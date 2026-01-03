@@ -3715,6 +3715,319 @@ public interface IEngine
 
     #endregion
 
+    #region FFT and Signal Processing
+
+    /// <summary>
+    /// Computes the 1D Fast Fourier Transform of a real-valued signal.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Real-valued input tensor with shape [..., n] where n should be a power of 2.</param>
+    /// <returns>Complex output tensor with shape [..., n/2 + 1] containing positive frequency components.</returns>
+    /// <remarks>
+    /// <para><b>Real FFT (RFFT):</b></para>
+    /// <para>
+    /// For real-valued inputs, the FFT output has conjugate symmetry, meaning the negative frequency
+    /// components are redundant. RFFT exploits this by only computing and returning the positive
+    /// frequencies (0 to Nyquist), reducing computation and memory by approximately half.
+    /// </para>
+    /// <para><b>Output Format:</b></para>
+    /// <para>
+    /// Returns interleaved real/imaginary pairs: [re0, im0, re1, im1, ..., re(n/2), im(n/2)].
+    /// The output length is (n/2 + 1) * 2 = n + 2 elements total.
+    /// </para>
+    /// <para><b>For Beginners:</b> The FFT converts a signal from the time domain (amplitude over time)
+    /// to the frequency domain (amplitude at each frequency). This is essential for audio processing,
+    /// where you might want to analyze which frequencies are present in a sound, remove noise at
+    /// specific frequencies, or compress audio data.</para>
+    /// <para><b>Example:</b> A 440 Hz sine wave (musical note A) will show a peak at the 440 Hz
+    /// frequency bin in the FFT output.</para>
+    /// </remarks>
+    Tensor<T> RFFT<T>(Tensor<T> input);
+
+    /// <summary>
+    /// Computes the inverse 1D FFT, converting from frequency domain back to real-valued time domain.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Complex input tensor with shape [..., n/2 + 1] (interleaved real/imaginary).</param>
+    /// <param name="outputLength">The desired output length (original signal length before RFFT).</param>
+    /// <returns>Real-valued output tensor with shape [..., outputLength].</returns>
+    /// <remarks>
+    /// <para>
+    /// Reconstructs the original real-valued signal from its frequency representation.
+    /// The outputLength parameter is needed because the original length cannot always be
+    /// determined from the RFFT output (odd vs even input lengths).
+    /// </para>
+    /// <para><b>For Beginners:</b> This reverses the FFT operation. If you modified frequencies
+    /// (like removing noise or applying effects), IRFFT converts back to a playable audio signal.</para>
+    /// </remarks>
+    Tensor<T> IRFFT<T>(Tensor<T> input, int outputLength);
+
+    /// <summary>
+    /// Computes the 1D complex-to-complex Fast Fourier Transform.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="inputReal">Real part of input with shape [..., n].</param>
+    /// <param name="inputImag">Imaginary part of input with shape [..., n].</param>
+    /// <param name="outputReal">Output: Real part of FFT result with shape [..., n].</param>
+    /// <param name="outputImag">Output: Imaginary part of FFT result with shape [..., n].</param>
+    /// <remarks>
+    /// <para>
+    /// Full complex FFT that handles both real and imaginary input components.
+    /// Unlike RFFT, this returns all n frequency bins (including negative frequencies).
+    /// </para>
+    /// <para><b>When to use:</b></para>
+    /// <list type="bullet">
+    /// <item><description>When input is already complex (e.g., after previous FFT operations)</description></item>
+    /// <item><description>When you need both positive and negative frequency components</description></item>
+    /// <item><description>For 2D FFT building blocks</description></item>
+    /// </list>
+    /// </remarks>
+    void FFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag);
+
+    /// <summary>
+    /// Computes the inverse 1D complex-to-complex Fast Fourier Transform.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="inputReal">Real part of frequency domain input with shape [..., n].</param>
+    /// <param name="inputImag">Imaginary part of frequency domain input with shape [..., n].</param>
+    /// <param name="outputReal">Output: Real part of time domain result with shape [..., n].</param>
+    /// <param name="outputImag">Output: Imaginary part of time domain result with shape [..., n].</param>
+    /// <remarks>
+    /// <para>
+    /// Inverse of the complex FFT. Converts frequency domain representation back to time domain.
+    /// Applies 1/n normalization to ensure round-trip FFT->IFFT recovers the original signal.
+    /// </para>
+    /// </remarks>
+    void IFFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag);
+
+    /// <summary>
+    /// Computes the 2D Fast Fourier Transform for image and spectrogram processing.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="inputReal">Real part of input with shape [..., height, width].</param>
+    /// <param name="inputImag">Imaginary part of input with shape [..., height, width].</param>
+    /// <param name="outputReal">Output: Real part of 2D FFT result.</param>
+    /// <param name="outputImag">Output: Imaginary part of 2D FFT result.</param>
+    /// <remarks>
+    /// <para>
+    /// 2D FFT is computed as 1D FFT along each axis sequentially (separable property).
+    /// Used extensively in image processing and for analyzing 2D patterns.
+    /// </para>
+    /// <para><b>Applications:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Image filtering (blur, sharpen, edge detection)</description></item>
+    /// <item><description>Image compression (JPEG uses DCT, related to FFT)</description></item>
+    /// <item><description>Spectrogram analysis (time-frequency representations)</description></item>
+    /// <item><description>Convolution via frequency domain multiplication</description></item>
+    /// </list>
+    /// </remarks>
+    void FFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag);
+
+    /// <summary>
+    /// Computes the inverse 2D Fast Fourier Transform.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="inputReal">Real part of frequency domain input.</param>
+    /// <param name="inputImag">Imaginary part of frequency domain input.</param>
+    /// <param name="outputReal">Output: Real part of spatial domain result.</param>
+    /// <param name="outputImag">Output: Imaginary part of spatial domain result.</param>
+    void IFFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag);
+
+    /// <summary>
+    /// Computes the Short-Time Fourier Transform (STFT) for time-frequency analysis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Audio signal with shape [batch, samples] or [samples].</param>
+    /// <param name="nFft">FFT size (window size). Must be power of 2. Default: 2048.</param>
+    /// <param name="hopLength">Number of samples between frames. Default: nFft/4.</param>
+    /// <param name="window">Window function tensor of length nFft (e.g., Hann window).</param>
+    /// <param name="center">If true, pad signal by nFft/2 on each side. Default: true.</param>
+    /// <param name="magnitudeOut">Output: Magnitude spectrogram [..., numFrames, nFft/2+1].</param>
+    /// <param name="phaseOut">Output: Phase spectrogram [..., numFrames, nFft/2+1].</param>
+    /// <remarks>
+    /// <para><b>Short-Time Fourier Transform (STFT):</b></para>
+    /// <para>
+    /// STFT analyzes how the frequency content of a signal changes over time by computing
+    /// the FFT on overlapping windows of the signal. The result is a 2D spectrogram showing
+    /// frequency (vertical) vs time (horizontal).
+    /// </para>
+    /// <para><b>Parameters explained:</b></para>
+    /// <list type="bullet">
+    /// <item><description><b>nFft</b>: Larger = better frequency resolution, worse time resolution</description></item>
+    /// <item><description><b>hopLength</b>: Smaller = more frames, smoother time evolution</description></item>
+    /// <item><description><b>window</b>: Reduces spectral leakage (Hann window is standard for audio)</description></item>
+    /// <item><description><b>center</b>: Ensures first/last frames are centered on signal edges</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Think of STFT as taking "snapshots" of frequencies at different
+    /// points in time. A piano note will show its fundamental frequency appearing when the key is
+    /// pressed and fading as the note decays.</para>
+    /// </remarks>
+    void STFT<T>(
+        Tensor<T> input,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        out Tensor<T> magnitudeOut,
+        out Tensor<T> phaseOut);
+
+    /// <summary>
+    /// Computes the inverse Short-Time Fourier Transform to reconstruct audio from spectrogram.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="magnitude">Magnitude spectrogram [..., numFrames, numFreqs].</param>
+    /// <param name="phase">Phase spectrogram [..., numFrames, numFreqs].</param>
+    /// <param name="nFft">FFT size used in forward STFT.</param>
+    /// <param name="hopLength">Hop length used in forward STFT.</param>
+    /// <param name="window">Window function tensor (same as forward STFT).</param>
+    /// <param name="center">Whether centering was used in forward STFT.</param>
+    /// <param name="length">Optional: exact output length. If null, computed from spectrogram shape.</param>
+    /// <returns>Reconstructed audio signal [..., samples].</returns>
+    /// <remarks>
+    /// <para>
+    /// Reconstructs the time-domain signal from magnitude and phase spectrograms using
+    /// overlap-add synthesis. For perfect reconstruction, use the same parameters as forward STFT.
+    /// </para>
+    /// <para><b>Note:</b> If only magnitude is available (no phase), use Griffin-Lim algorithm
+    /// for iterative phase estimation.</para>
+    /// </remarks>
+    Tensor<T> ISTFT<T>(
+        Tensor<T> magnitude,
+        Tensor<T> phase,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        int? length = null);
+
+    /// <summary>
+    /// Computes the Mel spectrogram from an audio signal.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Audio signal with shape [batch, samples] or [samples].</param>
+    /// <param name="sampleRate">Audio sample rate in Hz (e.g., 22050, 44100).</param>
+    /// <param name="nFft">FFT size. Default: 2048.</param>
+    /// <param name="hopLength">Hop length between frames. Default: 512.</param>
+    /// <param name="nMels">Number of Mel frequency bands. Default: 128.</param>
+    /// <param name="fMin">Minimum frequency in Hz. Default: 0.</param>
+    /// <param name="fMax">Maximum frequency in Hz. Default: sampleRate/2 (Nyquist).</param>
+    /// <param name="window">Window function tensor.</param>
+    /// <param name="powerToDb">If true, convert to decibel scale. Default: true.</param>
+    /// <returns>Mel spectrogram [..., numFrames, nMels].</returns>
+    /// <remarks>
+    /// <para><b>Mel Spectrogram:</b></para>
+    /// <para>
+    /// The Mel scale approximates human auditory perception, where we perceive pitch differences
+    /// logarithmically (an octave sounds like the same "distance" regardless of absolute frequency).
+    /// Mel spectrograms are the standard input representation for speech and music ML models.
+    /// </para>
+    /// <para><b>Common configurations:</b></para>
+    /// <list type="bullet">
+    /// <item><description><b>Speech:</b> nMels=80, nFft=1024, hopLength=256</description></item>
+    /// <item><description><b>Music:</b> nMels=128, nFft=2048, hopLength=512</description></item>
+    /// <item><description><b>Riffusion:</b> nMels=512, nFft=2048, hopLength=512</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> A Mel spectrogram is like a regular spectrogram but with frequency
+    /// bands spaced according to how humans hear. Low frequencies get more resolution (we're sensitive
+    /// to small pitch changes there), while high frequencies are grouped together.</para>
+    /// </remarks>
+    Tensor<T> MelSpectrogram<T>(
+        Tensor<T> input,
+        int sampleRate,
+        int nFft,
+        int hopLength,
+        int nMels,
+        T fMin,
+        T fMax,
+        Tensor<T> window,
+        bool powerToDb = true);
+
+    /// <summary>
+    /// Reconstructs audio from a magnitude spectrogram using the Griffin-Lim algorithm.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="magnitude">Magnitude spectrogram [..., numFrames, numFreqs].</param>
+    /// <param name="nFft">FFT size.</param>
+    /// <param name="hopLength">Hop length between frames.</param>
+    /// <param name="window">Window function tensor.</param>
+    /// <param name="iterations">Number of Griffin-Lim iterations. Default: 60.</param>
+    /// <param name="momentum">Momentum for faster convergence (0-0.99). Default: 0.99.</param>
+    /// <param name="length">Optional: exact output length.</param>
+    /// <returns>Reconstructed audio signal [..., samples].</returns>
+    /// <remarks>
+    /// <para><b>Griffin-Lim Algorithm:</b></para>
+    /// <para>
+    /// When only magnitude information is available (phase is unknown), Griffin-Lim iteratively
+    /// estimates the phase by repeatedly applying STFT/ISTFT and enforcing magnitude consistency.
+    /// </para>
+    /// <para><b>Algorithm steps:</b></para>
+    /// <list type="number">
+    /// <item><description>Initialize with random phase</description></item>
+    /// <item><description>Reconstruct signal: ISTFT(magnitude, estimated_phase)</description></item>
+    /// <item><description>Compute new STFT of reconstructed signal</description></item>
+    /// <item><description>Extract phase from new STFT, keep original magnitude</description></item>
+    /// <item><description>Repeat steps 2-4 for specified iterations</description></item>
+    /// </list>
+    /// <para><b>Quality vs Speed:</b></para>
+    /// <list type="bullet">
+    /// <item><description>30 iterations: Acceptable quality, some artifacts</description></item>
+    /// <item><description>60 iterations: Good quality for most applications</description></item>
+    /// <item><description>100+ iterations: Diminishing returns</description></item>
+    /// </list>
+    /// <para><b>Momentum:</b> Setting momentum > 0 accelerates convergence by using velocity
+    /// from previous iterations. 0.99 is recommended; set to 0 for original algorithm.</para>
+    /// </remarks>
+    Tensor<T> GriffinLim<T>(
+        Tensor<T> magnitude,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        int iterations = 60,
+        double momentum = 0.99,
+        int? length = null);
+
+    /// <summary>
+    /// Creates a Mel filterbank matrix for converting power spectrograms to Mel scale.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="nMels">Number of Mel bands.</param>
+    /// <param name="nFft">FFT size (filterbank will have nFft/2+1 frequency bins).</param>
+    /// <param name="sampleRate">Audio sample rate in Hz.</param>
+    /// <param name="fMin">Minimum frequency in Hz.</param>
+    /// <param name="fMax">Maximum frequency in Hz.</param>
+    /// <returns>Mel filterbank matrix [nMels, nFft/2+1].</returns>
+    /// <remarks>
+    /// <para>
+    /// Creates triangular filters spaced on the Mel scale. Each filter covers a range of
+    /// frequencies, with overlap between adjacent filters. The filterbank is applied by
+    /// matrix multiplication: melSpec = filterbank @ powerSpec.
+    /// </para>
+    /// <para><b>Mel scale formula:</b> mel = 2595 * log10(1 + hz/700)</para>
+    /// </remarks>
+    Tensor<T> CreateMelFilterbank<T>(int nMels, int nFft, int sampleRate, T fMin, T fMax);
+
+    /// <summary>
+    /// Creates a window function tensor for STFT analysis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="windowType">Type of window: "hann", "hamming", "blackman", "bartlett".</param>
+    /// <param name="length">Window length (typically equals nFft).</param>
+    /// <returns>Window function tensor of shape [length].</returns>
+    /// <remarks>
+    /// <para><b>Window functions</b> reduce spectral leakage in FFT analysis:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Hann (Hanning):</b> Most common for audio. Good frequency resolution.</description></item>
+    /// <item><description><b>Hamming:</b> Slightly better sidelobe suppression than Hann.</description></item>
+    /// <item><description><b>Blackman:</b> Best sidelobe suppression, wider main lobe.</description></item>
+    /// <item><description><b>Bartlett:</b> Triangular window, simple but less optimal.</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Without windowing, abrupt signal edges cause artifacts in the FFT.
+    /// Windows taper the signal smoothly to zero at the edges, producing cleaner frequency analysis.</para>
+    /// </remarks>
+    Tensor<T> CreateWindow<T>(string windowType, int length);
+
+    #endregion
+
     #region Fused Operations
 
     /// <summary>

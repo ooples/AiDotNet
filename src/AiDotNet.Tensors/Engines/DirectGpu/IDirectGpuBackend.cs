@@ -584,6 +584,21 @@ public interface IDirectGpuBackend : IDisposable
     void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
         int batchSize, int normalizedSize, float epsilon);
 
+    /// <summary>
+    /// Computes the backward pass for RMS normalization.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from the next layer (batchSize x normalizedSize).</param>
+    /// <param name="input">Original input from forward pass (batchSize x normalizedSize).</param>
+    /// <param name="gamma">Scale parameters (normalizedSize).</param>
+    /// <param name="saveRms">Saved RMS values from forward pass (batchSize).</param>
+    /// <param name="gradInput">Output gradient with respect to input (batchSize x normalizedSize).</param>
+    /// <param name="gradGamma">Output gradient with respect to gamma (normalizedSize).</param>
+    /// <param name="batchSize">Number of samples in the batch.</param>
+    /// <param name="normalizedSize">Size of the normalized dimension.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    void RmsNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma, IGpuBuffer saveRms,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, int batchSize, int normalizedSize, float epsilon);
+
     #endregion
 
     #region Dropout and Regularization
@@ -614,6 +629,61 @@ public interface IDirectGpuBackend : IDisposable
 
     void FlashAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
         IGpuBuffer output, IGpuBuffer? mask, int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal);
+
+    /// <summary>
+    /// Memory-efficient FlashAttention with log-sum-exp statistics for backward pass.
+    /// </summary>
+    /// <param name="query">Query tensor buffer [batch * heads * seqQ * headDim].</param>
+    /// <param name="key">Key tensor buffer [batch * heads * seqK * headDim].</param>
+    /// <param name="value">Value tensor buffer [batch * heads * seqK * headDim].</param>
+    /// <param name="output">Output buffer [batch * heads * seqQ * headDim].</param>
+    /// <param name="softmaxStats">Log-sum-exp statistics [batch * heads * seqQ].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="seqQ">Query sequence length.</param>
+    /// <param name="seqK">Key sequence length.</param>
+    /// <param name="headDim">Dimension per head.</param>
+    /// <param name="scale">Scaling factor (typically 1/sqrt(headDim)).</param>
+    /// <param name="isCausal">If true, applies causal masking.</param>
+    void FlashAttentionV2(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer softmaxStats,
+        int batch, int numHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal);
+
+    /// <summary>
+    /// Backward pass for FlashAttention using recomputation for memory efficiency.
+    /// </summary>
+    void FlashAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer softmaxStats,
+        IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal);
+
+    /// <summary>
+    /// Grouped Query Attention - multiple query heads share same KV heads.
+    /// </summary>
+    /// <param name="query">Query buffer [batch * numQHeads * seqQ * headDim].</param>
+    /// <param name="key">Key buffer [batch * numKVHeads * seqK * headDim].</param>
+    /// <param name="value">Value buffer [batch * numKVHeads * seqK * headDim].</param>
+    /// <param name="output">Output buffer [batch * numQHeads * seqQ * headDim].</param>
+    /// <param name="attentionWeights">Optional attention weights [batch * numQHeads * seqQ * seqK].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="numQHeads">Number of query heads.</param>
+    /// <param name="numKVHeads">Number of key-value heads (numQHeads must be divisible by numKVHeads).</param>
+    /// <param name="seqQ">Query sequence length.</param>
+    /// <param name="seqK">Key sequence length.</param>
+    /// <param name="headDim">Dimension per head.</param>
+    /// <param name="scale">Scaling factor.</param>
+    /// <param name="isCausal">If true, applies causal masking.</param>
+    void GroupedQueryAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? attentionWeights,
+        int batch, int numQHeads, int numKVHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal);
+
+    /// <summary>
+    /// Backward pass for Grouped Query Attention.
+    /// </summary>
+    void GroupedQueryAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer attentionWeights,
+        IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numQHeads, int numKVHeads, int seqQ, int seqK, int headDim, float scale);
 
     #endregion
 
@@ -668,6 +738,20 @@ public interface IDirectGpuBackend : IDisposable
     void ClipByNorm(IGpuBuffer A, IGpuBuffer B, float maxNorm, int size);
     void Fma(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, IGpuBuffer D, int size);
     void ScatterAdd(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer destination, int sourceSize, int destSize);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-add operation.
+    /// The gradient of scatter-add is a gather operation that collects gradients from destination
+    /// positions back to source positions.
+    /// </summary>
+    /// <param name="gradDestination">Gradient from the next layer at destination positions.</param>
+    /// <param name="indices">Indices that were used in the forward scatter-add (same as forward).</param>
+    /// <param name="gradSource">Output gradient with respect to source.</param>
+    /// <param name="numIndices">Number of indices/source elements.</param>
+    /// <param name="featureSize">Size of each feature vector being scattered.</param>
+    void ScatterAddBackward(IGpuBuffer gradDestination, IGpuBuffer indices, IGpuBuffer gradSource,
+        int numIndices, int featureSize);
+
     void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize);
 
     #endregion
@@ -700,6 +784,133 @@ public interface IDirectGpuBackend : IDisposable
 
     void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    #endregion
+
+    #region FFT and Signal Processing
+
+    /// <summary>
+    /// Computes 1D complex-to-complex FFT on GPU.
+    /// </summary>
+    /// <param name="inputReal">Real part of input [n elements].</param>
+    /// <param name="inputImag">Imaginary part of input [n elements].</param>
+    /// <param name="outputReal">Real part of output [n elements].</param>
+    /// <param name="outputImag">Imaginary part of output [n elements].</param>
+    /// <param name="n">FFT size (must be power of 2).</param>
+    /// <param name="inverse">If true, compute inverse FFT.</param>
+    void FFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag, int n, bool inverse);
+
+    /// <summary>
+    /// Computes 1D real-to-complex FFT (RFFT) on GPU.
+    /// </summary>
+    /// <param name="input">Real input [n elements].</param>
+    /// <param name="outputReal">Real part of output [n/2+1 elements].</param>
+    /// <param name="outputImag">Imaginary part of output [n/2+1 elements].</param>
+    /// <param name="n">Input size (must be power of 2).</param>
+    void RFFT(IGpuBuffer input, IGpuBuffer outputReal, IGpuBuffer outputImag, int n);
+
+    /// <summary>
+    /// Computes 1D complex-to-real inverse FFT (IRFFT) on GPU.
+    /// </summary>
+    /// <param name="inputReal">Real part of input [n/2+1 elements].</param>
+    /// <param name="inputImag">Imaginary part of input [n/2+1 elements].</param>
+    /// <param name="output">Real output [n elements].</param>
+    /// <param name="n">Output size (must be power of 2).</param>
+    void IRFFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer output, int n);
+
+    /// <summary>
+    /// Computes batched 1D FFT for multiple signals.
+    /// </summary>
+    /// <param name="inputReal">Real parts [batch * n elements].</param>
+    /// <param name="inputImag">Imaginary parts [batch * n elements].</param>
+    /// <param name="outputReal">Real parts of output [batch * n elements].</param>
+    /// <param name="outputImag">Imaginary parts of output [batch * n elements].</param>
+    /// <param name="batch">Number of signals.</param>
+    /// <param name="n">FFT size per signal.</param>
+    /// <param name="inverse">If true, compute inverse FFT.</param>
+    void BatchedFFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag,
+        int batch, int n, bool inverse);
+
+    /// <summary>
+    /// Computes 2D FFT on GPU.
+    /// </summary>
+    /// <param name="inputReal">Real part of input [height * width elements].</param>
+    /// <param name="inputImag">Imaginary part of input [height * width elements].</param>
+    /// <param name="outputReal">Real part of output [height * width elements].</param>
+    /// <param name="outputImag">Imaginary part of output [height * width elements].</param>
+    /// <param name="height">Height dimension.</param>
+    /// <param name="width">Width dimension.</param>
+    /// <param name="inverse">If true, compute inverse 2D FFT.</param>
+    void FFT2D(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag,
+        int height, int width, bool inverse);
+
+    /// <summary>
+    /// Applies a window function element-wise.
+    /// </summary>
+    /// <param name="input">Input signal.</param>
+    /// <param name="window">Window function coefficients.</param>
+    /// <param name="output">Windowed output.</param>
+    /// <param name="n">Signal length.</param>
+    void ApplyWindow(IGpuBuffer input, IGpuBuffer window, IGpuBuffer output, int n);
+
+    /// <summary>
+    /// Computes magnitude from complex values: sqrt(real² + imag²).
+    /// </summary>
+    /// <param name="real">Real part.</param>
+    /// <param name="imag">Imaginary part.</param>
+    /// <param name="magnitude">Output magnitude.</param>
+    /// <param name="n">Number of elements.</param>
+    void ComplexMagnitude(IGpuBuffer real, IGpuBuffer imag, IGpuBuffer magnitude, int n);
+
+    /// <summary>
+    /// Computes phase from complex values: atan2(imag, real).
+    /// </summary>
+    /// <param name="real">Real part.</param>
+    /// <param name="imag">Imaginary part.</param>
+    /// <param name="phase">Output phase in radians.</param>
+    /// <param name="n">Number of elements.</param>
+    void ComplexPhase(IGpuBuffer real, IGpuBuffer imag, IGpuBuffer phase, int n);
+
+    /// <summary>
+    /// Converts polar coordinates (magnitude, phase) to complex (real, imag).
+    /// </summary>
+    /// <param name="magnitude">Magnitude values.</param>
+    /// <param name="phase">Phase values in radians.</param>
+    /// <param name="real">Output real part.</param>
+    /// <param name="imag">Output imaginary part.</param>
+    /// <param name="n">Number of elements.</param>
+    void PolarToComplex(IGpuBuffer magnitude, IGpuBuffer phase, IGpuBuffer real, IGpuBuffer imag, int n);
+
+    /// <summary>
+    /// Applies Mel filterbank to power spectrogram.
+    /// </summary>
+    /// <param name="powerSpec">Power spectrogram [numFrames * numFreqs].</param>
+    /// <param name="filterbank">Mel filterbank matrix [nMels * numFreqs].</param>
+    /// <param name="melSpec">Output Mel spectrogram [numFrames * nMels].</param>
+    /// <param name="numFrames">Number of time frames.</param>
+    /// <param name="numFreqs">Number of frequency bins (nFft/2+1).</param>
+    /// <param name="nMels">Number of Mel bands.</param>
+    void ApplyMelFilterbank(IGpuBuffer powerSpec, IGpuBuffer filterbank, IGpuBuffer melSpec,
+        int numFrames, int numFreqs, int nMels);
+
+    /// <summary>
+    /// Converts power spectrogram to decibel scale.
+    /// </summary>
+    /// <param name="power">Power spectrogram.</param>
+    /// <param name="db">Output in decibels.</param>
+    /// <param name="n">Number of elements.</param>
+    /// <param name="refValue">Reference value for 0 dB.</param>
+    /// <param name="minDb">Minimum dB value (floor).</param>
+    void PowerToDb(IGpuBuffer power, IGpuBuffer db, int n, float refValue, float minDb);
+
+    /// <summary>
+    /// Converts decibel values back to power.
+    /// </summary>
+    /// <param name="db">Input in decibels.</param>
+    /// <param name="power">Output power spectrogram.</param>
+    /// <param name="n">Number of elements.</param>
+    /// <param name="refValue">Reference value that was used for 0 dB.</param>
+    void DbToPower(IGpuBuffer db, IGpuBuffer power, int n, float refValue);
 
     #endregion
 }

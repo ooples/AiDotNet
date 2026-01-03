@@ -1220,6 +1220,599 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     #endregion
 
+    #region FFT Operations (GPU-accelerated)
+
+    /// <summary>
+    /// GPU-accelerated 1D complex-to-complex FFT.
+    /// </summary>
+    void IEngine.FFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (!TryGetBackend(out var backend) || inputReal.Length != inputImag.Length)
+        {
+            base.FFT(inputReal, inputImag, out outputReal, out outputImag);
+            return;
+        }
+
+        int n = inputReal.Shape[^1];
+        if ((n & (n - 1)) != 0) // Not power of 2
+        {
+            base.FFT(inputReal, inputImag, out outputReal, out outputImag);
+            return;
+        }
+
+        try
+        {
+            float[] inputRealFloat = DirectGpuEngine.ToFloatArray(inputReal.Data);
+            float[] inputImagFloat = DirectGpuEngine.ToFloatArray(inputImag.Data);
+
+            using var inputRealBuffer = backend.AllocateBuffer(inputRealFloat);
+            using var inputImagBuffer = backend.AllocateBuffer(inputImagFloat);
+            using var outputRealBuffer = backend.AllocateBuffer(inputReal.Length);
+            using var outputImagBuffer = backend.AllocateBuffer(inputImag.Length);
+
+            backend.FFT(inputRealBuffer, inputImagBuffer, outputRealBuffer, outputImagBuffer, n, inverse: false);
+            backend.Synchronize();
+
+            float[] outputRealFloat = new float[inputReal.Length];
+            float[] outputImagFloat = new float[inputImag.Length];
+            backend.DownloadBuffer(outputRealBuffer, outputRealFloat);
+            backend.DownloadBuffer(outputImagBuffer, outputImagFloat);
+
+            outputReal = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputRealFloat), inputReal.Shape.ToArray());
+            outputImag = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputImagFloat), inputImag.Shape.ToArray());
+        }
+        catch
+        {
+            base.FFT(inputReal, inputImag, out outputReal, out outputImag);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated 1D complex-to-complex inverse FFT.
+    /// </summary>
+    void IEngine.IFFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (!TryGetBackend(out var backend) || inputReal.Length != inputImag.Length)
+        {
+            base.IFFT(inputReal, inputImag, out outputReal, out outputImag);
+            return;
+        }
+
+        int n = inputReal.Shape[^1];
+        if ((n & (n - 1)) != 0)
+        {
+            base.IFFT(inputReal, inputImag, out outputReal, out outputImag);
+            return;
+        }
+
+        try
+        {
+            float[] inputRealFloat = DirectGpuEngine.ToFloatArray(inputReal.Data);
+            float[] inputImagFloat = DirectGpuEngine.ToFloatArray(inputImag.Data);
+
+            using var inputRealBuffer = backend.AllocateBuffer(inputRealFloat);
+            using var inputImagBuffer = backend.AllocateBuffer(inputImagFloat);
+            using var outputRealBuffer = backend.AllocateBuffer(inputReal.Length);
+            using var outputImagBuffer = backend.AllocateBuffer(inputImag.Length);
+
+            backend.FFT(inputRealBuffer, inputImagBuffer, outputRealBuffer, outputImagBuffer, n, inverse: true);
+            backend.Synchronize();
+
+            float[] outputRealFloat = new float[inputReal.Length];
+            float[] outputImagFloat = new float[inputImag.Length];
+            backend.DownloadBuffer(outputRealBuffer, outputRealFloat);
+            backend.DownloadBuffer(outputImagBuffer, outputImagFloat);
+
+            outputReal = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputRealFloat), inputReal.Shape.ToArray());
+            outputImag = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputImagFloat), inputImag.Shape.ToArray());
+        }
+        catch
+        {
+            base.IFFT(inputReal, inputImag, out outputReal, out outputImag);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated 2D FFT.
+    /// </summary>
+    void IEngine.FFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (!TryGetBackend(out var backend) || inputReal.Rank < 2 || inputReal.Length != inputImag.Length)
+        {
+            base.FFT2D(inputReal, inputImag, out outputReal, out outputImag);
+            return;
+        }
+
+        int height = inputReal.Shape[^2];
+        int width = inputReal.Shape[^1];
+
+        if ((height & (height - 1)) != 0 || (width & (width - 1)) != 0)
+        {
+            base.FFT2D(inputReal, inputImag, out outputReal, out outputImag);
+            return;
+        }
+
+        try
+        {
+            float[] inputRealFloat = DirectGpuEngine.ToFloatArray(inputReal.Data);
+            float[] inputImagFloat = DirectGpuEngine.ToFloatArray(inputImag.Data);
+
+            using var inputRealBuffer = backend.AllocateBuffer(inputRealFloat);
+            using var inputImagBuffer = backend.AllocateBuffer(inputImagFloat);
+            using var outputRealBuffer = backend.AllocateBuffer(inputReal.Length);
+            using var outputImagBuffer = backend.AllocateBuffer(inputImag.Length);
+
+            backend.FFT2D(inputRealBuffer, inputImagBuffer, outputRealBuffer, outputImagBuffer, height, width, inverse: false);
+            backend.Synchronize();
+
+            float[] outputRealFloat = new float[inputReal.Length];
+            float[] outputImagFloat = new float[inputImag.Length];
+            backend.DownloadBuffer(outputRealBuffer, outputRealFloat);
+            backend.DownloadBuffer(outputImagBuffer, outputImagFloat);
+
+            outputReal = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputRealFloat), inputReal.Shape.ToArray());
+            outputImag = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputImagFloat), inputImag.Shape.ToArray());
+        }
+        catch
+        {
+            base.FFT2D(inputReal, inputImag, out outputReal, out outputImag);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated 2D inverse FFT.
+    /// </summary>
+    void IEngine.IFFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (!TryGetBackend(out var backend) || inputReal.Rank < 2 || inputReal.Length != inputImag.Length)
+        {
+            base.IFFT2D(inputReal, inputImag, out outputReal, out outputImag);
+            return;
+        }
+
+        int height = inputReal.Shape[^2];
+        int width = inputReal.Shape[^1];
+
+        if ((height & (height - 1)) != 0 || (width & (width - 1)) != 0)
+        {
+            base.IFFT2D(inputReal, inputImag, out outputReal, out outputImag);
+            return;
+        }
+
+        try
+        {
+            float[] inputRealFloat = DirectGpuEngine.ToFloatArray(inputReal.Data);
+            float[] inputImagFloat = DirectGpuEngine.ToFloatArray(inputImag.Data);
+
+            using var inputRealBuffer = backend.AllocateBuffer(inputRealFloat);
+            using var inputImagBuffer = backend.AllocateBuffer(inputImagFloat);
+            using var outputRealBuffer = backend.AllocateBuffer(inputReal.Length);
+            using var outputImagBuffer = backend.AllocateBuffer(inputImag.Length);
+
+            backend.FFT2D(inputRealBuffer, inputImagBuffer, outputRealBuffer, outputImagBuffer, height, width, inverse: true);
+            backend.Synchronize();
+
+            float[] outputRealFloat = new float[inputReal.Length];
+            float[] outputImagFloat = new float[inputImag.Length];
+            backend.DownloadBuffer(outputRealBuffer, outputRealFloat);
+            backend.DownloadBuffer(outputImagBuffer, outputImagFloat);
+
+            outputReal = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputRealFloat), inputReal.Shape.ToArray());
+            outputImag = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputImagFloat), inputImag.Shape.ToArray());
+        }
+        catch
+        {
+            base.IFFT2D(inputReal, inputImag, out outputReal, out outputImag);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated Short-Time Fourier Transform.
+    /// </summary>
+    void IEngine.STFT<T>(
+        Tensor<T> input,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        out Tensor<T> magnitudeOut,
+        out Tensor<T> phaseOut)
+    {
+        if (!TryGetBackend(out var backend) || (nFft & (nFft - 1)) != 0)
+        {
+            base.STFT(input, nFft, hopLength, window, center, out magnitudeOut, out phaseOut);
+            return;
+        }
+
+        try
+        {
+            // For STFT, we need to process frame by frame
+            // First, handle centering by padding the input
+            T[] inputData = input.Data;
+            if (center)
+            {
+                int padAmount = nFft / 2;
+                T[] paddedData = new T[inputData.Length + 2 * padAmount];
+                Array.Copy(inputData, 0, paddedData, padAmount, inputData.Length);
+                inputData = paddedData;
+            }
+
+            int numSamples = inputData.Length;
+            int numFrames = (numSamples - nFft) / hopLength + 1;
+            int numFreqs = nFft / 2 + 1;
+
+            if (numFrames <= 0)
+            {
+                base.STFT(input, nFft, hopLength, window, center, out magnitudeOut, out phaseOut);
+                return;
+            }
+
+            float[] inputFloat = DirectGpuEngine.ToFloatArray(inputData);
+            float[] windowFloat = DirectGpuEngine.ToFloatArray(window.Data);
+
+            // Allocate GPU buffers
+            using var inputBuffer = backend.AllocateBuffer(inputFloat);
+            using var windowBuffer = backend.AllocateBuffer(windowFloat);
+            using var frameBuffer = backend.AllocateBuffer(nFft);
+            using var windowedBuffer = backend.AllocateBuffer(nFft);
+            using var fftRealBuffer = backend.AllocateBuffer(nFft);
+            using var fftImagBuffer = backend.AllocateBuffer(nFft);
+            using var zeroBuffer = backend.AllocateBuffer(nFft);
+
+            // Initialize zero buffer for imaginary part of real input
+            float[] zeros = new float[nFft];
+            var tempZeroBuffer = backend.AllocateBuffer(zeros);
+
+            float[] magnitudeData = new float[numFrames * numFreqs];
+            float[] phaseData = new float[numFrames * numFreqs];
+
+            for (int frame = 0; frame < numFrames; frame++)
+            {
+                int frameStart = frame * hopLength;
+
+                // Extract frame from input
+                float[] frameData = new float[nFft];
+                Array.Copy(inputFloat, frameStart, frameData, 0, Math.Min(nFft, inputFloat.Length - frameStart));
+
+                // Upload frame data
+                using var currentFrameBuffer = backend.AllocateBuffer(frameData);
+
+                // Apply window
+                backend.ApplyWindow(currentFrameBuffer, windowBuffer, windowedBuffer, nFft);
+
+                // Perform FFT (windowed signal as real input, zeros as imaginary)
+                backend.FFT(windowedBuffer, tempZeroBuffer, fftRealBuffer, fftImagBuffer, nFft, inverse: false);
+
+                // Download FFT results
+                float[] fftReal = new float[nFft];
+                float[] fftImag = new float[nFft];
+                backend.DownloadBuffer(fftRealBuffer, fftReal);
+                backend.DownloadBuffer(fftImagBuffer, fftImag);
+
+                // Compute magnitude and phase for positive frequencies only
+                for (int k = 0; k < numFreqs; k++)
+                {
+                    float real = fftReal[k];
+                    float imag = fftImag[k];
+                    magnitudeData[frame * numFreqs + k] = (float)Math.Sqrt(real * real + imag * imag);
+                    phaseData[frame * numFreqs + k] = (float)Math.Atan2(imag, real);
+                }
+            }
+
+            tempZeroBuffer.Dispose();
+            backend.Synchronize();
+
+            int[] outputShape = input.Rank == 1
+                ? new[] { numFrames, numFreqs }
+                : new[] { input.Shape[0], numFrames, numFreqs };
+
+            magnitudeOut = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(magnitudeData), outputShape);
+            phaseOut = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(phaseData), outputShape);
+        }
+        catch
+        {
+            base.STFT(input, nFft, hopLength, window, center, out magnitudeOut, out phaseOut);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated inverse Short-Time Fourier Transform.
+    /// </summary>
+    Tensor<T> IEngine.ISTFT<T>(
+        Tensor<T> magnitude,
+        Tensor<T> phase,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        int? length)
+    {
+        if (!TryGetBackend(out var backend) || (nFft & (nFft - 1)) != 0)
+        {
+            return base.ISTFT(magnitude, phase, nFft, hopLength, window, center, length);
+        }
+
+        try
+        {
+            int numFrames = magnitude.Shape[^2];
+            int numFreqs = magnitude.Shape[^1];
+
+            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.Data);
+            float[] phaseFloat = DirectGpuEngine.ToFloatArray(phase.Data);
+            float[] windowFloat = DirectGpuEngine.ToFloatArray(window.Data);
+
+            // Reconstruct full spectrum (mirror for negative frequencies)
+            int outputSamples = (numFrames - 1) * hopLength + nFft;
+            float[] output = new float[outputSamples];
+            float[] windowSum = new float[outputSamples];
+
+            using var windowBuffer = backend.AllocateBuffer(windowFloat);
+            using var realBuffer = backend.AllocateBuffer(nFft);
+            using var imagBuffer = backend.AllocateBuffer(nFft);
+            using var outputRealBuffer = backend.AllocateBuffer(nFft);
+            using var outputImagBuffer = backend.AllocateBuffer(nFft);
+
+            for (int frame = 0; frame < numFrames; frame++)
+            {
+                // Convert polar to complex for full spectrum
+                float[] frameReal = new float[nFft];
+                float[] frameImag = new float[nFft];
+
+                // Fill positive frequencies
+                for (int k = 0; k < numFreqs; k++)
+                {
+                    float mag = magnitudeFloat[frame * numFreqs + k];
+                    float ph = phaseFloat[frame * numFreqs + k];
+                    frameReal[k] = mag * (float)Math.Cos(ph);
+                    frameImag[k] = mag * (float)Math.Sin(ph);
+                }
+
+                // Mirror for negative frequencies (conjugate symmetry)
+                for (int k = 1; k < nFft - numFreqs + 1; k++)
+                {
+                    int srcIdx = numFreqs - 1 - k;
+                    if (srcIdx > 0 && srcIdx < numFreqs)
+                    {
+                        frameReal[nFft - k] = frameReal[srcIdx];
+                        frameImag[nFft - k] = -frameImag[srcIdx];
+                    }
+                }
+
+                using var frameRealBuffer = backend.AllocateBuffer(frameReal);
+                using var frameImagBuffer = backend.AllocateBuffer(frameImag);
+
+                // Perform inverse FFT
+                backend.FFT(frameRealBuffer, frameImagBuffer, outputRealBuffer, outputImagBuffer, nFft, inverse: true);
+
+                // Download result
+                float[] ifftResult = new float[nFft];
+                backend.DownloadBuffer(outputRealBuffer, ifftResult);
+
+                // Overlap-add with window
+                int frameStart = frame * hopLength;
+                for (int i = 0; i < nFft && frameStart + i < outputSamples; i++)
+                {
+                    float w = windowFloat[i];
+                    output[frameStart + i] += ifftResult[i] * w;
+                    windowSum[frameStart + i] += w * w;
+                }
+            }
+
+            backend.Synchronize();
+
+            // Normalize by window sum
+            for (int i = 0; i < outputSamples; i++)
+            {
+                if (windowSum[i] > 1e-8f)
+                {
+                    output[i] /= windowSum[i];
+                }
+            }
+
+            // Remove centering padding if needed
+            if (center)
+            {
+                int padAmount = nFft / 2;
+                int actualLength = length ?? (outputSamples - 2 * padAmount);
+                float[] trimmed = new float[actualLength];
+                Array.Copy(output, padAmount, trimmed, 0, Math.Min(actualLength, outputSamples - padAmount));
+                output = trimmed;
+            }
+            else if (length.HasValue)
+            {
+                float[] trimmed = new float[length.Value];
+                Array.Copy(output, 0, trimmed, 0, Math.Min(length.Value, output.Length));
+                output = trimmed;
+            }
+
+            return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(output), new[] { output.Length });
+        }
+        catch
+        {
+            return base.ISTFT(magnitude, phase, nFft, hopLength, window, center, length);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated Mel spectrogram computation.
+    /// </summary>
+    Tensor<T> IEngine.MelSpectrogram<T>(
+        Tensor<T> input,
+        int sampleRate,
+        int nFft,
+        int hopLength,
+        int nMels,
+        T fMin,
+        T fMax,
+        Tensor<T> window,
+        bool powerToDb)
+    {
+        if (!TryGetBackend(out var backend) || (nFft & (nFft - 1)) != 0)
+        {
+            return base.MelSpectrogram(input, sampleRate, nFft, hopLength, nMels, fMin, fMax, window, powerToDb);
+        }
+
+        try
+        {
+            // First compute STFT
+            ((IEngine)this).STFT(input, nFft, hopLength, window, center: true, out var magnitude, out var _);
+
+            int numFrames = magnitude.Shape[^2];
+            int numFreqs = magnitude.Shape[^1];
+
+            // Create Mel filterbank
+            var filterbank = ((IEngine)this).CreateMelFilterbank<T>(nMels, nFft, sampleRate, fMin, fMax);
+
+            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.Data);
+            float[] filterbankFloat = DirectGpuEngine.ToFloatArray(filterbank.Data);
+
+            // Compute power spectrum (magnitude squared)
+            float[] powerSpec = new float[magnitudeFloat.Length];
+            for (int i = 0; i < magnitudeFloat.Length; i++)
+            {
+                powerSpec[i] = magnitudeFloat[i] * magnitudeFloat[i];
+            }
+
+            using var powerBuffer = backend.AllocateBuffer(powerSpec);
+            using var filterbankBuffer = backend.AllocateBuffer(filterbankFloat);
+            using var melBuffer = backend.AllocateBuffer(numFrames * nMels);
+
+            // Apply Mel filterbank
+            backend.ApplyMelFilterbank(powerBuffer, filterbankBuffer, melBuffer, numFrames, numFreqs, nMels);
+
+            if (powerToDb)
+            {
+                using var dbBuffer = backend.AllocateBuffer(numFrames * nMels);
+                backend.PowerToDb(melBuffer, dbBuffer, numFrames * nMels, 1.0f, -80.0f);
+                backend.Synchronize();
+
+                float[] dbResult = new float[numFrames * nMels];
+                backend.DownloadBuffer(dbBuffer, dbResult);
+
+                int[] outputShape = input.Rank == 1
+                    ? new[] { numFrames, nMels }
+                    : new[] { input.Shape[0], numFrames, nMels };
+
+                return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(dbResult), outputShape);
+            }
+            else
+            {
+                backend.Synchronize();
+
+                float[] melResult = new float[numFrames * nMels];
+                backend.DownloadBuffer(melBuffer, melResult);
+
+                int[] outputShape = input.Rank == 1
+                    ? new[] { numFrames, nMels }
+                    : new[] { input.Shape[0], numFrames, nMels };
+
+                return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(melResult), outputShape);
+            }
+        }
+        catch
+        {
+            return base.MelSpectrogram(input, sampleRate, nFft, hopLength, nMels, fMin, fMax, window, powerToDb);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated Griffin-Lim algorithm for audio reconstruction from magnitude spectrogram.
+    /// </summary>
+    Tensor<T> IEngine.GriffinLim<T>(
+        Tensor<T> magnitude,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        int iterations,
+        double momentum,
+        int? length)
+    {
+        if (!TryGetBackend(out var backend) || (nFft & (nFft - 1)) != 0)
+        {
+            return base.GriffinLim(magnitude, nFft, hopLength, window, iterations, momentum, length);
+        }
+
+        try
+        {
+            int numFrames = magnitude.Shape[^2];
+            int numFreqs = magnitude.Shape[^1];
+
+            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.Data);
+
+            // Initialize with random phase
+            var random = new Random(42);
+            float[] phase = new float[magnitudeFloat.Length];
+            for (int i = 0; i < phase.Length; i++)
+            {
+                phase[i] = (float)(random.NextDouble() * 2 * Math.PI - Math.PI);
+            }
+
+            float[] prevPhase = new float[phase.Length];
+            float momentumF = (float)momentum;
+
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                // Reconstruct signal using current phase estimate
+                var phaseTensor = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(phase), magnitude.Shape.ToArray());
+                var reconstructed = ((IEngine)this).ISTFT(magnitude, phaseTensor, nFft, hopLength, window, center: true, length);
+
+                // Re-analyze to get new phase
+                ((IEngine)this).STFT(reconstructed, nFft, hopLength, window, center: true, out var _, out var newPhaseTensor);
+
+                float[] newPhase = DirectGpuEngine.ToFloatArray(newPhaseTensor.Data);
+
+                // Apply momentum
+                if (iter > 0 && momentumF > 0)
+                {
+                    for (int i = 0; i < phase.Length; i++)
+                    {
+                        // Unwrap phase difference for momentum
+                        float diff = newPhase[i] - prevPhase[i];
+                        while (diff > Math.PI) diff -= (float)(2 * Math.PI);
+                        while (diff < -Math.PI) diff += (float)(2 * Math.PI);
+
+                        float accelerated = prevPhase[i] + diff * (1 + momentumF);
+                        phase[i] = accelerated;
+                    }
+                }
+                else
+                {
+                    Array.Copy(newPhase, phase, phase.Length);
+                }
+
+                Array.Copy(newPhase, prevPhase, prevPhase.Length);
+            }
+
+            // Final reconstruction
+            var finalPhaseTensor = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(phase), magnitude.Shape.ToArray());
+            return ((IEngine)this).ISTFT(magnitude, finalPhaseTensor, nFft, hopLength, window, center: true, length);
+        }
+        catch
+        {
+            return base.GriffinLim(magnitude, nFft, hopLength, window, iterations, momentum, length);
+        }
+    }
+
+    /// <summary>
+    /// Creates a Mel filterbank matrix (CPU implementation, can be cached).
+    /// </summary>
+    Tensor<T> IEngine.CreateMelFilterbank<T>(int nMels, int nFft, int sampleRate, T fMin, T fMax)
+    {
+        // Filterbank creation is a one-time operation, use CPU base implementation
+        return base.CreateMelFilterbank<T>(nMels, nFft, sampleRate, fMin, fMax);
+    }
+
+    /// <summary>
+    /// Creates a window function (CPU implementation, can be cached).
+    /// </summary>
+    Tensor<T> IEngine.CreateWindow<T>(string windowType, int windowLength)
+    {
+        // Window creation is a one-time operation, use CPU base implementation
+        return base.CreateWindow<T>(windowType, windowLength);
+    }
+
+    #endregion
+
     public void Dispose()
     {
         // Dispose all cached GPU buffers

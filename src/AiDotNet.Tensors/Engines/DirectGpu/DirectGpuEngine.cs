@@ -436,12 +436,11 @@ public sealed class DirectGpuEngine : IDisposable
                     break;
                 case ActivationType.None:
                 default:
-                    // No activation - just GEMM + bias (still fused)
+                    // No activation - GEMM + bias (bias added on CPU after GPU GEMM)
                     using (var bufferC = _backend.MatMul(bufferInput, bufferWeights, batchSize, outputFeatures, inputFeatures))
                     {
-                        // TODO: Add bias (for now, just return GEMM result)
                         float[] tempResult = _backend.DownloadBuffer(bufferC);
-                        // Add bias on CPU for now
+                        // Add bias (GPU bias broadcast kernel would be more efficient)
                         for (int b = 0; b < batchSize; b++)
                         {
                             for (int o = 0; o < outputFeatures; o++)

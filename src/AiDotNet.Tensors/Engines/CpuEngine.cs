@@ -13092,8 +13092,12 @@ public class CpuEngine : IEngine
         // Box-Muller transform for normal distribution
         for (int i = 0; i < totalElements; i += 2)
         {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
+            double u1 = random.NextDouble();
+            double u2 = random.NextDouble();
+
+            // Guard against log(0) which produces -Infinity and then NaN
+            u1 = Math.Max(u1, double.Epsilon);
+
             double mag = Math.Sqrt(-2.0 * Math.Log(u1));
             double z0 = mag * Math.Cos(2.0 * Math.PI * u2);
             double z1 = mag * Math.Sin(2.0 * Math.PI * u2);
@@ -15308,6 +15312,939 @@ public class CpuEngine : IEngine
     {
         // No-op on CPU
     }
+
+    #endregion
+
+    #region FFT and Signal Processing
+
+    /// <inheritdoc/>
+    public Tensor<T> RFFT<T>(Tensor<T> input)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = input.Shape[^1]; // Last dimension is the signal length
+
+        // Pad to next power of 2 if needed
+        int nFft = NextPowerOf2(n);
+
+        // Output has (nFft/2 + 1) complex values, stored as interleaved real/imag
+        int numFreqs = nFft / 2 + 1;
+
+        // Compute shape for output (last dim becomes 2 * numFreqs for interleaved complex)
+        var outputShape = input.Shape.ToArray();
+        outputShape[^1] = numFreqs * 2; // Interleaved real/imag
+        var result = new Tensor<T>(outputShape);
+
+        // Handle batched input
+        int batchSize = input.Length / n;
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            // Extract signal for this batch
+            var signal = new Vector<T>(nFft);
+            int inputOffset = batchIdx * n;
+            for (int i = 0; i < n; i++)
+                signal[i] = input.GetFlat(inputOffset + i);
+            for (int i = n; i < nFft; i++)
+                signal[i] = numOps.Zero;
+
+            // Compute FFT using Cooley-Tukey algorithm
+            var (realOut, imagOut) = FFTCore<T>(signal, inverse: false);
+
+            // Copy only positive frequencies (0 to Nyquist)
+            int outputOffset = batchIdx * numFreqs * 2;
+            for (int k = 0; k < numFreqs; k++)
+            {
+                result.SetFlat(outputOffset + k * 2, realOut[k]);
+                result.SetFlat(outputOffset + k * 2 + 1, imagOut[k]);
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> IRFFT<T>(Tensor<T> input, int outputLength)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numFreqs = input.Shape[^1] / 2; // Interleaved real/imag
+        int nFft = (numFreqs - 1) * 2;
+
+        // Output shape
+        var outputShape = input.Shape.ToArray();
+        outputShape[^1] = outputLength;
+        var result = new Tensor<T>(outputShape);
+
+        // Handle batched input
+        int batchSize = input.Length / (numFreqs * 2);
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            // Reconstruct full spectrum using conjugate symmetry
+            var realIn = new Vector<T>(nFft);
+            var imagIn = new Vector<T>(nFft);
+            int inputOffset = batchIdx * numFreqs * 2;
+
+            // Copy positive frequencies
+            for (int k = 0; k < numFreqs; k++)
+            {
+                realIn[k] = input.GetFlat(inputOffset + k * 2);
+                imagIn[k] = input.GetFlat(inputOffset + k * 2 + 1);
+            }
+
+            // Conjugate symmetry for negative frequencies
+            for (int k = 1; k < numFreqs - 1; k++)
+            {
+                realIn[nFft - k] = realIn[k];
+                imagIn[nFft - k] = numOps.Negate(imagIn[k]);
+            }
+
+            // Compute inverse FFT
+            var (realOut, _) = FFTCore<T>(realIn, imagIn, inverse: true);
+
+            // Copy result with normalization
+            int outputOffset = batchIdx * outputLength;
+            T scale = numOps.FromDouble(1.0 / nFft);
+            for (int i = 0; i < outputLength; i++)
+            {
+                result.SetFlat(outputOffset + i, numOps.Multiply(realOut[i], scale));
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public void FFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (inputReal == null) throw new ArgumentNullException(nameof(inputReal));
+        if (inputImag == null) throw new ArgumentNullException(nameof(inputImag));
+        if (!inputReal.Shape.SequenceEqual(inputImag.Shape))
+            throw new ArgumentException("Input real and imaginary parts must have the same shape");
+
+        int n = inputReal.Shape[^1];
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var outReal = new Tensor<T>(inputReal.Shape);
+        var outImag = new Tensor<T>(inputImag.Shape);
+
+        int batchSize = inputReal.Length / n;
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            var realIn = new Vector<T>(n);
+            var imagIn = new Vector<T>(n);
+            int offset = batchIdx * n;
+
+            for (int i = 0; i < n; i++)
+            {
+                realIn[i] = inputReal.GetFlat(offset + i);
+                imagIn[i] = inputImag.GetFlat(offset + i);
+            }
+
+            var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: false);
+
+            for (int i = 0; i < n; i++)
+            {
+                outReal.SetFlat(offset + i, realOut[i]);
+                outImag.SetFlat(offset + i, imagOut[i]);
+            }
+        });
+
+        outputReal = outReal;
+        outputImag = outImag;
+    }
+
+    /// <inheritdoc/>
+    public void IFFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (inputReal == null) throw new ArgumentNullException(nameof(inputReal));
+        if (inputImag == null) throw new ArgumentNullException(nameof(inputImag));
+        if (!inputReal.Shape.SequenceEqual(inputImag.Shape))
+            throw new ArgumentException("Input real and imaginary parts must have the same shape");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = inputReal.Shape[^1];
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var outReal = new Tensor<T>(inputReal.Shape);
+        var outImag = new Tensor<T>(inputImag.Shape);
+
+        int batchSize = inputReal.Length / n;
+        T scale = numOps.FromDouble(1.0 / n);
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            var realIn = new Vector<T>(n);
+            var imagIn = new Vector<T>(n);
+            int offset = batchIdx * n;
+
+            for (int i = 0; i < n; i++)
+            {
+                realIn[i] = inputReal.GetFlat(offset + i);
+                imagIn[i] = inputImag.GetFlat(offset + i);
+            }
+
+            var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: true);
+
+            for (int i = 0; i < n; i++)
+            {
+                outReal.SetFlat(offset + i, numOps.Multiply(realOut[i], scale));
+                outImag.SetFlat(offset + i, numOps.Multiply(imagOut[i], scale));
+            }
+        });
+
+        outputReal = outReal;
+        outputImag = outImag;
+    }
+
+    /// <inheritdoc/>
+    public void FFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (inputReal == null) throw new ArgumentNullException(nameof(inputReal));
+        if (inputImag == null) throw new ArgumentNullException(nameof(inputImag));
+        if (inputReal.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D");
+
+        // FFT along last dimension (columns)
+        FFT(inputReal, inputImag, out var tempReal, out var tempImag);
+
+        // Transpose, FFT along rows, transpose back
+        int height = inputReal.Shape[^2];
+        int width = inputReal.Shape[^1];
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var outReal = new Tensor<T>(inputReal.Shape);
+        var outImag = new Tensor<T>(inputImag.Shape);
+
+        // FFT along rows (second-to-last dimension)
+        int batchSize = inputReal.Length / (height * width);
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            // Process each column
+            for (int col = 0; col < width; col++)
+            {
+                var realIn = new Vector<T>(height);
+                var imagIn = new Vector<T>(height);
+
+                for (int row = 0; row < height; row++)
+                {
+                    int idx = batchIdx * height * width + row * width + col;
+                    realIn[row] = tempReal.GetFlat(idx);
+                    imagIn[row] = tempImag.GetFlat(idx);
+                }
+
+                var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: false);
+
+                for (int row = 0; row < height; row++)
+                {
+                    int idx = batchIdx * height * width + row * width + col;
+                    outReal.SetFlat(idx, realOut[row]);
+                    outImag.SetFlat(idx, imagOut[row]);
+                }
+            }
+        });
+
+        outputReal = outReal;
+        outputImag = outImag;
+    }
+
+    /// <inheritdoc/>
+    public void IFFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (inputReal == null) throw new ArgumentNullException(nameof(inputReal));
+        if (inputImag == null) throw new ArgumentNullException(nameof(inputImag));
+        if (inputReal.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int height = inputReal.Shape[^2];
+        int width = inputReal.Shape[^1];
+
+        var tempReal = new Tensor<T>(inputReal.Shape);
+        var tempImag = new Tensor<T>(inputImag.Shape);
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var outReal = new Tensor<T>(inputReal.Shape);
+        var outImag = new Tensor<T>(inputImag.Shape);
+
+        int batchSize = inputReal.Length / (height * width);
+        T scale = numOps.FromDouble(1.0 / (height * width));
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            // IFFT along columns first
+            for (int col = 0; col < width; col++)
+            {
+                var realIn = new Vector<T>(height);
+                var imagIn = new Vector<T>(height);
+
+                for (int row = 0; row < height; row++)
+                {
+                    int idx = batchIdx * height * width + row * width + col;
+                    realIn[row] = inputReal.GetFlat(idx);
+                    imagIn[row] = inputImag.GetFlat(idx);
+                }
+
+                var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: true);
+
+                for (int row = 0; row < height; row++)
+                {
+                    int idx = batchIdx * height * width + row * width + col;
+                    tempReal.SetFlat(idx, realOut[row]);
+                    tempImag.SetFlat(idx, imagOut[row]);
+                }
+            }
+
+            // IFFT along rows
+            for (int row = 0; row < height; row++)
+            {
+                var realIn = new Vector<T>(width);
+                var imagIn = new Vector<T>(width);
+                int rowOffset = batchIdx * height * width + row * width;
+
+                for (int col = 0; col < width; col++)
+                {
+                    realIn[col] = tempReal.GetFlat(rowOffset + col);
+                    imagIn[col] = tempImag.GetFlat(rowOffset + col);
+                }
+
+                var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: true);
+
+                for (int col = 0; col < width; col++)
+                {
+                    outReal.SetFlat(rowOffset + col, numOps.Multiply(realOut[col], scale));
+                    outImag.SetFlat(rowOffset + col, numOps.Multiply(imagOut[col], scale));
+                }
+            }
+        });
+
+        outputReal = outReal;
+        outputImag = outImag;
+    }
+
+    /// <inheritdoc/>
+    public void STFT<T>(
+        Tensor<T> input,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        out Tensor<T> magnitudeOut,
+        out Tensor<T> phaseOut)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (window == null) throw new ArgumentNullException(nameof(window));
+        if (window.Length != nFft)
+            throw new ArgumentException($"Window length {window.Length} must equal nFft {nFft}");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int signalLength = input.Shape[^1];
+
+        // Apply centering (reflection padding)
+        Tensor<T> paddedInput;
+        if (center)
+        {
+            int padAmount = nFft / 2;
+            var paddedShape = input.Shape.ToArray();
+            paddedShape[^1] = signalLength + 2 * padAmount;
+            paddedInput = new Tensor<T>(paddedShape);
+
+            int batchSize = input.Length / signalLength;
+            for (int b = 0; b < batchSize; b++)
+            {
+                int inputOffset = b * signalLength;
+                int outputOffset = b * paddedShape[^1];
+
+                // Reflect padding at start
+                for (int i = 0; i < padAmount; i++)
+                    paddedInput.SetFlat(outputOffset + i, input.GetFlat(inputOffset + padAmount - i));
+
+                // Copy original
+                for (int i = 0; i < signalLength; i++)
+                    paddedInput.SetFlat(outputOffset + padAmount + i, input.GetFlat(inputOffset + i));
+
+                // Reflect padding at end
+                for (int i = 0; i < padAmount; i++)
+                    paddedInput.SetFlat(outputOffset + padAmount + signalLength + i,
+                        input.GetFlat(inputOffset + signalLength - 2 - i));
+            }
+            signalLength = paddedShape[^1];
+        }
+        else
+        {
+            paddedInput = input;
+        }
+
+        // Calculate number of frames
+        int numFrames = (signalLength - nFft) / hopLength + 1;
+        int numFreqs = nFft / 2 + 1;
+
+        // Output shapes
+        var outputShape = input.Shape.ToArray();
+        outputShape[^1] = numFrames;
+        var newShape = new int[outputShape.Length + 1];
+        Array.Copy(outputShape, newShape, outputShape.Length - 1);
+        newShape[^2] = numFreqs;
+        newShape[^1] = numFrames;
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var magOut = new Tensor<T>(newShape);
+        var phOut = new Tensor<T>(newShape);
+
+        int batchSizeStft = paddedInput.Length / signalLength;
+
+        Parallel.For(0, batchSizeStft, batchIdx =>
+        {
+            for (int frame = 0; frame < numFrames; frame++)
+            {
+                int start = frame * hopLength;
+
+                // Extract windowed frame
+                var frameData = new Vector<T>(nFft);
+                int inputOffset = batchIdx * signalLength;
+                for (int i = 0; i < nFft; i++)
+                {
+                    T sample = paddedInput.GetFlat(inputOffset + start + i);
+                    T win = window.GetFlat(i);
+                    frameData[i] = numOps.Multiply(sample, win);
+                }
+
+                // Compute FFT
+                var (realOut, imagOut) = FFTCore<T>(frameData, inverse: false);
+
+                // Compute magnitude and phase for positive frequencies
+                int outputOffset = batchIdx * numFreqs * numFrames;
+                for (int k = 0; k < numFreqs; k++)
+                {
+                    double re = numOps.ToDouble(realOut[k]);
+                    double im = numOps.ToDouble(imagOut[k]);
+                    double mag = Math.Sqrt(re * re + im * im);
+                    double ph = Math.Atan2(im, re);
+
+                    magOut.SetFlat(outputOffset + k * numFrames + frame, numOps.FromDouble(mag));
+                    phOut.SetFlat(outputOffset + k * numFrames + frame, numOps.FromDouble(ph));
+                }
+            }
+        });
+
+        magnitudeOut = magOut;
+        phaseOut = phOut;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ISTFT<T>(
+        Tensor<T> magnitude,
+        Tensor<T> phase,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        int? length = null)
+    {
+        if (magnitude == null) throw new ArgumentNullException(nameof(magnitude));
+        if (phase == null) throw new ArgumentNullException(nameof(phase));
+        if (window == null) throw new ArgumentNullException(nameof(window));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numFreqs = magnitude.Shape[^2];
+        int numFrames = magnitude.Shape[^1];
+
+        // Calculate output length
+        int outputLength = length ?? (numFrames - 1) * hopLength + nFft;
+        if (center)
+            outputLength -= nFft; // Remove padding
+
+        // Output shape
+        var outputShape = magnitude.Shape.Take(magnitude.Shape.Length - 2).ToArray();
+        outputShape = outputShape.Length > 0 ? outputShape.Append(outputLength).ToArray() : new[] { outputLength };
+        var result = new Tensor<T>(outputShape);
+        var windowSum = new Tensor<T>(outputShape);
+
+        int batchSize = magnitude.Length / (numFreqs * numFrames);
+
+        for (int batchIdx = 0; batchIdx < batchSize; batchIdx++)
+        {
+            int magOffset = batchIdx * numFreqs * numFrames;
+            int outputOffset = batchIdx * outputLength;
+
+            for (int frame = 0; frame < numFrames; frame++)
+            {
+                // Reconstruct complex spectrum from magnitude and phase
+                var realIn = new Vector<T>(nFft);
+                var imagIn = new Vector<T>(nFft);
+
+                // Positive frequencies
+                for (int k = 0; k < numFreqs; k++)
+                {
+                    double mag = numOps.ToDouble(magnitude.GetFlat(magOffset + k * numFrames + frame));
+                    double ph = numOps.ToDouble(phase.GetFlat(magOffset + k * numFrames + frame));
+                    realIn[k] = numOps.FromDouble(mag * Math.Cos(ph));
+                    imagIn[k] = numOps.FromDouble(mag * Math.Sin(ph));
+                }
+
+                // Reconstruct negative frequencies using conjugate symmetry
+                for (int k = 1; k < numFreqs - 1; k++)
+                {
+                    realIn[nFft - k] = realIn[k];
+                    imagIn[nFft - k] = numOps.Negate(imagIn[k]);
+                }
+
+                // Inverse FFT
+                var (realOut, _) = FFTCore<T>(realIn, imagIn, inverse: true);
+                T scale = numOps.FromDouble(1.0 / nFft);
+
+                // Overlap-add
+                int start = frame * hopLength;
+                int actualStart = center ? start : start;
+                int writeStart = center ? Math.Max(0, start - nFft / 2) : start;
+
+                for (int i = 0; i < nFft; i++)
+                {
+                    int outIdx = writeStart + i;
+                    if (outIdx >= 0 && outIdx < outputLength)
+                    {
+                        T sample = numOps.Multiply(numOps.Multiply(realOut[i], scale), window.GetFlat(i));
+                        T existing = result.GetFlat(outputOffset + outIdx);
+                        result.SetFlat(outputOffset + outIdx, numOps.Add(existing, sample));
+
+                        T winSquared = numOps.Multiply(window.GetFlat(i), window.GetFlat(i));
+                        T existingWin = windowSum.GetFlat(outputOffset + outIdx);
+                        windowSum.SetFlat(outputOffset + outIdx, numOps.Add(existingWin, winSquared));
+                    }
+                }
+            }
+
+            // Normalize by window sum
+            for (int i = 0; i < outputLength; i++)
+            {
+                T winSum = windowSum.GetFlat(outputOffset + i);
+                double winSumD = numOps.ToDouble(winSum);
+                if (winSumD > 1e-8)
+                {
+                    T val = result.GetFlat(outputOffset + i);
+                    result.SetFlat(outputOffset + i, numOps.Divide(val, winSum));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MelSpectrogram<T>(
+        Tensor<T> input,
+        int sampleRate,
+        int nFft,
+        int hopLength,
+        int nMels,
+        T fMin,
+        T fMax,
+        Tensor<T> window,
+        bool powerToDb = true)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (window == null) throw new ArgumentNullException(nameof(window));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Compute STFT
+        STFT(input, nFft, hopLength, window, center: true, out var magnitude, out _);
+
+        // Convert to power spectrum (magnitude squared)
+        var powerSpec = TensorMultiply(magnitude, magnitude);
+
+        // Create mel filterbank
+        var melFilterbank = CreateMelFilterbank<T>(nMels, nFft, sampleRate, fMin, fMax);
+
+        // Apply filterbank: [nMels, numFreqs] @ [numFreqs, numFrames] -> [nMels, numFrames]
+        int numFreqs = nFft / 2 + 1;
+        int numFrames = magnitude.Shape[^1];
+        int batchSize = magnitude.Length / (numFreqs * numFrames);
+
+        var melShape = magnitude.Shape.ToArray();
+        melShape[^2] = nMels;
+        var melSpec = new Tensor<T>(melShape);
+
+        for (int batchIdx = 0; batchIdx < batchSize; batchIdx++)
+        {
+            int inputOffset = batchIdx * numFreqs * numFrames;
+            int outputOffset = batchIdx * nMels * numFrames;
+
+            for (int m = 0; m < nMels; m++)
+            {
+                for (int t = 0; t < numFrames; t++)
+                {
+                    T sum = numOps.Zero;
+                    for (int f = 0; f < numFreqs; f++)
+                    {
+                        T filterVal = melFilterbank.GetFlat(m * numFreqs + f);
+                        T powerVal = powerSpec.GetFlat(inputOffset + f * numFrames + t);
+                        sum = numOps.Add(sum, numOps.Multiply(filterVal, powerVal));
+                    }
+                    melSpec.SetFlat(outputOffset + m * numFrames + t, sum);
+                }
+            }
+        }
+
+        // Convert to dB scale if requested
+        if (powerToDb)
+        {
+            T refValue = numOps.One;
+            T minDb = numOps.FromDouble(-80.0);
+            T epsilon = numOps.FromDouble(1e-10);
+
+            for (int i = 0; i < melSpec.Length; i++)
+            {
+                T val = melSpec.GetFlat(i);
+                double valD = numOps.ToDouble(val);
+                valD = Math.Max(valD, numOps.ToDouble(epsilon));
+                double db = 10.0 * Math.Log10(valD / numOps.ToDouble(refValue));
+                db = Math.Max(db, numOps.ToDouble(minDb));
+                melSpec.SetFlat(i, numOps.FromDouble(db));
+            }
+        }
+
+        return melSpec;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GriffinLim<T>(
+        Tensor<T> magnitude,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        int iterations = 60,
+        double momentum = 0.99,
+        int? length = null)
+    {
+        if (magnitude == null) throw new ArgumentNullException(nameof(magnitude));
+        if (window == null) throw new ArgumentNullException(nameof(window));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numFreqs = magnitude.Shape[^2];
+        int numFrames = magnitude.Shape[^1];
+
+        // Initialize with random phase
+        var random = RandomHelper.ThreadSafeRandom;
+        var phase = new Tensor<T>(magnitude.Shape);
+        for (int i = 0; i < phase.Length; i++)
+        {
+            double randomPhase = random.NextDouble() * 2.0 * Math.PI - Math.PI;
+            phase.SetFlat(i, numOps.FromDouble(randomPhase));
+        }
+
+        Tensor<T>? previousPhase = null;
+
+        for (int iter = 0; iter < iterations; iter++)
+        {
+            // Reconstruct signal from magnitude and estimated phase
+            var reconstructed = ISTFT(magnitude, phase, nFft, hopLength, window, center: true, length: length);
+
+            // Re-compute STFT to get new phase estimate
+            STFT(reconstructed, nFft, hopLength, window, center: true, out _, out var newPhase);
+
+            // Apply momentum for faster convergence
+            if (previousPhase != null && momentum > 0)
+            {
+                for (int i = 0; i < phase.Length; i++)
+                {
+                    double currPhase = numOps.ToDouble(newPhase.GetFlat(i));
+                    double prevPhase = numOps.ToDouble(previousPhase.GetFlat(i));
+                    double diff = currPhase - prevPhase;
+                    // Wrap to [-pi, pi]
+                    while (diff > Math.PI) diff -= 2 * Math.PI;
+                    while (diff < -Math.PI) diff += 2 * Math.PI;
+                    double accelerated = prevPhase + diff * (1 + momentum);
+                    phase.SetFlat(i, numOps.FromDouble(accelerated));
+                }
+            }
+            else
+            {
+                TensorCopy(newPhase, phase);
+            }
+
+            previousPhase = newPhase;
+        }
+
+        // Final reconstruction
+        return ISTFT(magnitude, phase, nFft, hopLength, window, center: true, length: length);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> CreateMelFilterbank<T>(int nMels, int nFft, int sampleRate, T fMin, T fMax)
+    {
+        if (nMels <= 0) throw new ArgumentException("nMels must be positive", nameof(nMels));
+        if (nFft <= 0) throw new ArgumentException("nFft must be positive", nameof(nFft));
+        if (sampleRate <= 0) throw new ArgumentException("sampleRate must be positive", nameof(sampleRate));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double fMinHz = numOps.ToDouble(fMin);
+        double fMaxHz = numOps.ToDouble(fMax);
+
+        int numFreqs = nFft / 2 + 1;
+        var filterbank = new Tensor<T>([nMels, numFreqs]);
+        filterbank.Fill(numOps.Zero);
+
+        // Convert Hz to Mel scale
+        double melMin = HzToMel(fMinHz);
+        double melMax = HzToMel(fMaxHz);
+
+        // Create mel points evenly spaced in mel scale
+        var melPoints = new double[nMels + 2];
+        for (int i = 0; i < nMels + 2; i++)
+        {
+            melPoints[i] = melMin + i * (melMax - melMin) / (nMels + 1);
+        }
+
+        // Convert back to Hz and then to FFT bin indices
+        var binIndices = new int[nMels + 2];
+        for (int i = 0; i < nMels + 2; i++)
+        {
+            double hz = MelToHz(melPoints[i]);
+            binIndices[i] = (int)Math.Floor((nFft + 1) * hz / sampleRate);
+            binIndices[i] = Math.Max(0, Math.Min(numFreqs - 1, binIndices[i]));
+        }
+
+        // Create triangular filters
+        for (int m = 0; m < nMels; m++)
+        {
+            int fStart = binIndices[m];
+            int fCenter = binIndices[m + 1];
+            int fEnd = binIndices[m + 2];
+
+            // Rising edge
+            for (int f = fStart; f < fCenter; f++)
+            {
+                if (fCenter != fStart)
+                {
+                    double weight = (double)(f - fStart) / (fCenter - fStart);
+                    filterbank[m, f] = numOps.FromDouble(weight);
+                }
+            }
+
+            // Falling edge
+            for (int f = fCenter; f < fEnd; f++)
+            {
+                if (fEnd != fCenter)
+                {
+                    double weight = (double)(fEnd - f) / (fEnd - fCenter);
+                    filterbank[m, f] = numOps.FromDouble(weight);
+                }
+            }
+        }
+
+        return filterbank;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> CreateWindow<T>(string windowType, int length)
+    {
+        if (length <= 0) throw new ArgumentException("Length must be positive", nameof(length));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var window = new Tensor<T>([length]);
+
+        switch (windowType.ToLowerInvariant())
+        {
+            case "hann":
+            case "hanning":
+                for (int i = 0; i < length; i++)
+                {
+                    double val = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (length - 1)));
+                    window[i] = numOps.FromDouble(val);
+                }
+                break;
+
+            case "hamming":
+                for (int i = 0; i < length; i++)
+                {
+                    double val = 0.54 - 0.46 * Math.Cos(2.0 * Math.PI * i / (length - 1));
+                    window[i] = numOps.FromDouble(val);
+                }
+                break;
+
+            case "blackman":
+                for (int i = 0; i < length; i++)
+                {
+                    double val = 0.42 - 0.5 * Math.Cos(2.0 * Math.PI * i / (length - 1))
+                                      + 0.08 * Math.Cos(4.0 * Math.PI * i / (length - 1));
+                    window[i] = numOps.FromDouble(val);
+                }
+                break;
+
+            case "bartlett":
+            case "triangular":
+                for (int i = 0; i < length; i++)
+                {
+                    double val = 1.0 - Math.Abs((2.0 * i - (length - 1)) / (length - 1));
+                    window[i] = numOps.FromDouble(val);
+                }
+                break;
+
+            case "rectangular":
+            case "boxcar":
+                for (int i = 0; i < length; i++)
+                {
+                    window[i] = numOps.One;
+                }
+                break;
+
+            default:
+                throw new ArgumentException($"Unknown window type: {windowType}. Supported: hann, hamming, blackman, bartlett, rectangular");
+        }
+
+        return window;
+    }
+
+    #region FFT Helper Methods
+
+    /// <summary>
+    /// Core FFT computation using Cooley-Tukey algorithm.
+    /// </summary>
+    private static (Vector<T> real, Vector<T> imag) FFTCore<T>(Vector<T> realInput, bool inverse)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = realInput.Length;
+        var imagInput = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            imagInput[i] = numOps.Zero;
+        return FFTCore(realInput, imagInput, inverse);
+    }
+
+    /// <summary>
+    /// Core FFT computation using Cooley-Tukey algorithm with complex input.
+    /// </summary>
+    private static (Vector<T> real, Vector<T> imag) FFTCore<T>(Vector<T> realInput, Vector<T> imagInput, bool inverse)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = realInput.Length;
+        if (n <= 1)
+            return (new Vector<T>(realInput.ToArray()), new Vector<T>(imagInput.ToArray()));
+
+        // Pad to power of 2 if needed
+        int nPadded = NextPowerOf2(n);
+        Vector<T> realWork, imagWork;
+        if (nPadded != n)
+        {
+            realWork = new Vector<T>(nPadded);
+            imagWork = new Vector<T>(nPadded);
+            for (int i = 0; i < n; i++)
+            {
+                realWork[i] = realInput[i];
+                imagWork[i] = imagInput[i];
+            }
+            for (int i = n; i < nPadded; i++)
+            {
+                realWork[i] = numOps.Zero;
+                imagWork[i] = numOps.Zero;
+            }
+            n = nPadded;
+        }
+        else
+        {
+            realWork = new Vector<T>(realInput.ToArray());
+            imagWork = new Vector<T>(imagInput.ToArray());
+        }
+
+        // Bit-reversal permutation
+        var real = new Vector<T>(n);
+        var imag = new Vector<T>(n);
+        int bits = (int)Math.Log2(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            int j = BitReverse(i, bits);
+            real[j] = realWork[i];
+            imag[j] = imagWork[i];
+        }
+
+        // Cooley-Tukey iterative FFT
+        double angleSign = inverse ? 1.0 : -1.0;
+
+        for (int size = 2; size <= n; size *= 2)
+        {
+            int halfSize = size / 2;
+            double angleStep = angleSign * 2.0 * Math.PI / size;
+
+            for (int i = 0; i < n; i += size)
+            {
+                for (int k = 0; k < halfSize; k++)
+                {
+                    double angle = angleStep * k;
+                    double cos = Math.Cos(angle);
+                    double sin = Math.Sin(angle);
+
+                    int evenIdx = i + k;
+                    int oddIdx = i + k + halfSize;
+
+                    double tReal = numOps.ToDouble(real[oddIdx]) * cos - numOps.ToDouble(imag[oddIdx]) * sin;
+                    double tImag = numOps.ToDouble(real[oddIdx]) * sin + numOps.ToDouble(imag[oddIdx]) * cos;
+
+                    double evenReal = numOps.ToDouble(real[evenIdx]);
+                    double evenImag = numOps.ToDouble(imag[evenIdx]);
+
+                    real[evenIdx] = numOps.FromDouble(evenReal + tReal);
+                    imag[evenIdx] = numOps.FromDouble(evenImag + tImag);
+                    real[oddIdx] = numOps.FromDouble(evenReal - tReal);
+                    imag[oddIdx] = numOps.FromDouble(evenImag - tImag);
+                }
+            }
+        }
+
+        return (real, imag);
+    }
+
+    /// <summary>
+    /// Returns the smallest power of 2 >= n.
+    /// </summary>
+    private static int NextPowerOf2(int n)
+    {
+        if (n <= 0) return 1;
+        n--;
+        n |= n >> 1;
+        n |= n >> 2;
+        n |= n >> 4;
+        n |= n >> 8;
+        n |= n >> 16;
+        return n + 1;
+    }
+
+    /// <summary>
+    /// Reverses the bits of an integer for FFT bit-reversal permutation.
+    /// </summary>
+    private static int BitReverse(int x, int bits)
+    {
+        int result = 0;
+        for (int i = 0; i < bits; i++)
+        {
+            result = (result << 1) | (x & 1);
+            x >>= 1;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Converts frequency from Hz to Mel scale.
+    /// </summary>
+    private static double HzToMel(double hz)
+    {
+        return 2595.0 * Math.Log10(1.0 + hz / 700.0);
+    }
+
+    /// <summary>
+    /// Converts frequency from Mel scale to Hz.
+    /// </summary>
+    private static double MelToHz(double mel)
+    {
+        return 700.0 * (Math.Pow(10.0, mel / 2595.0) - 1.0);
+    }
+
+    #endregion
 
     #endregion
 }
