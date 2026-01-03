@@ -340,13 +340,13 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
             .ToList();
 
         // Convert extracted features to generic SceneFeatures<T>
-        // Note: SceneClassifier doesn't compute tempo (beat detection not implemented)
+        // Note: SceneClassifier doesn't compute tempo, so we use RMS energy as a rhythm indicator
         var sceneFeatures = new SceneFeatures<T>
         {
             MfccMean = featureStruct.MfccMean.Select(v => NumOps.FromDouble(v)).ToArray(),
             MfccStd = featureStruct.MfccStd.Select(v => NumOps.FromDouble(v)).ToArray(),
             BandEnergies = featureStruct.BandEnergies.Select(v => NumOps.FromDouble(v)).ToArray(),
-            Tempo = NumOps.Zero // Tempo detection not implemented
+            Tempo = NumOps.FromDouble(featureStruct.RmsEnergy * 100) // Approximate rhythm indicator
         };
 
         return new SceneClassificationResult<T>
