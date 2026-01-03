@@ -1,3 +1,4 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
 
@@ -1917,6 +1918,46 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             throw new ArgumentNullException(nameof(tensor));
 
         Engine.InvalidatePersistentTensor(tensor);
+    }
+
+    /// <summary>
+    /// Gets the fused activation type for IEngine fused operations.
+    /// </summary>
+    /// <returns>The FusedActivationType enum value for the current activation function.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method maps the layer's activation function to a FusedActivationType enum value,
+    /// allowing IEngine to use optimized fused GPU kernels (e.g., GEMM+Bias+ReLU in one kernel).
+    /// </para>
+    /// <para><b>For Beginners:</b> GPU operations are faster when combined.
+    /// Instead of doing MatMul, then adding bias, then applying ReLU as separate steps,
+    /// fused operations do all three in one GPU kernel - this is 20-50% faster.
+    /// This method tells the GPU which activation to fuse with other operations.
+    /// </para>
+    /// <para><b>Supported Activations:</b></para>
+    /// <list type="bullet">
+    /// <item><description>ReLU → FusedActivationType.ReLU</description></item>
+    /// <item><description>Sigmoid → FusedActivationType.Sigmoid</description></item>
+    /// <item><description>Tanh → FusedActivationType.Tanh</description></item>
+    /// <item><description>GELU → FusedActivationType.GELU</description></item>
+    /// <item><description>LeakyReLU → FusedActivationType.LeakyReLU</description></item>
+    /// <item><description>Swish/SiLU → FusedActivationType.Swish</description></item>
+    /// <item><description>Other/None → FusedActivationType.None (activation applied separately)</description></item>
+    /// </list>
+    /// </remarks>
+    protected FusedActivationType GetFusedActivationType()
+    {
+        return ScalarActivation switch
+        {
+            ReLUActivation<T> => FusedActivationType.ReLU,
+            SigmoidActivation<T> => FusedActivationType.Sigmoid,
+            TanhActivation<T> => FusedActivationType.Tanh,
+            GELUActivation<T> => FusedActivationType.GELU,
+            LeakyReLUActivation<T> => FusedActivationType.LeakyReLU,
+            SwishActivation<T> => FusedActivationType.Swish,
+            SiLUActivation<T> => FusedActivationType.Swish, // SiLU is the same as Swish
+            _ => FusedActivationType.None
+        };
     }
 
     #endregion

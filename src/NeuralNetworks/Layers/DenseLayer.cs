@@ -629,22 +629,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Gets the fused activation type for IEngine operations.
-    /// </summary>
-    /// <returns>The FusedActivationType enum value for the current activation function.</returns>
-    private FusedActivationType GetFusedActivationType()
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-            return FusedActivationType.ReLU;
-        if (ScalarActivation is SigmoidActivation<T>)
-            return FusedActivationType.Sigmoid;
-        if (ScalarActivation is TanhActivation<T>)
-            return FusedActivationType.Tanh;
-        // Note: For unsupported activations, return None and apply separately
-        return FusedActivationType.None;
-    }
-
-    /// <summary>
     /// Gets the weights tensor of the layer.
     /// </summary>
     /// <returns>The weight tensor connecting input neurons to output neurons.</returns>
