@@ -559,10 +559,11 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             Matrix<T> adapterWeights = adapter.MergeWeights();
 
             // Add this adapter's contribution to the merged weights
+            // DenseLayer uses [inputSize, outputSize] convention
             for (int i = 0; i < weightCount; i++)
             {
-                int row = i / inputSize;
-                int col = i % inputSize;
+                int row = i / outputSize;
+                int col = i % outputSize;
                 mergedParams[i] = NumOps.Add(mergedParams[i], adapterWeights[row, col]);
             }
             // Note: Biases remain unchanged (indices weightCount to end)

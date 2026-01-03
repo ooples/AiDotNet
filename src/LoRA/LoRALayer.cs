@@ -552,8 +552,10 @@ public class LoRALayer<T> : LayerBase<T>
     public Matrix<T> MergeWeights()
     {
         // Compute W_lora = A * B * scaling
+        // A: [inputSize, rank], B: [rank, outputSize]
+        // Result: [inputSize, outputSize] - matches DenseLayer's industry standard convention
         Matrix<T> merged = _loraA.Multiply(_loraB).Multiply(_scaling);
-        return merged.Transpose();  // Transpose to get [outputSize, inputSize] for compatibility with DenseLayer
+        return merged;
     }
 
     /// <summary>

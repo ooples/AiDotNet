@@ -615,10 +615,12 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> mergedParams = new Vector<T>(baseParams.Length);
 
         // Merge weights
+        // DenseLayer uses [inputSize, outputSize] convention
+        // loraWeights from MergeWeights() is also [inputSize, outputSize]
         for (int i = 0; i < weightCount; i++)
         {
-            int row = i / inputSize;
-            int col = i % inputSize;
+            int row = i / outputSize;
+            int col = i % outputSize;
             mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
         }
 

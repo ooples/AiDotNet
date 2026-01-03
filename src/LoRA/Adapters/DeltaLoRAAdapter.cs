@@ -187,15 +187,16 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         _momentumFactor = momentumFactor;
 
         // Initialize delta weights and velocity matrices
+        // Use [inputSize, outputSize] to match DenseLayer's industry standard convention
         int outputSize = GetOutputShape()[0];
         int inputSize = GetInputShape()[0];
-        _deltaWeights = new Matrix<T>(outputSize, inputSize);
-        _velocity = new Matrix<T>(outputSize, inputSize);
+        _deltaWeights = new Matrix<T>(inputSize, outputSize);
+        _velocity = new Matrix<T>(inputSize, outputSize);
 
         // Initialize to zero
-        for (int i = 0; i < outputSize; i++)
+        for (int i = 0; i < inputSize; i++)
         {
-            for (int j = 0; j < inputSize; j++)
+            for (int j = 0; j < outputSize; j++)
             {
                 _deltaWeights[i, j] = NumOps.Zero;
                 _velocity[i, j] = NumOps.Zero;
@@ -597,10 +598,11 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         T deltaScalingT = NumOps.FromDouble(_deltaScaling);
 
         // Merge weights: base + LoRA + delta * scaling
+        // DenseLayer uses [inputSize, outputSize] convention
         for (int i = 0; i < weightCount; i++)
         {
-            int row = i / inputSize;
-            int col = i % inputSize;
+            int row = i / outputSize;
+            int col = i % outputSize;
 
             // Start with base weight
             T merged = baseParams[i];

@@ -235,9 +235,9 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             // Act
             var mergedWeights = layer.MergeWeights();
 
-            // Assert
-            Assert.Equal(5, mergedWeights.Rows);
-            Assert.Equal(10, mergedWeights.Columns);
+            // Assert - Dimensions should be [inputSize, outputSize] to match DenseLayer's industry standard convention
+            Assert.Equal(10, mergedWeights.Rows);     // inputSize
+            Assert.Equal(5, mergedWeights.Columns);   // outputSize
         }
 
         [Fact]
