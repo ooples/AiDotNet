@@ -307,23 +307,45 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
             throw new InvalidOperationException("Deserialization returned null");
         }
 
+        // Parse and validate weights matrix
+        var weightsObj = state.Weights;
+        if (weightsObj is null)
+        {
+            throw new InvalidOperationException("Failed to deserialize agent state: Weights property is missing or null.");
+        }
+
+        if (weightsObj is not Newtonsoft.Json.Linq.JArray jArray)
+        {
+            throw new InvalidOperationException($"Failed to deserialize agent state: Weights must be a JSON array, got {weightsObj.GetType().Name}.");
+        }
+
+        // Validate row count
+        if (jArray.Count != _options.ActionSize)
+        {
+            throw new InvalidOperationException($"Weight matrix row count mismatch: expected {_options.ActionSize} (ActionSize), got {jArray.Count}.");
+        }
+
         // Create matrix with correct dimensions from options
         _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
 
         // Parse matrix from JArray structure (Matrix serializes as 2D array)
-        var weightsObj = state.Weights;
-        if (weightsObj is Newtonsoft.Json.Linq.JArray jArray)
+        for (int r = 0; r < jArray.Count; r++)
         {
-            for (int r = 0; r < _options.ActionSize && r < jArray.Count; r++)
+            var rowArray = jArray[r] as Newtonsoft.Json.Linq.JArray;
+            if (rowArray is null)
             {
-                var rowArray = jArray[r] as Newtonsoft.Json.Linq.JArray;
-                if (rowArray is not null)
-                {
-                    for (int c = 0; c < _options.FeatureSize && c < rowArray.Count; c++)
-                    {
-                        _weights[r, c] = NumOps.FromDouble((double)rowArray[c]);
-                    }
-                }
+                throw new InvalidOperationException($"Failed to deserialize agent state: Weight row {r} must be a JSON array.");
+            }
+
+            // Validate column count
+            if (rowArray.Count != _options.FeatureSize)
+            {
+                throw new InvalidOperationException($"Weight matrix column count mismatch at row {r}: expected {_options.FeatureSize} (FeatureSize), got {rowArray.Count}.");
+            }
+
+            for (int c = 0; c < rowArray.Count; c++)
+            {
+                _weights[r, c] = NumOps.FromDouble((double)rowArray[c]);
             }
         }
     }

@@ -139,14 +139,50 @@ public static class ModelHelper<T, TInput, TOutput>
                     inputSize: 1,
                     outputSize: 1));
         }
+        else if (typeof(TInput) == typeof(Vector<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            // For vector-to-vector models
+            return (IFullModel<T, TInput, TOutput>)new VectorModel<T>(Vector<T>.Empty());
+        }
+        else if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Tensor<T>))
+        {
+            // For matrix input with tensor output (used in some meta-learning scenarios)
+            return (IFullModel<T, TInput, TOutput>)(object)new NeuralNetwork<T>(
+                new NeuralNetworkArchitecture<T>(
+                    InputType.OneDimensional,
+                    NeuralNetworkTaskType.Regression,
+                    NetworkComplexity.Simple,
+                    inputSize: 1,
+                    outputSize: 1));
+        }
+        else if (typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            // For tensor input with vector output
+            return (IFullModel<T, TInput, TOutput>)(object)new NeuralNetwork<T>(
+                new NeuralNetworkArchitecture<T>(
+                    InputType.OneDimensional,
+                    NeuralNetworkTaskType.Regression,
+                    NetworkComplexity.Simple,
+                    inputSize: 1,
+                    outputSize: 1));
+        }
+        else if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Matrix<T>))
+        {
+            // For matrix input with matrix output
+            return (IFullModel<T, TInput, TOutput>)new VectorModel<T>(Vector<T>.Empty());
+        }
         else
         {
             // For other combinations, provide a clear error message
             throw new InvalidOperationException(
                 $"Unsupported combination of input type {typeof(TInput).Name} and output type {typeof(TOutput).Name}. " +
                 "Currently supported combinations are: " +
-                $"(Matrix<{typeof(T).Name}>, Vector<{typeof(T).Name}>) for linear models and " +
-                $"(Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>) for neural network models.");
+                $"(Matrix<{typeof(T).Name}>, Vector<{typeof(T).Name}>), " +
+                $"(Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>), " +
+                $"(Vector<{typeof(T).Name}>, Vector<{typeof(T).Name}>), " +
+                $"(Matrix<{typeof(T).Name}>, Tensor<{typeof(T).Name}>), " +
+                $"(Tensor<{typeof(T).Name}>, Vector<{typeof(T).Name}>), and " +
+                $"(Matrix<{typeof(T).Name}>, Matrix<{typeof(T).Name}>).");
         }
     }
 
@@ -262,13 +298,37 @@ public static class ModelHelper<T, TInput, TOutput>
             // Create a neural network model
             return CreateRandomNeuralNetworkWithFeatures(activeFeatures, totalFeatures);
         }
+        else if (typeof(TInput) == typeof(Vector<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            // For vector-to-vector models, use a vector model
+            return CreateRandomVectorModelWithFeatures(activeFeatures, totalFeatures);
+        }
+        else if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Tensor<T>))
+        {
+            // For matrix input with tensor output, use a neural network
+            return CreateRandomNeuralNetworkWithFeatures(activeFeatures, totalFeatures);
+        }
+        else if (typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            // For tensor input with vector output, use a neural network
+            return CreateRandomNeuralNetworkWithFeatures(activeFeatures, totalFeatures);
+        }
+        else if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Matrix<T>))
+        {
+            // For matrix input with matrix output, use a vector model
+            return CreateRandomVectorModelWithFeatures(activeFeatures, totalFeatures);
+        }
 
         // For other combinations, provide a clear error message
         throw new InvalidOperationException(
             $"Unsupported combination of input type {typeof(TInput).Name} and output type {typeof(TOutput).Name}. " +
             "Currently supported combinations are: " +
-            $"(Matrix<{typeof(T).Name}>, Vector<{typeof(T).Name}>) for linear models and " +
-            $"(Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>) for neural network models.");
+            $"(Matrix<{typeof(T).Name}>, Vector<{typeof(T).Name}>), " +
+            $"(Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>), " +
+            $"(Vector<{typeof(T).Name}>, Vector<{typeof(T).Name}>), " +
+            $"(Matrix<{typeof(T).Name}>, Tensor<{typeof(T).Name}>), " +
+            $"(Tensor<{typeof(T).Name}>, Vector<{typeof(T).Name}>), and " +
+            $"(Matrix<{typeof(T).Name}>, Matrix<{typeof(T).Name}>).");
     }
 
     /// <summary>

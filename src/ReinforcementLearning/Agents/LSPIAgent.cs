@@ -359,8 +359,61 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
 
-        // Clear and repopulate samples list (complex deserialization not needed for test)
+        // Deserialize samples list
         _samples = new List<(Vector<T>, int, T, Vector<T>, bool)>();
+        var samplesObj = state.Samples;
+        if (samplesObj is Newtonsoft.Json.Linq.JArray samplesArray)
+        {
+            foreach (var sampleObj in samplesArray)
+            {
+                if (sampleObj is Newtonsoft.Json.Linq.JObject sample)
+                {
+                    // Deserialize state vector (Item1)
+                    var stateArray = sample["Item1"] as Newtonsoft.Json.Linq.JArray;
+                    Vector<T> stateVec;
+                    if (stateArray is not null)
+                    {
+                        stateVec = new Vector<T>(stateArray.Count);
+                        for (int i = 0; i < stateArray.Count; i++)
+                        {
+                            stateVec[i] = NumOps.FromDouble((double)stateArray[i]);
+                        }
+                    }
+                    else
+                    {
+                        stateVec = new Vector<T>(0);
+                    }
+
+                    // Deserialize action (Item2)
+                    int action = sample["Item2"] is not null ? Convert.ToInt32(sample["Item2"]) : 0;
+
+                    // Deserialize reward (Item3)
+                    T reward = NumOps.FromDouble(sample["Item3"] is not null ? Convert.ToDouble(sample["Item3"]) : 0.0);
+
+                    // Deserialize next state vector (Item4)
+                    var nextStateArray = sample["Item4"] as Newtonsoft.Json.Linq.JArray;
+                    Vector<T> nextStateVec;
+                    if (nextStateArray is not null)
+                    {
+                        nextStateVec = new Vector<T>(nextStateArray.Count);
+                        for (int i = 0; i < nextStateArray.Count; i++)
+                        {
+                            nextStateVec[i] = NumOps.FromDouble((double)nextStateArray[i]);
+                        }
+                    }
+                    else
+                    {
+                        nextStateVec = new Vector<T>(0);
+                    }
+
+                    // Deserialize done flag (Item5)
+                    bool done = sample["Item5"] is not null && Convert.ToBoolean(sample["Item5"]);
+
+                    _samples.Add((stateVec, action, reward, nextStateVec, done));
+                }
+            }
+        }
+
         _iterations = (int)state.Iterations;
     }
 
