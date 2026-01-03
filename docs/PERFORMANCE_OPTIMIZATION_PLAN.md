@@ -32,10 +32,13 @@ This document outlines a comprehensive plan to address performance bottlenecks i
 ### 2. Forward Pass Bottlenecks
 
 **Root Causes:**
-1. **No SIMD optimization**: Pure scalar operations for tensor math
+1. **Incomplete layer refactoring**: ~85 layers still use manual loops instead of IEngine operations
 2. **Memory access patterns**: Non-contiguous access hurts cache performance
 3. **Large input tensors**: 224x224x3 = 150,528 floats per image
 4. **Dense connectivity**: DenseNet concatenates ALL previous feature maps
+
+> **Note:** SIMD operations already exist via `TensorPrimitivesHelper<T>` (5-15x speedup for float/double).
+> GPU acceleration exists via `IEngine` with cuBLAS/cuDNN bindings. See `GPU_ENGINE_OPTIMIZATION_PLAN.md`.
 
 ### 3. Test-Specific Issues
 
@@ -256,93 +259,104 @@ public void DenseNet_LargerVariants_HaveMoreLayers()
 
 ---
 
-## Epic 4: SIMD/Vectorization for Production Performance
+## Epic 4: Complete Layer Refactoring to Use IEngine
 
-### User Story 4.1: Add SIMD Tensor Operations
-**As a** production user,
-**I want** hardware-accelerated tensor operations,
-**So that** inference is 2-5x faster.
+> **Important:** This epic continues the work defined in `GPU_ENGINE_OPTIMIZATION_PLAN.md` (Phase 4-5).
+> The IEngine abstraction already provides SIMD (via TensorPrimitivesHelper), cuBLAS (~30K GFLOPS),
+> cuDNN (Winograd, FFT convolution), and fused operations. The work here is to refactor remaining
+> layers to use these existing optimized operations instead of manual loops.
+
+### User Story 4.1: Refactor High-Priority Attention Layers
+**As a** production user running transformers,
+**I want** attention layers to use IEngine operations,
+**So that** I get automatic CPU SIMD and GPU acceleration.
 
 **Acceptance Criteria:**
-- SIMD implementations for: Add, Multiply, MatMul, Conv2D
-- Support for AVX2, AVX-512 (x64) and NEON (ARM)
-- Fallback to scalar for unsupported hardware
-- Benchmark suite to measure improvements
+- CrossAttentionLayer uses `Engine.BatchMatMul` and `Engine.Softmax` (currently 20+ manual loops)
+- GraphAttentionLayer uses `Engine.ScaledDotProductAttention` (currently 85 manual loops)
+- All attention layers use `Engine.FlashAttention` for long sequences (O(N) memory)
+- No manual nested loops for attention computation
 
-**Implementation:**
+**Layers to Refactor:**
+| Layer | Current Issue | Target IEngine Operations |
+|-------|---------------|---------------------------|
+| CrossAttentionLayer | Manual 4-nested matmul | `Engine.BatchMatMul`, `Engine.Softmax` |
+| GraphAttentionLayer | 85 manual loops | `Engine.ScaledDotProductAttention` |
+| MultiHeadAttentionLayer | Needs update | `Engine.FlashAttention` for seq > 256 |
+| SelfAttentionLayer | Needs update | `Engine.ScaledDotProductAttention` |
+
+**Estimated Impact:** 2-5x faster attention computation
+
+---
+
+### User Story 4.2: Refactor Graph Neural Network Layers
+**As a** production user running GNNs,
+**I want** graph layers to use IEngine scatter/gather operations,
+**So that** message passing is GPU-accelerated.
+
+**Acceptance Criteria:**
+- MessagePassingLayer uses `Engine.ScatterAdd/Mean/Max` (currently 73+ NumOps calls)
+- GraphTransformerLayer uses existing IEngine operations (currently 75+ NumOps calls)
+- DiffusionConvLayer uses `Engine.Conv` operations (currently 43+ NumOps calls)
+- HeterogeneousGraphLayer refactored (30+ NumOps calls)
+
+**Layers to Refactor:**
+| Layer | Manual Loop Count | Target IEngine Operations |
+|-------|-------------------|---------------------------|
+| MessagePassingLayer | 73+ NumOps | `Engine.ScatterAdd/Mean/Max` |
+| GraphTransformerLayer | 75+ NumOps | `Engine.BatchMatMul`, `Engine.Softmax` |
+| DiffusionConvLayer | 43+ NumOps | `Engine.Conv2D`, `Engine.MatMul` |
+| HeterogeneousGraphLayer | 30+ NumOps | `Engine.Scatter*`, `Engine.Gather` |
+
+**Estimated Impact:** 3-10x faster GNN inference
+
+---
+
+### User Story 4.3: Complete Normalization and Pooling Layer Refactoring
+**As a** production user,
+**I want** all normalization layers to use fused IEngine operations,
+**So that** batch/layer/group norm are GPU-accelerated.
+
+**Acceptance Criteria:**
+- BatchNormalizationLayer uses `Engine.FusedBatchNorm`
+- LayerNormalizationLayer uses `Engine.LayerNorm`
+- GroupNormalizationLayer uses `Engine.GroupNorm`
+- All layers call `RegisterTrainableParameter` for GPU tensor caching
+
+**Layers to Refactor (Priority 4 from GPU plan):**
+- BatchNormalizationLayer
+- LayerNormalizationLayer
+- GroupNormalizationLayer
+- InstanceNormalizationLayer
+- SpectralNormalizationLayer
+
+**Estimated Impact:** 20-30% faster normalization operations
+
+---
+
+### User Story 4.4: Expand CpuEngine SIMD Coverage
+**As a** developer,
+**I want** remaining scalar operations in CpuEngine to use SIMD,
+**So that** CPU inference is consistently fast.
+
+**Current Scalar Operations to Vectorize:**
 ```csharp
-public static class SimdOperations
-{
-    public static void Add(ReadOnlySpan<float> a, ReadOnlySpan<float> b, Span<float> result)
-    {
-        if (Vector.IsHardwareAccelerated && a.Length >= Vector<float>.Count)
-        {
-            AddVectorized(a, b, result);
-        }
-        else
-        {
-            AddScalar(a, b, result);
-        }
-    }
-
-    private static void AddVectorized(ReadOnlySpan<float> a, ReadOnlySpan<float> b, Span<float> result)
-    {
-        int vectorSize = Vector<float>.Count;
-        int i = 0;
-
-        for (; i <= a.Length - vectorSize; i += vectorSize)
-        {
-            var va = new Vector<float>(a.Slice(i, vectorSize));
-            var vb = new Vector<float>(b.Slice(i, vectorSize));
-            (va + vb).CopyTo(result.Slice(i, vectorSize));
-        }
-
-        // Handle remainder
-        for (; i < a.Length; i++)
-        {
-            result[i] = a[i] + b[i];
-        }
-    }
-}
+// These operations in CpuEngine still use scalar loops:
+- Sqrt (uses NumOps.Sqrt in loop)
+- Power operations
+- Some activation functions (LeakyReLU, GELU, Mish, Swish, ELU)
 ```
 
-**Files to Create:**
-- `src/Tensors/Simd/SimdOperations.cs`
-- `src/Tensors/Simd/SimdMatMul.cs`
-- `src/Tensors/Simd/SimdConv2D.cs`
+**Implementation:**
+- Add vectorized versions to `INumericOperations<T>` interface
+- Implement using `System.Numerics.Tensors.TensorPrimitives` for float/double
+- Fallback to scalar for other numeric types
 
-**Estimated Impact:** 2-5x faster for large tensors
+**Files to Modify:**
+- `src/AiDotNet.Tensors/Helpers/TensorPrimitivesHelper.cs`
+- `src/AiDotNet.Tensors/NumericOperations/*.cs`
 
----
-
-### User Story 4.2: Optimize Matrix Multiplication
-**As a** production user running transformers/attention,
-**I want** fast matrix multiplication,
-**So that** attention-based models run efficiently.
-
-**Acceptance Criteria:**
-- BLAS-like interface for MatMul
-- Cache-blocking for large matrices
-- Optional use of native BLAS (MKL, OpenBLAS) via P/Invoke
-
-**Implementation Approach:**
-1. Implement cache-blocking (tile-based) algorithm
-2. Use SIMD within tiles
-3. Add optional native acceleration
-
----
-
-### User Story 4.3: Optimize Convolution Operations
-**As a** production user running CNNs,
-**I want** optimized convolution,
-**So that** ResNet/EfficientNet inference is fast.
-
-**Acceptance Criteria:**
-- Im2col + GEMM approach for Conv2D
-- Winograd transform for 3x3 convolutions
-- Depthwise separable optimization for MobileNet/EfficientNet
-
-**Estimated Impact:** 2-3x faster CNN forward pass
+**Estimated Impact:** 2-5x faster for affected operations
 
 ---
 
@@ -440,18 +454,18 @@ public class NetworkConstructionBenchmarks
 
 **Expected Impact:** Additional 30% reduction in test time, 30% memory reduction
 
-### Phase 3: Production Performance (3-4 weeks)
-- [ ] User Story 4.1: Add SIMD tensor operations
-- [ ] User Story 4.2: Optimize matrix multiplication
-- [ ] User Story 4.3: Optimize convolution operations
+### Phase 3: Layer Refactoring (3-4 weeks)
+- [ ] User Story 4.1: Refactor high-priority attention layers (CrossAttention, GraphAttention)
+- [ ] User Story 4.2: Refactor graph neural network layers (MessagePassing, GraphTransformer)
+- [ ] User Story 4.3: Complete normalization layer refactoring
 - [ ] User Story 2.2: Add pooling to forward pass
 
-**Expected Impact:** 2-5x faster inference
+**Expected Impact:** 2-5x faster inference via existing IEngine optimizations
 
-### Phase 4: Long-term (ongoing)
+### Phase 4: Polish and Maintenance (ongoing)
+- [ ] User Story 4.4: Expand CpuEngine SIMD coverage for remaining scalar ops
 - [ ] User Story 5.2: Add performance regression tests
-- [ ] Native BLAS integration (optional)
-- [ ] GPU acceleration planning
+- [ ] Continue layer refactoring per `GPU_ENGINE_OPTIMIZATION_PLAN.md` Phase 5
 
 ---
 
@@ -471,16 +485,23 @@ public class NetworkConstructionBenchmarks
 ## Dependencies and Risks
 
 ### Dependencies
-- .NET 8.0 for latest SIMD intrinsics
+- .NET 8.0 for latest SIMD intrinsics (already in use)
 - BenchmarkDotNet for performance testing
+- Existing IEngine infrastructure (see `GPU_ENGINE_OPTIMIZATION_PLAN.md`)
 
 ### Risks
 1. **API Breaking Changes**: Lazy initialization changes constructor semantics
    - Mitigation: Make lazy opt-in via strategy parameter
 2. **Thread Safety**: Lazy initialization must be thread-safe
    - Mitigation: Use `LazyInitializer.EnsureInitialized` pattern
-3. **SIMD Complexity**: Platform-specific code increases maintenance
-   - Mitigation: Comprehensive test matrix, fallback paths
+3. **Layer Refactoring Scope**: 85+ layers need updates to use IEngine
+   - Mitigation: Prioritize by usage frequency and performance impact
+   - Mitigation: Follow patterns established in Phase 3 of GPU plan (DenseLayer, ConvolutionalLayer)
+
+### Related Documentation
+- `GPU_ENGINE_OPTIMIZATION_PLAN.md` - Comprehensive GPU optimization plan (Phase 1-3 complete)
+- `src/AiDotNet.Tensors/Engines/IEngine.cs` - Core compute abstraction interface
+- `src/AiDotNet.Tensors/Helpers/TensorPrimitivesHelper.cs` - SIMD operations for float/double
 
 ---
 
