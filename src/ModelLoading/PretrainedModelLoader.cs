@@ -1,4 +1,3 @@
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.ModelLoading;
@@ -59,33 +58,28 @@ public class PretrainedModelLoader<T>
     }
 
     /// <summary>
-    /// Validates and maps VAE weights from a SafeTensors file.
+    /// Loads weights from a SafeTensors file into any IWeightLoadable model.
     /// </summary>
-    /// <param name="vae">The VAE model to validate weights for.</param>
+    /// <param name="model">The model to load weights into (must implement IWeightLoadable).</param>
     /// <param name="weightsPath">Path to the .safetensors file.</param>
-    /// <param name="mapping">Optional custom weight mapping. Uses SD v1.x mapping if null.</param>
-    /// <returns>Load result with mapping statistics. Note: WeightsApplied will be false as
-    /// actual weight application requires model-specific implementation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when vae or weightsPath is null.</exception>
+    /// <param name="mapping">Optional custom weight mapping function. Maps source names to target names.</param>
+    /// <param name="strict">If true, fails when weights can't be loaded. If false, skips missing weights.</param>
+    /// <returns>Load result with statistics about applied weights.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when model or weightsPath is null.</exception>
     /// <exception cref="FileNotFoundException">Thrown when weights file doesn't exist.</exception>
     /// <remarks>
     /// <para>
-    /// This method validates that weights can be mapped from the SafeTensors file to the
-    /// VAE model's expected parameter names. To actually apply the weights, the VAE model
-    /// would need to implement a SetParameterByName method, which is not yet available.
-    /// </para>
-    /// <para>
-    /// Use the returned LoadResult.MappedNames to see which weights would be applied.
+    /// <b>For Beginners:</b> This method takes pretrained weights from a file and loads them
+    /// into your model. The mapping function translates between the weight names in the file
+    /// (like "encoder.conv1.weight") and the names your model uses.
     /// </para>
     /// </remarks>
-    public LoadResult LoadVAEWeights(IVAEModel<T> vae, string weightsPath, WeightMapping? mapping = null)
+    public LoadResult LoadWeights(IWeightLoadable<T> model, string weightsPath, Func<string, string?>? mapping = null, bool strict = false)
     {
-        if (vae == null)
-            throw new ArgumentNullException(nameof(vae));
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
         if (string.IsNullOrWhiteSpace(weightsPath))
             throw new ArgumentNullException(nameof(weightsPath));
-
-        mapping = mapping ?? WeightMapping.CreateStableDiffusionV1VAE();
 
         var result = new LoadResult();
 
@@ -100,42 +94,21 @@ public class PretrainedModelLoader<T>
                 Console.WriteLine($"Loaded {weights.Count} tensors from {weightsPath}");
             }
 
-            // Map and load weights
-            foreach (var kvp in weights)
+            // Use IWeightLoadable's LoadWeights method
+            var loadResult = model.LoadWeights(weights, mapping, strict);
+
+            result.MappedTensors = loadResult.LoadedCount;
+            result.UnmappedTensors = loadResult.SkippedCount + loadResult.FailedCount;
+            result.MappedNames = loadResult.LoadedParameters.Select(p => (p, p)).ToList();
+            result.UnmappedNames = loadResult.FailedParameters.Select(f => f.Name).ToList();
+            result.Success = loadResult.Success;
+            result.WeightsApplied = loadResult.Success && loadResult.LoadedCount > 0;
+            result.ErrorMessage = loadResult.ErrorMessage;
+
+            if (_verbose)
             {
-                var sourceName = kvp.Key;
-                var tensor = kvp.Value;
-
-                var targetName = mapping.Map(sourceName);
-                if (targetName != null)
-                {
-                    // Would need to implement SetParameterByName on IVAEModel
-                    // For now, track what was mapped
-                    result.MappedTensors++;
-                    result.MappedNames.Add((sourceName, targetName));
-
-                    if (_verbose)
-                    {
-                        Console.WriteLine($"  Mapped: {sourceName} -> {targetName}");
-                    }
-                }
-                else
-                {
-                    result.UnmappedTensors++;
-                    result.UnmappedNames.Add(sourceName);
-
-                    if (_verbose)
-                    {
-                        Console.WriteLine($"  Unmapped: {sourceName}");
-                    }
-                }
+                Console.WriteLine($"  Applied {loadResult.LoadedCount} weights, skipped {loadResult.SkippedCount}, failed {loadResult.FailedCount}");
             }
-
-            result.Success = result.MappedTensors > 0;
-            // Note: Weights are not actually applied to the model yet
-            // as IVAEModel doesn't expose SetParameterByName.
-            // Use LoadAllTensors to get the raw weights and apply them manually.
-            result.WeightsApplied = false;
         }
         catch (Exception ex)
         {
@@ -145,6 +118,19 @@ public class PretrainedModelLoader<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Loads weights using a WeightMapping instance.
+    /// </summary>
+    /// <param name="model">The model to load weights into.</param>
+    /// <param name="weightsPath">Path to the .safetensors file.</param>
+    /// <param name="mapping">Weight mapping to use for name translation.</param>
+    /// <param name="strict">If true, fails when weights can't be loaded.</param>
+    /// <returns>Load result with statistics.</returns>
+    public LoadResult LoadWeights(IWeightLoadable<T> model, string weightsPath, WeightMapping mapping, bool strict = false)
+    {
+        return LoadWeights(model, weightsPath, mapping.Map, strict);
     }
 
     /// <summary>
