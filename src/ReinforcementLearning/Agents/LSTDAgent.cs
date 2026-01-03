@@ -286,7 +286,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var state = new
         {
-            Weights = _weights,
+            Weights = GetParameters(),  // Serialize as flat vector for consistency
             Options = _options
         };
         string json = JsonConvert.SerializeObject(state);
@@ -307,7 +307,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
             throw new InvalidOperationException("Deserialization returned null");
         }
 
-        // Parse and validate weights matrix
+        // Parse and validate weights as flat vector
         var weightsObj = state.Weights;
         if (weightsObj is null)
         {
@@ -319,35 +319,18 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
             throw new InvalidOperationException($"Failed to deserialize agent state: Weights must be a JSON array, got {weightsObj.GetType().Name}.");
         }
 
-        // Validate row count
-        if (jArray.Count != _options.ActionSize)
+        int expectedCount = _options.ActionSize * _options.FeatureSize;
+        if (jArray.Count != expectedCount)
         {
-            throw new InvalidOperationException($"Weight matrix row count mismatch: expected {_options.ActionSize} (ActionSize), got {jArray.Count}.");
+            throw new InvalidOperationException($"Weight count mismatch: expected {expectedCount} (ActionSize={_options.ActionSize} × FeatureSize={_options.FeatureSize}), got {jArray.Count}.");
         }
 
-        // Create matrix with correct dimensions from options
-        _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
-
-        // Parse matrix from JArray structure (Matrix serializes as 2D array)
-        for (int r = 0; r < jArray.Count; r++)
+        var weights = new Vector<T>(jArray.Count);
+        for (int i = 0; i < jArray.Count; i++)
         {
-            var rowArray = jArray[r] as Newtonsoft.Json.Linq.JArray;
-            if (rowArray is null)
-            {
-                throw new InvalidOperationException($"Failed to deserialize agent state: Weight row {r} must be a JSON array.");
-            }
-
-            // Validate column count
-            if (rowArray.Count != _options.FeatureSize)
-            {
-                throw new InvalidOperationException($"Weight matrix column count mismatch at row {r}: expected {_options.FeatureSize} (FeatureSize), got {rowArray.Count}.");
-            }
-
-            for (int c = 0; c < rowArray.Count; c++)
-            {
-                _weights[r, c] = NumOps.FromDouble((double)rowArray[c]);
-            }
+            weights[i] = NumOps.FromDouble((double)jArray[i]);
         }
+        SetParameters(weights);
     }
 
     public override Vector<T> GetParameters()
