@@ -29,16 +29,16 @@ public class TimeSeriesStatsIntegrationTests
     }
 
     [Fact]
-    public void DurbinWatson_ZeroResiduals_ThrowsArgumentException()
+    public void DurbinWatson_ZeroResiduals_ReturnsTwo()
     {
-        // Perfect prediction (all residuals = 0) should throw because DW is undefined
+        // Perfect prediction (all residuals = 0) returns 2.0 (ideal DW value indicating no autocorrelation)
+        // This is intentional: for perfect fit, there's effectively no autocorrelation to detect
         var actual = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0]);
         var predicted = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0]);
 
-        var ex = Assert.Throws<ArgumentException>(() =>
-            StatisticsHelper<double>.CalculateDurbinWatsonStatistic(actual, predicted));
+        var result = StatisticsHelper<double>.CalculateDurbinWatsonStatistic(actual, predicted);
 
-        Assert.Contains("zero", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2.0, result, 6);
     }
 
     [Fact]

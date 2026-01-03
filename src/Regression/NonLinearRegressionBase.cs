@@ -552,10 +552,11 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         using var writer = new BinaryWriter(ms);
 
         // Serialize options with type information for proper polymorphic deserialization
-        // Use TypeNameHandling.Auto with SafeSerializationBinder for security
+        // Use TypeNameHandling.All to ensure derived types are preserved during serialization
+        // SafeSerializationBinder prevents deserialization of unsafe types
         var serializerSettings = new JsonSerializerSettings
         {
-            TypeNameHandling = TypeNameHandling.Auto,
+            TypeNameHandling = TypeNameHandling.All,
             SerializationBinder = new SafeSerializationBinder()
         };
         var optionsJson = JsonConvert.SerializeObject(Options, serializerSettings);
@@ -632,14 +633,17 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         using var reader = new BinaryReader(ms);
 
         // Deserialize options with type information for proper polymorphic deserialization
-        // Use TypeNameHandling.Auto with SafeSerializationBinder to prevent deserialization attacks
+        // Use TypeNameHandling.All to honor $type metadata and create the correct derived type
+        // SafeSerializationBinder prevents deserialization of unsafe types
         var serializerSettings = new JsonSerializerSettings
         {
-            TypeNameHandling = TypeNameHandling.Auto,
+            TypeNameHandling = TypeNameHandling.All,
             SerializationBinder = new SafeSerializationBinder()
         };
         var optionsJson = reader.ReadString();
-        Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(optionsJson, serializerSettings) ?? new NonLinearRegressionOptions();
+        // The typeof(NonLinearRegressionOptions) is the base type, but TypeNameHandling.All will honor $type metadata
+        var optionsObj = JsonConvert.DeserializeObject(optionsJson, typeof(NonLinearRegressionOptions), serializerSettings);
+        Options = (NonLinearRegressionOptions)(optionsObj ?? new NonLinearRegressionOptions());
 
         // Deserialize support vectors
         int svRows = reader.ReadInt32();
@@ -945,8 +949,15 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         clone.SupportVectors = SupportVectors.Clone();
         clone.Alphas = Alphas.Clone();
         clone.B = B; // Value types are copied by value
-        clone.Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(
-            JsonConvert.SerializeObject(Options)) ?? new NonLinearRegressionOptions();
+        // Use TypeNameHandling.All to preserve derived Options type during deep copy
+        var serializerSettings = new JsonSerializerSettings
+        {
+            TypeNameHandling = TypeNameHandling.All,
+            SerializationBinder = new SafeSerializationBinder()
+        };
+        var optionsObj = JsonConvert.DeserializeObject(
+            JsonConvert.SerializeObject(Options, serializerSettings), typeof(NonLinearRegressionOptions), serializerSettings);
+        clone.Options = (NonLinearRegressionOptions)(optionsObj ?? new NonLinearRegressionOptions());
 
         // Create a new regularization instance with the same options
         var regularizationOptions = Regularization.GetOptions();
