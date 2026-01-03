@@ -167,6 +167,14 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         writer.Write(_options.EpsilonEnd);
         writer.Write(_options.EpsilonDecay);
 
+        // Write base class properties that must be serialized
+        writer.Write(NumOps.ToDouble(_options.LearningRate ?? NumOps.Zero));
+        writer.Write(NumOps.ToDouble(_options.DiscountFactor ?? NumOps.Zero));
+        writer.Write(_options.Seed ?? -1); // Use -1 to indicate no seed
+        // Serialize loss function type name for reconstruction
+        string lossFunctionTypeName = _options.LossFunction?.GetType().AssemblyQualifiedName ?? string.Empty;
+        writer.Write(lossFunctionTypeName);
+
         // Write current epsilon
         writer.Write(_epsilon);
 
@@ -196,13 +204,37 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         double epsilonEnd = reader.ReadDouble();
         double epsilonDecay = reader.ReadDouble();
 
+        // Read base class properties from serialized data
+        double learningRate = reader.ReadDouble();
+        double discountFactor = reader.ReadDouble();
+        int seedValue = reader.ReadInt32();
+        int? seed = seedValue == -1 ? null : seedValue;
+        string lossFunctionTypeName = reader.ReadString();
+
+        // Reconstruct loss function from type name
+        ILossFunction<T>? lossFunction = null;
+        if (!string.IsNullOrEmpty(lossFunctionTypeName))
+        {
+            Type? lossFunctionType = Type.GetType(lossFunctionTypeName);
+            if (lossFunctionType is not null)
+            {
+                lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType);
+            }
+        }
+        // Fall back to existing loss function if reconstruction failed
+        lossFunction ??= _options.LossFunction;
+
         _options = new LinearQLearningOptions<T>
         {
             ActionSize = actionSize,
             FeatureSize = featureSize,
             EpsilonStart = epsilonStart,
             EpsilonEnd = epsilonEnd,
-            EpsilonDecay = epsilonDecay
+            EpsilonDecay = epsilonDecay,
+            LearningRate = NumOps.FromDouble(learningRate),
+            DiscountFactor = NumOps.FromDouble(discountFactor),
+            Seed = seed,
+            LossFunction = lossFunction
         };
 
         // Read current epsilon

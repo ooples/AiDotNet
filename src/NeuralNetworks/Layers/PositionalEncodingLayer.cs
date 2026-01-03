@@ -243,18 +243,20 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Validate input rank: requires at least 2D [..., seq, embed]
-        if (input.Shape.Length < 2)
+        // Handle 1D input by treating it as [1, embed] (single position with embedding)
+        bool was1D = input.Shape.Length == 1;
+        Tensor<T> workingInput = input;
+
+        if (was1D)
         {
-            throw new ArgumentException(
-                $"PositionalEncodingLayer expects at least 2D input [..., seq, embed], " +
-                $"but received {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}].");
+            // Reshape [embed] -> [1, embed]
+            workingInput = input.Reshape([1, input.Shape[0]]);
         }
 
         // Handle any rank >= 2: last dim is embed, second-to-last is sequence
-        int rank = input.Shape.Length;
-        int seqLength = input.Shape[rank - 2];
-        int inputEmbedDim = input.Shape[rank - 1];
+        int rank = workingInput.Shape.Length;
+        int seqLength = workingInput.Shape[rank - 2];
+        int inputEmbedDim = workingInput.Shape[rank - 1];
 
         Tensor<T> currentEncodings;
         int currentEmbeddingSize;
@@ -329,10 +331,11 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // Slice encodings to match input sequence length: [seq, embed]
         var slicedEncodings = currentEncodings.Slice(0, 0, seqLength, currentEmbeddingSize);
 
+        Tensor<T> result;
         if (rank == 2)
         {
             // For 2D input [seq, embed], add directly
-            return Engine.TensorAdd(input, slicedEncodings);
+            result = Engine.TensorAdd(workingInput, slicedEncodings);
         }
         else
         {
@@ -345,8 +348,17 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
             broadcastShape[rank - 1] = currentEmbeddingSize;
 
             var reshapedEncodings = slicedEncodings.Reshape(broadcastShape);
-            return Engine.TensorBroadcastAdd(input, reshapedEncodings);
+            result = Engine.TensorBroadcastAdd(workingInput, reshapedEncodings);
         }
+
+        // If input was 1D, reshape output back to 1D
+        if (was1D)
+        {
+            // Reshape [1, embed] -> [embed]
+            result = result.Reshape([result.Shape[result.Shape.Length - 1]]);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -397,15 +409,25 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // Create a placeholder input tensor matching the output gradient shape
-        var inputTensor = new Tensor<T>(outputGradient.Shape);
+        // Handle 1D gradient by treating it as [1, embed]
+        bool was1D = outputGradient.Shape.Length == 1;
+        Tensor<T> workingGradient = outputGradient;
+
+        if (was1D)
+        {
+            // Reshape [embed] -> [1, embed]
+            workingGradient = outputGradient.Reshape([1, outputGradient.Shape[0]]);
+        }
+
+        // Create a placeholder input tensor matching the working gradient shape
+        var inputTensor = new Tensor<T>(workingGradient.Shape);
 
         // Create computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
 
         // Handle any rank >= 2: [..., seq, embed]
-        int rank = outputGradient.Shape.Length;
-        var sequenceLength = outputGradient.Shape[rank - 2];
+        int rank = workingGradient.Shape.Length;
+        var sequenceLength = workingGradient.Shape[rank - 2];
         var slicedEncodings = encodings.Slice(0, 0, sequenceLength, embeddingSize);
 
         // For autodiff graph, we need encodings to match gradient shape
@@ -479,7 +501,15 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         if (inputNode.Gradient == null)
             throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
 
-        return inputNode.Gradient;
+        var resultGradient = inputNode.Gradient;
+
+        // If output gradient was 1D, reshape result back to 1D
+        if (was1D)
+        {
+            resultGradient = resultGradient.Reshape([resultGradient.Shape[resultGradient.Shape.Length - 1]]);
+        }
+
+        return resultGradient;
     }
 
     /// <summary>

@@ -28,10 +28,10 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
         _options = options;
 
-        // Validate EpsilonDecay is in (0, 1) range
-        if (_options.EpsilonDecay <= 0.0 || _options.EpsilonDecay >= 1.0)
+        // Validate EpsilonDecay is in (0, 1] range (1.0 means no decay, which is valid)
+        if (_options.EpsilonDecay <= 0.0 || _options.EpsilonDecay > 1.0)
         {
-            throw new ArgumentException("EpsilonDecay must be in the range (0, 1) for proper decay behavior.", nameof(options));
+            throw new ArgumentException("EpsilonDecay must be in the range (0, 1] for proper decay behavior.", nameof(options));
         }
 
         _qTable = new Dictionary<string, Dictionary<int, T>>();

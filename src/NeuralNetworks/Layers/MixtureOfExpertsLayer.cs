@@ -1500,7 +1500,8 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var expertOutput = expertOutputs[i];
 
             // Extract routing weight for expert i as a vector [batchSize]
-            var weightVector = routingWeights.GetSliceAlongDimension(1, i);
+            // GetSliceAlongDimension(index, dimension) - get slice at index i along dimension 1 (expert dim)
+            var weightVector = routingWeights.GetSliceAlongDimension(i, 1);
 
             // Reshape for broadcasting across any-rank expert outputs
             var broadcastShape = new int[expertOutput.Shape.Length];

@@ -128,10 +128,16 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
             var parameters = Enumerable.Repeat(new NormalizationParameters<T> { Method = NormalizationMethod.None }, columns).ToList();
             return (data, parameters);
         }
+        else if (data is Vector<T> vector)
+        {
+            // Vector input - return as-is with one parameter per element
+            var parameters = Enumerable.Repeat(new NormalizationParameters<T> { Method = NormalizationMethod.None }, vector.Length).ToList();
+            return (data, parameters);
+        }
 
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
-            $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
+            $"Supported types are Matrix<{typeof(T).Name}>, Vector<{typeof(T).Name}>, and 2D Tensor<{typeof(T).Name}>.");
     }
 
     /// <summary>

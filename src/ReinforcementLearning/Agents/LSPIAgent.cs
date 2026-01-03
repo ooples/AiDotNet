@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -339,9 +340,82 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
             throw new InvalidOperationException("Deserialization returned null");
         }
 
-        _weights = JsonConvert.DeserializeObject<Matrix<T>>(state.Weights.ToString()) ?? new Matrix<T>(_options.ActionSize, _options.FeatureSize);
-        _samples = JsonConvert.DeserializeObject<List<(Vector<T>, int, T, Vector<T>, bool)>>(state.Samples.ToString()) ?? new List<(Vector<T>, int, T, Vector<T>, bool)>();
-        _iterations = state.Iterations;
+        // Create matrix with correct dimensions from options
+        _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
+
+        // Parse weights matrix from JArray structure
+        var weightsObj = state.Weights;
+        if (weightsObj is Newtonsoft.Json.Linq.JArray jArray)
+        {
+            for (int r = 0; r < _options.ActionSize && r < jArray.Count; r++)
+            {
+                var rowArray = jArray[r] as Newtonsoft.Json.Linq.JArray;
+                if (rowArray is not null)
+                {
+                    for (int c = 0; c < _options.FeatureSize && c < rowArray.Count; c++)
+                    {
+                        _weights[r, c] = NumOps.FromDouble((double)rowArray[c]);
+                    }
+                }
+            }
+        }
+
+        // Deserialize samples list
+        _samples = new List<(Vector<T>, int, T, Vector<T>, bool)>();
+        var samplesObj = state.Samples;
+        if (samplesObj is Newtonsoft.Json.Linq.JArray samplesArray)
+        {
+            foreach (var sample in samplesArray.OfType<Newtonsoft.Json.Linq.JObject>())
+            {
+                // Deserialize and validate state vector (Item1)
+                var stateArray = sample["Item1"] as Newtonsoft.Json.Linq.JArray;
+                if (stateArray is null || stateArray.Count != _options.FeatureSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Sample state vector dimension mismatch: expected {_options.FeatureSize}, " +
+                        $"got {stateArray?.Count ?? 0}.");
+                }
+
+                var stateVec = new Vector<T>(stateArray.Count);
+                for (int i = 0; i < stateArray.Count; i++)
+                {
+                    stateVec[i] = NumOps.FromDouble(Convert.ToDouble(stateArray[i]));
+                }
+
+                // Deserialize and validate action (Item2)
+                int action = sample["Item2"] is not null ? Convert.ToInt32(sample["Item2"]) : 0;
+                if (action < 0 || action >= _options.ActionSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Sample action index out of range: {action} (valid range: 0-{_options.ActionSize - 1}).");
+                }
+
+                // Deserialize reward (Item3)
+                T reward = NumOps.FromDouble(sample["Item3"] is not null ? Convert.ToDouble(sample["Item3"]) : 0.0);
+
+                // Deserialize and validate next state vector (Item4)
+                var nextStateArray = sample["Item4"] as Newtonsoft.Json.Linq.JArray;
+                if (nextStateArray is null || nextStateArray.Count != _options.FeatureSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Sample next state vector dimension mismatch: expected {_options.FeatureSize}, " +
+                        $"got {nextStateArray?.Count ?? 0}.");
+                }
+
+                var nextStateVec = new Vector<T>(nextStateArray.Count);
+                for (int i = 0; i < nextStateArray.Count; i++)
+                {
+                    nextStateVec[i] = NumOps.FromDouble(Convert.ToDouble(nextStateArray[i]));
+                }
+
+                // Deserialize done flag (Item5)
+                bool done = sample["Item5"] is not null && Convert.ToBoolean(sample["Item5"]);
+
+                _samples.Add((stateVec, action, reward, nextStateVec, done));
+            }
+        }
+
+        _iterations = Convert.ToInt32(state.Iterations);
     }
 
     public override Vector<T> GetParameters()
