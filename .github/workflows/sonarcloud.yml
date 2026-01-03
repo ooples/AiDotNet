@@ -336,13 +336,14 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          Write-Host "=== SLOW TEST REPORT (tests > 10 seconds) ===" -ForegroundColor Cyan
+          Write-Host "=== COMPREHENSIVE TEST TIMING DIAGNOSTICS ===" -ForegroundColor Cyan
           $trxFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "*.trx" -ErrorAction SilentlyContinue
           if ($trxFiles.Count -eq 0) {
             Write-Host "No TRX files found"
             exit 0
           }
-          $slowTests = @()
+          $allTests = @()
+          $totalExecutionTime = 0
           foreach ($trx in $trxFiles) {
             [xml]$xml = Get-Content $trx.FullName
             $ns = @{t = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
@@ -351,28 +352,61 @@ jobs:
               $duration = $result.Node.duration
               if ($duration) {
                 $ts = [TimeSpan]::Parse($duration)
-                if ($ts.TotalSeconds -gt 10) {
-                  $slowTests += [PSCustomObject]@{
-                    Name = $result.Node.testName
-                    Duration = $ts.TotalSeconds
-                    Outcome = $result.Node.outcome
-                  }
+                $allTests += [PSCustomObject]@{
+                  Name = $result.Node.testName
+                  Duration = $ts.TotalSeconds
+                  Outcome = $result.Node.outcome
+                  ClassName = ($result.Node.testName -split '\.')[-2]
                 }
+                $totalExecutionTime += $ts.TotalSeconds
               }
             }
           }
-          if ($slowTests.Count -gt 0) {
-            Write-Host ""
-            Write-Host "Found $($slowTests.Count) slow tests:" -ForegroundColor Yellow
-            $slowTests | Sort-Object Duration -Descending | ForEach-Object {
-              $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Yellow" } else { "White" }
-              Write-Host ("  [{0,7:N1}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+          Write-Host ""
+          Write-Host "=== TEST EXECUTION SUMMARY ===" -ForegroundColor Cyan
+          Write-Host ("Total tests: {0}" -f $allTests.Count)
+          Write-Host ("Total execution time: {0:N1} seconds ({1:N1} minutes)" -f $totalExecutionTime, ($totalExecutionTime / 60))
+          if ($allTests.Count -gt 0) {
+            $avgTime = $totalExecutionTime / $allTests.Count
+            Write-Host ("Average test time: {0:N2} seconds" -f $avgTime)
+          }
+          Write-Host ""
+          Write-Host "=== TOP 20 SLOWEST TESTS ===" -ForegroundColor Yellow
+          $allTests | Sort-Object Duration -Descending | Select-Object -First 20 | ForEach-Object {
+            $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Magenta" } elseif ($_.Duration -gt 10) { "Yellow" } else { "White" }
+            Write-Host ("  [{0,8:N2}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+          }
+          Write-Host ""
+          Write-Host "=== TIME BY TEST CLASS (Top 15) ===" -ForegroundColor Cyan
+          $byClass = $allTests | Group-Object ClassName | ForEach-Object {
+            [PSCustomObject]@{
+              ClassName = $_.Name
+              TestCount = $_.Count
+              TotalTime = ($_.Group | Measure-Object Duration -Sum).Sum
+              AvgTime = ($_.Group | Measure-Object Duration -Average).Average
+              MaxTime = ($_.Group | Measure-Object Duration -Maximum).Maximum
             }
+          } | Sort-Object TotalTime -Descending | Select-Object -First 15
+          foreach ($class in $byClass) {
+            $color = if ($class.TotalTime -gt 300) { "Red" } elseif ($class.TotalTime -gt 120) { "Yellow" } else { "White" }
+            Write-Host ("  [{0,7:N1}s total, {1,6:N2}s avg, {2,6:N1}s max] {3} ({4} tests)" -f $class.TotalTime, $class.AvgTime, $class.MaxTime, $class.ClassName, $class.TestCount) -ForegroundColor $color
+          }
+          $criticalTests = $allTests | Where-Object { $_.Duration -gt 60 }
+          if ($criticalTests.Count -gt 0) {
             Write-Host ""
-            $total = ($slowTests | Measure-Object -Property Duration -Sum).Sum
-            Write-Host ("Total time in slow tests: {0:N1} seconds ({1:N1} minutes)" -f $total, ($total / 60)) -ForegroundColor Cyan
-          } else {
-            Write-Host "No tests took longer than 10 seconds - excellent!" -ForegroundColor Green
+            Write-Host "=== CRITICAL: TESTS > 60 SECONDS (likely code bottlenecks) ===" -ForegroundColor Red
+            $criticalTests | Sort-Object Duration -Descending | ForEach-Object {
+              Write-Host ("  [BOTTLENECK] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Red
+            }
+            Write-Host "These tests indicate potential performance issues in the code under test." -ForegroundColor Red
+          }
+          $warningTests = $allTests | Where-Object { $_.Duration -gt 30 -and $_.Duration -le 60 }
+          if ($warningTests.Count -gt 0) {
+            Write-Host ""
+            Write-Host "=== WARNING: TESTS 30-60 SECONDS (potential bottlenecks) ===" -ForegroundColor Yellow
+            $warningTests | Sort-Object Duration -Descending | ForEach-Object {
+              Write-Host ("  [WARNING] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Yellow
+            }
           }
 
       - name: Set artifact name
@@ -590,13 +624,14 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          Write-Host "=== SLOW TEST REPORT (tests > 10 seconds) ===" -ForegroundColor Cyan
+          Write-Host "=== COMPREHENSIVE TEST TIMING DIAGNOSTICS ===" -ForegroundColor Cyan
           $trxFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "*.trx" -ErrorAction SilentlyContinue
           if ($trxFiles.Count -eq 0) {
             Write-Host "No TRX files found"
             exit 0
           }
-          $slowTests = @()
+          $allTests = @()
+          $totalExecutionTime = 0
           foreach ($trx in $trxFiles) {
             [xml]$xml = Get-Content $trx.FullName
             $ns = @{t = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
@@ -605,28 +640,61 @@ jobs:
               $duration = $result.Node.duration
               if ($duration) {
                 $ts = [TimeSpan]::Parse($duration)
-                if ($ts.TotalSeconds -gt 10) {
-                  $slowTests += [PSCustomObject]@{
-                    Name = $result.Node.testName
-                    Duration = $ts.TotalSeconds
-                    Outcome = $result.Node.outcome
-                  }
+                $allTests += [PSCustomObject]@{
+                  Name = $result.Node.testName
+                  Duration = $ts.TotalSeconds
+                  Outcome = $result.Node.outcome
+                  ClassName = ($result.Node.testName -split '\.')[-2]
                 }
+                $totalExecutionTime += $ts.TotalSeconds
               }
             }
           }
-          if ($slowTests.Count -gt 0) {
-            Write-Host ""
-            Write-Host "Found $($slowTests.Count) slow tests:" -ForegroundColor Yellow
-            $slowTests | Sort-Object Duration -Descending | ForEach-Object {
-              $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Yellow" } else { "White" }
-              Write-Host ("  [{0,7:N1}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+          Write-Host ""
+          Write-Host "=== TEST EXECUTION SUMMARY ===" -ForegroundColor Cyan
+          Write-Host ("Total tests: {0}" -f $allTests.Count)
+          Write-Host ("Total execution time: {0:N1} seconds ({1:N1} minutes)" -f $totalExecutionTime, ($totalExecutionTime / 60))
+          if ($allTests.Count -gt 0) {
+            $avgTime = $totalExecutionTime / $allTests.Count
+            Write-Host ("Average test time: {0:N2} seconds" -f $avgTime)
+          }
+          Write-Host ""
+          Write-Host "=== TOP 20 SLOWEST TESTS ===" -ForegroundColor Yellow
+          $allTests | Sort-Object Duration -Descending | Select-Object -First 20 | ForEach-Object {
+            $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Magenta" } elseif ($_.Duration -gt 10) { "Yellow" } else { "White" }
+            Write-Host ("  [{0,8:N2}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+          }
+          Write-Host ""
+          Write-Host "=== TIME BY TEST CLASS (Top 15) ===" -ForegroundColor Cyan
+          $byClass = $allTests | Group-Object ClassName | ForEach-Object {
+            [PSCustomObject]@{
+              ClassName = $_.Name
+              TestCount = $_.Count
+              TotalTime = ($_.Group | Measure-Object Duration -Sum).Sum
+              AvgTime = ($_.Group | Measure-Object Duration -Average).Average
+              MaxTime = ($_.Group | Measure-Object Duration -Maximum).Maximum
             }
+          } | Sort-Object TotalTime -Descending | Select-Object -First 15
+          foreach ($class in $byClass) {
+            $color = if ($class.TotalTime -gt 300) { "Red" } elseif ($class.TotalTime -gt 120) { "Yellow" } else { "White" }
+            Write-Host ("  [{0,7:N1}s total, {1,6:N2}s avg, {2,6:N1}s max] {3} ({4} tests)" -f $class.TotalTime, $class.AvgTime, $class.MaxTime, $class.ClassName, $class.TestCount) -ForegroundColor $color
+          }
+          $criticalTests = $allTests | Where-Object { $_.Duration -gt 60 }
+          if ($criticalTests.Count -gt 0) {
             Write-Host ""
-            $total = ($slowTests | Measure-Object -Property Duration -Sum).Sum
-            Write-Host ("Total time in slow tests: {0:N1} seconds ({1:N1} minutes)" -f $total, ($total / 60)) -ForegroundColor Cyan
-          } else {
-            Write-Host "No tests took longer than 10 seconds - excellent!" -ForegroundColor Green
+            Write-Host "=== CRITICAL: TESTS > 60 SECONDS (likely code bottlenecks) ===" -ForegroundColor Red
+            $criticalTests | Sort-Object Duration -Descending | ForEach-Object {
+              Write-Host ("  [BOTTLENECK] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Red
+            }
+            Write-Host "These tests indicate potential performance issues in the code under test." -ForegroundColor Red
+          }
+          $warningTests = $allTests | Where-Object { $_.Duration -gt 30 -and $_.Duration -le 60 }
+          if ($warningTests.Count -gt 0) {
+            Write-Host ""
+            Write-Host "=== WARNING: TESTS 30-60 SECONDS (potential bottlenecks) ===" -ForegroundColor Yellow
+            $warningTests | Sort-Object Duration -Descending | ForEach-Object {
+              Write-Host ("  [WARNING] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Yellow
+            }
           }
 
       - name: Set artifact name
