@@ -11,6 +11,6 @@
     <Compile Include="GpuDiagnostic.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
   </ItemGroup>
 </Project>
