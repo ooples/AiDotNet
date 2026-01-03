@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -45,6 +46,16 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// Number of mel spectrogram channels.
     /// </summary>
     private readonly int _melChannels;
+
+    /// <summary>
+    /// GPU-accelerated mel spectrogram processor.
+    /// </summary>
+    private MelSpectrogram<T>? _melSpectrogramProcessor;
+
+    /// <summary>
+    /// GPU-accelerated Griffin-Lim audio reconstructor.
+    /// </summary>
+    private GriffinLim<T>? _griffinLimProcessor;
 
     /// <inheritdoc />
     public virtual int SampleRate => _sampleRate;
@@ -419,46 +430,92 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// <inheritdoc />
     public virtual Tensor<T> WaveformToMelSpectrogram(Tensor<T> waveform)
     {
-        var waveformShape = waveform.Shape;
-        var numSamples = waveformShape[^1];
-        var numFrames = numSamples / HopLength + 1;
+        // Ensure the mel spectrogram processor is initialized
+        EnsureMelSpectrogramProcessorInitialized();
 
-        // Output shape: [batch, 1, melChannels, numFrames]
+        var waveformShape = waveform.Shape;
         var batchSize = waveformShape[0];
+        var numSamples = waveformShape[^1];
+
+        // Process each batch item using the GPU-accelerated mel spectrogram
+        var numFrames = numSamples / HopLength + 1;
         var melShape = new[] { batchSize, 1, MelChannels, numFrames };
         var melSpectrogram = new Tensor<T>(melShape);
         var melSpan = melSpectrogram.AsWritableSpan();
-        var waveSpan = waveform.AsSpan();
 
-        // Simplified mel spectrogram computation
-        // In a real implementation, this would use FFT and mel filterbanks
         for (int b = 0; b < batchSize; b++)
         {
-            for (int frame = 0; frame < numFrames; frame++)
-            {
-                var startSample = frame * HopLength;
-                var endSample = Math.Min(startSample + FFTSize, numSamples);
+            // Extract single waveform from batch
+            var singleWaveform = ExtractBatchWaveform(waveform, b, numSamples);
 
-                // Compute power spectrum (simplified)
-                var framePower = ComputeFramePower(waveSpan, b * numSamples + startSample, endSample - startSample);
+            // Compute mel spectrogram using GPU-accelerated processor
+            var singleMel = _melSpectrogramProcessor!.Forward(singleWaveform);
 
-                // Apply mel filterbank (simplified - linear distribution)
-                for (int mel = 0; mel < MelChannels; mel++)
-                {
-                    var melIdx = b * MelChannels * numFrames + mel * numFrames + frame;
-                    var freqRatio = (double)mel / MelChannels;
-                    var power = framePower * (1.0 - freqRatio * 0.5); // Simple approximation
-                    melSpan[melIdx] = NumOps.FromDouble(Math.Log10(power + 1e-10));
-                }
-            }
+            // Copy result to batch output
+            CopyMelToBatch(melSpan, singleMel, b, MelChannels, numFrames);
         }
 
         return melSpectrogram;
     }
 
+    /// <summary>
+    /// Ensures the mel spectrogram processor is initialized.
+    /// </summary>
+    private void EnsureMelSpectrogramProcessorInitialized()
+    {
+        if (_melSpectrogramProcessor == null)
+        {
+            _melSpectrogramProcessor = new MelSpectrogram<T>(
+                sampleRate: SampleRate,
+                nFft: FFTSize,
+                hopLength: HopLength,
+                nMels: MelChannels,
+                fMin: MinFrequency,
+                fMax: MaxFrequency,
+                logMel: true);
+        }
+    }
+
+    /// <summary>
+    /// Extracts a single waveform from a batch tensor.
+    /// </summary>
+    private Tensor<T> ExtractBatchWaveform(Tensor<T> waveform, int batchIndex, int numSamples)
+    {
+        var singleWaveform = new Tensor<T>(new[] { numSamples });
+        var srcSpan = waveform.AsSpan();
+        var dstSpan = singleWaveform.AsWritableSpan();
+        var offset = batchIndex * numSamples;
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            dstSpan[i] = srcSpan[offset + i];
+        }
+
+        return singleWaveform;
+    }
+
+    /// <summary>
+    /// Copies a mel spectrogram to a specific batch position.
+    /// </summary>
+    private void CopyMelToBatch(Span<T> batchSpan, Tensor<T> singleMel, int batchIndex, int melChannels, int numFrames)
+    {
+        var srcSpan = singleMel.AsSpan();
+        var batchOffset = batchIndex * melChannels * numFrames;
+        var srcLen = Math.Min(srcSpan.Length, melChannels * numFrames);
+
+        for (int i = 0; i < srcLen; i++)
+        {
+            batchSpan[batchOffset + i] = srcSpan[i];
+        }
+    }
+
     /// <inheritdoc />
     public virtual Tensor<T> MelSpectrogramToWaveform(Tensor<T> melSpectrogram)
     {
+        // Ensure processors are initialized
+        EnsureMelSpectrogramProcessorInitialized();
+        EnsureGriffinLimProcessorInitialized();
+
         var melShape = melSpectrogram.Shape;
         var batchSize = melShape[0];
         var numFrames = melShape[^1];
@@ -468,66 +525,173 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var waveformShape = new[] { batchSize, numSamples };
         var waveform = new Tensor<T>(waveformShape);
         var waveSpan = waveform.AsWritableSpan();
-        var melSpan = melSpectrogram.AsSpan();
 
-        // Simplified Griffin-Lim style reconstruction
-        // In a real implementation, this would use a neural vocoder like HiFi-GAN
+        // Process each batch item using GPU-accelerated Griffin-Lim
         for (int b = 0; b < batchSize; b++)
         {
-            for (int frame = 0; frame < numFrames - 1; frame++)
-            {
-                var startSample = frame * HopLength;
+            // Extract single mel spectrogram from batch
+            var singleMel = ExtractBatchMel(melSpectrogram, b, MelChannels, numFrames);
 
-                // Sum mel channels to get approximate amplitude
-                var amplitude = NumOps.Zero;
-                for (int mel = 0; mel < MelChannels; mel++)
-                {
-                    var melIdx = b * MelChannels * numFrames + mel * numFrames + frame;
-                    var logPower = NumOps.ToDouble(melSpan[melIdx]);
-                    amplitude = NumOps.Add(amplitude, NumOps.FromDouble(Math.Pow(10, logPower / 10.0)));
-                }
+            // Invert mel spectrogram to linear magnitude using the filterbank
+            var magnitude = _melSpectrogramProcessor!.InvertMelToMagnitude(singleMel);
 
-                // Generate samples for this frame (simplified sinusoidal synthesis)
-                for (int s = 0; s < HopLength && startSample + s < numSamples; s++)
-                {
-                    var sampleIdx = b * numSamples + startSample + s;
-                    var phase = 2.0 * Math.PI * s / HopLength;
-                    var value = NumOps.ToDouble(amplitude) * Math.Sin(phase) * 0.1;
-                    waveSpan[sampleIdx] = NumOps.FromDouble(value);
-                }
-            }
+            // Reconstruct audio using Griffin-Lim
+            var singleAudio = _griffinLimProcessor!.Reconstruct(magnitude, numSamples);
+
+            // Copy result to batch output
+            CopyAudioToBatch(waveSpan, singleAudio, b, numSamples);
         }
 
         return waveform;
     }
 
+    /// <summary>
+    /// Ensures the Griffin-Lim processor is initialized.
+    /// </summary>
+    private void EnsureGriffinLimProcessorInitialized()
+    {
+        if (_griffinLimProcessor == null)
+        {
+            _griffinLimProcessor = new GriffinLim<T>(
+                nFft: FFTSize,
+                hopLength: HopLength,
+                iterations: 32,
+                momentum: 0.99);
+        }
+    }
+
+    /// <summary>
+    /// Extracts a single mel spectrogram from a batch tensor.
+    /// </summary>
+    private Tensor<T> ExtractBatchMel(Tensor<T> melSpectrogram, int batchIndex, int melChannels, int numFrames)
+    {
+        var singleMel = new Tensor<T>(new[] { melChannels, numFrames });
+        var srcSpan = melSpectrogram.AsSpan();
+        var dstSpan = singleMel.AsWritableSpan();
+        var offset = batchIndex * melChannels * numFrames;
+
+        for (int i = 0; i < melChannels * numFrames; i++)
+        {
+            dstSpan[i] = srcSpan[offset + i];
+        }
+
+        return singleMel;
+    }
+
+    /// <summary>
+    /// Copies audio samples to a specific batch position.
+    /// </summary>
+    private void CopyAudioToBatch(Span<T> batchSpan, Tensor<T> singleAudio, int batchIndex, int numSamples)
+    {
+        var srcSpan = singleAudio.AsSpan();
+        var batchOffset = batchIndex * numSamples;
+        var srcLen = Math.Min(srcSpan.Length, numSamples);
+
+        for (int i = 0; i < srcLen; i++)
+        {
+            batchSpan[batchOffset + i] = srcSpan[i];
+        }
+    }
+
     /// <inheritdoc />
     public virtual Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
     {
-        // Simplified speaker embedding extraction
-        // Real implementation would use a speaker encoder network
-        var waveform = referenceAudio.AsSpan();
+        // Ensure mel spectrogram processor is initialized
+        EnsureMelSpectrogramProcessorInitialized();
+
+        // Extract mel spectrogram features from the reference audio
+        var audioShape = referenceAudio.Shape;
+        var numSamples = audioShape[^1];
+
+        // Get single channel waveform for processing
+        Tensor<T> waveform;
+        if (audioShape.Length > 1 && audioShape[0] > 1)
+        {
+            // Multi-channel: extract first channel
+            waveform = ExtractBatchWaveform(referenceAudio, 0, numSamples);
+        }
+        else
+        {
+            waveform = referenceAudio;
+        }
+
+        // Compute mel spectrogram using GPU-accelerated processor
+        var melSpectrogram = _melSpectrogramProcessor!.Forward(waveform);
+        var melSpan = melSpectrogram.AsSpan();
+
+        // Compute statistical embedding from mel spectrogram
+        // Using mel-frequency cepstral statistics as speaker embedding features
         var embeddingDim = 256;
         var embedding = new Tensor<T>(new[] { 1, embeddingDim });
         var embSpan = embedding.AsWritableSpan();
 
-        // Compute simple statistics as a placeholder embedding
-        double sum = 0, sumSq = 0;
-        for (int i = 0; i < waveform.Length; i++)
+        var melChannels = melSpectrogram.Shape[0];
+        var melFrames = melSpectrogram.Shape[^1];
+
+        // Compute per-channel statistics (mean, variance, delta mean, delta variance)
+        var statsPerChannel = Math.Min(4, embeddingDim / melChannels);
+        var featureIdx = 0;
+
+        for (int mel = 0; mel < melChannels && featureIdx < embeddingDim; mel++)
         {
-            var val = NumOps.ToDouble(waveform[i]);
-            sum += val;
-            sumSq += val * val;
+            // Compute mean for this mel channel
+            double channelSum = 0;
+            for (int frame = 0; frame < melFrames; frame++)
+            {
+                channelSum += NumOps.ToDouble(melSpan[mel * melFrames + frame]);
+            }
+            var channelMean = channelSum / melFrames;
+
+            // Compute variance for this mel channel
+            double channelVarSum = 0;
+            for (int frame = 0; frame < melFrames; frame++)
+            {
+                var diff = NumOps.ToDouble(melSpan[mel * melFrames + frame]) - channelMean;
+                channelVarSum += diff * diff;
+            }
+            var channelVar = channelVarSum / melFrames;
+
+            // Compute delta statistics (temporal dynamics)
+            double deltaSum = 0, deltaVarSum = 0;
+            for (int frame = 1; frame < melFrames; frame++)
+            {
+                var delta = NumOps.ToDouble(melSpan[mel * melFrames + frame]) -
+                            NumOps.ToDouble(melSpan[mel * melFrames + frame - 1]);
+                deltaSum += delta;
+                deltaVarSum += delta * delta;
+            }
+            var deltaMean = deltaSum / Math.Max(1, melFrames - 1);
+            var deltaVar = deltaVarSum / Math.Max(1, melFrames - 1);
+
+            // Store statistics as embedding features
+            if (featureIdx < embeddingDim)
+                embSpan[featureIdx++] = NumOps.FromDouble(channelMean);
+            if (featureIdx < embeddingDim)
+                embSpan[featureIdx++] = NumOps.FromDouble(Math.Sqrt(channelVar + 1e-6));
+            if (statsPerChannel > 2 && featureIdx < embeddingDim)
+                embSpan[featureIdx++] = NumOps.FromDouble(deltaMean);
+            if (statsPerChannel > 3 && featureIdx < embeddingDim)
+                embSpan[featureIdx++] = NumOps.FromDouble(Math.Sqrt(deltaVar + 1e-6));
         }
 
-        var mean = sum / waveform.Length;
-        var variance = sumSq / waveform.Length - mean * mean;
+        // Fill remaining dimensions with zero padding
+        while (featureIdx < embeddingDim)
+        {
+            embSpan[featureIdx++] = NumOps.Zero;
+        }
 
-        // Fill embedding with derived features
+        // L2 normalize the embedding
+        double norm = 0;
         for (int i = 0; i < embeddingDim; i++)
         {
-            var phase = 2.0 * Math.PI * i / embeddingDim;
-            embSpan[i] = NumOps.FromDouble(Math.Sin(phase * mean) * Math.Sqrt(variance + 1e-6));
+            var val = NumOps.ToDouble(embSpan[i]);
+            norm += val * val;
+        }
+        norm = Math.Sqrt(norm + 1e-8);
+
+        for (int i = 0; i < embeddingDim; i++)
+        {
+            embSpan[i] = NumOps.FromDouble(NumOps.ToDouble(embSpan[i]) / norm);
         }
 
         return embedding;
@@ -581,23 +745,6 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var wordCount = text.Split(new[] { ' ', '\t', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length;
         var wordsPerSecond = 150.0 / 60.0 * speakingRate;
         return Math.Max(1.0, wordCount / wordsPerSecond);
-    }
-
-    /// <summary>
-    /// Computes power of a frame of audio samples.
-    /// </summary>
-    protected virtual double ComputeFramePower(ReadOnlySpan<T> waveform, int startIdx, int length)
-    {
-        double power = 0;
-        var endIdx = Math.Min(startIdx + length, waveform.Length);
-
-        for (int i = startIdx; i < endIdx; i++)
-        {
-            var val = NumOps.ToDouble(waveform[i]);
-            power += val * val;
-        }
-
-        return power / Math.Max(1, endIdx - startIdx);
     }
 
     /// <summary>

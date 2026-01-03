@@ -155,9 +155,9 @@ public class GriffinLim<T>
         _hopLength = hopLength ?? nFft / 4;
 
         // Create window tensor for GPU operations
-        var window = windowFunction ?? new HanningWindowFunction<T>();
-        var windowData = window.CreateWindow(nFft);
-        _windowTensor = new Tensor<T>(windowData, new[] { nFft });
+        var window = windowFunction ?? new HanningWindow<T>();
+        var windowVector = window.Create(nFft);
+        _windowTensor = new Tensor<T>(windowVector.ToArray(), new[] { nFft });
     }
 
     /// <summary>
@@ -220,7 +220,7 @@ public class GriffinLim<T>
                     _hopLength,
                     _windowTensor,
                     _iterations,
-                    NumOps.FromDouble(_momentum),
+                    _momentum,
                     length);
             }
             catch
