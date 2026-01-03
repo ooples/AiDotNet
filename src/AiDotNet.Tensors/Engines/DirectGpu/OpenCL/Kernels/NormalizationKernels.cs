@@ -393,6 +393,86 @@ __kernel void rmsnorm_forward(
         output[idx] = input[idx] * invRms * gamma[i];
     }
 }
+
+// RMS Normalization backward pass
+// Computes gradients for input and gamma
+__kernel void rmsnorm_backward(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global const float* gamma,
+    __global const float* saveRms,
+    __global float* gradInput,
+    __global float* gradGamma,
+    const int batchSize,
+    const int normalizedSize,
+    const float epsilon)
+{
+    const int b = get_global_id(0);
+    if (b >= batchSize) return;
+
+    float rms = saveRms[b];
+    float invRms = 1.0f / rms;
+    float invRms3 = invRms * invRms * invRms;
+
+    // Compute sum of (gradOutput * gamma * input) for this sample
+    float sumGradGammaX = 0.0f;
+    for (int i = 0; i < normalizedSize; i++) {
+        int idx = b * normalizedSize + i;
+        sumGradGammaX += gradOutput[idx] * gamma[i] * input[idx];
+    }
+
+    // Compute gradInput for this sample
+    for (int i = 0; i < normalizedSize; i++) {
+        int idx = b * normalizedSize + i;
+        float x = input[idx];
+        float dy = gradOutput[idx];
+        float g = gamma[i];
+
+        // d/dx (x / rms * gamma) = gamma * (1/rms - x^2 / (n * rms^3))
+        // Simplified: gamma * invRms - x * sumGradGammaX * invRms^3 / n
+        gradInput[idx] = g * dy * invRms - x * sumGradGammaX * invRms3 / (float)normalizedSize;
+    }
+}
+
+// RMS Normalization gradient accumulation for gamma
+__kernel void rmsnorm_grad_gamma(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global const float* saveRms,
+    __global float* gradGamma,
+    const int batchSize,
+    const int normalizedSize)
+{
+    const int i = get_global_id(0);
+    if (i >= normalizedSize) return;
+
+    float dGamma = 0.0f;
+    for (int b = 0; b < batchSize; b++) {
+        int idx = b * normalizedSize + i;
+        float rms = saveRms[b];
+        float invRms = 1.0f / rms;
+        dGamma += gradOutput[idx] * input[idx] * invRms;
+    }
+    gradGamma[i] = dGamma;
+}
+
+// Scatter-Add backward pass (essentially a gather)
+// gradSource[i] = gradDestination[indices[i]]
+__kernel void scatter_add_backward(
+    __global const float* gradDestination,
+    __global const int* indices,
+    __global float* gradSource,
+    const int numIndices,
+    const int featureSize)
+{
+    const int i = get_global_id(0);
+    if (i >= numIndices) return;
+
+    int srcIdx = indices[i];
+    for (int f = 0; f < featureSize; f++) {
+        gradSource[i * featureSize + f] = gradDestination[srcIdx * featureSize + f];
+    }
+}
 ";
         }
 
@@ -410,7 +490,10 @@ __kernel void rmsnorm_forward(
                 "layernorm_grad_params",
                 "groupnorm_forward",
                 "instancenorm_forward",
-                "rmsnorm_forward"
+                "rmsnorm_forward",
+                "rmsnorm_backward",
+                "rmsnorm_grad_gamma",
+                "scatter_add_backward"
             };
         }
     }

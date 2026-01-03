@@ -236,6 +236,18 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             IntPtr eventWaitList,
             IntPtr eventOut);
 
+        [DllImport(OpenClLibrary, EntryPoint = "clEnqueueCopyBuffer")]
+        public static extern int EnqueueCopyBuffer(
+            IntPtr commandQueue,
+            IntPtr srcBuffer,
+            IntPtr dstBuffer,
+            UIntPtr srcOffset,
+            UIntPtr dstOffset,
+            UIntPtr size,
+            uint numEventsInWaitList,
+            IntPtr eventWaitList,
+            IntPtr eventOut);
+
         #endregion
 
         #region Program Functions

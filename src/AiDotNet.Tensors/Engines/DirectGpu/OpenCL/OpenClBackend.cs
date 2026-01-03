@@ -291,6 +291,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     _kernelCache[name] = new DirectOpenClKernel(_context, attnProgram, name);
                 }
                 Console.WriteLine($"[OpenClBackend] Attention kernels compiled: {AttentionKernels.GetKernelNames().Length} kernels");
+
+                // Compile FFT kernels
+                Console.WriteLine("[OpenClBackend] Compiling FFT kernels...");
+                var fftProgram = new DirectOpenClProgram(_context, FFTKernels.GetSource());
+                fftProgram.Build(optimizationFlags);
+                _programs.Add(fftProgram);
+                foreach (var name in FFTKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, fftProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] FFT kernels compiled: {FFTKernels.GetKernelNames().Length} kernels");
             }
             catch (Exception ex)
             {
@@ -5473,6 +5484,400 @@ KERNEL VARIANTS (A/B testing):
             k.SetArg(arg++, size);
 
             k.Execute1D(size, Math.Min(256, size));
+        }
+
+        #endregion
+
+        #region FFT and Signal Processing
+
+        /// <inheritdoc/>
+        public void FFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag, int n, bool inverse)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var inReal = ((DirectOpenClGpuBuffer)inputReal).Buffer;
+            var inImag = ((DirectOpenClGpuBuffer)inputImag).Buffer;
+            var outReal = ((DirectOpenClGpuBuffer)outputReal).Buffer;
+            var outImag = ((DirectOpenClGpuBuffer)outputImag).Buffer;
+
+            // Copy input to output for in-place FFT
+            CopyBuffer(inputReal, outputReal, n);
+            CopyBuffer(inputImag, outputImag, n);
+
+            int log2n = (int)Math.Log2(n);
+
+            // Bit-reversal permutation
+            var bitRevKernel = _kernelCache["bit_reverse_permutation"];
+            bitRevKernel.SetArg(0, outReal.Handle);
+            bitRevKernel.SetArg(1, outImag.Handle);
+            bitRevKernel.SetArg(2, n);
+            bitRevKernel.SetArg(3, log2n);
+            bitRevKernel.Execute1D(n, Math.Min(256, n));
+
+            // FFT butterfly stages
+            var butterflyKernel = _kernelCache["fft_butterfly"];
+            for (int stride = 2; stride <= n; stride *= 2)
+            {
+                int halfStride = stride / 2;
+                butterflyKernel.SetArg(0, outReal.Handle);
+                butterflyKernel.SetArg(1, outImag.Handle);
+                butterflyKernel.SetArg(2, n);
+                butterflyKernel.SetArg(3, stride);
+                butterflyKernel.SetArg(4, inverse ? 1 : 0);
+                butterflyKernel.Execute1D(n / 2, Math.Min(256, n / 2));
+            }
+
+            // Scale for inverse FFT
+            if (inverse)
+            {
+                ScaleBuffer(outputReal, 1.0f / n, n);
+                ScaleBuffer(outputImag, 1.0f / n, n);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void RFFT(IGpuBuffer input, IGpuBuffer outputReal, IGpuBuffer outputImag, int n)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            // Allocate temporary buffers for full complex FFT
+            var tempReal = AllocateBuffer(n);
+            var tempImag = AllocateBuffer(n);
+
+            try
+            {
+                // Copy real input and zero imaginary
+                CopyBuffer(input, tempReal, n);
+                ZeroBuffer(tempImag, n);
+
+                // Perform full complex FFT
+                FFT(tempReal, tempImag, tempReal, tempImag, n, false);
+
+                // Extract positive frequencies (n/2+1 elements)
+                var rfftKernel = _kernelCache["rfft_postprocess"];
+                rfftKernel.SetArg(0, ((DirectOpenClGpuBuffer)tempReal).Buffer.Handle);
+                rfftKernel.SetArg(1, ((DirectOpenClGpuBuffer)tempImag).Buffer.Handle);
+                rfftKernel.SetArg(2, ((DirectOpenClGpuBuffer)outputReal).Buffer.Handle);
+                rfftKernel.SetArg(3, ((DirectOpenClGpuBuffer)outputImag).Buffer.Handle);
+                rfftKernel.SetArg(4, n);
+                rfftKernel.Execute1D(n / 2 + 1, Math.Min(256, n / 2 + 1));
+            }
+            finally
+            {
+                tempReal.Dispose();
+                tempImag.Dispose();
+            }
+        }
+
+        /// <inheritdoc/>
+        public void IRFFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer output, int n)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            // Allocate temporary buffers for full complex FFT
+            var tempReal = AllocateBuffer(n);
+            var tempImag = AllocateBuffer(n);
+
+            try
+            {
+                // Reconstruct negative frequencies using conjugate symmetry
+                var irfftKernel = _kernelCache["irfft_preprocess"];
+                irfftKernel.SetArg(0, ((DirectOpenClGpuBuffer)inputReal).Buffer.Handle);
+                irfftKernel.SetArg(1, ((DirectOpenClGpuBuffer)inputImag).Buffer.Handle);
+                irfftKernel.SetArg(2, ((DirectOpenClGpuBuffer)tempReal).Buffer.Handle);
+                irfftKernel.SetArg(3, ((DirectOpenClGpuBuffer)tempImag).Buffer.Handle);
+                irfftKernel.SetArg(4, n);
+                irfftKernel.Execute1D(n, Math.Min(256, n));
+
+                // Perform inverse FFT
+                FFT(tempReal, tempImag, tempReal, tempImag, n, true);
+
+                // Copy real part to output
+                CopyBuffer(tempReal, output, n);
+            }
+            finally
+            {
+                tempReal.Dispose();
+                tempImag.Dispose();
+            }
+        }
+
+        /// <inheritdoc/>
+        public void BatchedFFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag, int batch, int n, bool inverse)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var inReal = ((DirectOpenClGpuBuffer)inputReal).Buffer;
+            var inImag = ((DirectOpenClGpuBuffer)inputImag).Buffer;
+            var outReal = ((DirectOpenClGpuBuffer)outputReal).Buffer;
+            var outImag = ((DirectOpenClGpuBuffer)outputImag).Buffer;
+
+            // Copy input to output for in-place FFT
+            CopyBuffer(inputReal, outputReal, batch * n);
+            CopyBuffer(inputImag, outputImag, batch * n);
+
+            int log2n = (int)Math.Log2(n);
+
+            // Batched bit-reversal
+            var bitRevKernel = _kernelCache["batched_bit_reverse"];
+            bitRevKernel.SetArg(0, outReal.Handle);
+            bitRevKernel.SetArg(1, outImag.Handle);
+            bitRevKernel.SetArg(2, batch);
+            bitRevKernel.SetArg(3, n);
+            bitRevKernel.SetArg(4, log2n);
+            bitRevKernel.Execute2D(n, batch, Math.Min(256, n), 1);
+
+            // Batched FFT butterfly stages
+            var butterflyKernel = _kernelCache["batched_fft_butterfly"];
+            for (int stride = 2; stride <= n; stride *= 2)
+            {
+                butterflyKernel.SetArg(0, outReal.Handle);
+                butterflyKernel.SetArg(1, outImag.Handle);
+                butterflyKernel.SetArg(2, batch);
+                butterflyKernel.SetArg(3, n);
+                butterflyKernel.SetArg(4, stride);
+                butterflyKernel.SetArg(5, inverse ? 1 : 0);
+                butterflyKernel.Execute2D(n / 2, batch, Math.Min(256, n / 2), 1);
+            }
+
+            // Scale for inverse FFT
+            if (inverse)
+            {
+                ScaleBuffer(outputReal, 1.0f / n, batch * n);
+                ScaleBuffer(outputImag, 1.0f / n, batch * n);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void FFT2D(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag, int height, int width, bool inverse)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var inReal = ((DirectOpenClGpuBuffer)inputReal).Buffer;
+            var inImag = ((DirectOpenClGpuBuffer)inputImag).Buffer;
+            var outReal = ((DirectOpenClGpuBuffer)outputReal).Buffer;
+            var outImag = ((DirectOpenClGpuBuffer)outputImag).Buffer;
+
+            // Copy input to output for in-place FFT
+            CopyBuffer(inputReal, outputReal, height * width);
+            CopyBuffer(inputImag, outputImag, height * width);
+
+            int log2Width = (int)Math.Log2(width);
+            int log2Height = (int)Math.Log2(height);
+
+            // Row-wise bit reversal
+            var bitRevRowsKernel = _kernelCache["bit_reverse_rows"];
+            bitRevRowsKernel.SetArg(0, outReal.Handle);
+            bitRevRowsKernel.SetArg(1, outImag.Handle);
+            bitRevRowsKernel.SetArg(2, height);
+            bitRevRowsKernel.SetArg(3, width);
+            bitRevRowsKernel.SetArg(4, log2Width);
+            bitRevRowsKernel.Execute2D(width, height, Math.Min(16, width), Math.Min(16, height));
+
+            // Row-wise FFT
+            var rowButterfly = _kernelCache["fft_rows_butterfly"];
+            for (int stride = 2; stride <= width; stride *= 2)
+            {
+                rowButterfly.SetArg(0, outReal.Handle);
+                rowButterfly.SetArg(1, outImag.Handle);
+                rowButterfly.SetArg(2, height);
+                rowButterfly.SetArg(3, width);
+                rowButterfly.SetArg(4, stride);
+                rowButterfly.SetArg(5, inverse ? 1 : 0);
+                rowButterfly.Execute2D(width / 2, height, Math.Min(16, width / 2), Math.Min(16, height));
+            }
+
+            // Column-wise bit reversal
+            var bitRevColsKernel = _kernelCache["bit_reverse_cols"];
+            bitRevColsKernel.SetArg(0, outReal.Handle);
+            bitRevColsKernel.SetArg(1, outImag.Handle);
+            bitRevColsKernel.SetArg(2, height);
+            bitRevColsKernel.SetArg(3, width);
+            bitRevColsKernel.SetArg(4, log2Height);
+            bitRevColsKernel.Execute2D(width, height, Math.Min(16, width), Math.Min(16, height));
+
+            // Column-wise FFT
+            var colButterfly = _kernelCache["fft_cols_butterfly"];
+            for (int stride = 2; stride <= height; stride *= 2)
+            {
+                colButterfly.SetArg(0, outReal.Handle);
+                colButterfly.SetArg(1, outImag.Handle);
+                colButterfly.SetArg(2, height);
+                colButterfly.SetArg(3, width);
+                colButterfly.SetArg(4, stride);
+                colButterfly.SetArg(5, inverse ? 1 : 0);
+                colButterfly.Execute2D(height / 2, width, Math.Min(16, height / 2), Math.Min(16, width));
+            }
+
+            // Scale for inverse FFT
+            if (inverse)
+            {
+                ScaleBuffer(outputReal, 1.0f / (height * width), height * width);
+                ScaleBuffer(outputImag, 1.0f / (height * width), height * width);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void ApplyWindow(IGpuBuffer input, IGpuBuffer window, IGpuBuffer output, int n)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var inBuf = ((DirectOpenClGpuBuffer)input).Buffer;
+            var winBuf = ((DirectOpenClGpuBuffer)window).Buffer;
+            var outBuf = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            var kernel = _kernelCache["apply_window"];
+            kernel.SetArg(0, inBuf.Handle);
+            kernel.SetArg(1, winBuf.Handle);
+            kernel.SetArg(2, outBuf.Handle);
+            kernel.SetArg(3, n);
+            kernel.Execute1D(n, Math.Min(256, n));
+        }
+
+        /// <inheritdoc/>
+        public void ComplexMagnitude(IGpuBuffer real, IGpuBuffer imag, IGpuBuffer magnitude, int n)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var realBuf = ((DirectOpenClGpuBuffer)real).Buffer;
+            var imagBuf = ((DirectOpenClGpuBuffer)imag).Buffer;
+            var magBuf = ((DirectOpenClGpuBuffer)magnitude).Buffer;
+
+            var kernel = _kernelCache["complex_magnitude"];
+            kernel.SetArg(0, realBuf.Handle);
+            kernel.SetArg(1, imagBuf.Handle);
+            kernel.SetArg(2, magBuf.Handle);
+            kernel.SetArg(3, n);
+            kernel.Execute1D(n, Math.Min(256, n));
+        }
+
+        /// <inheritdoc/>
+        public void ComplexPhase(IGpuBuffer real, IGpuBuffer imag, IGpuBuffer phase, int n)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var realBuf = ((DirectOpenClGpuBuffer)real).Buffer;
+            var imagBuf = ((DirectOpenClGpuBuffer)imag).Buffer;
+            var phaseBuf = ((DirectOpenClGpuBuffer)phase).Buffer;
+
+            var kernel = _kernelCache["complex_phase"];
+            kernel.SetArg(0, realBuf.Handle);
+            kernel.SetArg(1, imagBuf.Handle);
+            kernel.SetArg(2, phaseBuf.Handle);
+            kernel.SetArg(3, n);
+            kernel.Execute1D(n, Math.Min(256, n));
+        }
+
+        /// <inheritdoc/>
+        public void PolarToComplex(IGpuBuffer magnitude, IGpuBuffer phase, IGpuBuffer real, IGpuBuffer imag, int n)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var magBuf = ((DirectOpenClGpuBuffer)magnitude).Buffer;
+            var phaseBuf = ((DirectOpenClGpuBuffer)phase).Buffer;
+            var realBuf = ((DirectOpenClGpuBuffer)real).Buffer;
+            var imagBuf = ((DirectOpenClGpuBuffer)imag).Buffer;
+
+            var kernel = _kernelCache["polar_to_complex"];
+            kernel.SetArg(0, magBuf.Handle);
+            kernel.SetArg(1, phaseBuf.Handle);
+            kernel.SetArg(2, realBuf.Handle);
+            kernel.SetArg(3, imagBuf.Handle);
+            kernel.SetArg(4, n);
+            kernel.Execute1D(n, Math.Min(256, n));
+        }
+
+        /// <inheritdoc/>
+        public void ApplyMelFilterbank(IGpuBuffer powerSpec, IGpuBuffer filterbank, IGpuBuffer melSpec, int numFrames, int numFreqs, int nMels)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var powerBuf = ((DirectOpenClGpuBuffer)powerSpec).Buffer;
+            var fbBuf = ((DirectOpenClGpuBuffer)filterbank).Buffer;
+            var melBuf = ((DirectOpenClGpuBuffer)melSpec).Buffer;
+
+            var kernel = _kernelCache["apply_mel_filterbank"];
+            kernel.SetArg(0, powerBuf.Handle);
+            kernel.SetArg(1, fbBuf.Handle);
+            kernel.SetArg(2, melBuf.Handle);
+            kernel.SetArg(3, numFrames);
+            kernel.SetArg(4, numFreqs);
+            kernel.SetArg(5, nMels);
+            kernel.Execute2D(nMels, numFrames, Math.Min(32, nMels), 1);
+        }
+
+        /// <inheritdoc/>
+        public void PowerToDb(IGpuBuffer power, IGpuBuffer db, int n, float refValue, float minDb)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var powerBuf = ((DirectOpenClGpuBuffer)power).Buffer;
+            var dbBuf = ((DirectOpenClGpuBuffer)db).Buffer;
+
+            var kernel = _kernelCache["power_to_db"];
+            kernel.SetArg(0, powerBuf.Handle);
+            kernel.SetArg(1, dbBuf.Handle);
+            kernel.SetArg(2, n);
+            kernel.SetArg(3, refValue);
+            kernel.SetArg(4, minDb);
+            kernel.Execute1D(n, Math.Min(256, n));
+        }
+
+        /// <inheritdoc/>
+        public void DbToPower(IGpuBuffer db, IGpuBuffer power, int n, float refValue)
+        {
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            var dbBuf = ((DirectOpenClGpuBuffer)db).Buffer;
+            var powerBuf = ((DirectOpenClGpuBuffer)power).Buffer;
+
+            var kernel = _kernelCache["db_to_power"];
+            kernel.SetArg(0, dbBuf.Handle);
+            kernel.SetArg(1, powerBuf.Handle);
+            kernel.SetArg(2, n);
+            kernel.SetArg(3, refValue);
+            kernel.Execute1D(n, Math.Min(256, n));
+        }
+
+        private void CopyBuffer(IGpuBuffer src, IGpuBuffer dst, int size)
+        {
+            if (_context == null) return;
+            var srcBuf = ((DirectOpenClGpuBuffer)src).Buffer;
+            var dstBuf = ((DirectOpenClGpuBuffer)dst).Buffer;
+
+            // Use EnqueueCopyBuffer for device-to-device copy
+            int err = OpenClNativeBindings.EnqueueCopyBuffer(
+                _context.CommandQueue,
+                srcBuf.Handle,
+                dstBuf.Handle,
+                UIntPtr.Zero,
+                UIntPtr.Zero,
+                (UIntPtr)(size * sizeof(float)),
+                0,
+                IntPtr.Zero,
+                IntPtr.Zero);
+
+            if (err != OpenClNativeBindings.CL_SUCCESS)
+                throw new InvalidOperationException($"Failed to copy OpenCL buffer: {err}");
+        }
+
+        private void ZeroBuffer(IGpuBuffer buffer, int size)
+        {
+            var data = new float[size];
+            var buf = ((DirectOpenClGpuBuffer)buffer).Buffer;
+            buf.CopyFromHost(data);
+        }
+
+        private void ScaleBuffer(IGpuBuffer buffer, float scale, int size)
+        {
+            if (_context == null) return;
+            var buf = ((DirectOpenClGpuBuffer)buffer).Buffer;
+            var kernel = _kernelCache["scale_vector"];
+            kernel.SetArg(0, buf.Handle);
+            kernel.SetArg(1, buf.Handle);
+            kernel.SetArg(2, scale);
+            kernel.SetArg(3, size);
+            kernel.Execute1D(size, Math.Min(256, size));
         }
 
         #endregion

@@ -270,6 +270,234 @@ __kernel void gemm_bias(
         C[row * N + col] = sum + bias[col];
     }
 }
+
+// ===========================================================================
+// FUSED LAYERNORM + ACTIVATION KERNELS
+// ===========================================================================
+
+// Fused LayerNorm + ReLU
+__kernel void layernorm_relu(
+    __global const float* input,
+    __global float* output,
+    __global const float* gamma,
+    __global const float* beta,
+    int batchSize, int normalizedSize, float epsilon,
+    __local float* scratch)
+{
+    int batch = get_group_id(0);
+    if (batch >= batchSize) return;
+
+    int tid = get_local_id(0);
+    int baseIdx = batch * normalizedSize;
+
+    float localSum = 0.0f;
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        localSum += input[baseIdx + i];
+    }
+    scratch[tid] = localSum;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int s = get_local_size(0) / 2; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float mean = scratch[0] / normalizedSize;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    float localVar = 0.0f;
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        float diff = input[baseIdx + i] - mean;
+        localVar += diff * diff;
+    }
+    scratch[tid] = localVar;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int s = get_local_size(0) / 2; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float invStd = rsqrt(scratch[0] / normalizedSize + epsilon);
+
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        float normalized = (input[baseIdx + i] - mean) * invStd;
+        float result = gamma[i] * normalized + beta[i];
+        output[baseIdx + i] = fmax(0.0f, result);
+    }
+}
+
+// Fused LayerNorm + GELU
+__kernel void layernorm_gelu(
+    __global const float* input,
+    __global float* output,
+    __global const float* gamma,
+    __global const float* beta,
+    int batchSize, int normalizedSize, float epsilon,
+    __local float* scratch)
+{
+    int batch = get_group_id(0);
+    if (batch >= batchSize) return;
+
+    int tid = get_local_id(0);
+    int baseIdx = batch * normalizedSize;
+
+    float localSum = 0.0f;
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        localSum += input[baseIdx + i];
+    }
+    scratch[tid] = localSum;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int s = get_local_size(0) / 2; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float mean = scratch[0] / normalizedSize;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    float localVar = 0.0f;
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        float diff = input[baseIdx + i] - mean;
+        localVar += diff * diff;
+    }
+    scratch[tid] = localVar;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int s = get_local_size(0) / 2; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float invStd = rsqrt(scratch[0] / normalizedSize + epsilon);
+
+    const float SQRT_2_OVER_PI = 0.7978845608f;
+    const float COEFF = 0.044715f;
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        float normalized = (input[baseIdx + i] - mean) * invStd;
+        float x = gamma[i] * normalized + beta[i];
+        float x3 = x * x * x;
+        float inner = SQRT_2_OVER_PI * (x + COEFF * x3);
+        output[baseIdx + i] = 0.5f * x * (1.0f + tanh(inner));
+    }
+}
+
+// Fused Residual + LayerNorm
+__kernel void residual_layernorm(
+    __global const float* input,
+    __global const float* residual,
+    __global float* output,
+    __global const float* gamma,
+    __global const float* beta,
+    int batchSize, int normalizedSize, float epsilon,
+    __local float* scratch)
+{
+    int batch = get_group_id(0);
+    if (batch >= batchSize) return;
+
+    int tid = get_local_id(0);
+    int baseIdx = batch * normalizedSize;
+
+    float localSum = 0.0f;
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        localSum += input[baseIdx + i] + residual[baseIdx + i];
+    }
+    scratch[tid] = localSum;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int s = get_local_size(0) / 2; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float mean = scratch[0] / normalizedSize;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    float localVar = 0.0f;
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        float val = input[baseIdx + i] + residual[baseIdx + i];
+        float diff = val - mean;
+        localVar += diff * diff;
+    }
+    scratch[tid] = localVar;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int s = get_local_size(0) / 2; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float invStd = rsqrt(scratch[0] / normalizedSize + epsilon);
+
+    for (int i = tid; i < normalizedSize; i += get_local_size(0)) {
+        float val = input[baseIdx + i] + residual[baseIdx + i];
+        float normalized = (val - mean) * invStd;
+        output[baseIdx + i] = gamma[i] * normalized + beta[i];
+    }
+}
+
+// Fused Scale + Softmax
+__kernel void scaled_softmax(
+    __global const float* input,
+    __global float* output,
+    int batchSize, int seqLen, float scale,
+    __local float* scratch)
+{
+    int batch = get_group_id(0);
+    if (batch >= batchSize) return;
+
+    int tid = get_local_id(0);
+    int baseIdx = batch * seqLen;
+
+    float localMax = -INFINITY;
+    for (int i = tid; i < seqLen; i += get_local_size(0)) {
+        float val = input[baseIdx + i] * scale;
+        if (val > localMax) localMax = val;
+    }
+    scratch[tid] = localMax;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int s = get_local_size(0) / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            if (scratch[tid + s] > scratch[tid]) scratch[tid] = scratch[tid + s];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float maxVal = scratch[0];
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    float localSum = 0.0f;
+    for (int i = tid; i < seqLen; i += get_local_size(0)) {
+        float val = input[baseIdx + i] * scale;
+        localSum += exp(val - maxVal);
+    }
+    scratch[tid] = localSum;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int s = get_local_size(0) / 2; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float invSum = 1.0f / scratch[0];
+
+    for (int i = tid; i < seqLen; i += get_local_size(0)) {
+        float val = input[baseIdx + i] * scale;
+        output[baseIdx + i] = exp(val - maxVal) * invSum;
+    }
+}
+
+// Fused Bias + Dropout
+__kernel void bias_dropout(
+    __global const float* input,
+    __global float* output,
+    __global const float* bias,
+    __global const uint* mask,
+    int rows, int cols, float dropoutProb, float scale)
+{
+    int idx = get_global_id(0);
+    int size = rows * cols;
+    if (idx >= size) return;
+
+    int col = idx % cols;
+    float val = input[idx] + bias[col];
+    uint m = mask[idx];
+    output[idx] = (m != 0) ? val * scale : 0.0f;
+}
 ";
         }
 
@@ -281,7 +509,9 @@ __kernel void gemm_bias(
             return new string[]
             {
                 "gemm_bias_relu", "gemm_bias_gelu",
-                "gemm_bias_sigmoid", "gemm_bias_tanh", "gemm_bias"
+                "gemm_bias_sigmoid", "gemm_bias_tanh", "gemm_bias",
+                "layernorm_relu", "layernorm_gelu",
+                "residual_layernorm", "scaled_softmax", "bias_dropout"
             };
         }
     }
