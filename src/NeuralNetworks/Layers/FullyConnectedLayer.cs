@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -242,6 +244,10 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([outputSize]);
 
         InitializeParameters();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -285,6 +291,10 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([outputSize]);
 
         InitializeParameters();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -646,6 +656,10 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
         _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
         _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -779,6 +793,10 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         {
             _biases[i] = parameters[index++];
         }
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

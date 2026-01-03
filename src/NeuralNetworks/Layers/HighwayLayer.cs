@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -341,6 +343,12 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _gateActivation = gateActivation ?? new SigmoidActivation<T>();
 
         InitializeParameters();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(_transformWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_transformBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -381,6 +389,12 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _vectorGateActivation = gateActivation ?? new SigmoidActivation<T>();
 
         InitializeParameters();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(_transformWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_transformBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -832,6 +846,12 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _transformBias = Engine.TensorSubtract(_transformBias, scaledTransformBiasGrad);
         _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
         _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_transformWeights);
+        Engine.InvalidatePersistentTensor(_transformBias);
+        Engine.InvalidatePersistentTensor(_gateWeights);
+        Engine.InvalidatePersistentTensor(_gateBias);
     }
 
     /// <summary>
@@ -916,6 +936,12 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         index += gateWeightsSize;
 
         _gateBias = new Tensor<T>(_gateBias.Shape, parameters.Slice(index, _gateBias.Length));
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_transformWeights);
+        Engine.InvalidatePersistentTensor(_transformBias);
+        Engine.InvalidatePersistentTensor(_gateWeights);
+        Engine.InvalidatePersistentTensor(_gateBias);
     }
 
     /// <summary>
