@@ -440,7 +440,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
                 {
                     int outW = w * 2;
                     T val = inputData[inBaseIdx + h * width + w];
-                    
+
                     // Write 2x2 block
                     outputData[outBaseIdx + outH * outWidth + outW] = val;
                     outputData[outBaseIdx + outH * outWidth + outW + 1] = val;

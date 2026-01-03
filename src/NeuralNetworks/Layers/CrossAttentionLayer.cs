@@ -171,7 +171,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         var contextShape = context.Shape;
         int queryRank = queryShape.Length;
 
-                // Handle any-rank query input
+        // Handle any-rank query input
         int batch, queryLen, height = 0, width = 0;
         int queryDimActual;
         bool is4D = queryRank == 4;
