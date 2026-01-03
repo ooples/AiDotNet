@@ -23,6 +23,7 @@ public sealed class CudaBackend : IDirectGpuBackend
     private IntPtr _neuralNetModule;
     private IntPtr _fusedModule;
     private IntPtr _attentionModule;
+    private IntPtr _fftModule;
     private bool _disposed;
 
     public bool IsAvailable { get; }
@@ -254,6 +255,7 @@ public sealed class CudaBackend : IDirectGpuBackend
         _neuralNetModule = CompileKernelModule(device, CudaNeuralNetKernels.GetSource(), "neuralnet_kernels", CudaNeuralNetKernels.GetKernelNames());
         _fusedModule = CompileKernelModule(device, CudaFusedKernels.GetSource(), "fused_kernels", CudaFusedKernels.GetKernelNames());
         _attentionModule = CompileKernelModule(device, CudaAttentionKernels.GetSource(), "attention_kernels", CudaAttentionKernels.GetKernelNames());
+        _fftModule = CompileKernelModule(device, Kernels.CudaFFTKernels.GetSource(), "fft_kernels", Kernels.CudaFFTKernels.GetKernelNames());
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -1955,9 +1957,11 @@ public sealed class CudaBackend : IDirectGpuBackend
     public void FlashAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
         IGpuBuffer output, IGpuBuffer? mask, int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
     {
-        // Flash attention requires specialized memory-efficient implementation
-        // For now, fall back to standard attention
-        ScaledDotProductAttention(query, key, value, output, null, mask, batch, numHeads, seqLen, headDim, scale, isCausal);
+        // Allocate temporary buffer for softmax stats (not returned but required by FlashAttentionV2)
+        using var softmaxStats = AllocateBuffer(batch * numHeads * seqLen);
+
+        // Use FlashAttentionV2 which is the proper GPU-accelerated implementation
+        FlashAttentionV2(query, key, value, output, softmaxStats, batch, numHeads, seqLen, seqLen, headDim, scale, isCausal);
     }
 
     public unsafe void FlashAttentionV2(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
@@ -3015,6 +3019,437 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     #endregion
 
+    #region FFT and Signal Processing
+
+    /// <inheritdoc/>
+    public unsafe void FFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag, int n, bool inverse)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        using var _ = PushContext();
+
+        // Copy input to output for in-place FFT
+        CudaCopyBuffer(inputReal, outputReal, n);
+        CudaCopyBuffer(inputImag, outputImag, n);
+
+        int log2n = (int)Math.Log2(n);
+        IntPtr outRealPtr = outputReal.Handle;
+        IntPtr outImagPtr = outputImag.Handle;
+        int inv = inverse ? 1 : 0;
+
+        // Bit-reversal permutation
+        if (_kernelCache.TryGetValue("bit_reverse_permutation", out var bitRevKernel))
+        {
+            uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+            void** args = stackalloc void*[4];
+            args[0] = &outRealPtr;
+            args[1] = &outImagPtr;
+            args[2] = &n;
+            args[3] = &log2n;
+            LaunchKernel(bitRevKernel, grid, (uint)DefaultBlockSize, args);
+        }
+
+        // FFT butterfly stages
+        if (_kernelCache.TryGetValue("fft_butterfly", out var butterflyKernel))
+        {
+            // Pre-allocate args outside the loop to avoid CA2014
+            void** butterflyArgs = stackalloc void*[5];
+            butterflyArgs[0] = &outRealPtr;
+            butterflyArgs[1] = &outImagPtr;
+            butterflyArgs[2] = &n;
+            butterflyArgs[4] = &inv;
+
+            for (int stride = 2; stride <= n; stride *= 2)
+            {
+                uint grid = (uint)((n / 2 + DefaultBlockSize - 1) / DefaultBlockSize);
+                butterflyArgs[3] = &stride;
+                LaunchKernel(butterflyKernel, grid, (uint)DefaultBlockSize, butterflyArgs);
+            }
+        }
+
+        // Scale for inverse FFT
+        if (inverse && _kernelCache.TryGetValue("scale_inverse", out var scaleKernel))
+        {
+            uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+            void** args = stackalloc void*[3];
+            args[0] = &outRealPtr;
+            args[1] = &outImagPtr;
+            args[2] = &n;
+            LaunchKernel(scaleKernel, grid, (uint)DefaultBlockSize, args);
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void RFFT(IGpuBuffer input, IGpuBuffer outputReal, IGpuBuffer outputImag, int n)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        using var _ = PushContext();
+
+        // Allocate temporary buffers
+        var tempReal = AllocateBuffer(n);
+        var tempImag = AllocateBuffer(n);
+
+        try
+        {
+            // Copy input to tempReal, zero tempImag
+            CudaCopyBuffer(input, tempReal, n);
+            CuBlasNative.CheckCudaResult(CuBlasNative.cuMemsetD32(tempImag.Handle, 0, (ulong)n), "cuMemsetD32");
+
+            // Perform full complex FFT
+            FFT(tempReal, tempImag, tempReal, tempImag, n, false);
+
+            // Extract positive frequencies
+            if (_kernelCache.TryGetValue("rfft_postprocess", out var rfftKernel))
+            {
+                int outLen = n / 2 + 1;
+                uint grid = (uint)((outLen + DefaultBlockSize - 1) / DefaultBlockSize);
+                IntPtr tempRealPtr = tempReal.Handle;
+                IntPtr tempImagPtr = tempImag.Handle;
+                IntPtr outRealPtr = outputReal.Handle;
+                IntPtr outImagPtr = outputImag.Handle;
+                void** args = stackalloc void*[5];
+                args[0] = &tempRealPtr;
+                args[1] = &tempImagPtr;
+                args[2] = &outRealPtr;
+                args[3] = &outImagPtr;
+                args[4] = &n;
+                LaunchKernel(rfftKernel, grid, (uint)DefaultBlockSize, args);
+            }
+        }
+        finally
+        {
+            tempReal.Dispose();
+            tempImag.Dispose();
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void IRFFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer output, int n)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        using var _ = PushContext();
+
+        var tempReal = AllocateBuffer(n);
+        var tempImag = AllocateBuffer(n);
+
+        try
+        {
+            // Reconstruct negative frequencies
+            if (_kernelCache.TryGetValue("irfft_preprocess", out var irfftKernel))
+            {
+                uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+                IntPtr inRealPtr = inputReal.Handle;
+                IntPtr inImagPtr = inputImag.Handle;
+                IntPtr tempRealPtr = tempReal.Handle;
+                IntPtr tempImagPtr = tempImag.Handle;
+                void** args = stackalloc void*[5];
+                args[0] = &inRealPtr;
+                args[1] = &inImagPtr;
+                args[2] = &tempRealPtr;
+                args[3] = &tempImagPtr;
+                args[4] = &n;
+                LaunchKernel(irfftKernel, grid, (uint)DefaultBlockSize, args);
+            }
+
+            // Perform inverse FFT
+            FFT(tempReal, tempImag, tempReal, tempImag, n, true);
+
+            // Copy real part to output
+            CudaCopyBuffer(tempReal, output, n);
+        }
+        finally
+        {
+            tempReal.Dispose();
+            tempImag.Dispose();
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void BatchedFFT(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag, int batch, int n, bool inverse)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        using var _ = PushContext();
+
+        // Copy input to output for in-place FFT
+        CudaCopyBuffer(inputReal, outputReal, batch * n);
+        CudaCopyBuffer(inputImag, outputImag, batch * n);
+
+        int log2n = (int)Math.Log2(n);
+        IntPtr outRealPtr = outputReal.Handle;
+        IntPtr outImagPtr = outputImag.Handle;
+        int inv = inverse ? 1 : 0;
+
+        // Batched bit-reversal
+        if (_kernelCache.TryGetValue("batched_bit_reverse", out var bitRevKernel))
+        {
+            void** args = stackalloc void*[5];
+            args[0] = &outRealPtr;
+            args[1] = &outImagPtr;
+            args[2] = &batch;
+            args[3] = &n;
+            args[4] = &log2n;
+            LaunchKernel2D(bitRevKernel, (uint)((n + 15) / 16), (uint)batch, 1, 16, 1, args);
+        }
+
+        // Batched FFT butterfly stages
+        if (_kernelCache.TryGetValue("batched_fft_butterfly", out var butterflyKernel))
+        {
+            // Pre-allocate args outside the loop to avoid CA2014
+            void** butterflyArgs = stackalloc void*[6];
+            butterflyArgs[0] = &outRealPtr;
+            butterflyArgs[1] = &outImagPtr;
+            butterflyArgs[2] = &batch;
+            butterflyArgs[3] = &n;
+            butterflyArgs[5] = &inv;
+
+            for (int stride = 2; stride <= n; stride *= 2)
+            {
+                butterflyArgs[4] = &stride;
+                LaunchKernel2D(butterflyKernel, (uint)((n / 2 + 15) / 16), (uint)batch, 1, 16, 1, butterflyArgs);
+            }
+        }
+
+        // Scale for inverse FFT
+        if (inverse && _kernelCache.TryGetValue("scale_inverse", out var scaleKernel))
+        {
+            int total = batch * n;
+            uint grid = (uint)((total + DefaultBlockSize - 1) / DefaultBlockSize);
+            void** args = stackalloc void*[3];
+            args[0] = &outRealPtr;
+            args[1] = &outImagPtr;
+            args[2] = &total;
+            LaunchKernel(scaleKernel, grid, (uint)DefaultBlockSize, args);
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void FFT2D(IGpuBuffer inputReal, IGpuBuffer inputImag, IGpuBuffer outputReal, IGpuBuffer outputImag, int height, int width, bool inverse)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        using var _ = PushContext();
+
+        // Copy input to output for in-place FFT
+        CudaCopyBuffer(inputReal, outputReal, height * width);
+        CudaCopyBuffer(inputImag, outputImag, height * width);
+
+        int log2Width = (int)Math.Log2(width);
+        int log2Height = (int)Math.Log2(height);
+        IntPtr outRealPtr = outputReal.Handle;
+        IntPtr outImagPtr = outputImag.Handle;
+        int inv = inverse ? 1 : 0;
+
+        // Row-wise FFT (process each row as a separate FFT)
+        if (_kernelCache.TryGetValue("fft_rows_butterfly", out var rowButterfly))
+        {
+            // Pre-allocate args outside the loop to avoid CA2014
+            void** rowArgs = stackalloc void*[6];
+            rowArgs[0] = &outRealPtr;
+            rowArgs[1] = &outImagPtr;
+            rowArgs[2] = &height;
+            rowArgs[3] = &width;
+            rowArgs[5] = &inv;
+
+            for (int stride = 2; stride <= width; stride *= 2)
+            {
+                rowArgs[4] = &stride;
+                LaunchKernel2D(rowButterfly, (uint)((width / 2 + 15) / 16), (uint)((height + 15) / 16), 1, 16, 16, rowArgs);
+            }
+        }
+
+        // Column-wise FFT
+        if (_kernelCache.TryGetValue("fft_cols_butterfly", out var colButterfly))
+        {
+            // Pre-allocate args outside the loop to avoid CA2014
+            void** colArgs = stackalloc void*[6];
+            colArgs[0] = &outRealPtr;
+            colArgs[1] = &outImagPtr;
+            colArgs[2] = &height;
+            colArgs[3] = &width;
+            colArgs[5] = &inv;
+
+            for (int stride = 2; stride <= height; stride *= 2)
+            {
+                colArgs[4] = &stride;
+                LaunchKernel2D(colButterfly, (uint)((height / 2 + 15) / 16), (uint)((width + 15) / 16), 1, 16, 16, colArgs);
+            }
+        }
+
+        // Scale for inverse FFT
+        if (inverse && _kernelCache.TryGetValue("scale_inverse", out var scaleKernel))
+        {
+            int total = height * width;
+            uint grid = (uint)((total + DefaultBlockSize - 1) / DefaultBlockSize);
+            void** args = stackalloc void*[3];
+            args[0] = &outRealPtr;
+            args[1] = &outImagPtr;
+            args[2] = &total;
+            LaunchKernel(scaleKernel, grid, (uint)DefaultBlockSize, args);
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void ApplyWindow(IGpuBuffer input, IGpuBuffer window, IGpuBuffer output, int n)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        if (!_kernelCache.TryGetValue("apply_window", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: apply_window");
+
+        using var _ = PushContext();
+        uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inPtr = input.Handle;
+        IntPtr winPtr = window.Handle;
+        IntPtr outPtr = output.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &inPtr;
+        args[1] = &winPtr;
+        args[2] = &outPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, (uint)DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void ComplexMagnitude(IGpuBuffer real, IGpuBuffer imag, IGpuBuffer magnitude, int n)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        if (!_kernelCache.TryGetValue("complex_magnitude", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: complex_magnitude");
+
+        using var _ = PushContext();
+        uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr realPtr = real.Handle;
+        IntPtr imagPtr = imag.Handle;
+        IntPtr magPtr = magnitude.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &realPtr;
+        args[1] = &imagPtr;
+        args[2] = &magPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, (uint)DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void ComplexPhase(IGpuBuffer real, IGpuBuffer imag, IGpuBuffer phase, int n)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        if (!_kernelCache.TryGetValue("complex_phase", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: complex_phase");
+
+        using var _ = PushContext();
+        uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr realPtr = real.Handle;
+        IntPtr imagPtr = imag.Handle;
+        IntPtr phasePtr = phase.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &realPtr;
+        args[1] = &imagPtr;
+        args[2] = &phasePtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, (uint)DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void PolarToComplex(IGpuBuffer magnitude, IGpuBuffer phase, IGpuBuffer real, IGpuBuffer imag, int n)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        if (!_kernelCache.TryGetValue("polar_to_complex", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: polar_to_complex");
+
+        using var _ = PushContext();
+        uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr magPtr = magnitude.Handle;
+        IntPtr phasePtr = phase.Handle;
+        IntPtr realPtr = real.Handle;
+        IntPtr imagPtr = imag.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &magPtr;
+        args[1] = &phasePtr;
+        args[2] = &realPtr;
+        args[3] = &imagPtr;
+        args[4] = &n;
+        LaunchKernel(kernel, grid, (uint)DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void ApplyMelFilterbank(IGpuBuffer powerSpec, IGpuBuffer filterbank, IGpuBuffer melSpec, int numFrames, int numFreqs, int nMels)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        if (!_kernelCache.TryGetValue("apply_mel_filterbank", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: apply_mel_filterbank");
+
+        using var _ = PushContext();
+        IntPtr powerPtr = powerSpec.Handle;
+        IntPtr fbPtr = filterbank.Handle;
+        IntPtr melPtr = melSpec.Handle;
+        void** args = stackalloc void*[6];
+        args[0] = &powerPtr;
+        args[1] = &fbPtr;
+        args[2] = &melPtr;
+        args[3] = &numFrames;
+        args[4] = &numFreqs;
+        args[5] = &nMels;
+        LaunchKernel2D(kernel, (uint)((nMels + 31) / 32), (uint)numFrames, 1, 32, 1, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void PowerToDb(IGpuBuffer power, IGpuBuffer db, int n, float refValue, float minDb)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        if (!_kernelCache.TryGetValue("power_to_db", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: power_to_db");
+
+        using var _ = PushContext();
+        uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr powerPtr = power.Handle;
+        IntPtr dbPtr = db.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &powerPtr;
+        args[1] = &dbPtr;
+        args[2] = &n;
+        args[3] = &refValue;
+        args[4] = &minDb;
+        LaunchKernel(kernel, grid, (uint)DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void DbToPower(IGpuBuffer db, IGpuBuffer power, int n, float refValue)
+    {
+        if (!IsAvailable) throw new InvalidOperationException("CUDA backend not available");
+
+        if (!_kernelCache.TryGetValue("db_to_power", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: db_to_power");
+
+        using var _ = PushContext();
+        uint grid = (uint)((n + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr dbPtr = db.Handle;
+        IntPtr powerPtr = power.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &dbPtr;
+        args[1] = &powerPtr;
+        args[2] = &n;
+        args[3] = &refValue;
+        LaunchKernel(kernel, grid, (uint)DefaultBlockSize, args);
+    }
+
+    private void CudaCopyBuffer(IGpuBuffer src, IGpuBuffer dst, int size)
+    {
+        ulong byteSize = (ulong)size * sizeof(float);
+        CuBlasNative.CheckCudaResult(
+            CuBlasNative.cuMemcpyDtoD(dst.Handle, src.Handle, byteSize),
+            "cuMemcpyDtoD");
+    }
+
+    #endregion
+
 
     public void Dispose()
     {
@@ -3063,6 +3498,12 @@ public sealed class CudaBackend : IDirectGpuBackend
         {
             CudaNativeBindings.cuModuleUnload(_activationModule);
             _activationModule = IntPtr.Zero;
+        }
+
+        if (_fftModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_fftModule);
+            _fftModule = IntPtr.Zero;
         }
 
         if (_cudaContext != IntPtr.Zero)
