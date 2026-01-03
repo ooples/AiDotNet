@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -333,22 +334,4 @@ public class PointConvolutionLayer<T> : LayerBase<T>
     public override int ParameterCount => _inputChannels * _outputChannels + _outputChannels;
 
     public override bool SupportsTraining => true;
-}
-
-/// <summary>
-/// Extension methods for Random class to support Gaussian distribution.
-/// </summary>
-internal static class RandomExtensions
-{
-    /// <summary>
-    /// Generates a random number from a Gaussian (normal) distribution.
-    /// </summary>
-    public static double NextGaussian(this Random random, double mean = 0, double stddev = 1)
-    {
-        // Box-Muller transform
-        double u1 = 1.0 - random.NextDouble();
-        double u2 = 1.0 - random.NextDouble();
-        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-        return mean + stddev * randStdNormal;
-    }
 }

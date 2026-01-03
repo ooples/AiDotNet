@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -855,27 +856,5 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         _loraLayer.ResetState();
         _sparseGradients = null;
         _cachedInputMatrix = null;
-    }
-}
-
-/// <summary>
-/// Extension methods for random number generation.
-/// </summary>
-internal static class RandomExtensions
-{
-    /// <summary>
-    /// Generates a random number from a Gaussian (normal) distribution.
-    /// </summary>
-    /// <param name="random">Random number generator.</param>
-    /// <param name="mean">Mean of the distribution.</param>
-    /// <param name="stdDev">Standard deviation of the distribution.</param>
-    /// <returns>Random number from Gaussian distribution.</returns>
-    public static double NextGaussian(this Random random, double mean = 0.0, double stdDev = 1.0)
-    {
-        // Box-Muller transform
-        double u1 = 1.0 - random.NextDouble();
-        double u2 = 1.0 - random.NextDouble();
-        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-        return mean + stdDev * randStdNormal;
     }
 }

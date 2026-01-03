@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.AutoML;
@@ -322,8 +323,6 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
 
     private double NextGaussian()
     {
-        double u1 = Math.Max(1e-12, Random.NextDouble());
-        double u2 = Math.Max(1e-12, Random.NextDouble());
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return Random.NextGaussian();
     }
 }

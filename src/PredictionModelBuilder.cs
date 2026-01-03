@@ -1,6 +1,7 @@
 
 
 global using AiDotNet.Agents;
+global using AiDotNet.Extensions;
 global using AiDotNet.Configuration;
 global using AiDotNet.DataProcessor;
 global using AiDotNet.Deployment.Configuration;
@@ -239,6 +240,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
 
     // Training pipeline configuration
     private TrainingPipelineConfiguration<T, TInput, TOutput>? _trainingPipelineConfiguration;
+
+    // Memory management configuration for gradient checkpointing, activation pooling, and model sharding
+    private Training.Memory.TrainingMemoryConfig? _memoryConfig;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -1066,7 +1070,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             PromptOptimizer = _promptOptimizer,
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor
+            PromptCompressor = _promptCompressor,
+            MemoryConfig = _memoryConfig
         };
 
         return new PredictionModelResult<T, TInput, TOutput>(options);
@@ -1103,6 +1108,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     {
         // Apply GPU configuration first
         ApplyGpuConfiguration();
+
+        // Apply memory management configuration (gradient checkpointing, etc.)
+        ApplyMemoryConfiguration();
 
         // Ensure we have a model configured
         if (_model is null)
@@ -1234,7 +1242,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             GraphStore = _graphStore,
             HybridGraphRetriever = _hybridGraphRetriever,
             LoRAConfiguration = _loraConfiguration,
-            AgentConfig = _agentConfig
+            AgentConfig = _agentConfig,
+            MemoryConfig = _memoryConfig
         };
 
         return new PredictionModelResult<T, TInput, TOutput>(options);
@@ -2195,6 +2204,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             ProfilingReport = profilerSession?.GetReport(),
 
             // Training Infrastructure Properties
+            MemoryConfig = _memoryConfig,
             ExperimentRunId = experimentRunId,
             ExperimentId = experimentId,
             ModelVersion = modelVersion,
@@ -2287,6 +2297,12 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         var profilerSession = CreateProfilerSession();
         using var _ = profilerSession?.Scope("BuildMetaLearningInternalAsync");
 
+        // Apply GPU configuration first
+        ApplyGpuConfiguration();
+
+        // Apply memory management configuration (gradient checkpointing, etc.)
+        ApplyMemoryConfiguration();
+
         // Validate meta-learner is configured (should be checked by caller, but defensive)
         if (_metaLearner is null)
         {
@@ -2338,7 +2354,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
             PromptCompressor = _promptCompressor,
-            ProfilingReport = profilerSession?.GetReport()
+            ProfilingReport = profilerSession?.GetReport(),
+            MemoryConfig = _memoryConfig
         };
 
         var result = new PredictionModelResult<T, TInput, TOutput>(metaOptions);
@@ -2411,6 +2428,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
 
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
+
+        // Apply memory management configuration (gradient checkpointing, etc.)
+        ApplyMemoryConfiguration();
 
         // Validate RL options are configured
         if (_rlOptions?.Environment is null)
@@ -2658,7 +2678,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
             PromptCompressor = _promptCompressor,
-            ProfilingReport = profilerSession?.GetReport()
+            ProfilingReport = profilerSession?.GetReport(),
+            MemoryConfig = _memoryConfig
         };
 
         var result = new PredictionModelResult<T, TInput, TOutput>(rlOptions);
@@ -3833,6 +3854,59 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager)
     {
         _checkpointManager = manager;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures memory management for training including gradient checkpointing,
+    /// activation pooling, and model sharding.
+    /// </summary>
+    /// <param name="configuration">The memory configuration to use. If null, uses default settings.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Training large neural networks requires a lot of memory.
+    /// Memory management helps you train bigger models by:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description><b>Gradient Checkpointing:</b> Trades compute for memory by recomputing
+    /// activations during backpropagation instead of storing them all.</description></item>
+    /// <item><description><b>Activation Pooling:</b> Reuses memory buffers to reduce garbage collection.</description></item>
+    /// <item><description><b>Model Sharding:</b> Splits large models across multiple GPUs.</description></item>
+    /// </list>
+    /// <para>
+    /// <b>Available Presets:</b>
+    /// <list type="bullet">
+    /// <item><description><c>TrainingMemoryConfig.MemoryEfficient()</c> - Maximum memory savings</description></item>
+    /// <item><description><c>TrainingMemoryConfig.SpeedOptimized()</c> - Maximum speed</description></item>
+    /// <item><description><c>TrainingMemoryConfig.MultiGpu(n)</c> - Multi-GPU training</description></item>
+    /// <item><description><c>TrainingMemoryConfig.ForTransformers()</c> - Optimized for transformers</description></item>
+    /// <item><description><c>TrainingMemoryConfig.ForConvNets()</c> - Optimized for CNNs</description></item>
+    /// </list>
+    /// </para>
+    /// <example>
+    /// <code>
+    /// // Using a preset configuration
+    /// builder.ConfigureMemoryManagement(TrainingMemoryConfig.MemoryEfficient());
+    ///
+    /// // Using a custom configuration
+    /// builder.ConfigureMemoryManagement(new TrainingMemoryConfig
+    /// {
+    ///     UseGradientCheckpointing = true,
+    ///     CheckpointEveryNLayers = 2,
+    ///     UseActivationPooling = true,
+    ///     MaxPoolMemoryMB = 2048
+    /// });
+    ///
+    /// // Multi-GPU training
+    /// builder.ConfigureMemoryManagement(TrainingMemoryConfig.MultiGpu(4));
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(
+        Training.Memory.TrainingMemoryConfig? configuration = null)
+    {
+        _memoryConfig = configuration;
         return this;
     }
 
@@ -5727,7 +5801,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// - <b>AlwaysCpu</b>: Force CPU-only execution, never use GPU
     /// </para>
     /// <para><b>GPU Device Type Behaviors:</b>
-    /// - <b>Auto</b>: Let ILGPU select the best device (CUDA for NVIDIA, OpenCL for AMD/Intel)
+    /// - <b>Auto</b>: Use DirectGpu backend order (CUDA → OpenCL → HIP) with CPU fallback
     /// - <b>CUDA</b>: Force NVIDIA CUDA backend (throws if NVIDIA GPU not available)
     /// - <b>OpenCL</b>: Force OpenCL backend (works with NVIDIA, AMD, Intel, throws if no GPU)
     /// - <b>CPU</b>: Force CPU-only execution (equivalent to UsageLevel.AlwaysCpu)
@@ -5735,7 +5809,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </remarks>
     private void ApplyGpuConfiguration()
     {
-#if !NET462
         // Skip if no GPU configuration was provided (null = default = auto-detect with CPU fallback)
         if (_gpuAccelerationConfig == null)
         {
@@ -5751,6 +5824,27 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
                 // This ensures the library works out of the box on any hardware
             }
             return;
+        }
+
+        if (_gpuAccelerationConfig.UsageLevel == AiDotNet.Engines.GpuUsageLevel.AlwaysCpu)
+        {
+            AiDotNetEngine.ResetToCpu();
+            return;
+        }
+
+        if (_gpuAccelerationConfig.DeviceType == AiDotNet.Engines.GpuDeviceType.CPU)
+        {
+            AiDotNetEngine.ResetToCpu();
+            return;
+        }
+
+        if (_gpuAccelerationConfig.DeviceType == AiDotNet.Engines.GpuDeviceType.CUDA)
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_DIRECTGPU_BACKENDS", "cuda");
+        }
+        else if (_gpuAccelerationConfig.DeviceType == AiDotNet.Engines.GpuDeviceType.OpenCL)
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_DIRECTGPU_BACKENDS", "opencl");
         }
 
         // Apply configuration based on usage level
@@ -5903,40 +5997,38 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
                 throw new ArgumentException($"Unknown GPU usage level: {_gpuAccelerationConfig.UsageLevel}");
         }
 
-        // Note on DeviceType (CUDA vs OpenCL):
-        // The current ILGPU-based implementation auto-selects the best device type via GetPreferredDevice().
-        // Explicit device type selection (CUDA vs OpenCL) would require:
-        // 1. Enumerating available accelerators by type
-        // 2. Filtering by CUDA vs OpenCL vs CPU
-        // 3. Creating accelerator from filtered list
-        // 4. Passing accelerator to GpuEngine constructor
-        //
-        // This is a future enhancement. For now, GpuDeviceType.Auto is implicitly used,
-        // which lets ILGPU choose the best device (CUDA for NVIDIA, OpenCL for AMD/Intel).
-        //
-        // To add explicit device type support:
-        // - Modify GpuEngine constructor to accept optional AcceleratorType filter
-        // - Enumerate devices: context.Devices.Where(d => d.AcceleratorType == AcceleratorType.Cuda)
-        // - Create accelerator from filtered device
-        //
-        // This would allow users to force CUDA or OpenCL when multiple options are available,
-        // but adds complexity and is rarely needed since Auto already picks the fastest option.
         if (_gpuAccelerationConfig.DeviceType != AiDotNet.Engines.GpuDeviceType.Auto)
         {
-            Console.WriteLine($"[AiDotNet] Warning: Explicit device type ({_gpuAccelerationConfig.DeviceType}) is not yet implemented.");
-            Console.WriteLine("[AiDotNet] Using Auto device selection (CUDA for NVIDIA, OpenCL for AMD/Intel).");
-            Console.WriteLine("[AiDotNet] This is the recommended setting and provides optimal performance.");
+            Console.WriteLine($"[AiDotNet] DirectGpu backend order forced to {_gpuAccelerationConfig.DeviceType}.");
         }
-#else
-        // GPU acceleration is not supported in .NET Framework 4.6.2
-        // ILGPU requires .NET Standard 2.1 or higher, which is not available in net462
-        if (_gpuAccelerationConfig != null && _gpuAccelerationConfig.UsageLevel != AiDotNet.Engines.GpuUsageLevel.AlwaysCpu)
+
+        if (_gpuAccelerationConfig.DeviceIndex != 0)
         {
-            Console.WriteLine("[AiDotNet] Warning: GPU acceleration is not supported in .NET Framework 4.6.2");
-            Console.WriteLine("[AiDotNet] Using CPU execution (ILGPU requires .NET Standard 2.1+)");
-            Console.WriteLine("[AiDotNet] To use GPU acceleration, target net8.0 or higher");
+            Console.WriteLine("[AiDotNet] Warning: GPU DeviceIndex selection is not implemented for DirectGpu backends.");
         }
-#endif
+    }
+
+    /// <summary>
+    /// Applies memory management configuration to models that support it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Memory management helps train larger models by:
+    /// - Gradient checkpointing: Trade compute for memory (recompute activations instead of storing all)
+    /// - Activation pooling: Reuse tensor memory to reduce garbage collection
+    /// </para>
+    /// </remarks>
+    private void ApplyMemoryConfiguration()
+    {
+        // Skip if no memory configuration was provided
+        if (_memoryConfig is null)
+            return;
+
+        // Apply to models that support memory management
+        if (_model is NeuralNetworks.NeuralNetworkBase<T> neuralNetwork)
+        {
+            neuralNetwork.EnableMemoryManagement(_memoryConfig);
+        }
     }
 
     private static (TInput X, TOutput Y, List<(int ClientId, int StartRow, int SampleCount)> ClientRanges)
@@ -6572,10 +6664,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <returns>A normally distributed random value.</returns>
     private static double NextGaussian(Random rng, double mean, double stdDev)
     {
-        var u1 = 1.0 - rng.NextDouble();
-        var u2 = 1.0 - rng.NextDouble();
-        var randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-        return mean + stdDev * randStdNormal;
+        return rng.NextGaussian(mean, stdDev);
     }
 
     /// <summary>

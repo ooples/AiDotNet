@@ -5,7 +5,7 @@ namespace AiDotNet.Engines;
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> Different GPU types work with different graphics cards:
-/// - **Auto**: Automatically select best available (CUDA → OpenCL → CPU)
+/// - **Auto**: Automatically select best available (CUDA → OpenCL → HIP → CPU)
 /// - **CUDA**: NVIDIA GPUs only (GeForce, RTX, Quadro, Tesla, A100, H100)
 /// - **OpenCL**: Cross-platform (AMD, Intel, NVIDIA, Apple)
 /// - **CPU**: Force CPU-only execution (no GPU)
@@ -14,7 +14,7 @@ namespace AiDotNet.Engines;
 public enum GpuDeviceType
 {
     /// <summary>
-    /// Automatically select best available GPU (CUDA → OpenCL → CPU).
+    /// Automatically select best available GPU (CUDA → OpenCL → HIP → CPU).
     /// </summary>
     Auto,
 
@@ -99,7 +99,7 @@ public class GpuAccelerationConfig
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Specifies which type of GPU to use:
-    /// - **Auto**: Automatically select best available (CUDA → OpenCL → CPU)
+    /// - **Auto**: Automatically select best available (CUDA → OpenCL → HIP → CPU)
     /// - **CUDA**: Force NVIDIA CUDA (fails if not available)
     /// - **OpenCL**: Force OpenCL (AMD/Intel/NVIDIA GPUs)
     /// - **CPU**: Force CPU execution (disable GPU)
@@ -165,6 +165,32 @@ public class GpuAccelerationConfig
     public bool EnableForInference { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether to enable GPU persistence for neural network weights (default: true).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Phase B: Persistent GPU Tensors (US-GPU-030)</b></para>
+    /// <para>
+    /// When enabled, neural network weights and biases stay on GPU memory between operations,
+    /// eliminating per-operation CPU-GPU memory transfers. This provides massive speedups
+    /// (up to 100x) for training and inference.
+    /// </para>
+    /// <para><b>For Beginners:</b> This keeps your model's weights on the GPU permanently
+    /// instead of copying them back and forth for each operation. This is the single most
+    /// important optimization for GPU performance.
+    ///
+    /// Only disable if:
+    /// - You're running out of GPU memory
+    /// - You need weights on CPU for other purposes between operations
+    /// - You're debugging GPU-related issues
+    /// </para>
+    /// <para><b>Memory Impact:</b> Weights stay in GPU memory until the model is disposed.
+    /// For large models (e.g., 100M parameters at 4 bytes each = 400MB), this GPU memory
+    /// is allocated and held for the model's lifetime.
+    /// </para>
+    /// </remarks>
+    public bool EnableGpuPersistence { get; set; } = true;
+
+    /// <summary>
     /// Creates a configuration with default GPU settings.
     /// </summary>
     public GpuAccelerationConfig()
@@ -177,6 +203,6 @@ public class GpuAccelerationConfig
     /// <returns>A string describing the configuration settings.</returns>
     public override string ToString()
     {
-        return $"GpuConfig: DeviceType={DeviceType}, UsageLevel={UsageLevel}, DeviceIndex={DeviceIndex}, EnableForInference={EnableForInference}, Verbose={VerboseLogging}";
+        return $"GpuConfig: DeviceType={DeviceType}, UsageLevel={UsageLevel}, DeviceIndex={DeviceIndex}, EnableForInference={EnableForInference}, EnableGpuPersistence={EnableGpuPersistence}, Verbose={VerboseLogging}";
     }
 }

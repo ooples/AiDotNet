@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -388,6 +390,10 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([_outputDepth]);
 
         InitializeWeights();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -439,6 +445,10 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([_outputDepth]);
 
         InitializeWeights();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -547,18 +557,38 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
 
         _lastInput = input4D;
 
-        // Use Engine.Conv2D with dilation parameter (input already in NCHW format)
-        var strideArr = new int[] { _stride, _stride };
-        var paddingArr = new int[] { _padding, _padding };
-        var dilationArr = new int[] { _dilation, _dilation };
+        // Get the fused activation type for optimal GPU/CPU performance
+        var fusedActivation = GetFusedActivationType();
 
-        var outputNCHW = Engine.Conv2D(input4D, _kernels, strideArr, paddingArr, dilationArr);
+        Tensor<T> outputNCHW;
+        if (fusedActivation != FusedActivationType.None)
+        {
+            // Use FusedConv2D for optimal GPU kernel fusion (conv + bias + activation)
+            outputNCHW = Engine.FusedConv2D(
+                input4D, _kernels, _biases,
+                _stride, _stride,
+                _padding, _padding,
+                _dilation, _dilation,
+                fusedActivation);
 
-        // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
-        var biasReshaped = _biases.Reshape([1, _outputDepth, 1, 1]);
-        outputNCHW = Engine.TensorBroadcastAdd(outputNCHW, biasReshaped);
+            // Store activated output for backward pass gradient computation
+            _lastOutput = outputNCHW;
+        }
+        else
+        {
+            // Fallback for unsupported activations: use separate operations
+            var convOutput = Engine.Conv2D(
+                input4D, _kernels,
+                [_stride, _stride],
+                [_padding, _padding],
+                [_dilation, _dilation]);
 
-        _lastOutput = ApplyActivation(outputNCHW);
+            // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
+            var biasReshaped = _biases.Reshape([1, _outputDepth, 1, 1]);
+            var withBias = Engine.TensorBroadcastAdd(convOutput, biasReshaped);
+            outputNCHW = ApplyActivation(withBias);
+            _lastOutput = outputNCHW;
+        }
 
         // Return with matching dimensions to preserve original tensor rank
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -924,6 +954,10 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelGradients, learningRate));
         _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
 
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
+
         // Reset gradients
         _kernelGradients = null;
         _biasGradients = null;
@@ -997,6 +1031,10 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
 
         _kernels = new Tensor<T>([_outputDepth, _inputDepth, _kernelSize, _kernelSize], kernelVec);
         _biases = new Tensor<T>([_outputDepth], biasVec);
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.TimeSeries;
@@ -437,11 +438,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             {
                 var (mean, scale) = PredictDistribution(context);
 
-                double u1 = _random.NextDouble();
-                double u2 = _random.NextDouble();
-                double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-
-                T sample = NumOps.Add(mean, NumOps.Multiply(scale, NumOps.FromDouble(randStdNormal)));
+                T sample = NumOps.Add(mean, NumOps.Multiply(scale, NumOps.FromDouble(_random.NextGaussian())));
                 forecast[h] = sample;
 
                 var newContext = new Vector<T>(context.Length);

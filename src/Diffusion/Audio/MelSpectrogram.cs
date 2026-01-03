@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
 
 namespace AiDotNet.Diffusion.Audio;
@@ -94,6 +95,26 @@ public class MelSpectrogram<T>
     private readonly Tensor<T> _melFilterbank;
 
     /// <summary>
+    /// Window tensor for IEngine operations.
+    /// </summary>
+    private readonly Tensor<T> _windowTensor;
+
+    /// <summary>
+    /// FFT size for direct GPU operations.
+    /// </summary>
+    private readonly int _nFft;
+
+    /// <summary>
+    /// Hop length for direct GPU operations.
+    /// </summary>
+    private readonly int _hopLength;
+
+    /// <summary>
+    /// IEngine for GPU-accelerated operations.
+    /// </summary>
+    private IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Gets the number of Mel bins.
     /// </summary>
     public int NumMels => _nMels;
@@ -160,6 +181,10 @@ public class MelSpectrogram<T>
         if (_fMax > sampleRate / 2.0)
             throw new ArgumentOutOfRangeException(nameof(fMax), "fMax cannot exceed Nyquist frequency.");
 
+        // Store FFT parameters for direct GPU operations
+        _nFft = nFft;
+        _hopLength = hopLength ?? nFft / 4;
+
         // Initialize STFT (uses HanningWindow by default - industry standard for audio)
         _stft = new ShortTimeFourierTransform<T>(
             nFft: nFft,
@@ -168,6 +193,16 @@ public class MelSpectrogram<T>
 
         // Create Mel filterbank
         _melFilterbank = CreateMelFilterbank(nMels, nFft, sampleRate, _fMin, _fMax);
+
+        // Create window tensor for direct IEngine operations
+        var window = windowFunction ?? new HanningWindow<T>();
+        var windowVector = window.Create(nFft);
+        var windowData = new T[nFft];
+        for (int i = 0; i < nFft; i++)
+        {
+            windowData[i] = windowVector[i];
+        }
+        _windowTensor = new Tensor<T>(windowData, new[] { nFft });
     }
 
     /// <summary>
@@ -175,8 +210,30 @@ public class MelSpectrogram<T>
     /// </summary>
     /// <param name="signal">Input audio signal.</param>
     /// <returns>Mel spectrogram tensor [numFrames, nMels].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>GPU Acceleration:</b> When GPU is available, this method uses IEngine.MelSpectrogram
+    /// for hardware-accelerated processing of the entire pipeline (STFT + Mel filterbank + dB conversion).
+    /// </para>
+    /// </remarks>
     public Tensor<T> Forward(Tensor<T> signal)
     {
+        // Try GPU-accelerated path using IEngine.MelSpectrogram
+        if (Engine.SupportsGpu)
+        {
+            try
+            {
+                T fMinT = NumOps.FromDouble(_fMin);
+                T fMaxT = NumOps.FromDouble(_fMax);
+                return Engine.MelSpectrogram(signal, _sampleRate, _nFft, _hopLength, _nMels, fMinT, fMaxT, _windowTensor, _logMel);
+            }
+            catch
+            {
+                // Fall back to CPU implementation on any error
+            }
+        }
+
+        // CPU fallback path
         // Compute power spectrogram
         var powerSpec = _stft.Power(signal);
 

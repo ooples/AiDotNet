@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
@@ -190,10 +191,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
                 do
                 {
-                    // Sample from standard normal using Box-Muller
-                    double u1 = _random.NextDouble();
-                    double u2 = _random.NextDouble();
-                    x = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                    // Sample from standard normal
+                    x = _random.NextGaussian();
                     v = 1.0 + c * x;
                 } while (v <= 0.0);
 

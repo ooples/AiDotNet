@@ -1,4 +1,4 @@
-
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -283,6 +283,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _beta = new Tensor<T>([numFeatures]);
         _runningMean = new Tensor<T>([numFeatures]);
         _runningVariance = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
     }
 
     /// <summary>
@@ -669,6 +673,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
 
         _gamma = Tensor<T>.FromVector(gammaVec, [featureSize]);
         _beta = Tensor<T>.FromVector(betaVec, [featureSize]);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_gamma);
+        Engine.InvalidatePersistentTensor(_beta);
     }
 
     /// <summary>
@@ -716,6 +724,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         // Production-grade: Use Engine operations instead of manual loops
         _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
         _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_gamma);
+        Engine.InvalidatePersistentTensor(_beta);
     }
 
     /// <summary>

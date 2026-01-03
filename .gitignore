@@ -373,3 +373,7 @@ CLAUDE.md
 
 # Local progress tracking (not for repository)
 GPU_VECTORIZATION_TODO.md
+
+# External dependencies (binaries, not source)
+external/
+.clblast/

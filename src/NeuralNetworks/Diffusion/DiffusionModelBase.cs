@@ -1,6 +1,7 @@
 using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -676,23 +677,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     {
         var noise = new Vector<T>(length);
 
-        // Box-Muller transform for normal distribution
-        for (int i = 0; i < length; i += 2)
+        for (int i = 0; i < length; i++)
         {
-            var u1 = rng.NextDouble();
-            var u2 = rng.NextDouble();
-
-            // Avoid log(0)
-            while (u1 <= double.Epsilon)
-                u1 = rng.NextDouble();
-
-            var mag = Math.Sqrt(-2.0 * Math.Log(u1));
-            var z0 = mag * Math.Cos(2.0 * Math.PI * u2);
-            var z1 = mag * Math.Sin(2.0 * Math.PI * u2);
-
-            noise[i] = NumOps.FromDouble(z0);
-            if (i + 1 < length)
-                noise[i + 1] = NumOps.FromDouble(z1);
+            noise[i] = NumOps.FromDouble(rng.NextGaussian());
         }
 
         return noise;

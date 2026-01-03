@@ -8,23 +8,47 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        Console.WriteLine("AiDotNet Examples");
-        Console.WriteLine("================");
-        Console.WriteLine("1. Neural Network Example (Classification and Regression)");
-        Console.WriteLine("2. Multiple Regression Example (House Price Prediction)");
-        Console.WriteLine("3. Time Series Example (Stock Price Forecasting)");
-        Console.WriteLine("4. Enhanced Regression Example (Real Estate Analysis)");
-        Console.WriteLine("5. Enhanced Neural Network Example (Customer Churn Prediction)");
-        Console.WriteLine("6. Enhanced Time Series Example (Energy Demand Forecasting)");
-        Console.WriteLine("7. Phase A GPU Acceleration Integration Tests");
-        Console.WriteLine("8. DeconvolutionalLayer Test");
-        Console.WriteLine("0. Exit");
-        Console.WriteLine();
-        Console.Write("Select an example to run (0-8): ");
+        int choice = -1;
 
-        if (int.TryParse(Console.ReadLine(), out int choice))
+        // Check for command-line argument
+        if (args.Length > 0 && int.TryParse(args[0], out int argChoice))
         {
-            Console.Clear();
+            choice = argChoice;
+            Console.WriteLine($"Running option {choice} from command line...");
+        }
+        else
+        {
+            Console.WriteLine("AiDotNet Examples");
+            Console.WriteLine("================");
+            Console.WriteLine("1. Neural Network Example (Classification and Regression)");
+            Console.WriteLine("2. Multiple Regression Example (House Price Prediction)");
+            Console.WriteLine("3. Time Series Example (Stock Price Forecasting)");
+            Console.WriteLine("4. Enhanced Regression Example (Real Estate Analysis)");
+            Console.WriteLine("5. Enhanced Neural Network Example (Customer Churn Prediction)");
+            Console.WriteLine("6. Enhanced Time Series Example (Energy Demand Forecasting)");
+            Console.WriteLine("7. Phase A GPU Acceleration Integration Tests");
+            Console.WriteLine("8. DeconvolutionalLayer Test");
+            Console.WriteLine("9. Extended GEMM Tuning (GPU Optimization)");
+            Console.WriteLine("   Usage: AiDotNetTestConsole.exe 9 [trials] [--diag]");
+            Console.WriteLine("   Example: AiDotNetTestConsole.exe 9 100 --diag");
+            Console.WriteLine("10. Comprehensive GEMM A/B Testing (All Sizes & Variants)");
+            Console.WriteLine("   Tests CLBlast vs XOR Swizzle vs RDNA1 Opt across all sizes");
+            Console.WriteLine("11. Tile Configuration A/B Testing (Find Optimal Tile Sizes)");
+            Console.WriteLine("   Tests different tile configurations to maximize GFLOPS");
+            Console.WriteLine("0. Exit");
+            Console.WriteLine();
+            Console.Write("Select an example to run (0-11): ");
+
+            int.TryParse(Console.ReadLine(), out choice);
+        }
+
+        if (choice >= 0)
+        {
+            // Only clear console in interactive mode
+            if (args.Length == 0)
+            {
+                try { Console.Clear(); } catch { /* Ignore clear failures */ }
+            }
 
             switch (choice)
             {
@@ -63,8 +87,23 @@ class Program
                 case 8:
                     DeconvTest.Run();
                     break;
+                case 9:
+                    // Second argument is trials override for GEMM tuning
+                    // Third argument (optional): "diag" or "-d" to enable diagnostics
+                    int? trials = args.Length > 1 && int.TryParse(args[1], out int t) ? t : null;
+                    bool enableDiag = args.Any(a => a.Equals("diag", StringComparison.OrdinalIgnoreCase) ||
+                                                    a.Equals("-d", StringComparison.OrdinalIgnoreCase) ||
+                                                    a.Equals("--diag", StringComparison.OrdinalIgnoreCase));
+                    GemmTuningTest.Run(trials, enableDiag);
+                    break;
+                case 10:
+                    ComprehensiveGemmAbTest.Run();
+                    break;
+                case 11:
+                    TileConfigAbTest.Run();
+                    break;
                 default:
-                    Console.WriteLine("Invalid choice. Please select a number between 0 and 8.");
+                    Console.WriteLine("Invalid choice. Please select a number between 0 and 11.");
                     break;
             }
         }
@@ -73,7 +112,11 @@ class Program
             Console.WriteLine("Invalid input. Please enter a number.");
         }
 
-        Console.WriteLine("\nPress any key to exit...");
-        Console.ReadKey();
+        // Only wait for key press in interactive mode
+        if (args.Length == 0)
+        {
+            Console.WriteLine("\nPress any key to exit...");
+            Console.ReadKey();
+        }
     }
 }

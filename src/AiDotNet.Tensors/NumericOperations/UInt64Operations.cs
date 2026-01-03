@@ -897,4 +897,16 @@ public class UInt64Operations : INumericOperations<ulong>
 
     public void MultiplyAdd(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, ulong scalar, Span<ulong> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    public void ToFloatSpan(ReadOnlySpan<ulong> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<ulong> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<ulong> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<ulong> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 }

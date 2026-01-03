@@ -459,7 +459,9 @@ public class MetaLearningCoverageIntegrationTests
         var protoModel = Assert.IsType<PrototypicalModel<double, Matrix<double>, Tensor<double>>>(adapted);
         var predictions = protoModel.Predict(task.QuerySetX);
 
-        Assert.Equal(task.NumWays, predictions.Shape[0]);
+        Assert.Equal(2, predictions.Shape.Length);
+        Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);
+        Assert.Equal(task.NumWays, predictions.Shape[1]);
         Assert.NotNull(protoModel.GetModelMetadata());
     }
 
@@ -485,7 +487,9 @@ public class MetaLearningCoverageIntegrationTests
         var protoModel = Assert.IsType<PrototypicalModel<double, Matrix<double>, Tensor<double>>>(adapted);
         var predictions = protoModel.Predict(task.QuerySetX);
 
-        Assert.Equal(task.NumWays, predictions.Shape[0]);
+        Assert.Equal(2, predictions.Shape.Length);
+        Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);
+        Assert.Equal(task.NumWays, predictions.Shape[1]);
 
         var multiTensor = new Tensor<double>(new[] { 2, 2, 2 });
         for (int i = 0; i < multiTensor.Length; i++)

@@ -22,6 +22,8 @@
     <PackageReference Include="Microsoft.ML" Version="3.0.1" Condition="'$(TargetFramework)' == 'net8.0'" />
     <PackageReference Include="TensorFlow.NET" Version="0.150.0" Condition="'$(TargetFramework)' == 'net8.0'" />
     <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <PackageReference Include="TorchSharp" Version="0.105.2" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <PackageReference Include="TorchSharp-cuda-windows" Version="0.105.2" Condition="'$(TargetFramework)' == 'net8.0'" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,3 +31,4 @@
   </ItemGroup>
 
 </Project>
+

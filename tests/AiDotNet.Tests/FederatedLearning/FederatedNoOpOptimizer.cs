@@ -3,6 +3,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
+using AiDotNet.Regression;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
@@ -22,6 +23,15 @@ internal sealed class FederatedNoOpOptimizer : IOptimizer<double, Matrix<double>
     public OptimizationResult<double, Matrix<double>, Vector<double>> Optimize(OptimizationInputData<double, Matrix<double>, Vector<double>> inputData)
     {
         var best = inputData.InitialSolution ?? _model;
+
+        // For models that require training data (like KNN), we need to actually train them
+        // even though this is a "no-op" optimizer - otherwise Predict will fail
+        if (best is NonLinearRegressionBase<double> nonLinearModel)
+        {
+            // Call Train to populate training data for distance-based models like KNN
+            nonLinearModel.Train(inputData.XTrain, inputData.YTrain);
+        }
+
         return new OptimizationResult<double, Matrix<double>, Vector<double>>
         {
             BestSolution = best.WithParameters(best.GetParameters()),

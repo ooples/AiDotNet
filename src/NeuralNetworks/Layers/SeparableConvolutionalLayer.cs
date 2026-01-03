@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -337,6 +339,11 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([_outputDepth]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -387,6 +394,11 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([_outputDepth]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -541,12 +553,14 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         // Convert pointwise kernels from [inputDepth, 1, 1, outputDepth] to [outputDepth, inputDepth, 1, 1]
         var pointwiseKernelNCHW = ConvertPointwiseKernelToNCHW(_pointwiseKernels);
 
-        // Step 2: Pointwise convolution (1x1 conv) using Engine
-        var pointwiseOutputNCHW = Engine.Conv2D(depthwiseOutputNCHW, pointwiseKernelNCHW, new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
-
-        // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
-        var biasReshaped = _biases.Reshape([1, _outputDepth, 1, 1]);
-        pointwiseOutputNCHW = Engine.TensorBroadcastAdd(pointwiseOutputNCHW, biasReshaped);
+        // Step 2: Pointwise convolution (1x1 conv) with fused bias using Engine
+        // Note: Can't fuse activation because it's applied after NCHW->NHWC transpose
+        var pointwiseOutputNCHW = Engine.FusedConv2D(
+            depthwiseOutputNCHW, pointwiseKernelNCHW, _biases,
+            1, 1,   // stride
+            0, 0,   // padding
+            1, 1,   // dilation
+            FusedActivationType.None);  // Activation applied after transpose
 
         // Convert output from NCHW back to NHWC
         var output = pointwiseOutputNCHW.Transpose([0, 2, 3, 1]);
@@ -855,6 +869,11 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
             Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
         _biases = Engine.TensorSubtract(_biases, _biasesVelocity);
 
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_depthwiseKernels);
+        Engine.InvalidatePersistentTensor(_pointwiseKernels);
+        Engine.InvalidatePersistentTensor(_biases);
+
         // Clear gradients
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
@@ -938,6 +957,11 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         _depthwiseKernels = Tensor<T>.FromVector(dwVec, [_inputDepth, _kernelSize, _kernelSize, 1]);
         _pointwiseKernels = Tensor<T>.FromVector(pwVec, [_inputDepth, 1, 1, _outputDepth]);
         _biases = Tensor<T>.FromVector(biasVec, [_outputDepth]);
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_depthwiseKernels);
+        Engine.InvalidatePersistentTensor(_pointwiseKernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

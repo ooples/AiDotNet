@@ -2,6 +2,7 @@ using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Clustering.Probabilistic;
@@ -1075,10 +1076,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         var z = new double[d];
         for (int i = 0; i < d; i++)
         {
-            // Box-Muller transform
-            double u1 = rand.NextDouble();
-            double u2 = rand.NextDouble();
-            z[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+            z[i] = rand.NextGaussian();
         }
 
         // Cholesky decomposition of covariance

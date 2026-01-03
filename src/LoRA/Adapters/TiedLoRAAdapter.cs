@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -304,11 +305,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             {
                 for (int j = 0; j < rank; j++)
                 {
-                    // Box-Muller transform for Gaussian random numbers
-                    double u1 = rng.NextDouble();
-                    double u2 = rng.NextDouble();
-                    double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                    _sharedMatrixA[i, j] = ops.Multiply(ops.FromDouble(randStdNormal), stddevA);
+                    _sharedMatrixA[i, j] = ops.Multiply(ops.FromDouble(rng.NextGaussian()), stddevA);
                 }
             }
 

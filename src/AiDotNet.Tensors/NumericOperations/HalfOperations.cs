@@ -552,4 +552,22 @@ public class HalfOperations : INumericOperations<Half>
 
     public void MultiplyAdd(ReadOnlySpan<Half> x, ReadOnlySpan<Half> y, Half scalar, Span<Half> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    public void ToFloatSpan(ReadOnlySpan<Half> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<Half> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    /// <summary>
+    /// Converts Half span to Half span (identity operation - just copy).
+    /// </summary>
+    public void ToHalfSpan(ReadOnlySpan<Half> source, Span<Half> destination)
+        => source.CopyTo(destination);
+
+    /// <summary>
+    /// Converts Half span to Half span (identity operation - just copy).
+    /// </summary>
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<Half> destination)
+        => source.CopyTo(destination);
 }

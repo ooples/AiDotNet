@@ -231,10 +231,10 @@ public class AudioProcessor<T>
         // Convert dB to power
         var powerSpec = DbToPower(dbSpec);
 
-        // Invert Mel to linear magnitude spectrogram
-        var magnitude = InvertMelSpectrogram(powerSpec);
+        // Invert Mel to linear magnitude spectrogram using GPU-accelerated method
+        var magnitude = _melSpec.InvertMelToMagnitude(powerSpec);
 
-        // Apply Griffin-Lim
+        // Apply Griffin-Lim with GPU acceleration
         return _griffinLim.Reconstruct(magnitude, length);
     }
 
@@ -321,54 +321,6 @@ public class AudioProcessor<T>
         }
 
         return power;
-    }
-
-    /// <summary>
-    /// Inverts Mel spectrogram to linear magnitude spectrogram.
-    /// </summary>
-    private Tensor<T> InvertMelSpectrogram(Tensor<T> melPower)
-    {
-        int numFrames = melPower.Shape[0];
-        int nMels = melPower.Shape[1];
-        int numFreqs = _nFft / 2 + 1;
-
-        var filterbank = _melSpec.GetFilterbank();
-        var magnitude = new Tensor<T>(new[] { numFrames, numFreqs });
-
-        // Compute normalization factors
-        var filterNorm = new T[numFreqs];
-        for (int f = 0; f < numFreqs; f++)
-        {
-            T sum = NumOps.Zero;
-            for (int mel = 0; mel < nMels; mel++)
-            {
-                var filter = filterbank.Data[mel * numFreqs + f];
-                sum = NumOps.Add(sum, NumOps.Multiply(filter, filter));
-            }
-            filterNorm[f] = NumOps.Add(sum, NumOps.FromDouble(1e-8));
-        }
-
-        // Apply pseudo-inverse
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            for (int f = 0; f < numFreqs; f++)
-            {
-                T sum = NumOps.Zero;
-                for (int mel = 0; mel < nMels; mel++)
-                {
-                    var melVal = melPower.Data[frame * nMels + mel];
-                    var filter = filterbank.Data[mel * numFreqs + f];
-                    sum = NumOps.Add(sum, NumOps.Multiply(melVal, filter));
-                }
-                var normalized = NumOps.Divide(sum, filterNorm[f]);
-
-                // Take square root for magnitude
-                magnitude.Data[frame * numFreqs + f] = NumOps.FromDouble(
-                    Math.Sqrt(Math.Max(0, NumOps.ToDouble(normalized))));
-            }
-        }
-
-        return magnitude;
     }
 
     /// <summary>

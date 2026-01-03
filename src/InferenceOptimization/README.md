@@ -78,7 +78,7 @@ This module provides low-level kernel optimization for critical operations, enab
 ### 7. GPU Optimization Infrastructure
 - Base classes for GPU kernel implementations
 - Memory management abstractions
-- CUDA kernel base (ready for ILGPU/ManagedCuda integration)
+- CUDA kernel base (ready for DirectCuda/ManagedCuda integration)
 - Device capability querying
 
 ## Quick Start
@@ -209,7 +209,7 @@ See `AiDotNetBenchmarkTests/InferenceOptimization/` for benchmark examples.
 
 ## Future Enhancements
 
-- GPU kernel implementations using ILGPU or ManagedCuda
+- GPU kernel implementations using DirectGpu backends or ManagedCuda
 - Quantization support (INT8, FP16)
 - Model graph optimization
 - Operator fusion

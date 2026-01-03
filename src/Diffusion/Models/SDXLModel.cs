@@ -1,6 +1,7 @@
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -903,11 +904,7 @@ public class SDXLRefiner<T>
 
         for (int i = 0; i < span.Length; i++)
         {
-            // Box-Muller transform for Gaussian noise
-            var u1 = rng.NextDouble();
-            var u2 = rng.NextDouble();
-            var z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            span[i] = NumOps.FromDouble(z);
+            span[i] = NumOps.FromDouble(rng.NextGaussian());
         }
 
         return noise;

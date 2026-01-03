@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.SelfSupervisedLearning;
@@ -79,10 +80,7 @@ public class LinearProjector<T> : IProjectorHead<T>
 
         for (int i = 0; i < weightData.Length; i++)
         {
-            var u1 = random.NextDouble();
-            var u2 = random.NextDouble();
-            var normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            weightData[i] = NumOps.FromDouble(normal * stddev);
+            weightData[i] = NumOps.FromDouble(random.NextGaussian() * stddev);
         }
 
         _weight = new Tensor<T>(weightData, [inputDim, outputDim]);

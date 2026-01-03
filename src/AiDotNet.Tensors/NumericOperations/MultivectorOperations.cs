@@ -416,6 +416,18 @@ public class MultivectorOperations<T> : INumericOperations<Multivector<T>>
     public void MultiplyAdd(ReadOnlySpan<Multivector<T>> x, ReadOnlySpan<Multivector<T>> y, Multivector<T> scalar, Span<Multivector<T>> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 
+    public void ToFloatSpan(ReadOnlySpan<Multivector<T>> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<Multivector<T>> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
     #endregion
 
     private void EnsureCompatible(Multivector<T> value)

@@ -30,10 +30,16 @@
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!-- Define WINDOWS for correct DLL names on Windows -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="AiDotNet" />
     <InternalsVisibleTo Include="AiDotNetTests" />
     <InternalsVisibleTo Include="AiDotNetTestConsole" />
+    <InternalsVisibleTo Include="AiDotNet.Tensors.Benchmarks" />
   </ItemGroup>
 
   <ItemGroup>
@@ -49,12 +55,17 @@
 
   <ItemGroup>
     <PackageReference Include="System.Numerics.Tensors" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
   </ItemGroup>
 
-  <!-- ILGPU packages for GPU acceleration -->
+  <!-- System.Text.Json is needed for net471 as it's not built-in like net8.0 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net471'">
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <!-- CLBlast native library for optimized OpenCL BLAS operations -->
   <ItemGroup>
-    <PackageReference Include="ILGPU" Version="1.5.3" />
-    <PackageReference Include="ILGPU.Algorithms" Version="1.5.3" />
+    <ProjectReference Include="..\AiDotNet.Native.CLBlast\AiDotNet.Native.CLBlast.csproj" />
   </ItemGroup>
 
   <!-- Exclude files that require .NET Core intrinsics from .NET Framework builds -->

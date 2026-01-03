@@ -112,17 +112,11 @@ public class TrainingPipelineConfiguration<T, TInput, TOutput>
     /// </remarks>
     public MixedPrecisionType MixedPrecisionDType { get; set; } = MixedPrecisionType.FP16;
 
-    /// <summary>
-    /// Gets or sets whether to use gradient checkpointing globally.
-    /// </summary>
-    /// <remarks>
-    /// Default is false. Enable to reduce memory at cost of speed.
-    /// </remarks>
-    public bool UseGradientCheckpointing { get; set; } = false;
-
     // ========================================================================
-    // Checkpointing Configuration
+    // Checkpointing Configuration (Disk Persistence)
     // ========================================================================
+    // Note: For gradient checkpointing (memory optimization), use ConfigureMemoryManagement()
+    // with TrainingMemoryConfig.UseGradientCheckpointing instead.
 
     /// <summary>
     /// Gets or sets whether to save checkpoints between stages.
@@ -231,22 +225,8 @@ public class TrainingPipelineConfiguration<T, TInput, TOutput>
     // ========================================================================
     // Distributed Training Configuration
     // ========================================================================
-
-    /// <summary>
-    /// Gets or sets the distributed training strategy.
-    /// </summary>
-    /// <remarks>
-    /// Default is None (single device). Use DDP for multi-GPU training.
-    /// </remarks>
-    public DistributedStrategy DistributedStrategy { get; set; } = DistributedStrategy.None;
-
-    /// <summary>
-    /// Gets or sets the number of devices/GPUs to use.
-    /// </summary>
-    /// <remarks>
-    /// Default is 1. Set higher for distributed training.
-    /// </remarks>
-    public int NumDevices { get; set; } = 1;
+    // Note: For distributed training, use ConfigureDistributedTraining() on PredictionModelBuilder.
+    // For memory sharding (NumDevices), use ConfigureMemoryManagement() with TrainingMemoryConfig.
 
     // ========================================================================
     // Logging Configuration

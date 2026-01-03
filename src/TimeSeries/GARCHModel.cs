@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using Newtonsoft.Json;
 
 namespace AiDotNet.TimeSeries;
@@ -321,13 +322,8 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T GenerateStandardNormal()
     {
-        // Box-Muller transform to generate standard normal random variable
         Random random = RandomHelper.CreateSecureRandom();
-        double u1 = random.NextDouble();
-        double u2 = random.NextDouble();
-        double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-
-        return NumOps.FromDouble(z);
+        return NumOps.FromDouble(random.NextGaussian());
     }
 
     /// <summary>

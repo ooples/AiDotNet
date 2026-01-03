@@ -1,3 +1,5 @@
+using AiDotNet.Extensions;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -415,15 +417,8 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
 
         for (int i = 0; i < mean.Length; i++)
         {
-            // Generate two random numbers from a uniform distribution
-            double u1 = 1.0 - Random.NextDouble(); // Uniform(0,1] random number
-            double u2 = 1.0 - Random.NextDouble(); // Uniform(0,1] random number
-
-            // Box-Muller transform to generate a sample from a standard normal distribution
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-
             // Convert z to T type
-            T zT = NumOps.FromDouble(z);
+            T zT = NumOps.FromDouble(Random.NextGaussian());
 
             // Reparameterization trick: sample = mean + exp(0.5 * logVariance) * z
             T halfLogVariance = NumOps.Multiply(NumOps.FromDouble(0.5), logVariance[i]);

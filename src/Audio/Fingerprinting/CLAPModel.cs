@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -858,10 +859,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
             for (int i = 0; i < size; i++)
             {
-                double u1 = rand.NextDouble();
-                double u2 = rand.NextDouble();
-                double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                weights[i] = _numOps.FromDouble(normal * scale);
+                weights[i] = _numOps.FromDouble(rand.NextGaussian() * scale);
             }
         }
         else
@@ -1005,13 +1003,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         private T[] InitWeights(int size, Random rand, double scale)
         {
-            return Enumerable.Range(0, size).Select(_ =>
-            {
-                double u1 = rand.NextDouble();
-                double u2 = rand.NextDouble();
-                double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                return _ops.FromDouble(normal * scale);
-            }).ToArray();
+            return Enumerable.Range(0, size).Select(_ => _ops.FromDouble(rand.NextGaussian() * scale)).ToArray();
         }
 
         public Tensor<T> Forward(Tensor<T> input)

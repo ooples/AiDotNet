@@ -724,6 +724,21 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     // ============================================================================
 
     /// <summary>
+    /// Gets or sets the memory management configuration for training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Memory management includes gradient checkpointing, activation pooling,
+    /// and model sharding to enable training of larger models.
+    /// </para>
+    /// <para><b>For Beginners:</b> This configuration helps you train larger models
+    /// by optimizing how memory is used during training. It can reduce memory usage
+    /// by 40-50% at the cost of ~30% extra compute time.
+    /// </para>
+    /// </remarks>
+    public Training.Memory.TrainingMemoryConfig? MemoryConfig { get; set; }
+
+    /// <summary>
     /// Gets or sets the experiment run ID from experiment tracking.
     /// </summary>
     /// <remarks>

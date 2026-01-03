@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -162,10 +163,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < _rank; j++)
             {
-                double u1 = 1.0 - _random.NextDouble();
-                double u2 = 1.0 - _random.NextDouble();
-                double gaussianValue = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                newA[i, j] = NumOps.FromDouble(gaussianValue * stddev);
+                newA[i, j] = NumOps.FromDouble(_random.NextGaussian() * stddev);
             }
         }
 

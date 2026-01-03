@@ -2,14 +2,15 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-	  <TargetFrameworks>net8.0;net471</TargetFrameworks>
+    <TargetFrameworks>net8.0;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-	  <LangVersion>latest</LangVersion>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\src\AiDotNet.csproj" />
+    <ProjectReference Include="..\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
   </ItemGroup>
 
 </Project>

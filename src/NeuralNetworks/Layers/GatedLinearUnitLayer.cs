@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -365,6 +367,12 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _gateBias = new Tensor<T>([outputDimension]);
 
         InitializeParameters();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(_linearWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_linearBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -403,6 +411,12 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _gateBias = new Tensor<T>([outputDimension]);
 
         InitializeParameters();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(_linearWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_linearBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -675,6 +689,12 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
         _linearBias = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
         _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_linearWeights);
+        Engine.InvalidatePersistentTensor(_gateWeights);
+        Engine.InvalidatePersistentTensor(_linearBias);
+        Engine.InvalidatePersistentTensor(_gateBias);
     }
 
     /// <summary>
@@ -765,6 +785,12 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _linearBias = new Tensor<T>(_linearBias.Shape, parameters.Slice(index, _linearBias.Length));
         index += _linearBias.Length;
         _gateBias = new Tensor<T>(_gateBias.Shape, parameters.Slice(index, _gateBias.Length));
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_linearWeights);
+        Engine.InvalidatePersistentTensor(_gateWeights);
+        Engine.InvalidatePersistentTensor(_linearBias);
+        Engine.InvalidatePersistentTensor(_gateBias);
     }
 
     /// <summary>

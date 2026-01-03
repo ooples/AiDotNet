@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
 
@@ -213,6 +214,11 @@ public class RecurrentLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([hiddenSize]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -250,6 +256,11 @@ public class RecurrentLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([hiddenSize]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -793,6 +804,11 @@ public class RecurrentLayer<T> : LayerBase<T>
         _inputWeights = Engine.TensorSubtract(_inputWeights, scaledInputGrad);
         _hiddenWeights = Engine.TensorSubtract(_hiddenWeights, scaledHiddenGrad);
         _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_inputWeights);
+        Engine.InvalidatePersistentTensor(_hiddenWeights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -898,6 +914,11 @@ public class RecurrentLayer<T> : LayerBase<T>
         _inputWeights = Tensor<T>.FromVector(inputWeightsVec).Reshape(_inputWeights.Shape);
         _hiddenWeights = Tensor<T>.FromVector(hiddenWeightsVec).Reshape(_hiddenWeights.Shape);
         _biases = Tensor<T>.FromVector(biasesVec).Reshape(_biases.Shape);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_inputWeights);
+        Engine.InvalidatePersistentTensor(_hiddenWeights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

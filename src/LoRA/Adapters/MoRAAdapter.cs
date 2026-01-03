@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -214,10 +215,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < _matrixM.Columns; j++)
             {
-                double u1 = Random.NextDouble();
-                double u2 = Random.NextDouble();
-                double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                _matrixM[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                _matrixM[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
             }
         }
     }
@@ -284,10 +282,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < cols; j++)
             {
-                double u1 = Random.NextDouble();
-                double u2 = Random.NextDouble();
-                double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                randomMatrix[i, j] = NumOps.FromDouble(randStdNormal);
+                randomMatrix[i, j] = NumOps.FromDouble(Random.NextGaussian());
             }
         }
 

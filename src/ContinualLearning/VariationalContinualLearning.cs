@@ -1,4 +1,5 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -362,9 +363,6 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     /// </summary>
     private double SampleStandardNormal()
     {
-        // Box-Muller transform
-        var u1 = 1.0 - _random.NextDouble();
-        var u2 = 1.0 - _random.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+        return _random.NextGaussian();
     }
 }

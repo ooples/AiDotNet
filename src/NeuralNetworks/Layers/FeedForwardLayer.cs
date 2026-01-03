@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -272,6 +273,10 @@ public class FeedForwardLayer<T> : LayerBase<T>
         BiasesGradient = Tensor<T>.Empty();
         Input = Tensor<T>.Empty();
         Output = Tensor<T>.Empty();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(Weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(Biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -311,6 +316,10 @@ public class FeedForwardLayer<T> : LayerBase<T>
         BiasesGradient = Tensor<T>.Empty();
         Input = Tensor<T>.Empty();
         Output = Tensor<T>.Empty();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(Weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(Biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -619,6 +628,10 @@ public class FeedForwardLayer<T> : LayerBase<T>
     {
         Weights = Weights.Subtract(WeightsGradient.Multiply(learningRate));
         Biases = Biases.Subtract(BiasesGradient.Multiply(learningRate));
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(Weights);
+        Engine.InvalidatePersistentTensor(Biases);
     }
 
     /// <summary>
@@ -723,6 +736,10 @@ public class FeedForwardLayer<T> : LayerBase<T>
         {
             Biases[0, j] = parameters[index++];
         }
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(Weights);
+        Engine.InvalidatePersistentTensor(Biases);
     }
 
     /// <summary>

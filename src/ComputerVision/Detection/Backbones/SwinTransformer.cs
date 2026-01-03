@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
@@ -413,11 +414,7 @@ internal class SwinTransformerBlock<T>
         var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < _relativePositionBiasTable.Length; i++)
         {
-            // Box-Muller transform for normal distribution
-            double u1 = random.NextDouble();
-            double u2 = random.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1 + 1e-10)) * Math.Cos(2.0 * Math.PI * u2);
-            double value = z * 0.02;
+            double value = random.NextGaussian(0, 0.02);
             // Truncate to [-0.04, 0.04]
             value = Math.Max(-0.04, Math.Min(0.04, value));
             _relativePositionBiasTable[i] = _numOps.FromDouble(value);

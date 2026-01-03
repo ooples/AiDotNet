@@ -156,6 +156,17 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             _maskWeights = InitializeWeights(maskChannels, inputChannels, kernelSize, kernelSize);
             _maskBias = new Tensor<T>([maskChannels]);
         }
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_offsetWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_offsetBias, PersistentTensorRole.Biases);
+        if (useModulation && _maskWeights != null && _maskBias != null)
+        {
+            RegisterTrainableParameter(_maskWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_maskBias, PersistentTensorRole.Biases);
+        }
     }
 
     #endregion
@@ -675,6 +686,17 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             for (int i = 0; i < _maskBias.Length; i++)
                 _maskBias.Data[i] = parameters[offset++];
         }
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_bias);
+        Engine.InvalidatePersistentTensor(_offsetWeights);
+        Engine.InvalidatePersistentTensor(_offsetBias);
+        if (_useModulation && _maskWeights != null && _maskBias != null)
+        {
+            Engine.InvalidatePersistentTensor(_maskWeights);
+            Engine.InvalidatePersistentTensor(_maskBias);
+        }
     }
 
     /// <inheritdoc/>
@@ -738,6 +760,17 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                         NumOps.Multiply(learningRate, _maskBiasGradients.Data[i]));
                 }
             }
+        }
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_bias);
+        Engine.InvalidatePersistentTensor(_offsetWeights);
+        Engine.InvalidatePersistentTensor(_offsetBias);
+        if (_useModulation && _maskWeights != null && _maskBias != null)
+        {
+            Engine.InvalidatePersistentTensor(_maskWeights);
+            Engine.InvalidatePersistentTensor(_maskBias);
         }
     }
 

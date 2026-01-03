@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -343,6 +345,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([_outputChannels]);
 
         InitializeParameters();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -404,6 +410,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([_outputChannels]);
 
         InitializeParameters();
+
+        // Register tensors for GPU memory persistence
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -819,6 +829,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
         _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -901,6 +915,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // Convert vectors to tensors and assign
         _weights = Tensor<T>.FromVector(weightsVector, _weights.Shape);
         _biases = Tensor<T>.FromVector(biasesVector, _biases.Shape);
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -182,10 +183,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < _matrixA.Columns; j++)
             {
-                double u1 = Random.NextDouble();
-                double u2 = Random.NextDouble();
-                double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                _matrixA[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                _matrixA[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
             }
         }
 

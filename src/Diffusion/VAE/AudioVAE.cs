@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -119,6 +120,16 @@ public class AudioVAE<T> : VAEModelBase<T>
     /// Cached input for backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// GPU-accelerated mel spectrogram processor.
+    /// </summary>
+    private MelSpectrogram<T>? _melSpectrogramProcessor;
+
+    /// <summary>
+    /// GPU-accelerated Griffin-Lim processor for audio reconstruction.
+    /// </summary>
+    private GriffinLim<T>? _griffinLimProcessor;
 
     /// <inheritdoc />
     public override int InputChannels => _melChannels;
@@ -394,66 +405,113 @@ public class AudioVAE<T> : VAEModelBase<T>
         int hopLength = 512,
         int fftSize = 2048)
     {
+        // Initialize mel spectrogram processor on first use or if parameters change
+        if (_melSpectrogramProcessor == null)
+        {
+            _melSpectrogramProcessor = new MelSpectrogram<T>(
+                sampleRate: sampleRate,
+                nFft: fftSize,
+                hopLength: hopLength,
+                nMels: _melChannels,
+                fMin: 0,
+                fMax: sampleRate / 2.0,
+                logMel: true);
+        }
+
         var shape = waveform.Shape;
 
         // Handle 1D waveform input [samples] vs 2D input [batch, samples]
-        int batch;
-        int samples;
         if (shape.Length == 1)
         {
-            // 1D waveform: treat as single batch
-            batch = 1;
-            samples = shape[0];
+            // 1D waveform: process directly and add batch dimension
+            var melSpec = _melSpectrogramProcessor.Forward(waveform);
+            // Reshape from [timeFrames, melChannels] to [1, melChannels, timeFrames]
+            var transposed = TransposeAndAddBatch(melSpec);
+            return transposed;
         }
         else
         {
-            // 2D waveform: [batch, samples]
-            batch = shape[0];
-            samples = shape[1];
-        }
+            // 2D waveform: [batch, samples] - process each batch item
+            int batch = shape[0];
+            int samples = shape[1];
+            var timeFrames = (samples - fftSize) / hopLength + 1;
+            var result = new Tensor<T>(new[] { batch, _melChannels, timeFrames });
 
-        // Calculate output dimensions
-        var timeFrames = samples / hopLength;
-        var result = new Tensor<T>(new[] { batch, _melChannels, timeFrames });
-        var resultSpan = result.AsWritableSpan();
-        var waveSpan = waveform.AsSpan();
-
-        // Simplified mel spectrogram calculation
-        // In practice, this would use proper STFT and mel filterbanks
-        for (int b = 0; b < batch; b++)
-        {
-            for (int t = 0; t < timeFrames; t++)
+            for (int b = 0; b < batch; b++)
             {
-                for (int m = 0; m < _melChannels; m++)
-                {
-                    double energy = 0;
-                    int startSample = t * hopLength;
-                    int endSample = Math.Min(startSample + fftSize, samples);
+                // Extract single waveform
+                var singleWaveform = ExtractBatchItem(waveform, b, samples);
+                var melSpec = _melSpectrogramProcessor.Forward(singleWaveform);
 
-                    // Calculate energy in this window for this mel bin
-                    // This is a simplified version - real implementation uses FFT + mel filterbank
-                    for (int s = startSample; s < endSample; s++)
-                    {
-                        // Handle both 1D [samples] and 2D [batch, samples] layouts
-                        var sampleIdx = (shape.Length == 1) ? s : (b * samples + s);
-                        if (sampleIdx < waveSpan.Length)
-                        {
-                            var sampleVal = NumOps.ToDouble(waveSpan[sampleIdx]);
-                            // Weight by mel bin (higher bins = higher frequencies)
-                            var melWeight = Math.Exp(-Math.Abs(s - startSample - m * fftSize / _melChannels) / 100.0);
-                            energy += sampleVal * sampleVal * melWeight;
-                        }
-                    }
+                // Copy to result (mel spec is [timeFrames, melChannels], we need [melChannels, timeFrames])
+                CopyTransposedToResult(melSpec, result, b, _melChannels, timeFrames);
+            }
 
-                    // Log scale (add small epsilon to avoid log(0))
-                    var logEnergy = Math.Log(energy + 1e-10);
-                    var dstIdx = b * _melChannels * timeFrames + m * timeFrames + t;
-                    resultSpan[dstIdx] = NumOps.FromDouble(logEnergy);
-                }
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Transposes mel spectrogram from [timeFrames, melChannels] to [1, melChannels, timeFrames].
+    /// </summary>
+    private Tensor<T> TransposeAndAddBatch(Tensor<T> melSpec)
+    {
+        int timeFrames = melSpec.Shape[0];
+        int melChannels = melSpec.Shape[1];
+        var result = new Tensor<T>(new[] { 1, melChannels, timeFrames });
+        var resultSpan = result.AsWritableSpan();
+        var melSpan = melSpec.AsSpan();
+
+        for (int t = 0; t < timeFrames; t++)
+        {
+            for (int m = 0; m < melChannels; m++)
+            {
+                var srcIdx = t * melChannels + m;
+                var dstIdx = m * timeFrames + t;
+                resultSpan[dstIdx] = melSpan[srcIdx];
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Extracts a single waveform from a batch.
+    /// </summary>
+    private Tensor<T> ExtractBatchItem(Tensor<T> waveform, int batchIdx, int samples)
+    {
+        var result = new Tensor<T>(new[] { samples });
+        var resultSpan = result.AsWritableSpan();
+        var waveSpan = waveform.AsSpan();
+
+        for (int s = 0; s < samples; s++)
+        {
+            resultSpan[s] = waveSpan[batchIdx * samples + s];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Copies transposed mel spectrogram to result tensor.
+    /// </summary>
+    private void CopyTransposedToResult(Tensor<T> melSpec, Tensor<T> result, int batchIdx, int melChannels, int timeFrames)
+    {
+        var resultSpan = result.AsWritableSpan();
+        var melSpan = melSpec.AsSpan();
+
+        for (int t = 0; t < timeFrames; t++)
+        {
+            for (int m = 0; m < melChannels; m++)
+            {
+                var srcIdx = t * melChannels + m;
+                var dstIdx = batchIdx * melChannels * timeFrames + m * timeFrames + t;
+                if (srcIdx < melSpan.Length && dstIdx < resultSpan.Length)
+                {
+                    resultSpan[dstIdx] = melSpan[srcIdx];
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -471,8 +529,8 @@ public class AudioVAE<T> : VAEModelBase<T>
     /// 1. Mel spectrograms lose phase information
     /// 2. The mel filterbank is not perfectly invertible
     ///
-    /// In practice, neural vocoders like HiFi-GAN or Vocoder are used.
-    /// This method provides a simplified approximation using Griffin-Lim-style iteration.
+    /// This method uses GPU-accelerated Griffin-Lim algorithm for phase reconstruction
+    /// after inverting the mel spectrogram to a linear magnitude spectrogram.
     /// </para>
     /// </remarks>
     public virtual Tensor<T> MelSpectrogramToAudio(
@@ -480,42 +538,97 @@ public class AudioVAE<T> : VAEModelBase<T>
         int sampleRate = 16000,
         int hopLength = 512)
     {
+        const int fftSize = 2048;
+
+        // Initialize processors on first use
+        if (_melSpectrogramProcessor == null)
+        {
+            _melSpectrogramProcessor = new MelSpectrogram<T>(
+                sampleRate: sampleRate,
+                nFft: fftSize,
+                hopLength: hopLength,
+                nMels: _melChannels,
+                fMin: 0,
+                fMax: sampleRate / 2.0,
+                logMel: true);
+        }
+
+        if (_griffinLimProcessor == null)
+        {
+            _griffinLimProcessor = new GriffinLim<T>(
+                nFft: fftSize,
+                hopLength: hopLength,
+                iterations: 32,
+                momentum: 0.99);
+        }
+
         var shape = melSpectrogram.Shape;
         var batch = shape[0];
         var melChannels = shape[1];
         var timeFrames = shape[2];
 
         var samples = timeFrames * hopLength;
-        var result = new Tensor<T>(new[] { batch, samples });
+        var results = new List<Tensor<T>>();
+
+        // Process each batch item
+        for (int b = 0; b < batch; b++)
+        {
+            // Extract and transpose single mel spectrogram
+            // Input: [batch, melChannels, timeFrames], need: [timeFrames, melChannels]
+            var singleMel = TransposeFromBatch(melSpectrogram, b, melChannels, timeFrames);
+
+            // Invert mel spectrogram to linear magnitude spectrogram
+            var magnitude = _melSpectrogramProcessor.InvertMelToMagnitude(singleMel);
+
+            // Use GPU-accelerated Griffin-Lim for phase reconstruction
+            var audio = _griffinLimProcessor.Reconstruct(magnitude, samples);
+            results.Add(audio);
+        }
+
+        // Combine batch results
+        if (batch == 1)
+        {
+            // Reshape to [1, samples]
+            var audio = results[0];
+            var result = new Tensor<T>(new[] { 1, audio.Shape[0] });
+            Array.Copy(audio.Data, result.Data, audio.Data.Length);
+            return result;
+        }
+        else
+        {
+            var result = new Tensor<T>(new[] { batch, samples });
+            var resultSpan = result.AsWritableSpan();
+
+            for (int b = 0; b < batch; b++)
+            {
+                var audioSpan = results[b].AsSpan();
+                var copyLen = Math.Min(audioSpan.Length, samples);
+                for (int s = 0; s < copyLen; s++)
+                {
+                    resultSpan[b * samples + s] = audioSpan[s];
+                }
+            }
+
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Transposes mel spectrogram from batch format [batch, melChannels, timeFrames] to [timeFrames, melChannels].
+    /// </summary>
+    private Tensor<T> TransposeFromBatch(Tensor<T> melSpectrogram, int batchIdx, int melChannels, int timeFrames)
+    {
+        var result = new Tensor<T>(new[] { timeFrames, melChannels });
         var resultSpan = result.AsWritableSpan();
         var melSpan = melSpectrogram.AsSpan();
 
-        // Simplified mel-to-audio (Griffin-Lim style approximation)
-        // Real implementation would use a neural vocoder
-        for (int b = 0; b < batch; b++)
+        for (int t = 0; t < timeFrames; t++)
         {
-            for (int s = 0; s < samples; s++)
+            for (int m = 0; m < melChannels; m++)
             {
-                int t = s / hopLength;
-                t = Math.Min(t, timeFrames - 1);
-
-                double waveVal = 0;
-
-                // Combine energy from mel bins
-                for (int m = 0; m < melChannels; m++)
-                {
-                    var srcIdx = b * melChannels * timeFrames + m * timeFrames + t;
-                    var logEnergy = NumOps.ToDouble(melSpan[srcIdx]);
-                    var energy = Math.Exp(logEnergy);
-
-                    // Generate oscillation at frequency corresponding to mel bin
-                    var freq = MelToFrequency(m, melChannels, sampleRate);
-                    var phase = 2 * Math.PI * freq * s / sampleRate;
-                    waveVal += Math.Sqrt(energy) * Math.Sin(phase) / melChannels;
-                }
-
-                var dstIdx = b * samples + s;
-                resultSpan[dstIdx] = NumOps.FromDouble(waveVal);
+                var srcIdx = batchIdx * melChannels * timeFrames + m * timeFrames + t;
+                var dstIdx = t * melChannels + m;
+                resultSpan[dstIdx] = melSpan[srcIdx];
             }
         }
 

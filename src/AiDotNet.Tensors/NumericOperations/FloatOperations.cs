@@ -1222,5 +1222,65 @@ public class FloatOperations : INumericOperations<float>
         Engines.Simd.SimdKernels.ScalarMultiplyAdd(x, y, scalar, destination);
     }
 
+    /// <summary>
+    /// Converts float span to float span (identity operation - just copy).
+    /// Uses SIMD-optimized copy for maximum performance.
+    /// </summary>
+    public void ToFloatSpan(ReadOnlySpan<float> source, Span<float> destination)
+    {
+        // Identity operation for float - just copy
+        source.CopyTo(destination);
+    }
+
+    /// <summary>
+    /// Converts float span to float span (identity operation - just copy).
+    /// Uses SIMD-optimized copy for maximum performance.
+    /// </summary>
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<float> destination)
+    {
+        // Identity operation for float - just copy
+        source.CopyTo(destination);
+    }
+
+    /// <summary>
+    /// Converts float span to Half (FP16) span.
+    /// SIMD-optimized on .NET 8+ using TensorPrimitives.ConvertToHalf.
+    /// Critical for mixed-precision GPU operations (FP16 loads with FP32 accumulation).
+    /// </summary>
+    public void ToHalfSpan(ReadOnlySpan<float> source, Span<Half> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+#if NET8_0_OR_GREATER
+        // SIMD-optimized conversion on .NET 8+
+        System.Numerics.Tensors.TensorPrimitives.ConvertToHalf(source, destination);
+#else
+        // Sequential fallback for .NET Framework
+        for (int i = 0; i < source.Length; i++)
+            destination[i] = (Half)source[i];
+#endif
+    }
+
+    /// <summary>
+    /// Converts Half (FP16) span to float span.
+    /// SIMD-optimized on .NET 8+ using TensorPrimitives.ConvertToSingle.
+    /// Used when retrieving results from GPU operations using half precision.
+    /// </summary>
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<float> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+#if NET8_0_OR_GREATER
+        // SIMD-optimized conversion on .NET 8+
+        System.Numerics.Tensors.TensorPrimitives.ConvertToSingle(source, destination);
+#else
+        // Sequential fallback for .NET Framework
+        for (int i = 0; i < source.Length; i++)
+            destination[i] = (float)source[i];
+#endif
+    }
+
     #endregion
 }

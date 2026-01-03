@@ -41,6 +41,9 @@ public class CpuEngine : IEngine
     public bool SupportsGpu => false;
 
     /// <inheritdoc/>
+    public DirectGpu.DirectGpuEngine? DirectGpu => Engine.DirectGpu;
+
+    /// <inheritdoc/>
     public Vector<T> Add<T>(Vector<T> a, Vector<T> b)
     {
         if (a == null) throw new ArgumentNullException(nameof(a));
@@ -3640,6 +3643,499 @@ public class CpuEngine : IEngine
         var resultVector = TensorPrimitivesHelper<T>.ELU(flatVector, alpha);
         return new Tensor<T>(tensor.Shape, resultVector);
     }
+
+    /// <inheritdoc/>
+    public Tensor<T> LeakyReLU<T>(Tensor<T> tensor, T alpha)
+    {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double alphaDouble = numOps.ToDouble(alpha);
+        var flatVector = tensor.ToVector();
+        var resultVector = TensorPrimitivesHelper<T>.LeakyReLU(flatVector, alphaDouble);
+        return new Tensor<T>(tensor.Shape, resultVector);
+    }
+
+    /// <summary>
+    /// Gated Linear Unit: GLU(a, b) = a * sigmoid(b)
+    /// Splits input in half along specified dimension and applies sigmoid gating.
+    /// From "Language Modeling with Gated Convolutional Networks" (Dauphin et al., 2017)
+    /// </summary>
+    public Tensor<T> GLU<T>(Tensor<T> input, int dim = -1)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Handle negative dimension
+        int actualDim = dim < 0 ? input.Rank + dim : dim;
+        if (actualDim < 0 || actualDim >= input.Rank)
+            throw new ArgumentException($"Invalid dimension {dim} for tensor with rank {input.Rank}");
+
+        int dimSize = input.Shape[actualDim];
+        if (dimSize % 2 != 0)
+            throw new ArgumentException($"Dimension {actualDim} must have even size for GLU, got {dimSize}");
+
+        int halfSize = dimSize / 2;
+
+        // Calculate output shape
+        var outputShape = input.Shape.ToArray();
+        outputShape[actualDim] = halfSize;
+
+        var inputData = input.ToVector().Data;
+        var outputData = new T[inputData.Length / 2];
+
+        // Calculate strides for the dimension
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < input.Rank; i++)
+            innerSize *= input.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= input.Shape[i];
+
+        // Apply GLU: output = a * sigmoid(b)
+        Parallel.For(0, outerSize, outer =>
+        {
+            for (int h = 0; h < halfSize; h++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int aIdx = outer * dimSize * innerSize + h * innerSize + inner;
+                    int bIdx = outer * dimSize * innerSize + (h + halfSize) * innerSize + inner;
+                    int outIdx = outer * halfSize * innerSize + h * innerSize + inner;
+
+                    T a = inputData[aIdx];
+                    T b = inputData[bIdx];
+                    T sigmoid_b = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(b))));
+                    outputData[outIdx] = numOps.Multiply(a, sigmoid_b);
+                }
+            }
+        });
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// GLU backward pass.
+    /// </summary>
+    public Tensor<T> GLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? input.Rank + dim : dim;
+        int dimSize = input.Shape[actualDim];
+        int halfSize = dimSize / 2;
+
+        var inputData = input.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().Data;
+        var gradInputData = new T[inputData.Length];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < input.Rank; i++)
+            innerSize *= input.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= input.Shape[i];
+
+        // Gradient: d/da = sigmoid(b) * gradOut, d/db = a * sigmoid(b) * (1 - sigmoid(b)) * gradOut
+        Parallel.For(0, outerSize, outer =>
+        {
+            for (int h = 0; h < halfSize; h++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int aIdx = outer * dimSize * innerSize + h * innerSize + inner;
+                    int bIdx = outer * dimSize * innerSize + (h + halfSize) * innerSize + inner;
+                    int outIdx = outer * halfSize * innerSize + h * innerSize + inner;
+
+                    T a = inputData[aIdx];
+                    T b = inputData[bIdx];
+                    T gradOut = gradOutData[outIdx];
+
+                    T sigmoid_b = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(b))));
+                    T one_minus_sigmoid = numOps.Subtract(numOps.One, sigmoid_b);
+
+                    gradInputData[aIdx] = numOps.Multiply(sigmoid_b, gradOut);
+                    gradInputData[bIdx] = numOps.Multiply(numOps.Multiply(numOps.Multiply(a, sigmoid_b), one_minus_sigmoid), gradOut);
+                }
+            }
+        });
+
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
+    /// <summary>
+    /// GeGLU: Gaussian Error Gated Linear Unit.
+    /// GeGLU(a, b) = a * GELU(b)
+    /// From "GLU Variants Improve Transformer" (Shazeer, 2020)
+    /// </summary>
+    public Tensor<T> GeGLU<T>(Tensor<T> input, int dim = -1)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? input.Rank + dim : dim;
+        if (actualDim < 0 || actualDim >= input.Rank)
+            throw new ArgumentException($"Invalid dimension {dim} for tensor with rank {input.Rank}");
+
+        int dimSize = input.Shape[actualDim];
+        if (dimSize % 2 != 0)
+            throw new ArgumentException($"Dimension {actualDim} must have even size for GeGLU, got {dimSize}");
+
+        int halfSize = dimSize / 2;
+
+        var outputShape = input.Shape.ToArray();
+        outputShape[actualDim] = halfSize;
+
+        var inputData = input.ToVector().Data;
+        var outputData = new T[inputData.Length / 2];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < input.Rank; i++)
+            innerSize *= input.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= input.Shape[i];
+
+        // GELU approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+        double sqrtTwoOverPi = Math.Sqrt(2.0 / Math.PI);
+
+        Parallel.For(0, outerSize, outer =>
+        {
+            for (int h = 0; h < halfSize; h++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int aIdx = outer * dimSize * innerSize + h * innerSize + inner;
+                    int bIdx = outer * dimSize * innerSize + (h + halfSize) * innerSize + inner;
+                    int outIdx = outer * halfSize * innerSize + h * innerSize + inner;
+
+                    T a = inputData[aIdx];
+                    T b = inputData[bIdx];
+
+                    // GELU(b)
+                    double bVal = numOps.ToDouble(b);
+                    double gelu = 0.5 * bVal * (1.0 + Math.Tanh(sqrtTwoOverPi * (bVal + 0.044715 * bVal * bVal * bVal)));
+                    outputData[outIdx] = numOps.Multiply(a, numOps.FromDouble(gelu));
+                }
+            }
+        });
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// GeGLU backward pass.
+    /// </summary>
+    public Tensor<T> GeGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? input.Rank + dim : dim;
+        int dimSize = input.Shape[actualDim];
+        int halfSize = dimSize / 2;
+
+        var inputData = input.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().Data;
+        var gradInputData = new T[inputData.Length];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < input.Rank; i++)
+            innerSize *= input.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= input.Shape[i];
+
+        double sqrtTwoOverPi = Math.Sqrt(2.0 / Math.PI);
+
+        Parallel.For(0, outerSize, outer =>
+        {
+            for (int h = 0; h < halfSize; h++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int aIdx = outer * dimSize * innerSize + h * innerSize + inner;
+                    int bIdx = outer * dimSize * innerSize + (h + halfSize) * innerSize + inner;
+                    int outIdx = outer * halfSize * innerSize + h * innerSize + inner;
+
+                    T a = inputData[aIdx];
+                    T b = inputData[bIdx];
+                    T gradOut = gradOutData[outIdx];
+
+                    double bVal = numOps.ToDouble(b);
+                    double aVal = numOps.ToDouble(a);
+                    double gradOutVal = numOps.ToDouble(gradOut);
+
+                    // GELU and its derivative
+                    double inner_val = sqrtTwoOverPi * (bVal + 0.044715 * bVal * bVal * bVal);
+                    double tanh_val = Math.Tanh(inner_val);
+                    double gelu = 0.5 * bVal * (1.0 + tanh_val);
+                    double sech2 = 1.0 - tanh_val * tanh_val;
+                    double gelu_deriv = 0.5 * (1.0 + tanh_val) + 0.5 * bVal * sech2 * sqrtTwoOverPi * (1.0 + 3.0 * 0.044715 * bVal * bVal);
+
+                    gradInputData[aIdx] = numOps.FromDouble(gelu * gradOutVal);
+                    gradInputData[bIdx] = numOps.FromDouble(aVal * gelu_deriv * gradOutVal);
+                }
+            }
+        });
+
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
+    /// <summary>
+    /// SwiGLU: Swish-Gated Linear Unit.
+    /// SwiGLU(a, b) = a * Swish(b) where Swish(x) = x * sigmoid(x)
+    /// From "GLU Variants Improve Transformer" (Shazeer, 2020)
+    /// Used in LLaMA, PaLM, and other modern transformers.
+    /// </summary>
+    public Tensor<T> SwiGLU<T>(Tensor<T> input, int dim = -1)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? input.Rank + dim : dim;
+        if (actualDim < 0 || actualDim >= input.Rank)
+            throw new ArgumentException($"Invalid dimension {dim} for tensor with rank {input.Rank}");
+
+        int dimSize = input.Shape[actualDim];
+        if (dimSize % 2 != 0)
+            throw new ArgumentException($"Dimension {actualDim} must have even size for SwiGLU, got {dimSize}");
+
+        int halfSize = dimSize / 2;
+
+        var outputShape = input.Shape.ToArray();
+        outputShape[actualDim] = halfSize;
+
+        var inputData = input.ToVector().Data;
+        var outputData = new T[inputData.Length / 2];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < input.Rank; i++)
+            innerSize *= input.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= input.Shape[i];
+
+        // SwiGLU: a * (b * sigmoid(b))
+        Parallel.For(0, outerSize, outer =>
+        {
+            for (int h = 0; h < halfSize; h++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int aIdx = outer * dimSize * innerSize + h * innerSize + inner;
+                    int bIdx = outer * dimSize * innerSize + (h + halfSize) * innerSize + inner;
+                    int outIdx = outer * halfSize * innerSize + h * innerSize + inner;
+
+                    T a = inputData[aIdx];
+                    T b = inputData[bIdx];
+
+                    // Swish(b) = b * sigmoid(b)
+                    T sigmoid_b = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(b))));
+                    T swish_b = numOps.Multiply(b, sigmoid_b);
+                    outputData[outIdx] = numOps.Multiply(a, swish_b);
+                }
+            }
+        });
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// SwiGLU backward pass.
+    /// </summary>
+    public Tensor<T> SwiGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? input.Rank + dim : dim;
+        int dimSize = input.Shape[actualDim];
+        int halfSize = dimSize / 2;
+
+        var inputData = input.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().Data;
+        var gradInputData = new T[inputData.Length];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < input.Rank; i++)
+            innerSize *= input.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= input.Shape[i];
+
+        // d/da = Swish(b) * gradOut
+        // d/db = a * d_Swish(b) * gradOut where d_Swish(b) = sigmoid(b) + b * sigmoid(b) * (1 - sigmoid(b))
+        Parallel.For(0, outerSize, outer =>
+        {
+            for (int h = 0; h < halfSize; h++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int aIdx = outer * dimSize * innerSize + h * innerSize + inner;
+                    int bIdx = outer * dimSize * innerSize + (h + halfSize) * innerSize + inner;
+                    int outIdx = outer * halfSize * innerSize + h * innerSize + inner;
+
+                    T a = inputData[aIdx];
+                    T b = inputData[bIdx];
+                    T gradOut = gradOutData[outIdx];
+
+                    T sigmoid_b = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(b))));
+                    T swish_b = numOps.Multiply(b, sigmoid_b);
+                    T one_minus_sigmoid = numOps.Subtract(numOps.One, sigmoid_b);
+                    T swish_deriv = numOps.Add(sigmoid_b, numOps.Multiply(numOps.Multiply(b, sigmoid_b), one_minus_sigmoid));
+
+                    gradInputData[aIdx] = numOps.Multiply(swish_b, gradOut);
+                    gradInputData[bIdx] = numOps.Multiply(numOps.Multiply(a, swish_deriv), gradOut);
+                }
+            }
+        });
+
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
+    /// <summary>
+    /// ReGLU: ReLU-Gated Linear Unit.
+    /// ReGLU(a, b) = a * ReLU(b)
+    /// From "GLU Variants Improve Transformer" (Shazeer, 2020)
+    /// </summary>
+    public Tensor<T> ReGLU<T>(Tensor<T> input, int dim = -1)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? input.Rank + dim : dim;
+        if (actualDim < 0 || actualDim >= input.Rank)
+            throw new ArgumentException($"Invalid dimension {dim} for tensor with rank {input.Rank}");
+
+        int dimSize = input.Shape[actualDim];
+        if (dimSize % 2 != 0)
+            throw new ArgumentException($"Dimension {actualDim} must have even size for ReGLU, got {dimSize}");
+
+        int halfSize = dimSize / 2;
+
+        var outputShape = input.Shape.ToArray();
+        outputShape[actualDim] = halfSize;
+
+        var inputData = input.ToVector().Data;
+        var outputData = new T[inputData.Length / 2];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < input.Rank; i++)
+            innerSize *= input.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= input.Shape[i];
+
+        // ReGLU: a * ReLU(b) = a * max(0, b)
+        Parallel.For(0, outerSize, outer =>
+        {
+            for (int h = 0; h < halfSize; h++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int aIdx = outer * dimSize * innerSize + h * innerSize + inner;
+                    int bIdx = outer * dimSize * innerSize + (h + halfSize) * innerSize + inner;
+                    int outIdx = outer * halfSize * innerSize + h * innerSize + inner;
+
+                    T a = inputData[aIdx];
+                    T b = inputData[bIdx];
+
+                    // ReLU(b) = max(0, b)
+                    T relu_b = numOps.GreaterThan(b, numOps.Zero) ? b : numOps.Zero;
+                    outputData[outIdx] = numOps.Multiply(a, relu_b);
+                }
+            }
+        });
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// ReGLU backward pass.
+    /// </summary>
+    public Tensor<T> ReGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? input.Rank + dim : dim;
+        int dimSize = input.Shape[actualDim];
+        int halfSize = dimSize / 2;
+
+        var inputData = input.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().Data;
+        var gradInputData = new T[inputData.Length];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < input.Rank; i++)
+            innerSize *= input.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= input.Shape[i];
+
+        // d/da = ReLU(b) * gradOut
+        // d/db = a * (b > 0 ? 1 : 0) * gradOut
+        Parallel.For(0, outerSize, outer =>
+        {
+            for (int h = 0; h < halfSize; h++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int aIdx = outer * dimSize * innerSize + h * innerSize + inner;
+                    int bIdx = outer * dimSize * innerSize + (h + halfSize) * innerSize + inner;
+                    int outIdx = outer * halfSize * innerSize + h * innerSize + inner;
+
+                    T a = inputData[aIdx];
+                    T b = inputData[bIdx];
+                    T gradOut = gradOutData[outIdx];
+
+                    T relu_b = numOps.GreaterThan(b, numOps.Zero) ? b : numOps.Zero;
+                    T relu_deriv = numOps.GreaterThan(b, numOps.Zero) ? numOps.One : numOps.Zero;
+
+                    gradInputData[aIdx] = numOps.Multiply(relu_b, gradOut);
+                    gradInputData[bIdx] = numOps.Multiply(numOps.Multiply(a, relu_deriv), gradOut);
+                }
+            }
+        });
+
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
 
     #endregion
 
@@ -8569,7 +9065,1992 @@ public class CpuEngine : IEngine
         return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
     }
 
+
+    /// <inheritdoc/>
+    public Tensor<T> RMSNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (gamma == null) throw new ArgumentNullException(nameof(gamma));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T eps = numOps.FromDouble(epsilon);
+        int normalizedDims = gamma.Shape.Length;
+        int inputRank = input.Shape.Length;
+
+        if (normalizedDims > inputRank)
+            throw new ArgumentException("Gamma shape has more dimensions than input shape");
+
+        for (int i = 0; i < normalizedDims; i++)
+        {
+            int inputDimIdx = inputRank - normalizedDims + i;
+            if (gamma.Shape[i] != input.Shape[inputDimIdx])
+                throw new ArgumentException("Gamma shape does not match input trailing dimensions");
+        }
+
+        int batchSize = 1;
+        int batchDims = inputRank - normalizedDims;
+        var batchShape = new int[Math.Max(1, batchDims)];
+        for (int i = 0; i < batchDims; i++)
+        {
+            batchSize *= input.Shape[i];
+            batchShape[i] = input.Shape[i];
+        }
+        if (batchDims == 0) { batchSize = 1; batchShape = [1]; }
+
+        int featureSize = gamma.Length;
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var rmsData = new T[batchSize];
+        var outputData = new T[batchSize * featureSize];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T sumSq = numOps.Zero;
+            for (int f = 0; f < featureSize; f++)
+            {
+                T val = inputData[b * featureSize + f];
+                sumSq = numOps.Add(sumSq, numOps.Multiply(val, val));
+            }
+            rmsData[b] = numOps.Sqrt(numOps.Add(numOps.Divide(sumSq, numOps.FromDouble(featureSize)), eps));
+        }
+
+        Parallel.For(0, batchSize, b =>
+        {
+            T invRms = numOps.Divide(numOps.One, rmsData[b]);
+            for (int f = 0; f < featureSize; f++)
+                outputData[b * featureSize + f] = numOps.Multiply(gammaData[f], numOps.Multiply(inputData[b * featureSize + f], invRms));
+        });
+
+        rms = new Tensor<T>(batchShape, new Vector<T>(rmsData));
+        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> RMSNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (gamma == null) throw new ArgumentNullException(nameof(gamma));
+        if (rms == null) throw new ArgumentNullException(nameof(rms));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int normalizedDims = gamma.Shape.Length;
+        int inputRank = input.Shape.Length;
+        int batchDims = inputRank - normalizedDims;
+        int batchSize = 1;
+        for (int i = 0; i < batchDims; i++) batchSize *= input.Shape[i];
+        if (batchDims == 0) batchSize = 1;
+
+        int featureSize = gamma.Length;
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var rmsData = rms.ToArray();
+        var gradGammaData = new T[featureSize];
+        var gradInputData = new T[input.Length];
+        for (int f = 0; f < featureSize; f++) gradGammaData[f] = numOps.Zero;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T invRms = numOps.Divide(numOps.One, rmsData[b]);
+            for (int f = 0; f < featureSize; f++)
+            {
+                T normalized = numOps.Multiply(inputData[b * featureSize + f], invRms);
+                gradGammaData[f] = numOps.Add(gradGammaData[f], numOps.Multiply(gradOutputData[b * featureSize + f], normalized));
+            }
+        }
+
+        Parallel.For(0, batchSize, b =>
+        {
+            T invRms = numOps.Divide(numOps.One, rmsData[b]);
+            T sumCorrection = numOps.Zero;
+            for (int f = 0; f < featureSize; f++)
+            {
+                T scaledGrad = numOps.Multiply(gammaData[f], gradOutputData[b * featureSize + f]);
+                T normalized = numOps.Multiply(inputData[b * featureSize + f], invRms);
+                sumCorrection = numOps.Add(sumCorrection, numOps.Multiply(scaledGrad, normalized));
+            }
+            T meanCorrection = numOps.Divide(sumCorrection, numOps.FromDouble(featureSize));
+            for (int f = 0; f < featureSize; f++)
+            {
+                T scaledGrad = numOps.Multiply(gammaData[f], gradOutputData[b * featureSize + f]);
+                T normalized = numOps.Multiply(inputData[b * featureSize + f], invRms);
+                gradInputData[b * featureSize + f] = numOps.Multiply(invRms, numOps.Subtract(scaledGrad, numOps.Multiply(normalized, meanCorrection)));
+            }
+        });
+
+        gradGamma = new Tensor<T>(gamma.Shape, new Vector<T>(gradGammaData));
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
     #endregion
+
+    #region Attention Operations
+
+    /// <summary>
+    /// Computes scaled dot-product attention.
+    /// Attention(Q, K, V) = softmax(Q @ K^T / sqrt(d_k)) @ V
+    /// From "Attention Is All You Need" (Vaswani et al., 2017)
+    /// </summary>
+    public Tensor<T> ScaledDotProductAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<bool>? mask,
+        double? scale,
+        out Tensor<T> attentionWeights)
+    {
+        if (query == null)
+            throw new ArgumentNullException(nameof(query));
+        if (key == null)
+            throw new ArgumentNullException(nameof(key));
+        if (value == null)
+            throw new ArgumentNullException(nameof(value));
+
+        // Expected shapes: [batch, heads, seq, d_k] for Q, K and [batch, heads, seq, d_v] for V
+        if (query.Rank != 4 || key.Rank != 4 || value.Rank != 4)
+            throw new ArgumentException("Query, Key, and Value must be 4D tensors [batch, heads, seq, d_k/d_v]");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int heads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int d_k = query.Shape[3];
+        int seqK = key.Shape[2];
+        int d_v = value.Shape[3];
+
+        // Validate shapes
+        if (key.Shape[0] != batch || key.Shape[1] != heads || key.Shape[3] != d_k)
+            throw new ArgumentException("Key shape mismatch with Query");
+        if (value.Shape[0] != batch || value.Shape[1] != heads || value.Shape[2] != seqK)
+            throw new ArgumentException("Value shape mismatch with Key");
+
+        // Compute scale factor
+        double scaleVal = scale ?? (1.0 / Math.Sqrt(d_k));
+        T scaleFactor = numOps.FromDouble(scaleVal);
+
+        // Compute attention scores: Q @ K^T -> [batch, heads, seqQ, seqK]
+        var scoresData = new T[batch * heads * seqQ * seqK];
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+
+        Parallel.For(0, batch * heads, bh =>
+        {
+            int b = bh / heads;
+            int h = bh % heads;
+            int qOffset = (b * heads + h) * seqQ * d_k;
+            int kOffset = (b * heads + h) * seqK * d_k;
+            int sOffset = (b * heads + h) * seqQ * seqK;
+
+            for (int i = 0; i < seqQ; i++)
+            {
+                for (int j = 0; j < seqK; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < d_k; k++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(queryData[qOffset + i * d_k + k], keyData[kOffset + j * d_k + k]));
+                    }
+                    scoresData[sOffset + i * seqK + j] = numOps.Multiply(sum, scaleFactor);
+                }
+            }
+        });
+
+        // Apply mask (if provided) and softmax
+        var weightsData = new T[batch * heads * seqQ * seqK];
+        T negInf = numOps.FromDouble(double.NegativeInfinity);
+
+        Parallel.For(0, batch * heads, bh =>
+        {
+            int b = bh / heads;
+            int h = bh % heads;
+            int offset = (b * heads + h) * seqQ * seqK;
+
+            for (int i = 0; i < seqQ; i++)
+            {
+                // Apply mask and find max for numerical stability
+                T maxVal = negInf;
+                for (int j = 0; j < seqK; j++)
+                {
+                    int idx = offset + i * seqK + j;
+                    if (mask != null && !mask[b, h, i, j])
+                    {
+                        scoresData[idx] = negInf;
+                    }
+                    if (numOps.GreaterThan(scoresData[idx], maxVal))
+                    {
+                        maxVal = scoresData[idx];
+                    }
+                }
+
+                // Compute exp and sum
+                T sumExp = numOps.Zero;
+                for (int j = 0; j < seqK; j++)
+                {
+                    int idx = offset + i * seqK + j;
+                    T expVal = numOps.Exp(numOps.Subtract(scoresData[idx], maxVal));
+                    weightsData[idx] = expVal;
+                    sumExp = numOps.Add(sumExp, expVal);
+                }
+
+                // Normalize
+                for (int j = 0; j < seqK; j++)
+                {
+                    int idx = offset + i * seqK + j;
+                    weightsData[idx] = numOps.Divide(weightsData[idx], sumExp);
+                }
+            }
+        });
+
+        attentionWeights = new Tensor<T>([batch, heads, seqQ, seqK], new Vector<T>(weightsData));
+
+        // Compute output: weights @ V -> [batch, heads, seqQ, d_v]
+        var outputData = new T[batch * heads * seqQ * d_v];
+        var valueData = value.ToVector().Data;
+
+        Parallel.For(0, batch * heads, bh =>
+        {
+            int b = bh / heads;
+            int h = bh % heads;
+            int wOffset = (b * heads + h) * seqQ * seqK;
+            int vOffset = (b * heads + h) * seqK * d_v;
+            int oOffset = (b * heads + h) * seqQ * d_v;
+
+            for (int i = 0; i < seqQ; i++)
+            {
+                for (int j = 0; j < d_v; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < seqK; k++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(weightsData[wOffset + i * seqK + k], valueData[vOffset + k * d_v + j]));
+                    }
+                    outputData[oOffset + i * d_v + j] = sum;
+                }
+            }
+        });
+
+        return new Tensor<T>([batch, heads, seqQ, d_v], new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Computes the backward pass for scaled dot-product attention.
+    /// </summary>
+    public Tensor<T> ScaledDotProductAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> attentionWeights,
+        double scale,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (query == null)
+            throw new ArgumentNullException(nameof(query));
+        if (key == null)
+            throw new ArgumentNullException(nameof(key));
+        if (value == null)
+            throw new ArgumentNullException(nameof(value));
+        if (attentionWeights == null)
+            throw new ArgumentNullException(nameof(attentionWeights));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int heads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int d_k = query.Shape[3];
+        int seqK = key.Shape[2];
+        int d_v = value.Shape[3];
+
+        T scaleFactor = numOps.FromDouble(scale);
+
+        var gradOutData = gradOutput.ToVector().Data;
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+        var weightsData = attentionWeights.ToVector().Data;
+
+        var gradVData = new T[batch * heads * seqK * d_v];
+        var gradQData = new T[batch * heads * seqQ * d_k];
+        var gradKData = new T[batch * heads * seqK * d_k];
+
+        Parallel.For(0, batch * heads, bh =>
+        {
+            int b = bh / heads;
+            int h = bh % heads;
+            int wOffset = (b * heads + h) * seqQ * seqK;
+            int gOffset = (b * heads + h) * seqQ * d_v;
+            int vOffset = (b * heads + h) * seqK * d_v;
+            int qOffset = (b * heads + h) * seqQ * d_k;
+            int kOffset = (b * heads + h) * seqK * d_k;
+
+            // Gradient w.r.t. V: weights^T @ gradOutput
+            for (int i = 0; i < seqK; i++)
+            {
+                for (int j = 0; j < d_v; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < seqQ; k++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(weightsData[wOffset + k * seqK + i], gradOutData[gOffset + k * d_v + j]));
+                    }
+                    gradVData[vOffset + i * d_v + j] = sum;
+                }
+            }
+
+            // Gradient w.r.t. attention weights: gradOutput @ V^T
+            var gradWeights = new T[seqQ * seqK];
+            for (int i = 0; i < seqQ; i++)
+            {
+                for (int j = 0; j < seqK; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < d_v; k++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(gradOutData[gOffset + i * d_v + k], valueData[vOffset + j * d_v + k]));
+                    }
+                    gradWeights[i * seqK + j] = sum;
+                }
+            }
+
+            // Softmax backward: gradScores = weights * (gradWeights - sum(weights * gradWeights))
+            var gradScores = new T[seqQ * seqK];
+            for (int i = 0; i < seqQ; i++)
+            {
+                T dotProduct = numOps.Zero;
+                for (int j = 0; j < seqK; j++)
+                {
+                    dotProduct = numOps.Add(dotProduct, numOps.Multiply(weightsData[wOffset + i * seqK + j], gradWeights[i * seqK + j]));
+                }
+                for (int j = 0; j < seqK; j++)
+                {
+                    T w = weightsData[wOffset + i * seqK + j];
+                    gradScores[i * seqK + j] = numOps.Multiply(w, numOps.Subtract(gradWeights[i * seqK + j], dotProduct));
+                }
+            }
+
+            // Gradient w.r.t. Q: gradScores @ K * scale
+            for (int i = 0; i < seqQ; i++)
+            {
+                for (int j = 0; j < d_k; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < seqK; k++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(gradScores[i * seqK + k], keyData[kOffset + k * d_k + j]));
+                    }
+                    gradQData[qOffset + i * d_k + j] = numOps.Multiply(sum, scaleFactor);
+                }
+            }
+
+            // Gradient w.r.t. K: gradScores^T @ Q * scale
+            for (int i = 0; i < seqK; i++)
+            {
+                for (int j = 0; j < d_k; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < seqQ; k++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(gradScores[k * seqK + i], queryData[qOffset + k * d_k + j]));
+                    }
+                    gradKData[kOffset + i * d_k + j] = numOps.Multiply(sum, scaleFactor);
+                }
+            }
+        });
+
+        gradQuery = new Tensor<T>(query.Shape, new Vector<T>(gradQData));
+        gradKey = new Tensor<T>(key.Shape, new Vector<T>(gradKData));
+        gradValue = new Tensor<T>(value.Shape, new Vector<T>(gradVData));
+
+        return gradOutput;
+    }
+
+    /// <summary>
+    /// Computes memory-efficient attention using the FlashAttention algorithm.
+    /// </summary>
+    /// <remarks>
+    /// This is a CPU implementation of FlashAttention that uses tiling and online softmax
+    /// to achieve O(N) memory complexity instead of O(N²) for standard attention.
+    /// While the CPU version doesn't benefit as much from the memory hierarchy optimizations
+    /// as GPU, it still provides memory savings for long sequences.
+    /// </remarks>
+    public Tensor<T> FlashAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        double? scale,
+        bool isCausal,
+        out Tensor<T> softmaxStats)
+    {
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (value == null) throw new ArgumentNullException(nameof(value));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int heads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int seqK = key.Shape[2];
+
+        // Compute scale if not provided
+        double scaleValue = scale ?? 1.0 / Math.Sqrt(headDim);
+        T scaleFactor = numOps.FromDouble(scaleValue);
+
+        // Block sizes for tiling (tuned for CPU cache)
+        const int BLOCK_Q = 64;
+        const int BLOCK_KV = 64;
+
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+
+        // Output and statistics
+        var outputData = new T[batch * heads * seqQ * headDim];
+        var statsData = new T[batch * heads * seqQ]; // log-sum-exp statistics
+
+        // Initialize output to zero and stats to negative infinity
+        T negInf = numOps.FromDouble(double.NegativeInfinity);
+        numOps.Fill(outputData.AsSpan(), numOps.Zero);
+        numOps.Fill(statsData.AsSpan(), negInf);
+
+        Parallel.For(0, batch * heads, bh =>
+        {
+            int b = bh / heads;
+            int h = bh % heads;
+            int qOffset = (b * heads + h) * seqQ * headDim;
+            int kOffset = (b * heads + h) * seqK * headDim;
+            int vOffset = (b * heads + h) * seqK * headDim;
+            int oOffset = (b * heads + h) * seqQ * headDim;
+            int sOffset = (b * heads + h) * seqQ;
+
+            // Local accumulators per query position
+            var rowMax = new T[seqQ];
+            var rowSum = new T[seqQ];
+            numOps.Fill(rowMax.AsSpan(), negInf);
+            numOps.Fill(rowSum.AsSpan(), numOps.Zero);
+
+            // Process KV blocks
+            for (int kvBlockStart = 0; kvBlockStart < seqK; kvBlockStart += BLOCK_KV)
+            {
+                int kvBlockEnd = Math.Min(kvBlockStart + BLOCK_KV, seqK);
+
+                // Process Q blocks
+                for (int qBlockStart = 0; qBlockStart < seqQ; qBlockStart += BLOCK_Q)
+                {
+                    int qBlockEnd = Math.Min(qBlockStart + BLOCK_Q, seqQ);
+
+                    // Compute attention scores for this tile
+                    for (int qi = qBlockStart; qi < qBlockEnd; qi++)
+                    {
+                        // Causal: skip if all keys in block are after query
+                        if (isCausal && kvBlockStart > qi)
+                            continue;
+
+                        T localMax = rowMax[qi];
+                        T localSum = rowSum[qi];
+
+                        // Temporary storage for this row's scores in the block
+                        var blockScores = new T[kvBlockEnd - kvBlockStart];
+                        var blockMaxScore = negInf;
+
+                        // Compute scores: Q @ K^T * scale
+                        for (int ki = kvBlockStart; ki < kvBlockEnd; ki++)
+                        {
+                            // Causal mask
+                            if (isCausal && ki > qi)
+                            {
+                                blockScores[ki - kvBlockStart] = negInf;
+                                continue;
+                            }
+
+                            T score = numOps.Zero;
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                score = numOps.Add(score, numOps.Multiply(
+                                    queryData[qOffset + qi * headDim + d],
+                                    keyData[kOffset + ki * headDim + d]));
+                            }
+                            score = numOps.Multiply(score, scaleFactor);
+                            blockScores[ki - kvBlockStart] = score;
+
+                            if (numOps.ToDouble(score) > numOps.ToDouble(blockMaxScore))
+                                blockMaxScore = score;
+                        }
+
+                        // Online softmax: compute new max
+                        T newMax = numOps.ToDouble(blockMaxScore) > numOps.ToDouble(localMax) ? blockMaxScore : localMax;
+
+                        // Rescale previous accumulator
+                        T scale1 = numOps.Exp(numOps.Subtract(localMax, newMax));
+                        T newSum = numOps.Multiply(localSum, scale1);
+
+                        // Add new contributions
+                        for (int ki = kvBlockStart; ki < kvBlockEnd; ki++)
+                        {
+                            if (isCausal && ki > qi)
+                                continue;
+
+                            T expScore = numOps.Exp(numOps.Subtract(blockScores[ki - kvBlockStart], newMax));
+                            newSum = numOps.Add(newSum, expScore);
+
+                            // Update output: O = O * scale1 + exp(score - newMax) * V
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                T vVal = valueData[vOffset + ki * headDim + d];
+                                T oVal = outputData[oOffset + qi * headDim + d];
+
+                                // First time rescaling for this block
+                                if (ki == kvBlockStart)
+                                    oVal = numOps.Multiply(oVal, scale1);
+
+                                outputData[oOffset + qi * headDim + d] = numOps.Add(oVal, numOps.Multiply(expScore, vVal));
+                            }
+                        }
+
+                        rowMax[qi] = newMax;
+                        rowSum[qi] = newSum;
+                    }
+                }
+            }
+
+            // Final normalization: O = O / rowSum
+            for (int qi = 0; qi < seqQ; qi++)
+            {
+                T invSum = numOps.Divide(numOps.One, rowSum[qi]);
+                for (int d = 0; d < headDim; d++)
+                {
+                    outputData[oOffset + qi * headDim + d] = numOps.Multiply(
+                        outputData[oOffset + qi * headDim + d], invSum);
+                }
+                // Store log-sum-exp: logsumexp = max + log(sum)
+                statsData[sOffset + qi] = numOps.Add(rowMax[qi], numOps.Log(rowSum[qi]));
+            }
+        });
+
+        softmaxStats = new Tensor<T>([batch, heads, seqQ], new Vector<T>(statsData));
+        return new Tensor<T>([batch, heads, seqQ, headDim], new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Computes the backward pass for FlashAttention.
+    /// </summary>
+    public Tensor<T> FlashAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> output,
+        Tensor<T> softmaxStats,
+        double scale,
+        bool isCausal,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (value == null) throw new ArgumentNullException(nameof(value));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        if (softmaxStats == null) throw new ArgumentNullException(nameof(softmaxStats));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int heads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int seqK = key.Shape[2];
+
+        T scaleFactor = numOps.FromDouble(scale);
+
+        const int BLOCK_Q = 64;
+        const int BLOCK_KV = 64;
+
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+        var outputData = output.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().Data;
+        var statsData = softmaxStats.ToVector().Data;
+
+        var gradQData = new T[batch * heads * seqQ * headDim];
+        var gradKData = new T[batch * heads * seqK * headDim];
+        var gradVData = new T[batch * heads * seqK * headDim];
+
+        T negInf = numOps.FromDouble(double.NegativeInfinity);
+
+        Parallel.For(0, batch * heads, bh =>
+        {
+            int b = bh / heads;
+            int h = bh % heads;
+            int qOffset = (b * heads + h) * seqQ * headDim;
+            int kOffset = (b * heads + h) * seqK * headDim;
+            int vOffset = (b * heads + h) * seqK * headDim;
+            int oOffset = (b * heads + h) * seqQ * headDim;
+            int sOffset = (b * heads + h) * seqQ;
+
+            // Process in blocks (similar to forward, but recomputing attention)
+            for (int kvBlockStart = 0; kvBlockStart < seqK; kvBlockStart += BLOCK_KV)
+            {
+                int kvBlockEnd = Math.Min(kvBlockStart + BLOCK_KV, seqK);
+
+                for (int qBlockStart = 0; qBlockStart < seqQ; qBlockStart += BLOCK_Q)
+                {
+                    int qBlockEnd = Math.Min(qBlockStart + BLOCK_Q, seqQ);
+
+                    for (int qi = qBlockStart; qi < qBlockEnd; qi++)
+                    {
+                        if (isCausal && kvBlockStart > qi)
+                            continue;
+
+                        T logsumexp = statsData[sOffset + qi];
+
+                        // Recompute attention weights for this row segment
+                        for (int ki = kvBlockStart; ki < kvBlockEnd; ki++)
+                        {
+                            if (isCausal && ki > qi)
+                                continue;
+
+                            // Recompute score
+                            T score = numOps.Zero;
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                score = numOps.Add(score, numOps.Multiply(
+                                    queryData[qOffset + qi * headDim + d],
+                                    keyData[kOffset + ki * headDim + d]));
+                            }
+                            score = numOps.Multiply(score, scaleFactor);
+
+                            // Recompute attention weight: exp(score - logsumexp)
+                            T attnWeight = numOps.Exp(numOps.Subtract(score, logsumexp));
+
+                            // Gradient w.r.t. V: attnWeight * gradOutput
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                T gradO = gradOutData[oOffset + qi * headDim + d];
+                                int vIdx = vOffset + ki * headDim + d;
+                                lock (gradVData) // Thread safety for accumulation
+                                {
+                                    gradVData[vIdx] = numOps.Add(gradVData[vIdx], numOps.Multiply(attnWeight, gradO));
+                                }
+                            }
+
+                            // Compute dS = attnWeight * (dO @ V - sum(attnWeight * dO @ V))
+                            // First compute dO @ v for this position
+                            T doV = numOps.Zero;
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                doV = numOps.Add(doV, numOps.Multiply(
+                                    gradOutData[oOffset + qi * headDim + d],
+                                    valueData[vOffset + ki * headDim + d]));
+                            }
+
+                            // Compute dO @ O for the full row (dot product with output)
+                            T doO = numOps.Zero;
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                doO = numOps.Add(doO, numOps.Multiply(
+                                    gradOutData[oOffset + qi * headDim + d],
+                                    outputData[oOffset + qi * headDim + d]));
+                            }
+
+                            // dS = attnWeight * (doV - doO)
+                            T dS = numOps.Multiply(attnWeight, numOps.Subtract(doV, doO));
+                            dS = numOps.Multiply(dS, scaleFactor);
+
+                            // Gradient w.r.t. Q: dS * K
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                int qIdx = qOffset + qi * headDim + d;
+                                gradQData[qIdx] = numOps.Add(gradQData[qIdx],
+                                    numOps.Multiply(dS, keyData[kOffset + ki * headDim + d]));
+                            }
+
+                            // Gradient w.r.t. K: dS * Q
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                int kIdx = kOffset + ki * headDim + d;
+                                lock (gradKData) // Thread safety for accumulation
+                                {
+                                    gradKData[kIdx] = numOps.Add(gradKData[kIdx],
+                                        numOps.Multiply(dS, queryData[qOffset + qi * headDim + d]));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        gradQuery = new Tensor<T>(query.Shape, new Vector<T>(gradQData));
+        gradKey = new Tensor<T>(key.Shape, new Vector<T>(gradKData));
+        gradValue = new Tensor<T>(value.Shape, new Vector<T>(gradVData));
+
+        return gradOutput;
+    }
+
+    /// <summary>
+    /// Computes Grouped Query Attention (GQA) for efficient inference.
+    /// </summary>
+    /// <remarks>
+    /// GQA allows multiple query heads to share the same key-value head,
+    /// reducing memory bandwidth and KV-cache size during inference.
+    /// </remarks>
+    public Tensor<T> GroupedQueryAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        int numQueriesPerKV,
+        double? scale,
+        bool isCausal,
+        out Tensor<T> attentionWeights)
+    {
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (value == null) throw new ArgumentNullException(nameof(value));
+        if (numQueriesPerKV <= 0) throw new ArgumentOutOfRangeException(nameof(numQueriesPerKV));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int numQHeads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int numKVHeads = key.Shape[1];
+        int seqK = key.Shape[2];
+
+        if (numQHeads != numKVHeads * numQueriesPerKV)
+            throw new ArgumentException($"Query heads ({numQHeads}) must equal KV heads ({numKVHeads}) * numQueriesPerKV ({numQueriesPerKV})");
+
+        // Compute scale
+        double scaleValue = scale ?? 1.0 / Math.Sqrt(headDim);
+        T scaleFactor = numOps.FromDouble(scaleValue);
+        T negInf = numOps.FromDouble(double.NegativeInfinity);
+
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+
+        var outputData = new T[batch * numQHeads * seqQ * headDim];
+        var weightsData = new T[batch * numQHeads * seqQ * seqK];
+
+        Parallel.For(0, batch * numQHeads, bqh =>
+        {
+            int b = bqh / numQHeads;
+            int qh = bqh % numQHeads;
+            int kvh = qh / numQueriesPerKV; // Which KV head this query head uses
+
+            int qOffset = (b * numQHeads + qh) * seqQ * headDim;
+            int kOffset = (b * numKVHeads + kvh) * seqK * headDim;
+            int vOffset = (b * numKVHeads + kvh) * seqK * headDim;
+            int oOffset = (b * numQHeads + qh) * seqQ * headDim;
+            int wOffset = (b * numQHeads + qh) * seqQ * seqK;
+
+            for (int qi = 0; qi < seqQ; qi++)
+            {
+                // Compute attention scores: Q @ K^T * scale
+                var scores = new T[seqK];
+                T maxScore = negInf;
+
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    // Causal mask
+                    if (isCausal && ki > qi)
+                    {
+                        scores[ki] = negInf;
+                        continue;
+                    }
+
+                    T score = numOps.Zero;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        score = numOps.Add(score, numOps.Multiply(
+                            queryData[qOffset + qi * headDim + d],
+                            keyData[kOffset + ki * headDim + d]));
+                    }
+                    score = numOps.Multiply(score, scaleFactor);
+                    scores[ki] = score;
+
+                    if (numOps.ToDouble(score) > numOps.ToDouble(maxScore))
+                        maxScore = score;
+                }
+
+                // Softmax
+                T sumExp = numOps.Zero;
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    if (isCausal && ki > qi)
+                    {
+                        weightsData[wOffset + qi * seqK + ki] = numOps.Zero;
+                        continue;
+                    }
+                    T expScore = numOps.Exp(numOps.Subtract(scores[ki], maxScore));
+                    weightsData[wOffset + qi * seqK + ki] = expScore;
+                    sumExp = numOps.Add(sumExp, expScore);
+                }
+
+                // Normalize
+                T invSum = numOps.Divide(numOps.One, sumExp);
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    weightsData[wOffset + qi * seqK + ki] = numOps.Multiply(
+                        weightsData[wOffset + qi * seqK + ki], invSum);
+                }
+
+                // Compute output: weights @ V
+                for (int d = 0; d < headDim; d++)
+                {
+                    T val = numOps.Zero;
+                    for (int ki = 0; ki < seqK; ki++)
+                    {
+                        val = numOps.Add(val, numOps.Multiply(
+                            weightsData[wOffset + qi * seqK + ki],
+                            valueData[vOffset + ki * headDim + d]));
+                    }
+                    outputData[oOffset + qi * headDim + d] = val;
+                }
+            }
+        });
+
+        attentionWeights = new Tensor<T>([batch, numQHeads, seqQ, seqK], new Vector<T>(weightsData));
+        return new Tensor<T>([batch, numQHeads, seqQ, headDim], new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Computes the backward pass for Grouped Query Attention.
+    /// </summary>
+    public Tensor<T> GroupedQueryAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> attentionWeights,
+        int numQueriesPerKV,
+        double scale,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (value == null) throw new ArgumentNullException(nameof(value));
+        if (attentionWeights == null) throw new ArgumentNullException(nameof(attentionWeights));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int numQHeads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int numKVHeads = key.Shape[1];
+        int seqK = key.Shape[2];
+
+        T scaleFactor = numOps.FromDouble(scale);
+
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+        var weightsData = attentionWeights.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().Data;
+
+        var gradQData = new T[batch * numQHeads * seqQ * headDim];
+        var gradKData = new T[batch * numKVHeads * seqK * headDim];
+        var gradVData = new T[batch * numKVHeads * seqK * headDim];
+
+        // Lock objects for thread-safe accumulation of gradK and gradV
+        var gradKLocks = new object[batch * numKVHeads * seqK];
+        var gradVLocks = new object[batch * numKVHeads * seqK];
+        for (int i = 0; i < gradKLocks.Length; i++)
+        {
+            gradKLocks[i] = new object();
+            gradVLocks[i] = new object();
+        }
+
+        Parallel.For(0, batch * numQHeads, bqh =>
+        {
+            int b = bqh / numQHeads;
+            int qh = bqh % numQHeads;
+            int kvh = qh / numQueriesPerKV;
+
+            int qOffset = (b * numQHeads + qh) * seqQ * headDim;
+            int kOffset = (b * numKVHeads + kvh) * seqK * headDim;
+            int vOffset = (b * numKVHeads + kvh) * seqK * headDim;
+            int gOffset = (b * numQHeads + qh) * seqQ * headDim;
+            int wOffset = (b * numQHeads + qh) * seqQ * seqK;
+
+            for (int qi = 0; qi < seqQ; qi++)
+            {
+                // Gradient w.r.t. V: weights^T @ gradOutput
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    T weight = weightsData[wOffset + qi * seqK + ki];
+                    int lockIdx = (b * numKVHeads + kvh) * seqK + ki;
+
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        T gradV = numOps.Multiply(weight, gradOutData[gOffset + qi * headDim + d]);
+                        lock (gradVLocks[lockIdx])
+                        {
+                            gradVData[vOffset + ki * headDim + d] = numOps.Add(
+                                gradVData[vOffset + ki * headDim + d], gradV);
+                        }
+                    }
+                }
+
+                // Gradient w.r.t. attention weights: gradOutput @ V^T
+                var gradWeights = new T[seqK];
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    T sum = numOps.Zero;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(
+                            gradOutData[gOffset + qi * headDim + d],
+                            valueData[vOffset + ki * headDim + d]));
+                    }
+                    gradWeights[ki] = sum;
+                }
+
+                // Softmax backward: gradScores = weights * (gradWeights - sum(weights * gradWeights))
+                T dotProduct = numOps.Zero;
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    dotProduct = numOps.Add(dotProduct, numOps.Multiply(
+                        weightsData[wOffset + qi * seqK + ki], gradWeights[ki]));
+                }
+
+                var gradScores = new T[seqK];
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    T w = weightsData[wOffset + qi * seqK + ki];
+                    gradScores[ki] = numOps.Multiply(w, numOps.Subtract(gradWeights[ki], dotProduct));
+                    gradScores[ki] = numOps.Multiply(gradScores[ki], scaleFactor);
+                }
+
+                // Gradient w.r.t. Q: gradScores @ K
+                for (int d = 0; d < headDim; d++)
+                {
+                    T sum = numOps.Zero;
+                    for (int ki = 0; ki < seqK; ki++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(gradScores[ki], keyData[kOffset + ki * headDim + d]));
+                    }
+                    gradQData[qOffset + qi * headDim + d] = sum;
+                }
+
+                // Gradient w.r.t. K: gradScores^T @ Q (accumulated across query heads sharing this KV)
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    int lockIdx = (b * numKVHeads + kvh) * seqK + ki;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        T gradK = numOps.Multiply(gradScores[ki], queryData[qOffset + qi * headDim + d]);
+                        lock (gradKLocks[lockIdx])
+                        {
+                            gradKData[kOffset + ki * headDim + d] = numOps.Add(
+                                gradKData[kOffset + ki * headDim + d], gradK);
+                        }
+                    }
+                }
+            }
+        });
+
+        gradQuery = new Tensor<T>(query.Shape, new Vector<T>(gradQData));
+        gradKey = new Tensor<T>(key.Shape, new Vector<T>(gradKData));
+        gradValue = new Tensor<T>(value.Shape, new Vector<T>(gradVData));
+
+        return gradOutput;
+    }
+
+    /// <summary>
+    /// Computes Graph Attention Network (GAT) style attention over graph nodes.
+    /// </summary>
+    public Tensor<T> GraphAttention<T>(
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> attentionWeightSource,
+        Tensor<T> attentionWeightTarget,
+        double leakyReluAlpha,
+        out Tensor<T> attentionCoeffs)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batchSize = nodeFeatures.Shape[0];
+        int numNodes = nodeFeatures.Shape[1];
+        int features = nodeFeatures.Shape[2];
+        int numEdges = edgeSourceIndices.Shape[0];
+
+        var nodeData = nodeFeatures.AsSpan();
+        var srcIndices = edgeSourceIndices.AsSpan();
+        var tgtIndices = edgeTargetIndices.AsSpan();
+        var attnSrcData = attentionWeightSource.AsSpan();
+        var attnTgtData = attentionWeightTarget.AsSpan();
+
+        // Output tensors
+        var outputData = new T[batchSize * numNodes * features];
+        var coeffsData = new T[batchSize * numEdges];
+
+        T alpha = numOps.FromDouble(leakyReluAlpha);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int batchOffset = b * numNodes * features;
+
+            // Step 1: Compute attention scores for each edge
+            var edgeScores = new T[numEdges];
+            for (int e = 0; e < numEdges; e++)
+            {
+                int src = srcIndices[e];
+                int tgt = tgtIndices[e];
+
+                // Compute a_src^T @ h_src + a_tgt^T @ h_tgt
+                T score = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    T srcFeature = nodeData[batchOffset + src * features + f];
+                    T tgtFeature = nodeData[batchOffset + tgt * features + f];
+                    score = numOps.Add(score, numOps.Multiply(attnSrcData[f], srcFeature));
+                    score = numOps.Add(score, numOps.Multiply(attnTgtData[f], tgtFeature));
+                }
+
+                // Apply LeakyReLU
+                if (numOps.ToDouble(score) < 0)
+                {
+                    score = numOps.Multiply(alpha, score);
+                }
+                edgeScores[e] = score;
+            }
+
+            // Step 2: Compute softmax per target node (normalize over incoming edges)
+            // First, group edges by target node
+            var targetEdges = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
+            for (int e = 0; e < numEdges; e++)
+            {
+                int tgt = tgtIndices[e];
+                if (!targetEdges.ContainsKey(tgt))
+                    targetEdges[tgt] = new System.Collections.Generic.List<int>();
+                targetEdges[tgt].Add(e);
+            }
+
+            // Softmax per target node
+            var attentionWeights = new T[numEdges];
+            foreach (var kvp in targetEdges)
+            {
+                var edges = kvp.Value;
+
+                // Find max for numerical stability
+                double maxScore = double.MinValue;
+                foreach (int e in edges)
+                {
+                    double s = numOps.ToDouble(edgeScores[e]);
+                    if (s > maxScore) maxScore = s;
+                }
+
+                // Compute exp and sum
+                double expSum = 0.0;
+                var expScores = new double[edges.Count];
+                for (int i = 0; i < edges.Count; i++)
+                {
+                    expScores[i] = Math.Exp(numOps.ToDouble(edgeScores[edges[i]]) - maxScore);
+                    expSum += expScores[i];
+                }
+
+                // Normalize
+                for (int i = 0; i < edges.Count; i++)
+                {
+                    attentionWeights[edges[i]] = numOps.FromDouble(expScores[i] / expSum);
+                }
+            }
+
+            // Store attention coefficients
+            for (int e = 0; e < numEdges; e++)
+            {
+                coeffsData[b * numEdges + e] = attentionWeights[e];
+            }
+
+            // Step 3: Aggregate features using attention weights
+            // h'_i = sum_j alpha_ij * h_j (where j are neighbors of i)
+            for (int e = 0; e < numEdges; e++)
+            {
+                int src = srcIndices[e];
+                int tgt = tgtIndices[e];
+                T weight = attentionWeights[e];
+
+                for (int f = 0; f < features; f++)
+                {
+                    T srcFeature = nodeData[batchOffset + src * features + f];
+                    T contribution = numOps.Multiply(weight, srcFeature);
+                    outputData[batchOffset + tgt * features + f] = numOps.Add(
+                        outputData[batchOffset + tgt * features + f], contribution);
+                }
+            }
+        }
+
+        attentionCoeffs = new Tensor<T>(new[] { batchSize, numEdges }, new Vector<T>(coeffsData));
+        return new Tensor<T>(nodeFeatures.Shape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Computes the backward pass for Graph Attention Network attention.
+    /// </summary>
+    public Tensor<T> GraphAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> attentionWeightSource,
+        Tensor<T> attentionWeightTarget,
+        Tensor<T> attentionCoeffs,
+        double leakyReluAlpha,
+        out Tensor<T> gradNodeFeatures,
+        out Tensor<T> gradAttentionWeightSource,
+        out Tensor<T> gradAttentionWeightTarget)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batchSize = nodeFeatures.Shape[0];
+        int numNodes = nodeFeatures.Shape[1];
+        int features = nodeFeatures.Shape[2];
+        int numEdges = edgeSourceIndices.Shape[0];
+
+        var nodeData = nodeFeatures.AsSpan();
+        var gradOutData = gradOutput.AsSpan();
+        var srcIndices = edgeSourceIndices.AsSpan();
+        var tgtIndices = edgeTargetIndices.AsSpan();
+        var attnSrcData = attentionWeightSource.AsSpan();
+        var attnTgtData = attentionWeightTarget.AsSpan();
+        var coeffsData = attentionCoeffs.AsSpan();
+
+        T alpha = numOps.FromDouble(leakyReluAlpha);
+
+        var gradNodeData = new T[batchSize * numNodes * features];
+        var gradAttnSrc = new T[features];
+        var gradAttnTgt = new T[features];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int batchOffset = b * numNodes * features;
+            int coeffsOffset = b * numEdges;
+
+            // Group edges by target for softmax backward
+            var targetEdges = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
+            for (int e = 0; e < numEdges; e++)
+            {
+                int tgt = tgtIndices[e];
+                if (!targetEdges.ContainsKey(tgt))
+                    targetEdges[tgt] = new System.Collections.Generic.List<int>();
+                targetEdges[tgt].Add(e);
+            }
+
+            // Compute gradients for each edge
+            var gradCoeffs = new T[numEdges];
+
+            // Gradient w.r.t. attention coefficients from aggregation
+            // dL/d_alpha_ij = dL/d_h'_tgt @ h_src
+            for (int e = 0; e < numEdges; e++)
+            {
+                int src = srcIndices[e];
+                int tgt = tgtIndices[e];
+
+                T gradCoeff = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    T gradOutTgt = gradOutData[batchOffset + tgt * features + f];
+                    T srcFeature = nodeData[batchOffset + src * features + f];
+                    gradCoeff = numOps.Add(gradCoeff, numOps.Multiply(gradOutTgt, srcFeature));
+                }
+                gradCoeffs[e] = gradCoeff;
+            }
+
+            // Gradient w.r.t. node features from aggregation
+            // dL/d_h_src += alpha_ij * dL/d_h'_tgt
+            for (int e = 0; e < numEdges; e++)
+            {
+                int src = srcIndices[e];
+                int tgt = tgtIndices[e];
+                T coeff = coeffsData[coeffsOffset + e];
+
+                for (int f = 0; f < features; f++)
+                {
+                    T gradOutTgt = gradOutData[batchOffset + tgt * features + f];
+                    T contribution = numOps.Multiply(coeff, gradOutTgt);
+                    gradNodeData[batchOffset + src * features + f] = numOps.Add(
+                        gradNodeData[batchOffset + src * features + f], contribution);
+                }
+            }
+
+            // Backprop through softmax per target node
+            foreach (var kvp in targetEdges)
+            {
+                var edges = kvp.Value;
+
+                // Softmax backward: dL/d_score_i = sum_j (alpha_i * (delta_ij - alpha_j)) * dL/d_alpha_j
+                for (int i = 0; i < edges.Count; i++)
+                {
+                    int ei = edges[i];
+                    T alphaI = coeffsData[coeffsOffset + ei];
+                    T gradScore = numOps.Zero;
+
+                    for (int j = 0; j < edges.Count; j++)
+                    {
+                        int ej = edges[j];
+                        T alphaJ = coeffsData[coeffsOffset + ej];
+                        T gradAlphaJ = gradCoeffs[ej];
+
+                        T jacobian = i == j
+                            ? numOps.Multiply(alphaI, numOps.Subtract(numOps.One, alphaJ))
+                            : numOps.Negate(numOps.Multiply(alphaI, alphaJ));
+
+                        gradScore = numOps.Add(gradScore, numOps.Multiply(jacobian, gradAlphaJ));
+                    }
+
+                    // Backprop through LeakyReLU
+                    // Recompute score to check sign
+                    int src = srcIndices[ei];
+                    int tgt = tgtIndices[ei];
+                    T score = numOps.Zero;
+                    for (int f = 0; f < features; f++)
+                    {
+                        T srcFeature = nodeData[batchOffset + src * features + f];
+                        T tgtFeature = nodeData[batchOffset + tgt * features + f];
+                        score = numOps.Add(score, numOps.Multiply(attnSrcData[f], srcFeature));
+                        score = numOps.Add(score, numOps.Multiply(attnTgtData[f], tgtFeature));
+                    }
+
+                    T leakyGrad = numOps.ToDouble(score) < 0 ? alpha : numOps.One;
+                    gradScore = numOps.Multiply(gradScore, leakyGrad);
+
+                    // Gradient w.r.t. attention weights
+                    // dL/d_a_src += dL/d_score * h_src
+                    // dL/d_a_tgt += dL/d_score * h_tgt
+                    for (int f = 0; f < features; f++)
+                    {
+                        T srcFeature = nodeData[batchOffset + src * features + f];
+                        T tgtFeature = nodeData[batchOffset + tgt * features + f];
+
+                        gradAttnSrc[f] = numOps.Add(gradAttnSrc[f], numOps.Multiply(gradScore, srcFeature));
+                        gradAttnTgt[f] = numOps.Add(gradAttnTgt[f], numOps.Multiply(gradScore, tgtFeature));
+
+                        // Gradient w.r.t. node features through attention
+                        T gradSrcFromAttn = numOps.Multiply(gradScore, attnSrcData[f]);
+                        T gradTgtFromAttn = numOps.Multiply(gradScore, attnTgtData[f]);
+
+                        gradNodeData[batchOffset + src * features + f] = numOps.Add(
+                            gradNodeData[batchOffset + src * features + f], gradSrcFromAttn);
+                        gradNodeData[batchOffset + tgt * features + f] = numOps.Add(
+                            gradNodeData[batchOffset + tgt * features + f], gradTgtFromAttn);
+                    }
+                }
+            }
+        }
+
+        gradNodeFeatures = new Tensor<T>(nodeFeatures.Shape, new Vector<T>(gradNodeData));
+        gradAttentionWeightSource = new Tensor<T>(attentionWeightSource.Shape, new Vector<T>(gradAttnSrc));
+        gradAttentionWeightTarget = new Tensor<T>(attentionWeightTarget.Shape, new Vector<T>(gradAttnTgt));
+
+        return gradOutput;
+    }
+
+    /// <summary>
+    /// Computes multi-head Graph Attention with concatenation or averaging of heads.
+    /// </summary>
+    public Tensor<T> MultiHeadGraphAttention<T>(
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> headWeights,
+        Tensor<T> attentionWeightsSource,
+        Tensor<T> attentionWeightsTarget,
+        double leakyReluAlpha,
+        bool concatenate,
+        out Tensor<T> attentionCoeffs)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batchSize = nodeFeatures.Shape[0];
+        int numNodes = nodeFeatures.Shape[1];
+        int inFeatures = nodeFeatures.Shape[2];
+        int numHeads = headWeights.Shape[0];
+        int headDim = headWeights.Shape[2];
+        int numEdges = edgeSourceIndices.Shape[0];
+
+        var nodeData = nodeFeatures.AsSpan();
+        var weightData = headWeights.AsSpan();
+        var attnSrcData = attentionWeightsSource.AsSpan();
+        var attnTgtData = attentionWeightsTarget.AsSpan();
+
+        int outFeatures = concatenate ? numHeads * headDim : headDim;
+        var outputData = new T[batchSize * numNodes * outFeatures];
+        var allCoeffsData = new T[batchSize * numHeads * numEdges];
+
+        for (int h = 0; h < numHeads; h++)
+        {
+            // Transform node features for this head: [batch, nodes, in_features] @ W_h -> [batch, nodes, head_dim]
+            var transformedData = new T[batchSize * numNodes * headDim];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        T sum = numOps.Zero;
+                        for (int f = 0; f < inFeatures; f++)
+                        {
+                            int nodeIdx = b * numNodes * inFeatures + n * inFeatures + f;
+                            int weightIdx = h * inFeatures * headDim + f * headDim + d;
+                            sum = numOps.Add(sum, numOps.Multiply(nodeData[nodeIdx], weightData[weightIdx]));
+                        }
+                        transformedData[b * numNodes * headDim + n * headDim + d] = sum;
+                    }
+                }
+            }
+
+            // Extract attention weights for this head
+            var headAttnSrc = new T[headDim];
+            var headAttnTgt = new T[headDim];
+            for (int d = 0; d < headDim; d++)
+            {
+                headAttnSrc[d] = attnSrcData[h * headDim + d];
+                headAttnTgt[d] = attnTgtData[h * headDim + d];
+            }
+
+            // Create transformed tensor for this head
+            var transformedTensor = new Tensor<T>(new[] { batchSize, numNodes, headDim }, new Vector<T>(transformedData));
+            var headAttnSrcTensor = new Tensor<T>(new[] { headDim }, new Vector<T>(headAttnSrc));
+            var headAttnTgtTensor = new Tensor<T>(new[] { headDim }, new Vector<T>(headAttnTgt));
+
+            // Apply single-head GAT
+            var headOutput = GraphAttention(
+                transformedTensor,
+                edgeSourceIndices,
+                edgeTargetIndices,
+                headAttnSrcTensor,
+                headAttnTgtTensor,
+                leakyReluAlpha,
+                out var headCoeffs);
+
+            var headOutputData = headOutput.AsSpan();
+            var headCoeffsData = headCoeffs.AsSpan();
+
+            // Store coefficients
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int e = 0; e < numEdges; e++)
+                {
+                    allCoeffsData[b * numHeads * numEdges + h * numEdges + e] = headCoeffsData[b * numEdges + e];
+                }
+            }
+
+            // Combine head outputs
+            if (concatenate)
+            {
+                // Concatenate: place head output at appropriate offset
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            int srcIdx = b * numNodes * headDim + n * headDim + d;
+                            int dstIdx = b * numNodes * outFeatures + n * outFeatures + h * headDim + d;
+                            outputData[dstIdx] = headOutputData[srcIdx];
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Average: accumulate and divide later
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            int idx = b * numNodes * headDim + n * headDim + d;
+                            outputData[idx] = numOps.Add(outputData[idx], headOutputData[idx]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // If averaging, divide by number of heads
+        if (!concatenate)
+        {
+            T divisor = numOps.FromDouble(numHeads);
+            for (int i = 0; i < outputData.Length; i++)
+            {
+                outputData[i] = numOps.Divide(outputData[i], divisor);
+            }
+        }
+
+        attentionCoeffs = new Tensor<T>(new[] { batchSize, numHeads, numEdges }, new Vector<T>(allCoeffsData));
+        return new Tensor<T>(new[] { batchSize, numNodes, outFeatures }, new Vector<T>(outputData));
+    }
+
+
+    #endregion
+
+    #region Scatter Operations (Graph Neural Networks)
+
+    /// <summary>
+    /// Scatter add: Aggregates source values at indices using addition.
+    /// Used in GNN message passing for sum aggregation.
+    /// </summary>
+    public Tensor<T> ScatterAdd<T>(Tensor<T> source, Tensor<int> indices, int dim = 0, int? outputSize = null)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Handle negative dimension
+        int actualDim = dim < 0 ? source.Rank + dim : dim;
+        if (actualDim < 0 || actualDim >= source.Rank)
+            throw new ArgumentException($"Invalid dimension {dim} for tensor with rank {source.Rank}");
+
+        // Determine output size along scatter dimension
+        var indicesData = indices.ToVector().Data;
+        int maxIndex = 0;
+        for (int i = 0; i < indicesData.Length; i++)
+        {
+            if (indicesData[i] > maxIndex) maxIndex = indicesData[i];
+        }
+        int outDimSize = outputSize ?? (maxIndex + 1);
+
+        // Build output shape
+        var outputShape = source.Shape.ToArray();
+        outputShape[actualDim] = outDimSize;
+
+        var sourceData = source.ToVector().Data;
+        var outputData = new T[outputShape.Aggregate(1, (a, b) => a * b)];
+
+        // Initialize to zero
+        for (int i = 0; i < outputData.Length; i++)
+            outputData[i] = numOps.Zero;
+
+        // Calculate strides
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < source.Rank; i++)
+            innerSize *= source.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= source.Shape[i];
+
+        int srcDimSize = source.Shape[actualDim];
+
+        // Scatter add
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int d = 0; d < srcDimSize; d++)
+            {
+                int targetIdx = indicesData[d % indicesData.Length];
+                if (targetIdx < 0 || targetIdx >= outDimSize) continue;
+
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int srcIdx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int dstIdx = outer * outDimSize * innerSize + targetIdx * innerSize + inner;
+                    outputData[dstIdx] = numOps.Add(outputData[dstIdx], sourceData[srcIdx]);
+                }
+            }
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Backward pass for scatter add.
+    /// </summary>
+    public Tensor<T> ScatterAddBackward<T>(Tensor<T> gradOutput, Tensor<int> indices, int[] sourceShape, int dim = 0)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
+
+        var gradOutData = gradOutput.ToVector().Data;
+        var indicesData = indices.ToVector().Data;
+        var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < sourceShape.Length; i++)
+            innerSize *= sourceShape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= sourceShape[i];
+
+        int srcDimSize = sourceShape[actualDim];
+        int outDimSize = gradOutput.Shape[actualDim];
+
+        // Gather gradients back
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int d = 0; d < srcDimSize; d++)
+            {
+                int targetIdx = indicesData[d % indicesData.Length];
+                if (targetIdx < 0 || targetIdx >= outDimSize) continue;
+
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int srcIdx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int dstIdx = outer * outDimSize * innerSize + targetIdx * innerSize + inner;
+                    gradInputData[srcIdx] = gradOutData[dstIdx];
+                }
+            }
+        }
+
+        return new Tensor<T>(sourceShape, new Vector<T>(gradInputData));
+    }
+
+    /// <summary>
+    /// Scatter mean: Aggregates source values at indices using mean.
+    /// </summary>
+    public Tensor<T> ScatterMean<T>(Tensor<T> source, Tensor<int> indices, out Tensor<int>? counts, int dim = 0, int? outputSize = null)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? source.Rank + dim : dim;
+
+        var indicesData = indices.ToVector().Data;
+        int maxIndex = 0;
+        for (int i = 0; i < indicesData.Length; i++)
+        {
+            if (indicesData[i] > maxIndex) maxIndex = indicesData[i];
+        }
+        int outDimSize = outputSize ?? (maxIndex + 1);
+
+        var outputShape = source.Shape.ToArray();
+        outputShape[actualDim] = outDimSize;
+
+        var sourceData = source.ToVector().Data;
+        var outputData = new T[outputShape.Aggregate(1, (a, b) => a * b)];
+        var countData = new int[outDimSize];
+
+        // Initialize
+        for (int i = 0; i < outputData.Length; i++)
+            outputData[i] = numOps.Zero;
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < source.Rank; i++)
+            innerSize *= source.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= source.Shape[i];
+
+        int srcDimSize = source.Shape[actualDim];
+
+        // Sum and count
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int d = 0; d < srcDimSize; d++)
+            {
+                int targetIdx = indicesData[d % indicesData.Length];
+                if (targetIdx < 0 || targetIdx >= outDimSize) continue;
+
+                if (outer == 0) countData[targetIdx]++;
+
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int srcIdx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int dstIdx = outer * outDimSize * innerSize + targetIdx * innerSize + inner;
+                    outputData[dstIdx] = numOps.Add(outputData[dstIdx], sourceData[srcIdx]);
+                }
+            }
+        }
+
+        // Divide by counts
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int d = 0; d < outDimSize; d++)
+            {
+                if (countData[d] > 0)
+                {
+                    T divisor = numOps.FromDouble(countData[d]);
+                    for (int inner = 0; inner < innerSize; inner++)
+                    {
+                        int idx = outer * outDimSize * innerSize + d * innerSize + inner;
+                        outputData[idx] = numOps.Divide(outputData[idx], divisor);
+                    }
+                }
+            }
+        }
+
+        counts = new Tensor<int>([outDimSize], new Vector<int>(countData));
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Backward pass for scatter mean.
+    /// </summary>
+    public Tensor<T> ScatterMeanBackward<T>(Tensor<T> gradOutput, Tensor<int> indices, Tensor<int> counts, int[] sourceShape, int dim = 0)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+        if (counts == null)
+            throw new ArgumentNullException(nameof(counts));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
+
+        var gradOutData = gradOutput.ToVector().Data;
+        var indicesData = indices.ToVector().Data;
+        var countsData = counts.ToVector().Data;
+        var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < sourceShape.Length; i++)
+            innerSize *= sourceShape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= sourceShape[i];
+
+        int srcDimSize = sourceShape[actualDim];
+        int outDimSize = gradOutput.Shape[actualDim];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int d = 0; d < srcDimSize; d++)
+            {
+                int targetIdx = indicesData[d % indicesData.Length];
+                if (targetIdx < 0 || targetIdx >= outDimSize) continue;
+
+                int count = countsData[targetIdx];
+                T divisor = count > 0 ? numOps.FromDouble(count) : numOps.One;
+
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int srcIdx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int dstIdx = outer * outDimSize * innerSize + targetIdx * innerSize + inner;
+                    gradInputData[srcIdx] = numOps.Divide(gradOutData[dstIdx], divisor);
+                }
+            }
+        }
+
+        return new Tensor<T>(sourceShape, new Vector<T>(gradInputData));
+    }
+
+    /// <summary>
+    /// Scatter max: Aggregates source values at indices using maximum.
+    /// </summary>
+    public Tensor<T> ScatterMax<T>(Tensor<T> source, Tensor<int> indices, out Tensor<int>? argmax, int dim = 0, int? outputSize = null)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? source.Rank + dim : dim;
+
+        var indicesData = indices.ToVector().Data;
+        int maxIndex = 0;
+        for (int i = 0; i < indicesData.Length; i++)
+        {
+            if (indicesData[i] > maxIndex) maxIndex = indicesData[i];
+        }
+        int outDimSize = outputSize ?? (maxIndex + 1);
+
+        var outputShape = source.Shape.ToArray();
+        outputShape[actualDim] = outDimSize;
+
+        var sourceData = source.ToVector().Data;
+        int outputLength = outputShape.Aggregate(1, (a, b) => a * b);
+        var outputData = new T[outputLength];
+        var argmaxData = new int[outputLength];
+
+        // Initialize to negative infinity and -1
+        T negInf = numOps.FromDouble(double.NegativeInfinity);
+        for (int i = 0; i < outputData.Length; i++)
+        {
+            outputData[i] = negInf;
+            argmaxData[i] = -1;
+        }
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < source.Rank; i++)
+            innerSize *= source.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= source.Shape[i];
+
+        int srcDimSize = source.Shape[actualDim];
+
+        // Find max
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int d = 0; d < srcDimSize; d++)
+            {
+                int targetIdx = indicesData[d % indicesData.Length];
+                if (targetIdx < 0 || targetIdx >= outDimSize) continue;
+
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int srcIdx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int dstIdx = outer * outDimSize * innerSize + targetIdx * innerSize + inner;
+
+                    if (numOps.GreaterThan(sourceData[srcIdx], outputData[dstIdx]))
+                    {
+                        outputData[dstIdx] = sourceData[srcIdx];
+                        argmaxData[dstIdx] = d;
+                    }
+                }
+            }
+        }
+
+        argmax = new Tensor<int>(outputShape, new Vector<int>(argmaxData));
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Backward pass for scatter max.
+    /// </summary>
+    public Tensor<T> ScatterMaxBackward<T>(Tensor<T> gradOutput, Tensor<int> argmax, int[] sourceShape, int dim = 0)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (argmax == null)
+            throw new ArgumentNullException(nameof(argmax));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
+
+        var gradOutData = gradOutput.ToVector().Data;
+        var argmaxData = argmax.ToVector().Data;
+        var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
+
+        // Initialize to zero
+        for (int i = 0; i < gradInputData.Length; i++)
+            gradInputData[i] = numOps.Zero;
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < sourceShape.Length; i++)
+            innerSize *= sourceShape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= sourceShape[i];
+
+        int srcDimSize = sourceShape[actualDim];
+        int outDimSize = gradOutput.Shape[actualDim];
+
+        // Route gradients to argmax positions
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int d = 0; d < outDimSize; d++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int dstIdx = outer * outDimSize * innerSize + d * innerSize + inner;
+                    int srcD = argmaxData[dstIdx];
+                    if (srcD >= 0 && srcD < srcDimSize)
+                    {
+                        int srcIdx = outer * srcDimSize * innerSize + srcD * innerSize + inner;
+                        gradInputData[srcIdx] = gradOutData[dstIdx];
+                    }
+                }
+            }
+        }
+
+        return new Tensor<T>(sourceShape, new Vector<T>(gradInputData));
+    }
+
+    /// <summary>
+    /// Scatter softmax: Applies softmax within each group defined by indices.
+    /// </summary>
+    public Tensor<T> ScatterSoftmax<T>(Tensor<T> source, Tensor<int> indices, int dim = 0, int? outputSize = null)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? source.Rank + dim : dim;
+
+        var indicesData = indices.ToVector().Data;
+        int maxIndex = 0;
+        for (int i = 0; i < indicesData.Length; i++)
+        {
+            if (indicesData[i] > maxIndex) maxIndex = indicesData[i];
+        }
+        int numGroups = outputSize ?? (maxIndex + 1);
+
+        var sourceData = source.ToVector().Data;
+        var outputData = new T[sourceData.Length];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < source.Rank; i++)
+            innerSize *= source.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= source.Shape[i];
+
+        int srcDimSize = source.Shape[actualDim];
+
+        // For each outer/inner position, compute softmax per group
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
+            {
+                // Find max per group for numerical stability
+                var maxPerGroup = new T[numGroups];
+                T negInf = numOps.FromDouble(double.NegativeInfinity);
+                for (int g = 0; g < numGroups; g++) maxPerGroup[g] = negInf;
+
+                for (int d = 0; d < srcDimSize; d++)
+                {
+                    int idx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int group = indicesData[d % indicesData.Length];
+                    if (group >= 0 && group < numGroups && numOps.GreaterThan(sourceData[idx], maxPerGroup[group]))
+                    {
+                        maxPerGroup[group] = sourceData[idx];
+                    }
+                }
+
+                // Compute exp and sum per group
+                var sumPerGroup = new T[numGroups];
+                for (int g = 0; g < numGroups; g++) sumPerGroup[g] = numOps.Zero;
+
+                for (int d = 0; d < srcDimSize; d++)
+                {
+                    int idx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int group = indicesData[d % indicesData.Length];
+                    if (group >= 0 && group < numGroups)
+                    {
+                        T expVal = numOps.Exp(numOps.Subtract(sourceData[idx], maxPerGroup[group]));
+                        outputData[idx] = expVal;
+                        sumPerGroup[group] = numOps.Add(sumPerGroup[group], expVal);
+                    }
+                }
+
+                // Normalize
+                for (int d = 0; d < srcDimSize; d++)
+                {
+                    int idx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int group = indicesData[d % indicesData.Length];
+                    if (group >= 0 && group < numGroups && !numOps.Equals(sumPerGroup[group], numOps.Zero))
+                    {
+                        outputData[idx] = numOps.Divide(outputData[idx], sumPerGroup[group]);
+                    }
+                }
+            }
+        }
+
+        return new Tensor<T>(source.Shape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Backward pass for scatter softmax.
+    /// </summary>
+    public Tensor<T> ScatterSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, Tensor<int> indices, int dim = 0)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (output == null)
+            throw new ArgumentNullException(nameof(output));
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int actualDim = dim < 0 ? output.Rank + dim : dim;
+
+        var indicesData = indices.ToVector().Data;
+        int maxIndex = 0;
+        for (int i = 0; i < indicesData.Length; i++)
+        {
+            if (indicesData[i] > maxIndex) maxIndex = indicesData[i];
+        }
+        int numGroups = maxIndex + 1;
+
+        var gradOutData = gradOutput.ToVector().Data;
+        var outData = output.ToVector().Data;
+        var gradInputData = new T[gradOutData.Length];
+
+        int innerSize = 1;
+        for (int i = actualDim + 1; i < output.Rank; i++)
+            innerSize *= output.Shape[i];
+
+        int outerSize = 1;
+        for (int i = 0; i < actualDim; i++)
+            outerSize *= output.Shape[i];
+
+        int srcDimSize = output.Shape[actualDim];
+
+        // Softmax backward: grad_input = output * (grad_output - sum(output * grad_output))
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
+            {
+                // Compute sum(output * grad_output) per group
+                var sumPerGroup = new T[numGroups];
+                for (int g = 0; g < numGroups; g++) sumPerGroup[g] = numOps.Zero;
+
+                for (int d = 0; d < srcDimSize; d++)
+                {
+                    int idx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int group = indicesData[d % indicesData.Length];
+                    if (group >= 0 && group < numGroups)
+                    {
+                        sumPerGroup[group] = numOps.Add(sumPerGroup[group], numOps.Multiply(outData[idx], gradOutData[idx]));
+                    }
+                }
+
+                // Compute gradient
+                for (int d = 0; d < srcDimSize; d++)
+                {
+                    int idx = outer * srcDimSize * innerSize + d * innerSize + inner;
+                    int group = indicesData[d % indicesData.Length];
+                    if (group >= 0 && group < numGroups)
+                    {
+                        gradInputData[idx] = numOps.Multiply(outData[idx], numOps.Subtract(gradOutData[idx], sumPerGroup[group]));
+                    }
+                }
+            }
+        }
+
+        return new Tensor<T>(output.Shape, new Vector<T>(gradInputData));
+    }
+
+    #endregion
+
 
     #region Tensor Reduction Operations
 
@@ -10611,8 +13092,12 @@ public class CpuEngine : IEngine
         // Box-Muller transform for normal distribution
         for (int i = 0; i < totalElements; i += 2)
         {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
+            double u1 = random.NextDouble();
+            double u2 = random.NextDouble();
+
+            // Guard against log(0) which produces -Infinity and then NaN
+            u1 = Math.Max(u1, double.Epsilon);
+
             double mag = Math.Sqrt(-2.0 * Math.Log(u1));
             double z0 = mag * Math.Cos(2.0 * Math.PI * u2);
             double z1 = mag * Math.Sin(2.0 * Math.PI * u2);
@@ -12503,6 +14988,1323 @@ public class CpuEngine : IEngine
 
         return result;
     }
+
+    #endregion
+
+    #region Fused Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedLinear<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, FusedActivationType activation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+
+        // For 2D inputs (batch x features), use optimized fused GEMM for float/double
+        if (input.Rank == 2 && weights.Rank == 2)
+        {
+            int M = input.Shape[0];  // Batch size
+            int K = input.Shape[1];  // Input features
+            int N = weights.Shape[1]; // Output features
+
+            if (weights.Shape[0] != K)
+                throw new ArgumentException($"Weight matrix shape mismatch: expected [{K}, N], got [{weights.Shape[0]}, {weights.Shape[1]}]");
+
+            var result = new Tensor<T>([M, N]);
+
+            // Use optimized fused operations for float type
+            if (typeof(T) == typeof(float))
+            {
+                // Cast arrays directly (boxing avoids generic constraint issues)
+                var inputArray = (float[])(object)input.Data;
+                var weightsArray = (float[])(object)weights.Data;
+                var biasArray = bias != null ? (float[])(object)bias.Data : null;
+                var outputArray = (float[])(object)result.Data;
+
+                CpuFusedOperations.FusedGemmBiasActivation(
+                    inputArray, weightsArray, biasArray, outputArray,
+                    M, N, K, activation);
+
+                return result;
+            }
+
+            // Use optimized fused operations for double type
+            if (typeof(T) == typeof(double))
+            {
+                var inputArray = (double[])(object)input.Data;
+                var weightsArray = (double[])(object)weights.Data;
+                var biasArray = bias != null ? (double[])(object)bias.Data : null;
+                var outputArray = (double[])(object)result.Data;
+
+                CpuFusedOperations.FusedGemmBiasActivation(
+                    inputArray, weightsArray, biasArray, outputArray,
+                    M, N, K, activation);
+
+                return result;
+            }
+        }
+
+        // Fallback: sequential operations for other types or higher-rank tensors
+        var fallbackResult = TensorMatMul(input, weights);
+
+        if (bias != null)
+        {
+            fallbackResult = TensorBroadcastAdd(fallbackResult, bias);
+        }
+
+        fallbackResult = ApplyFusedActivation(fallbackResult, activation);
+
+        return fallbackResult;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedLinearBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> weights,
+        Tensor<T> preActivation,
+        FusedActivationType activation,
+        out Tensor<T> gradWeights,
+        out Tensor<T>? gradBias)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (preActivation == null) throw new ArgumentNullException(nameof(preActivation));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Step 1: Compute activation gradient
+        var gradActivation = ApplyFusedActivationBackward(gradOutput, preActivation, activation);
+
+        // Step 2: Compute bias gradient (sum along batch dimension)
+        if (gradActivation.Shape.Length == 2)
+        {
+            int batchSize = gradActivation.Shape[0];
+            int outputSize = gradActivation.Shape[1];
+            var biasGrad = new Tensor<T>([outputSize]);
+
+            for (int j = 0; j < outputSize; j++)
+            {
+                T sum = numOps.Zero;
+                for (int i = 0; i < batchSize; i++)
+                {
+                    sum = numOps.Add(sum, gradActivation[i, j]);
+                }
+                biasGrad[j] = sum;
+            }
+            gradBias = biasGrad;
+        }
+        else
+        {
+            gradBias = null;
+        }
+
+        // Step 3: Compute weight gradient: input^T @ gradActivation
+        var inputT = TensorTranspose(input);
+        gradWeights = TensorMatMul(inputT, gradActivation);
+
+        // Step 4: Compute input gradient: gradActivation @ weights^T
+        var weightsT = TensorTranspose(weights);
+        var gradInput = TensorMatMul(gradActivation, weightsT);
+
+        return gradInput;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedConv2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH,
+        int strideW,
+        int padH,
+        int padW,
+        int dilationH,
+        int dilationW,
+        FusedActivationType activation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+
+        // CPU implementation: sequential operations
+        // Step 1: Conv2D
+        var result = Conv2D(input, kernel, new[] { strideH, strideW }, new[] { padH, padW }, new[] { dilationH, dilationW });
+
+        // Step 2: Add bias if provided
+        if (bias != null)
+        {
+            result = TensorBroadcastAdd(result, bias);
+        }
+
+        // Step 3: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedConv3D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideD, int strideH, int strideW,
+        int padD, int padH, int padW,
+        int dilationD, int dilationH, int dilationW,
+        FusedActivationType activation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+
+        // CPU implementation: sequential operations
+        // Step 1: Conv3D
+        var result = Conv3D(input, kernel, new[] { strideD, strideH, strideW }, new[] { padD, padH, padW }, new[] { dilationD, dilationH, dilationW });
+
+        // Step 2: Add bias if provided (reshape to [1, outChannels, 1, 1, 1] for NCDHW broadcast)
+        if (bias != null)
+        {
+            var biasExpanded = bias.Reshape(1, bias.Shape[0], 1, 1, 1);
+            result = TensorBroadcastAdd(result, biasExpanded);
+        }
+
+        // Step 3: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedConvTranspose2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int outputPadH, int outputPadW,
+        FusedActivationType activation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+
+        // CPU implementation: sequential operations
+        // Step 1: ConvTranspose2D
+        var result = ConvTranspose2D(input, kernel, new[] { strideH, strideW }, new[] { padH, padW }, new[] { outputPadH, outputPadW });
+
+        // Step 2: Add bias if provided (reshape to [1, outChannels, 1, 1] for NCHW broadcast)
+        if (bias != null)
+        {
+            var biasExpanded = bias.Reshape(1, bias.Shape[0], 1, 1);
+            result = TensorBroadcastAdd(result, biasExpanded);
+        }
+
+        // Step 3: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedBatchNorm<T>(
+        Tensor<T> input,
+        Tensor<T> gamma,
+        Tensor<T> beta,
+        Tensor<T> runningMean,
+        Tensor<T> runningVar,
+        double epsilon,
+        double momentum,
+        bool training,
+        FusedActivationType activation,
+        out Tensor<T> saveMean,
+        out Tensor<T> saveVar)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (gamma == null) throw new ArgumentNullException(nameof(gamma));
+        if (beta == null) throw new ArgumentNullException(nameof(beta));
+        if (runningMean == null) throw new ArgumentNullException(nameof(runningMean));
+        if (runningVar == null) throw new ArgumentNullException(nameof(runningVar));
+
+        // CPU implementation: sequential operations
+        // Note: Running mean/var and momentum are handled externally in training mode
+        // This CPU implementation just does the batch normalization
+        var result = BatchNorm(input, gamma, beta, epsilon, out saveMean, out saveVar);
+
+        // Step 2: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies the specified activation function to the tensor.
+    /// </summary>
+    private Tensor<T> ApplyFusedActivation<T>(Tensor<T> input, FusedActivationType activation)
+    {
+        return activation switch
+        {
+            FusedActivationType.None => input,
+            FusedActivationType.ReLU => ReLU(input),
+            FusedActivationType.GELU => GELU(input),
+            FusedActivationType.Sigmoid => Sigmoid(input),
+            FusedActivationType.Tanh => Tanh(input),
+            FusedActivationType.LeakyReLU => LeakyReLU(input, MathHelper.GetNumericOperations<T>().FromDouble(0.01)),
+            FusedActivationType.Swish => Swish(input),
+            FusedActivationType.Softmax => Softmax(input, -1),
+            _ => throw new ArgumentException($"Unknown activation type: {activation}")
+        };
+    }
+
+    /// <summary>
+    /// Computes the backward pass for the specified activation function.
+    /// </summary>
+    private Tensor<T> ApplyFusedActivationBackward<T>(Tensor<T> gradOutput, Tensor<T> preActivation, FusedActivationType activation)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        return activation switch
+        {
+            FusedActivationType.None => gradOutput,
+            FusedActivationType.ReLU => TensorMultiply(gradOutput, ReLUDerivative(preActivation)),
+            FusedActivationType.GELU => TensorMultiply(gradOutput, GELUDerivative(preActivation)),
+            FusedActivationType.Sigmoid => TensorMultiply(gradOutput, SigmoidDerivative(Sigmoid(preActivation))),
+            FusedActivationType.Tanh => TensorMultiply(gradOutput, TanhDerivative(Tanh(preActivation))),
+            FusedActivationType.LeakyReLU => TensorMultiply(gradOutput, LeakyReLUDerivative(preActivation, numOps.FromDouble(0.01))),
+            FusedActivationType.Swish => TensorMultiply(gradOutput, SwishDerivative(preActivation)),
+            FusedActivationType.Softmax => throw new NotSupportedException("Softmax backward requires special handling via cross-entropy"),
+            _ => throw new ArgumentException($"Unknown activation type: {activation}")
+        };
+    }
+
+    /// <summary>
+    /// Computes the derivative of Swish activation: f'(x) = f(x) + sigmoid(x) * (1 - f(x))
+    /// </summary>
+    private Tensor<T> SwishDerivative<T>(Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(input.Shape);
+        int totalElements = input.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            double x = numOps.ToDouble(input.GetFlat(i));
+            double sigmoid = 1.0 / (1.0 + Math.Exp(-x));
+            double swish = x * sigmoid;
+            double derivative = swish + sigmoid * (1.0 - swish);
+            result.SetFlat(i, numOps.FromDouble(derivative));
+        });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the derivative of Leaky ReLU activation.
+    /// </summary>
+    private Tensor<T> LeakyReLUDerivative<T>(Tensor<T> input, T alpha)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(input.Shape);
+        int totalElements = input.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            T val = input.GetFlat(i);
+            bool positive = numOps.ToDouble(val) > 0;
+            result.SetFlat(i, positive ? numOps.One : alpha);
+        });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the derivative of GELU activation.
+    /// </summary>
+    private Tensor<T> GELUDerivative<T>(Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(input.Shape);
+        int totalElements = input.Length;
+
+        const double sqrtTwoOverPi = 0.7978845608028654; // sqrt(2/pi)
+        const double coeff = 0.044715;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            double x = numOps.ToDouble(input.GetFlat(i));
+            double x3 = x * x * x;
+            double inner = sqrtTwoOverPi * (x + coeff * x3);
+            double tanh = Math.Tanh(inner);
+            double sech2 = 1.0 - tanh * tanh;
+            double innerDeriv = sqrtTwoOverPi * (1.0 + 3.0 * coeff * x * x);
+            double derivative = 0.5 * (1.0 + tanh) + 0.5 * x * sech2 * innerDeriv;
+            result.SetFlat(i, numOps.FromDouble(derivative));
+        });
+
+        return result;
+    }
+
+    #endregion
+
+    #region Persistent Tensor Management
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// On CPU, this is a no-op. Persistent tensor management only provides benefits
+    /// on GPU where data transfer between host and device is expensive.
+    /// </remarks>
+    public void RegisterPersistentTensor<T>(Tensor<T> tensor, PersistentTensorRole role)
+    {
+        // No-op on CPU: persistence only benefits GPU by avoiding repeated transfers
+        // The tensor is already in CPU memory, so there's nothing to cache
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// On CPU, this is a no-op. See <see cref="RegisterPersistentTensor{T}"/>.
+    /// </remarks>
+    public void UnregisterPersistentTensor<T>(Tensor<T> tensor)
+    {
+        // No-op on CPU
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// On CPU, this is a no-op. See <see cref="RegisterPersistentTensor{T}"/>.
+    /// </remarks>
+    public void InvalidatePersistentTensor<T>(Tensor<T> tensor)
+    {
+        // No-op on CPU
+    }
+
+    #endregion
+
+    #region FFT and Signal Processing
+
+    /// <inheritdoc/>
+    public Tensor<T> RFFT<T>(Tensor<T> input)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = input.Shape[^1]; // Last dimension is the signal length
+
+        // Pad to next power of 2 if needed
+        int nFft = NextPowerOf2(n);
+
+        // Output has (nFft/2 + 1) complex values, stored as interleaved real/imag
+        int numFreqs = nFft / 2 + 1;
+
+        // Compute shape for output (last dim becomes 2 * numFreqs for interleaved complex)
+        var outputShape = input.Shape.ToArray();
+        outputShape[^1] = numFreqs * 2; // Interleaved real/imag
+        var result = new Tensor<T>(outputShape);
+
+        // Handle batched input
+        int batchSize = input.Length / n;
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            // Extract signal for this batch
+            var signal = new Vector<T>(nFft);
+            int inputOffset = batchIdx * n;
+            for (int i = 0; i < n; i++)
+                signal[i] = input.GetFlat(inputOffset + i);
+            for (int i = n; i < nFft; i++)
+                signal[i] = numOps.Zero;
+
+            // Compute FFT using Cooley-Tukey algorithm
+            var (realOut, imagOut) = FFTCore<T>(signal, inverse: false);
+
+            // Copy only positive frequencies (0 to Nyquist)
+            int outputOffset = batchIdx * numFreqs * 2;
+            for (int k = 0; k < numFreqs; k++)
+            {
+                result.SetFlat(outputOffset + k * 2, realOut[k]);
+                result.SetFlat(outputOffset + k * 2 + 1, imagOut[k]);
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> IRFFT<T>(Tensor<T> input, int outputLength)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numFreqs = input.Shape[^1] / 2; // Interleaved real/imag
+        int nFft = (numFreqs - 1) * 2;
+
+        // Output shape
+        var outputShape = input.Shape.ToArray();
+        outputShape[^1] = outputLength;
+        var result = new Tensor<T>(outputShape);
+
+        // Handle batched input
+        int batchSize = input.Length / (numFreqs * 2);
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            // Reconstruct full spectrum using conjugate symmetry
+            var realIn = new Vector<T>(nFft);
+            var imagIn = new Vector<T>(nFft);
+            int inputOffset = batchIdx * numFreqs * 2;
+
+            // Copy positive frequencies
+            for (int k = 0; k < numFreqs; k++)
+            {
+                realIn[k] = input.GetFlat(inputOffset + k * 2);
+                imagIn[k] = input.GetFlat(inputOffset + k * 2 + 1);
+            }
+
+            // Conjugate symmetry for negative frequencies
+            for (int k = 1; k < numFreqs - 1; k++)
+            {
+                realIn[nFft - k] = realIn[k];
+                imagIn[nFft - k] = numOps.Negate(imagIn[k]);
+            }
+
+            // Compute inverse FFT
+            var (realOut, _) = FFTCore<T>(realIn, imagIn, inverse: true);
+
+            // Copy result with normalization
+            int outputOffset = batchIdx * outputLength;
+            T scale = numOps.FromDouble(1.0 / nFft);
+            for (int i = 0; i < outputLength; i++)
+            {
+                result.SetFlat(outputOffset + i, numOps.Multiply(realOut[i], scale));
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public void FFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (inputReal == null) throw new ArgumentNullException(nameof(inputReal));
+        if (inputImag == null) throw new ArgumentNullException(nameof(inputImag));
+        if (!inputReal.Shape.SequenceEqual(inputImag.Shape))
+            throw new ArgumentException("Input real and imaginary parts must have the same shape");
+
+        int n = inputReal.Shape[^1];
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var outReal = new Tensor<T>(inputReal.Shape);
+        var outImag = new Tensor<T>(inputImag.Shape);
+
+        int batchSize = inputReal.Length / n;
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            var realIn = new Vector<T>(n);
+            var imagIn = new Vector<T>(n);
+            int offset = batchIdx * n;
+
+            for (int i = 0; i < n; i++)
+            {
+                realIn[i] = inputReal.GetFlat(offset + i);
+                imagIn[i] = inputImag.GetFlat(offset + i);
+            }
+
+            var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: false);
+
+            for (int i = 0; i < n; i++)
+            {
+                outReal.SetFlat(offset + i, realOut[i]);
+                outImag.SetFlat(offset + i, imagOut[i]);
+            }
+        });
+
+        outputReal = outReal;
+        outputImag = outImag;
+    }
+
+    /// <inheritdoc/>
+    public void IFFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (inputReal == null) throw new ArgumentNullException(nameof(inputReal));
+        if (inputImag == null) throw new ArgumentNullException(nameof(inputImag));
+        if (!inputReal.Shape.SequenceEqual(inputImag.Shape))
+            throw new ArgumentException("Input real and imaginary parts must have the same shape");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = inputReal.Shape[^1];
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var outReal = new Tensor<T>(inputReal.Shape);
+        var outImag = new Tensor<T>(inputImag.Shape);
+
+        int batchSize = inputReal.Length / n;
+        T scale = numOps.FromDouble(1.0 / n);
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            var realIn = new Vector<T>(n);
+            var imagIn = new Vector<T>(n);
+            int offset = batchIdx * n;
+
+            for (int i = 0; i < n; i++)
+            {
+                realIn[i] = inputReal.GetFlat(offset + i);
+                imagIn[i] = inputImag.GetFlat(offset + i);
+            }
+
+            var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: true);
+
+            for (int i = 0; i < n; i++)
+            {
+                outReal.SetFlat(offset + i, numOps.Multiply(realOut[i], scale));
+                outImag.SetFlat(offset + i, numOps.Multiply(imagOut[i], scale));
+            }
+        });
+
+        outputReal = outReal;
+        outputImag = outImag;
+    }
+
+    /// <inheritdoc/>
+    public void FFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (inputReal == null) throw new ArgumentNullException(nameof(inputReal));
+        if (inputImag == null) throw new ArgumentNullException(nameof(inputImag));
+        if (inputReal.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D");
+
+        // FFT along last dimension (columns)
+        FFT(inputReal, inputImag, out var tempReal, out var tempImag);
+
+        // Transpose, FFT along rows, transpose back
+        int height = inputReal.Shape[^2];
+        int width = inputReal.Shape[^1];
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var outReal = new Tensor<T>(inputReal.Shape);
+        var outImag = new Tensor<T>(inputImag.Shape);
+
+        // FFT along rows (second-to-last dimension)
+        int batchSize = inputReal.Length / (height * width);
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            // Process each column
+            for (int col = 0; col < width; col++)
+            {
+                var realIn = new Vector<T>(height);
+                var imagIn = new Vector<T>(height);
+
+                for (int row = 0; row < height; row++)
+                {
+                    int idx = batchIdx * height * width + row * width + col;
+                    realIn[row] = tempReal.GetFlat(idx);
+                    imagIn[row] = tempImag.GetFlat(idx);
+                }
+
+                var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: false);
+
+                for (int row = 0; row < height; row++)
+                {
+                    int idx = batchIdx * height * width + row * width + col;
+                    outReal.SetFlat(idx, realOut[row]);
+                    outImag.SetFlat(idx, imagOut[row]);
+                }
+            }
+        });
+
+        outputReal = outReal;
+        outputImag = outImag;
+    }
+
+    /// <inheritdoc/>
+    public void IFFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag)
+    {
+        if (inputReal == null) throw new ArgumentNullException(nameof(inputReal));
+        if (inputImag == null) throw new ArgumentNullException(nameof(inputImag));
+        if (inputReal.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int height = inputReal.Shape[^2];
+        int width = inputReal.Shape[^1];
+
+        var tempReal = new Tensor<T>(inputReal.Shape);
+        var tempImag = new Tensor<T>(inputImag.Shape);
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var outReal = new Tensor<T>(inputReal.Shape);
+        var outImag = new Tensor<T>(inputImag.Shape);
+
+        int batchSize = inputReal.Length / (height * width);
+        T scale = numOps.FromDouble(1.0 / (height * width));
+
+        Parallel.For(0, batchSize, batchIdx =>
+        {
+            // IFFT along columns first
+            for (int col = 0; col < width; col++)
+            {
+                var realIn = new Vector<T>(height);
+                var imagIn = new Vector<T>(height);
+
+                for (int row = 0; row < height; row++)
+                {
+                    int idx = batchIdx * height * width + row * width + col;
+                    realIn[row] = inputReal.GetFlat(idx);
+                    imagIn[row] = inputImag.GetFlat(idx);
+                }
+
+                var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: true);
+
+                for (int row = 0; row < height; row++)
+                {
+                    int idx = batchIdx * height * width + row * width + col;
+                    tempReal.SetFlat(idx, realOut[row]);
+                    tempImag.SetFlat(idx, imagOut[row]);
+                }
+            }
+
+            // IFFT along rows
+            for (int row = 0; row < height; row++)
+            {
+                var realIn = new Vector<T>(width);
+                var imagIn = new Vector<T>(width);
+                int rowOffset = batchIdx * height * width + row * width;
+
+                for (int col = 0; col < width; col++)
+                {
+                    realIn[col] = tempReal.GetFlat(rowOffset + col);
+                    imagIn[col] = tempImag.GetFlat(rowOffset + col);
+                }
+
+                var (realOut, imagOut) = FFTCore<T>(realIn, imagIn, inverse: true);
+
+                for (int col = 0; col < width; col++)
+                {
+                    outReal.SetFlat(rowOffset + col, numOps.Multiply(realOut[col], scale));
+                    outImag.SetFlat(rowOffset + col, numOps.Multiply(imagOut[col], scale));
+                }
+            }
+        });
+
+        outputReal = outReal;
+        outputImag = outImag;
+    }
+
+    /// <inheritdoc/>
+    public void STFT<T>(
+        Tensor<T> input,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        out Tensor<T> magnitudeOut,
+        out Tensor<T> phaseOut)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (window == null) throw new ArgumentNullException(nameof(window));
+        if (window.Length != nFft)
+            throw new ArgumentException($"Window length {window.Length} must equal nFft {nFft}");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int signalLength = input.Shape[^1];
+
+        // Apply centering (reflection padding)
+        Tensor<T> paddedInput;
+        if (center)
+        {
+            int padAmount = nFft / 2;
+            var paddedShape = input.Shape.ToArray();
+            paddedShape[^1] = signalLength + 2 * padAmount;
+            paddedInput = new Tensor<T>(paddedShape);
+
+            int batchSize = input.Length / signalLength;
+            for (int b = 0; b < batchSize; b++)
+            {
+                int inputOffset = b * signalLength;
+                int outputOffset = b * paddedShape[^1];
+
+                // Reflect padding at start
+                for (int i = 0; i < padAmount; i++)
+                    paddedInput.SetFlat(outputOffset + i, input.GetFlat(inputOffset + padAmount - i));
+
+                // Copy original
+                for (int i = 0; i < signalLength; i++)
+                    paddedInput.SetFlat(outputOffset + padAmount + i, input.GetFlat(inputOffset + i));
+
+                // Reflect padding at end
+                for (int i = 0; i < padAmount; i++)
+                    paddedInput.SetFlat(outputOffset + padAmount + signalLength + i,
+                        input.GetFlat(inputOffset + signalLength - 2 - i));
+            }
+            signalLength = paddedShape[^1];
+        }
+        else
+        {
+            paddedInput = input;
+        }
+
+        // Calculate number of frames
+        int numFrames = (signalLength - nFft) / hopLength + 1;
+        int numFreqs = nFft / 2 + 1;
+
+        // Output shapes
+        var outputShape = input.Shape.ToArray();
+        outputShape[^1] = numFrames;
+        var newShape = new int[outputShape.Length + 1];
+        Array.Copy(outputShape, newShape, outputShape.Length - 1);
+        newShape[^2] = numFreqs;
+        newShape[^1] = numFrames;
+
+        // Create local variables to use in lambda (out params can't be captured)
+        var magOut = new Tensor<T>(newShape);
+        var phOut = new Tensor<T>(newShape);
+
+        int batchSizeStft = paddedInput.Length / signalLength;
+
+        Parallel.For(0, batchSizeStft, batchIdx =>
+        {
+            for (int frame = 0; frame < numFrames; frame++)
+            {
+                int start = frame * hopLength;
+
+                // Extract windowed frame
+                var frameData = new Vector<T>(nFft);
+                int inputOffset = batchIdx * signalLength;
+                for (int i = 0; i < nFft; i++)
+                {
+                    T sample = paddedInput.GetFlat(inputOffset + start + i);
+                    T win = window.GetFlat(i);
+                    frameData[i] = numOps.Multiply(sample, win);
+                }
+
+                // Compute FFT
+                var (realOut, imagOut) = FFTCore<T>(frameData, inverse: false);
+
+                // Compute magnitude and phase for positive frequencies
+                int outputOffset = batchIdx * numFreqs * numFrames;
+                for (int k = 0; k < numFreqs; k++)
+                {
+                    double re = numOps.ToDouble(realOut[k]);
+                    double im = numOps.ToDouble(imagOut[k]);
+                    double mag = Math.Sqrt(re * re + im * im);
+                    double ph = Math.Atan2(im, re);
+
+                    magOut.SetFlat(outputOffset + k * numFrames + frame, numOps.FromDouble(mag));
+                    phOut.SetFlat(outputOffset + k * numFrames + frame, numOps.FromDouble(ph));
+                }
+            }
+        });
+
+        magnitudeOut = magOut;
+        phaseOut = phOut;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ISTFT<T>(
+        Tensor<T> magnitude,
+        Tensor<T> phase,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        int? length = null)
+    {
+        if (magnitude == null) throw new ArgumentNullException(nameof(magnitude));
+        if (phase == null) throw new ArgumentNullException(nameof(phase));
+        if (window == null) throw new ArgumentNullException(nameof(window));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numFreqs = magnitude.Shape[^2];
+        int numFrames = magnitude.Shape[^1];
+
+        // Calculate output length
+        int outputLength = length ?? (numFrames - 1) * hopLength + nFft;
+        if (center)
+            outputLength -= nFft; // Remove padding
+
+        // Output shape
+        var outputShape = magnitude.Shape.Take(magnitude.Shape.Length - 2).ToArray();
+        outputShape = outputShape.Length > 0 ? outputShape.Append(outputLength).ToArray() : new[] { outputLength };
+        var result = new Tensor<T>(outputShape);
+        var windowSum = new Tensor<T>(outputShape);
+
+        int batchSize = magnitude.Length / (numFreqs * numFrames);
+
+        for (int batchIdx = 0; batchIdx < batchSize; batchIdx++)
+        {
+            int magOffset = batchIdx * numFreqs * numFrames;
+            int outputOffset = batchIdx * outputLength;
+
+            for (int frame = 0; frame < numFrames; frame++)
+            {
+                // Reconstruct complex spectrum from magnitude and phase
+                var realIn = new Vector<T>(nFft);
+                var imagIn = new Vector<T>(nFft);
+
+                // Positive frequencies
+                for (int k = 0; k < numFreqs; k++)
+                {
+                    double mag = numOps.ToDouble(magnitude.GetFlat(magOffset + k * numFrames + frame));
+                    double ph = numOps.ToDouble(phase.GetFlat(magOffset + k * numFrames + frame));
+                    realIn[k] = numOps.FromDouble(mag * Math.Cos(ph));
+                    imagIn[k] = numOps.FromDouble(mag * Math.Sin(ph));
+                }
+
+                // Reconstruct negative frequencies using conjugate symmetry
+                for (int k = 1; k < numFreqs - 1; k++)
+                {
+                    realIn[nFft - k] = realIn[k];
+                    imagIn[nFft - k] = numOps.Negate(imagIn[k]);
+                }
+
+                // Inverse FFT
+                var (realOut, _) = FFTCore<T>(realIn, imagIn, inverse: true);
+                T scale = numOps.FromDouble(1.0 / nFft);
+
+                // Overlap-add
+                int start = frame * hopLength;
+                int actualStart = center ? start : start;
+                int writeStart = center ? Math.Max(0, start - nFft / 2) : start;
+
+                for (int i = 0; i < nFft; i++)
+                {
+                    int outIdx = writeStart + i;
+                    if (outIdx >= 0 && outIdx < outputLength)
+                    {
+                        T sample = numOps.Multiply(numOps.Multiply(realOut[i], scale), window.GetFlat(i));
+                        T existing = result.GetFlat(outputOffset + outIdx);
+                        result.SetFlat(outputOffset + outIdx, numOps.Add(existing, sample));
+
+                        T winSquared = numOps.Multiply(window.GetFlat(i), window.GetFlat(i));
+                        T existingWin = windowSum.GetFlat(outputOffset + outIdx);
+                        windowSum.SetFlat(outputOffset + outIdx, numOps.Add(existingWin, winSquared));
+                    }
+                }
+            }
+
+            // Normalize by window sum
+            for (int i = 0; i < outputLength; i++)
+            {
+                T winSum = windowSum.GetFlat(outputOffset + i);
+                double winSumD = numOps.ToDouble(winSum);
+                if (winSumD > 1e-8)
+                {
+                    T val = result.GetFlat(outputOffset + i);
+                    result.SetFlat(outputOffset + i, numOps.Divide(val, winSum));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MelSpectrogram<T>(
+        Tensor<T> input,
+        int sampleRate,
+        int nFft,
+        int hopLength,
+        int nMels,
+        T fMin,
+        T fMax,
+        Tensor<T> window,
+        bool powerToDb = true)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (window == null) throw new ArgumentNullException(nameof(window));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Compute STFT
+        STFT(input, nFft, hopLength, window, center: true, out var magnitude, out _);
+
+        // Convert to power spectrum (magnitude squared)
+        var powerSpec = TensorMultiply(magnitude, magnitude);
+
+        // Create mel filterbank
+        var melFilterbank = CreateMelFilterbank<T>(nMels, nFft, sampleRate, fMin, fMax);
+
+        // Apply filterbank: [nMels, numFreqs] @ [numFreqs, numFrames] -> [nMels, numFrames]
+        int numFreqs = nFft / 2 + 1;
+        int numFrames = magnitude.Shape[^1];
+        int batchSize = magnitude.Length / (numFreqs * numFrames);
+
+        var melShape = magnitude.Shape.ToArray();
+        melShape[^2] = nMels;
+        var melSpec = new Tensor<T>(melShape);
+
+        for (int batchIdx = 0; batchIdx < batchSize; batchIdx++)
+        {
+            int inputOffset = batchIdx * numFreqs * numFrames;
+            int outputOffset = batchIdx * nMels * numFrames;
+
+            for (int m = 0; m < nMels; m++)
+            {
+                for (int t = 0; t < numFrames; t++)
+                {
+                    T sum = numOps.Zero;
+                    for (int f = 0; f < numFreqs; f++)
+                    {
+                        T filterVal = melFilterbank.GetFlat(m * numFreqs + f);
+                        T powerVal = powerSpec.GetFlat(inputOffset + f * numFrames + t);
+                        sum = numOps.Add(sum, numOps.Multiply(filterVal, powerVal));
+                    }
+                    melSpec.SetFlat(outputOffset + m * numFrames + t, sum);
+                }
+            }
+        }
+
+        // Convert to dB scale if requested
+        if (powerToDb)
+        {
+            T refValue = numOps.One;
+            T minDb = numOps.FromDouble(-80.0);
+            T epsilon = numOps.FromDouble(1e-10);
+
+            for (int i = 0; i < melSpec.Length; i++)
+            {
+                T val = melSpec.GetFlat(i);
+                double valD = numOps.ToDouble(val);
+                valD = Math.Max(valD, numOps.ToDouble(epsilon));
+                double db = 10.0 * Math.Log10(valD / numOps.ToDouble(refValue));
+                db = Math.Max(db, numOps.ToDouble(minDb));
+                melSpec.SetFlat(i, numOps.FromDouble(db));
+            }
+        }
+
+        return melSpec;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GriffinLim<T>(
+        Tensor<T> magnitude,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        int iterations = 60,
+        double momentum = 0.99,
+        int? length = null)
+    {
+        if (magnitude == null) throw new ArgumentNullException(nameof(magnitude));
+        if (window == null) throw new ArgumentNullException(nameof(window));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numFreqs = magnitude.Shape[^2];
+        int numFrames = magnitude.Shape[^1];
+
+        // Initialize with random phase
+        var random = RandomHelper.ThreadSafeRandom;
+        var phase = new Tensor<T>(magnitude.Shape);
+        for (int i = 0; i < phase.Length; i++)
+        {
+            double randomPhase = random.NextDouble() * 2.0 * Math.PI - Math.PI;
+            phase.SetFlat(i, numOps.FromDouble(randomPhase));
+        }
+
+        Tensor<T>? previousPhase = null;
+
+        for (int iter = 0; iter < iterations; iter++)
+        {
+            // Reconstruct signal from magnitude and estimated phase
+            var reconstructed = ISTFT(magnitude, phase, nFft, hopLength, window, center: true, length: length);
+
+            // Re-compute STFT to get new phase estimate
+            STFT(reconstructed, nFft, hopLength, window, center: true, out _, out var newPhase);
+
+            // Apply momentum for faster convergence
+            if (previousPhase != null && momentum > 0)
+            {
+                for (int i = 0; i < phase.Length; i++)
+                {
+                    double currPhase = numOps.ToDouble(newPhase.GetFlat(i));
+                    double prevPhase = numOps.ToDouble(previousPhase.GetFlat(i));
+                    double diff = currPhase - prevPhase;
+                    // Wrap to [-pi, pi]
+                    while (diff > Math.PI) diff -= 2 * Math.PI;
+                    while (diff < -Math.PI) diff += 2 * Math.PI;
+                    double accelerated = prevPhase + diff * (1 + momentum);
+                    phase.SetFlat(i, numOps.FromDouble(accelerated));
+                }
+            }
+            else
+            {
+                TensorCopy(newPhase, phase);
+            }
+
+            previousPhase = newPhase;
+        }
+
+        // Final reconstruction
+        return ISTFT(magnitude, phase, nFft, hopLength, window, center: true, length: length);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> CreateMelFilterbank<T>(int nMels, int nFft, int sampleRate, T fMin, T fMax)
+    {
+        if (nMels <= 0) throw new ArgumentException("nMels must be positive", nameof(nMels));
+        if (nFft <= 0) throw new ArgumentException("nFft must be positive", nameof(nFft));
+        if (sampleRate <= 0) throw new ArgumentException("sampleRate must be positive", nameof(sampleRate));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double fMinHz = numOps.ToDouble(fMin);
+        double fMaxHz = numOps.ToDouble(fMax);
+
+        int numFreqs = nFft / 2 + 1;
+        var filterbank = new Tensor<T>([nMels, numFreqs]);
+        filterbank.Fill(numOps.Zero);
+
+        // Convert Hz to Mel scale
+        double melMin = HzToMel(fMinHz);
+        double melMax = HzToMel(fMaxHz);
+
+        // Create mel points evenly spaced in mel scale
+        var melPoints = new double[nMels + 2];
+        for (int i = 0; i < nMels + 2; i++)
+        {
+            melPoints[i] = melMin + i * (melMax - melMin) / (nMels + 1);
+        }
+
+        // Convert back to Hz and then to FFT bin indices
+        var binIndices = new int[nMels + 2];
+        for (int i = 0; i < nMels + 2; i++)
+        {
+            double hz = MelToHz(melPoints[i]);
+            binIndices[i] = (int)Math.Floor((nFft + 1) * hz / sampleRate);
+            binIndices[i] = Math.Max(0, Math.Min(numFreqs - 1, binIndices[i]));
+        }
+
+        // Create triangular filters
+        for (int m = 0; m < nMels; m++)
+        {
+            int fStart = binIndices[m];
+            int fCenter = binIndices[m + 1];
+            int fEnd = binIndices[m + 2];
+
+            // Rising edge
+            for (int f = fStart; f < fCenter; f++)
+            {
+                if (fCenter != fStart)
+                {
+                    double weight = (double)(f - fStart) / (fCenter - fStart);
+                    filterbank[m, f] = numOps.FromDouble(weight);
+                }
+            }
+
+            // Falling edge
+            for (int f = fCenter; f < fEnd; f++)
+            {
+                if (fEnd != fCenter)
+                {
+                    double weight = (double)(fEnd - f) / (fEnd - fCenter);
+                    filterbank[m, f] = numOps.FromDouble(weight);
+                }
+            }
+        }
+
+        return filterbank;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> CreateWindow<T>(string windowType, int length)
+    {
+        if (length <= 0) throw new ArgumentException("Length must be positive", nameof(length));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var window = new Tensor<T>([length]);
+
+        switch (windowType.ToLowerInvariant())
+        {
+            case "hann":
+            case "hanning":
+                for (int i = 0; i < length; i++)
+                {
+                    double val = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (length - 1)));
+                    window[i] = numOps.FromDouble(val);
+                }
+                break;
+
+            case "hamming":
+                for (int i = 0; i < length; i++)
+                {
+                    double val = 0.54 - 0.46 * Math.Cos(2.0 * Math.PI * i / (length - 1));
+                    window[i] = numOps.FromDouble(val);
+                }
+                break;
+
+            case "blackman":
+                for (int i = 0; i < length; i++)
+                {
+                    double val = 0.42 - 0.5 * Math.Cos(2.0 * Math.PI * i / (length - 1))
+                                      + 0.08 * Math.Cos(4.0 * Math.PI * i / (length - 1));
+                    window[i] = numOps.FromDouble(val);
+                }
+                break;
+
+            case "bartlett":
+            case "triangular":
+                for (int i = 0; i < length; i++)
+                {
+                    double val = 1.0 - Math.Abs((2.0 * i - (length - 1)) / (length - 1));
+                    window[i] = numOps.FromDouble(val);
+                }
+                break;
+
+            case "rectangular":
+            case "boxcar":
+                for (int i = 0; i < length; i++)
+                {
+                    window[i] = numOps.One;
+                }
+                break;
+
+            default:
+                throw new ArgumentException($"Unknown window type: {windowType}. Supported: hann, hamming, blackman, bartlett, rectangular");
+        }
+
+        return window;
+    }
+
+    #region FFT Helper Methods
+
+    /// <summary>
+    /// Core FFT computation using Cooley-Tukey algorithm.
+    /// </summary>
+    private static (Vector<T> real, Vector<T> imag) FFTCore<T>(Vector<T> realInput, bool inverse)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = realInput.Length;
+        var imagInput = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            imagInput[i] = numOps.Zero;
+        return FFTCore(realInput, imagInput, inverse);
+    }
+
+    /// <summary>
+    /// Core FFT computation using Cooley-Tukey algorithm with complex input.
+    /// </summary>
+    private static (Vector<T> real, Vector<T> imag) FFTCore<T>(Vector<T> realInput, Vector<T> imagInput, bool inverse)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = realInput.Length;
+        if (n <= 1)
+            return (new Vector<T>(realInput.ToArray()), new Vector<T>(imagInput.ToArray()));
+
+        // Pad to power of 2 if needed
+        int nPadded = NextPowerOf2(n);
+        Vector<T> realWork, imagWork;
+        if (nPadded != n)
+        {
+            realWork = new Vector<T>(nPadded);
+            imagWork = new Vector<T>(nPadded);
+            for (int i = 0; i < n; i++)
+            {
+                realWork[i] = realInput[i];
+                imagWork[i] = imagInput[i];
+            }
+            for (int i = n; i < nPadded; i++)
+            {
+                realWork[i] = numOps.Zero;
+                imagWork[i] = numOps.Zero;
+            }
+            n = nPadded;
+        }
+        else
+        {
+            realWork = new Vector<T>(realInput.ToArray());
+            imagWork = new Vector<T>(imagInput.ToArray());
+        }
+
+        // Bit-reversal permutation
+        var real = new Vector<T>(n);
+        var imag = new Vector<T>(n);
+        int bits = (int)MathHelper.Log2(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            int j = BitReverse(i, bits);
+            real[j] = realWork[i];
+            imag[j] = imagWork[i];
+        }
+
+        // Cooley-Tukey iterative FFT
+        double angleSign = inverse ? 1.0 : -1.0;
+
+        for (int size = 2; size <= n; size *= 2)
+        {
+            int halfSize = size / 2;
+            double angleStep = angleSign * 2.0 * Math.PI / size;
+
+            for (int i = 0; i < n; i += size)
+            {
+                for (int k = 0; k < halfSize; k++)
+                {
+                    double angle = angleStep * k;
+                    double cos = Math.Cos(angle);
+                    double sin = Math.Sin(angle);
+
+                    int evenIdx = i + k;
+                    int oddIdx = i + k + halfSize;
+
+                    double tReal = numOps.ToDouble(real[oddIdx]) * cos - numOps.ToDouble(imag[oddIdx]) * sin;
+                    double tImag = numOps.ToDouble(real[oddIdx]) * sin + numOps.ToDouble(imag[oddIdx]) * cos;
+
+                    double evenReal = numOps.ToDouble(real[evenIdx]);
+                    double evenImag = numOps.ToDouble(imag[evenIdx]);
+
+                    real[evenIdx] = numOps.FromDouble(evenReal + tReal);
+                    imag[evenIdx] = numOps.FromDouble(evenImag + tImag);
+                    real[oddIdx] = numOps.FromDouble(evenReal - tReal);
+                    imag[oddIdx] = numOps.FromDouble(evenImag - tImag);
+                }
+            }
+        }
+
+        return (real, imag);
+    }
+
+    /// <summary>
+    /// Returns the smallest power of 2 >= n.
+    /// </summary>
+    private static int NextPowerOf2(int n)
+    {
+        if (n <= 0) return 1;
+        n--;
+        n |= n >> 1;
+        n |= n >> 2;
+        n |= n >> 4;
+        n |= n >> 8;
+        n |= n >> 16;
+        return n + 1;
+    }
+
+    /// <summary>
+    /// Reverses the bits of an integer for FFT bit-reversal permutation.
+    /// </summary>
+    private static int BitReverse(int x, int bits)
+    {
+        int result = 0;
+        for (int i = 0; i < bits; i++)
+        {
+            result = (result << 1) | (x & 1);
+            x >>= 1;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Converts frequency from Hz to Mel scale.
+    /// </summary>
+    private static double HzToMel(double hz)
+    {
+        return 2595.0 * Math.Log10(1.0 + hz / 700.0);
+    }
+
+    /// <summary>
+    /// Converts frequency from Mel scale to Hz.
+    /// </summary>
+    private static double MelToHz(double mel)
+    {
+        return 700.0 * (Math.Pow(10.0, mel / 2595.0) - 1.0);
+    }
+
+    #endregion
 
     #endregion
 }

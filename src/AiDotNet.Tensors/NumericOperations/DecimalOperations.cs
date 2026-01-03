@@ -890,4 +890,16 @@ public class DecimalOperations : INumericOperations<decimal>
 
     public void MultiplyAdd(ReadOnlySpan<decimal> x, ReadOnlySpan<decimal> y, decimal scalar, Span<decimal> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    public void ToFloatSpan(ReadOnlySpan<decimal> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<decimal> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<decimal> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<decimal> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 }

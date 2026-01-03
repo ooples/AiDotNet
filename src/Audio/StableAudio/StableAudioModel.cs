@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -507,10 +508,7 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             if (NumOps.ToDouble(mask.GetFlat(i)) > 0.5)
             {
-                double u1 = 1.0 - random.NextDouble();
-                double u2 = random.NextDouble();
-                double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                noisyLatents.SetFlat(i, NumOps.FromDouble(gaussian));
+                noisyLatents.SetFlat(i, NumOps.FromDouble(random.NextGaussian()));
             }
         }
 
@@ -749,10 +747,7 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         for (int i = 0; i < latents.Length; i++)
         {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = random.NextDouble();
-            double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            latents.SetFlat(i, NumOps.FromDouble(gaussian));
+            latents.SetFlat(i, NumOps.FromDouble(random.NextGaussian()));
         }
 
         return latents;

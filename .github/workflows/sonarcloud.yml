@@ -239,10 +239,23 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
-          - name: AiDotNet.Tests - Unit - 10a3 NN-VLM-Other
+          # VLM tests split individually due to 45+ min timeout when combined
+          - name: AiDotNet.Tests - Unit - 10a3a1 NN-Blip
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests|FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~BlipNeuralNetworkTests'
+          - name: AiDotNet.Tests - Unit - 10a3a2 NN-Blip2
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~Blip2NeuralNetworkTests'
+          - name: AiDotNet.Tests - Unit - 10a3a3 NN-Clip
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~ClipNeuralNetworkTests'
+          - name: AiDotNet.Tests - Unit - 10a3b NN-Adapters
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           - name: AiDotNet.Tests - Unit - 10b Optimizers
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
@@ -323,13 +336,14 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          Write-Host "=== SLOW TEST REPORT (tests > 10 seconds) ===" -ForegroundColor Cyan
+          Write-Host "=== COMPREHENSIVE TEST TIMING DIAGNOSTICS ===" -ForegroundColor Cyan
           $trxFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "*.trx" -ErrorAction SilentlyContinue
           if ($trxFiles.Count -eq 0) {
             Write-Host "No TRX files found"
             exit 0
           }
-          $slowTests = @()
+          $allTests = @()
+          $totalExecutionTime = 0
           foreach ($trx in $trxFiles) {
             [xml]$xml = Get-Content $trx.FullName
             $ns = @{t = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
@@ -338,28 +352,61 @@ jobs:
               $duration = $result.Node.duration
               if ($duration) {
                 $ts = [TimeSpan]::Parse($duration)
-                if ($ts.TotalSeconds -gt 10) {
-                  $slowTests += [PSCustomObject]@{
-                    Name = $result.Node.testName
-                    Duration = $ts.TotalSeconds
-                    Outcome = $result.Node.outcome
-                  }
+                $allTests += [PSCustomObject]@{
+                  Name = $result.Node.testName
+                  Duration = $ts.TotalSeconds
+                  Outcome = $result.Node.outcome
+                  ClassName = ($result.Node.testName -split '\.')[-2]
                 }
+                $totalExecutionTime += $ts.TotalSeconds
               }
             }
           }
-          if ($slowTests.Count -gt 0) {
-            Write-Host ""
-            Write-Host "Found $($slowTests.Count) slow tests:" -ForegroundColor Yellow
-            $slowTests | Sort-Object Duration -Descending | ForEach-Object {
-              $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Yellow" } else { "White" }
-              Write-Host ("  [{0,7:N1}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+          Write-Host ""
+          Write-Host "=== TEST EXECUTION SUMMARY ===" -ForegroundColor Cyan
+          Write-Host ("Total tests: {0}" -f $allTests.Count)
+          Write-Host ("Total execution time: {0:N1} seconds ({1:N1} minutes)" -f $totalExecutionTime, ($totalExecutionTime / 60))
+          if ($allTests.Count -gt 0) {
+            $avgTime = $totalExecutionTime / $allTests.Count
+            Write-Host ("Average test time: {0:N2} seconds" -f $avgTime)
+          }
+          Write-Host ""
+          Write-Host "=== TOP 20 SLOWEST TESTS ===" -ForegroundColor Yellow
+          $allTests | Sort-Object Duration -Descending | Select-Object -First 20 | ForEach-Object {
+            $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Magenta" } elseif ($_.Duration -gt 10) { "Yellow" } else { "White" }
+            Write-Host ("  [{0,8:N2}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+          }
+          Write-Host ""
+          Write-Host "=== TIME BY TEST CLASS (Top 15) ===" -ForegroundColor Cyan
+          $byClass = $allTests | Group-Object ClassName | ForEach-Object {
+            [PSCustomObject]@{
+              ClassName = $_.Name
+              TestCount = $_.Count
+              TotalTime = ($_.Group | Measure-Object Duration -Sum).Sum
+              AvgTime = ($_.Group | Measure-Object Duration -Average).Average
+              MaxTime = ($_.Group | Measure-Object Duration -Maximum).Maximum
             }
+          } | Sort-Object TotalTime -Descending | Select-Object -First 15
+          foreach ($class in $byClass) {
+            $color = if ($class.TotalTime -gt 300) { "Red" } elseif ($class.TotalTime -gt 120) { "Yellow" } else { "White" }
+            Write-Host ("  [{0,7:N1}s total, {1,6:N2}s avg, {2,6:N1}s max] {3} ({4} tests)" -f $class.TotalTime, $class.AvgTime, $class.MaxTime, $class.ClassName, $class.TestCount) -ForegroundColor $color
+          }
+          $criticalTests = $allTests | Where-Object { $_.Duration -gt 60 }
+          if ($criticalTests.Count -gt 0) {
             Write-Host ""
-            $total = ($slowTests | Measure-Object -Property Duration -Sum).Sum
-            Write-Host ("Total time in slow tests: {0:N1} seconds ({1:N1} minutes)" -f $total, ($total / 60)) -ForegroundColor Cyan
-          } else {
-            Write-Host "No tests took longer than 10 seconds - excellent!" -ForegroundColor Green
+            Write-Host "=== CRITICAL: TESTS > 60 SECONDS (likely code bottlenecks) ===" -ForegroundColor Red
+            $criticalTests | Sort-Object Duration -Descending | ForEach-Object {
+              Write-Host ("  [BOTTLENECK] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Red
+            }
+            Write-Host "These tests indicate potential performance issues in the code under test." -ForegroundColor Red
+          }
+          $warningTests = $allTests | Where-Object { $_.Duration -gt 30 -and $_.Duration -le 60 }
+          if ($warningTests.Count -gt 0) {
+            Write-Host ""
+            Write-Host "=== WARNING: TESTS 30-60 SECONDS (potential bottlenecks) ===" -ForegroundColor Yellow
+            $warningTests | Sort-Object Duration -Descending | ForEach-Object {
+              Write-Host ("  [WARNING] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Yellow
+            }
           }
 
       - name: Set artifact name
@@ -521,8 +568,15 @@ jobs:
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
           - name: Unit 10a2 NN-Efficient
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
-          - name: Unit 10a3 NN-VLM-Other
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests|FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
+          # VLM tests split individually due to 45+ min timeout when combined
+          - name: Unit 10a3a1 NN-Blip
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~BlipNeuralNetworkTests'
+          - name: Unit 10a3a2 NN-Blip2
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~Blip2NeuralNetworkTests'
+          - name: Unit 10a3a3 NN-Clip
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~ClipNeuralNetworkTests'
+          - name: Unit 10a3b NN-Adapters
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           - name: Unit 10b-12 Opt-RAG-Reg
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers|FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG|FullyQualifiedName~AiDotNet.Tests.UnitTests.Regularization|FullyQualifiedName~AiDotNet.Tests.UnitTests.ReinforcementLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration|FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning)'
           - name: Unit 13+ PS-Reason-Other
@@ -570,13 +624,14 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          Write-Host "=== SLOW TEST REPORT (tests > 10 seconds) ===" -ForegroundColor Cyan
+          Write-Host "=== COMPREHENSIVE TEST TIMING DIAGNOSTICS ===" -ForegroundColor Cyan
           $trxFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "*.trx" -ErrorAction SilentlyContinue
           if ($trxFiles.Count -eq 0) {
             Write-Host "No TRX files found"
             exit 0
           }
-          $slowTests = @()
+          $allTests = @()
+          $totalExecutionTime = 0
           foreach ($trx in $trxFiles) {
             [xml]$xml = Get-Content $trx.FullName
             $ns = @{t = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
@@ -585,28 +640,61 @@ jobs:
               $duration = $result.Node.duration
               if ($duration) {
                 $ts = [TimeSpan]::Parse($duration)
-                if ($ts.TotalSeconds -gt 10) {
-                  $slowTests += [PSCustomObject]@{
-                    Name = $result.Node.testName
-                    Duration = $ts.TotalSeconds
-                    Outcome = $result.Node.outcome
-                  }
+                $allTests += [PSCustomObject]@{
+                  Name = $result.Node.testName
+                  Duration = $ts.TotalSeconds
+                  Outcome = $result.Node.outcome
+                  ClassName = ($result.Node.testName -split '\.')[-2]
                 }
+                $totalExecutionTime += $ts.TotalSeconds
               }
             }
           }
-          if ($slowTests.Count -gt 0) {
-            Write-Host ""
-            Write-Host "Found $($slowTests.Count) slow tests:" -ForegroundColor Yellow
-            $slowTests | Sort-Object Duration -Descending | ForEach-Object {
-              $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Yellow" } else { "White" }
-              Write-Host ("  [{0,7:N1}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+          Write-Host ""
+          Write-Host "=== TEST EXECUTION SUMMARY ===" -ForegroundColor Cyan
+          Write-Host ("Total tests: {0}" -f $allTests.Count)
+          Write-Host ("Total execution time: {0:N1} seconds ({1:N1} minutes)" -f $totalExecutionTime, ($totalExecutionTime / 60))
+          if ($allTests.Count -gt 0) {
+            $avgTime = $totalExecutionTime / $allTests.Count
+            Write-Host ("Average test time: {0:N2} seconds" -f $avgTime)
+          }
+          Write-Host ""
+          Write-Host "=== TOP 20 SLOWEST TESTS ===" -ForegroundColor Yellow
+          $allTests | Sort-Object Duration -Descending | Select-Object -First 20 | ForEach-Object {
+            $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Magenta" } elseif ($_.Duration -gt 10) { "Yellow" } else { "White" }
+            Write-Host ("  [{0,8:N2}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+          }
+          Write-Host ""
+          Write-Host "=== TIME BY TEST CLASS (Top 15) ===" -ForegroundColor Cyan
+          $byClass = $allTests | Group-Object ClassName | ForEach-Object {
+            [PSCustomObject]@{
+              ClassName = $_.Name
+              TestCount = $_.Count
+              TotalTime = ($_.Group | Measure-Object Duration -Sum).Sum
+              AvgTime = ($_.Group | Measure-Object Duration -Average).Average
+              MaxTime = ($_.Group | Measure-Object Duration -Maximum).Maximum
             }
+          } | Sort-Object TotalTime -Descending | Select-Object -First 15
+          foreach ($class in $byClass) {
+            $color = if ($class.TotalTime -gt 300) { "Red" } elseif ($class.TotalTime -gt 120) { "Yellow" } else { "White" }
+            Write-Host ("  [{0,7:N1}s total, {1,6:N2}s avg, {2,6:N1}s max] {3} ({4} tests)" -f $class.TotalTime, $class.AvgTime, $class.MaxTime, $class.ClassName, $class.TestCount) -ForegroundColor $color
+          }
+          $criticalTests = $allTests | Where-Object { $_.Duration -gt 60 }
+          if ($criticalTests.Count -gt 0) {
             Write-Host ""
-            $total = ($slowTests | Measure-Object -Property Duration -Sum).Sum
-            Write-Host ("Total time in slow tests: {0:N1} seconds ({1:N1} minutes)" -f $total, ($total / 60)) -ForegroundColor Cyan
-          } else {
-            Write-Host "No tests took longer than 10 seconds - excellent!" -ForegroundColor Green
+            Write-Host "=== CRITICAL: TESTS > 60 SECONDS (likely code bottlenecks) ===" -ForegroundColor Red
+            $criticalTests | Sort-Object Duration -Descending | ForEach-Object {
+              Write-Host ("  [BOTTLENECK] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Red
+            }
+            Write-Host "These tests indicate potential performance issues in the code under test." -ForegroundColor Red
+          }
+          $warningTests = $allTests | Where-Object { $_.Duration -gt 30 -and $_.Duration -le 60 }
+          if ($warningTests.Count -gt 0) {
+            Write-Host ""
+            Write-Host "=== WARNING: TESTS 30-60 SECONDS (potential bottlenecks) ===" -ForegroundColor Yellow
+            $warningTests | Sort-Object Duration -Descending | ForEach-Object {
+              Write-Host ("  [WARNING] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Yellow
+            }
           }
 
       - name: Set artifact name

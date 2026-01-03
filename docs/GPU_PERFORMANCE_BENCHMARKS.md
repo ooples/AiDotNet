@@ -100,14 +100,8 @@ dotnet run -c Release --filter "*GEMM_Large_GPU*"
 
 Direct benchmarking against PyTorch/TensorFlow requires Python interop. However, we can estimate comparative performance:
 
-#### ILGPU vs cuBLAS/cuDNN
-
-| Operation | AiDotNet (ILGPU) | PyTorch (cuBLAS/cuDNN) | Relative Performance |
-|-----------|------------------|------------------------|----------------------|
-| GEMM | ILGPU kernels | cuBLAS | **0.5-0.8x** (ILGPU slightly slower) |
-| Conv2D | Custom kernels | cuDNN | **0.3-0.6x** (cuDNN more optimized) |
-| Pooling | Custom kernels | cuDNN | **0.5-0.9x** (Similar performance) |
-
+#### DirectGpu vs cuBLAS/cuDNN
+Run the DirectGpu benchmarks to compare against vendor libraries on your hardware.
 #### Key Differences
 
 **AiDotNet Advantages**:
@@ -222,7 +216,7 @@ If GPU benchmarks return `null`:
 1. Verify CUDA/OpenCL installation
 2. Check GPU drivers are up to date
 3. Verify `GpuEngine` initialization succeeds
-4. Check ILGPU compatibility with your GPU
+4. Check DirectGpu backend availability (CUDA/OpenCL) for your GPU
 
 ### Unexpected Performance
 
@@ -234,8 +228,9 @@ If results differ from expected:
 
 ## References
 
-- BenchmarkDotNet Documentation: https://benchmarkdotnet.org/
-- ILGPU Documentation: http://www.ilgpu.net/
+- [BenchmarkDotNet Documentation](https://benchmarkdotnet.org/)
+- [OpenCL Documentation](https://www.khronos.org/opencl/)
+- [CUDA Documentation](https://developer.nvidia.com/cuda-toolkit)
 - Phase B Implementation: See Epic 1-4 user stories in issue #496
 
 ---
@@ -243,3 +238,4 @@ If results differ from expected:
 **Last Updated**: 2025-01-17
 **Phase**: B - GPU Production Implementation
 **Status**: US-GPU-017 Complete
+

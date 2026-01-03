@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Native.CLBlast\AiDotNet.Native.CLBlast.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -1043,10 +1044,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
             for (int i = 0; i < size; i++)
             {
-                double u1 = rand.NextDouble();
-                double u2 = rand.NextDouble();
-                double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                weights[i] = _numOps.FromDouble(normal * scale);
+                weights[i] = _numOps.FromDouble(rand.NextGaussian() * scale);
             }
         }
         else
@@ -1199,24 +1197,15 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
             for (int i = 0; i < _conv1Weight.Length; i++)
             {
-                double u1 = rand.NextDouble();
-                double u2 = rand.NextDouble();
-                double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                _conv1Weight[i] = _ops.FromDouble(normal * scale);
+                _conv1Weight[i] = _ops.FromDouble(rand.NextGaussian() * scale);
             }
             for (int i = 0; i < _conv2Weight.Length; i++)
             {
-                double u1 = rand.NextDouble();
-                double u2 = rand.NextDouble();
-                double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                _conv2Weight[i] = _ops.FromDouble(normal * scale);
+                _conv2Weight[i] = _ops.FromDouble(rand.NextGaussian() * scale);
             }
             for (int i = 0; i < _depthwiseWeight.Length; i++)
             {
-                double u1 = rand.NextDouble();
-                double u2 = rand.NextDouble();
-                double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                _depthwiseWeight[i] = _ops.FromDouble(normal * scale);
+                _depthwiseWeight[i] = _ops.FromDouble(rand.NextGaussian() * scale);
             }
             for (int i = 0; i < hiddenDim; i++)
             {

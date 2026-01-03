@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Augmentation;
@@ -173,10 +174,7 @@ public class AugmentationContext<T>
     /// <returns>A sample from N(0, 1).</returns>
     private double SampleStandardNormal()
     {
-        // Box-Muller transform
-        double u1 = 1.0 - _random.NextDouble();
-        double u2 = 1.0 - _random.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+        return _random.NextGaussian();
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
@@ -571,22 +572,4 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
 
     /// <inheritdoc/>
     public override bool SupportsJitCompilation => false;
-}
-
-/// <summary>
-/// Extension methods for generating Gaussian random numbers.
-/// </summary>
-internal static class RandomExtensions
-{
-    /// <summary>
-    /// Generates a random number from a Gaussian distribution using Box-Muller transform.
-    /// </summary>
-    public static double NextGaussian(this Random random, double mean = 0.0, double stdDev = 1.0)
-    {
-        // Box-Muller transform
-        double u1 = 1.0 - random.NextDouble();
-        double u2 = 1.0 - random.NextDouble();
-        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-        return mean + stdDev * randStdNormal;
-    }
 }

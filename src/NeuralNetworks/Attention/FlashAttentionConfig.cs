@@ -102,7 +102,7 @@ public class FlashAttentionConfig
     /// </summary>
     /// <remarks>
     /// <para>
-    /// When true and GPU is available, uses optimized ILGPU kernels for Flash Attention.
+    /// When true and GPU is available, uses optimized DirectGpu kernels for Flash Attention.
     /// Falls back to CPU implementation if GPU is not available.
     /// </para>
     /// </remarks>

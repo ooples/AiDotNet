@@ -415,6 +415,15 @@ public class ShardingConfig
     public bool UsePipelineParallelism { get; set; } = false;
 
     /// <summary>
+    /// Number of micro-batches for pipeline parallelism.
+    /// </summary>
+    /// <remarks>
+    /// Higher values improve GPU utilization but increase memory usage.
+    /// Typical values: 4-8 for most models.
+    /// </remarks>
+    public int MicroBatchCount { get; set; } = 4;
+
+    /// <summary>
     /// Custom device assignments when using ShardingStrategy.Custom.
     /// Index is layer index, value is device index.
     /// </summary>

@@ -1,4 +1,6 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -25,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class LayerBase<T> : ILayer<T>
+public abstract class LayerBase<T> : ILayer<T>, IDisposable
 {
     /// <summary>
     /// Gets the global execution engine for vector operations.
@@ -260,17 +262,28 @@ public abstract class LayerBase<T> : ILayer<T>
     /// Some layers behave differently during training versus inference, such as Dropout or BatchNormalization.
     /// </para>
     /// <para><b>For Beginners:</b> This tells the layer whether it's currently training or being used for predictions.
-    /// 
+    ///
     /// This mode flag:
     /// - Affects how certain layers behave
     /// - Can turn on/off special training features
     /// - Helps the network switch between learning and using what it learned
-    /// 
+    ///
     /// For example, dropout layers randomly turn off neurons during training to improve
     /// generalization, but during inference they don't drop anything.
     /// </para>
     /// </remarks>
     protected bool IsTrainingMode = true;
+
+    /// <summary>
+    /// Tracks whether Dispose has been called.
+    /// </summary>
+    private bool _disposed;
+
+    /// <summary>
+    /// Collection of tensors that have been registered as persistent with the engine.
+    /// These will be unregistered when the layer is disposed.
+    /// </summary>
+    private readonly List<object> _registeredTensors = new();
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -1818,4 +1831,511 @@ public abstract class LayerBase<T> : ILayer<T>
 
         return metadata;
     }
+
+    #region GPU Persistent Tensor Registration
+
+    /// <summary>
+    /// Registers a trainable parameter tensor with the engine for GPU memory optimization.
+    /// </summary>
+    /// <param name="tensor">The tensor to register (typically weights or biases).</param>
+    /// <param name="role">The role of the tensor for optimization hints.</param>
+    /// <remarks>
+    /// <para>
+    /// This method hints to the engine that the tensor will be reused across many operations
+    /// and should be kept resident in GPU memory when a GPU engine is active. This avoids
+    /// expensive CPU-GPU data transfers on every forward pass.
+    /// </para>
+    /// <para><b>Performance Impact:</b></para>
+    /// <para>
+    /// Without registration: Layer weights (e.g., 285MB for a large Dense layer) are
+    /// transferred to GPU on every forward pass.
+    /// </para>
+    /// <para>
+    /// With registration: Weights are transferred once and cached on GPU. Only activations
+    /// (much smaller) are transferred per pass. Expected speedup: 100-1000x for large layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells the GPU to keep certain data (like learned weights)
+    /// in its fast memory instead of copying it back and forth every time. Think of it like keeping
+    /// frequently used books on your desk instead of walking to the library each time.
+    /// </para>
+    /// <para><b>Usage Pattern:</b></para>
+    /// <para>
+    /// Call this method in the layer's constructor after initializing weight tensors:
+    /// <code>
+    /// public DenseLayer(int inputSize, int outputSize)
+    /// {
+    ///     _weights = new Tensor&lt;T&gt;(outputSize, inputSize);
+    ///     _biases = new Tensor&lt;T&gt;(outputSize);
+    ///     InitializeWeights();
+    ///
+    ///     // Register for GPU persistence
+    ///     RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+    ///     RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected void RegisterTrainableParameter(Tensor<T> tensor, PersistentTensorRole role)
+    {
+        if (tensor is null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        Engine.RegisterPersistentTensor(tensor, role);
+        _registeredTensors.Add(tensor);
+    }
+
+    /// <summary>
+    /// Notifies the engine that a registered persistent tensor's data has changed.
+    /// </summary>
+    /// <param name="tensor">The tensor whose data has been modified.</param>
+    /// <remarks>
+    /// <para>
+    /// Call this method after modifying a registered tensor's data (e.g., during parameter updates).
+    /// The engine will re-upload the data to GPU on the next operation that uses the tensor.
+    /// </para>
+    /// <para><b>For Beginners:</b> When you change the values in a registered tensor (like updating
+    /// weights during training), you need to tell the GPU that the copy it has is outdated.
+    /// This method does that - it tells the GPU "hey, this data changed, please get a fresh copy."
+    /// </para>
+    /// <para><b>Usage Pattern:</b></para>
+    /// <para>
+    /// Call after UpdateParameters modifies weights:
+    /// <code>
+    /// public override void UpdateParameters(T learningRate)
+    /// {
+    ///     // Update weights using gradients
+    ///     _weights = _weights.Subtract(_weightGradients.Multiply(learningRate));
+    ///
+    ///     // Notify engine that GPU copy is stale
+    ///     InvalidateTrainableParameter(_weights);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected void InvalidateTrainableParameter(Tensor<T> tensor)
+    {
+        if (tensor is null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        Engine.InvalidatePersistentTensor(tensor);
+    }
+
+    /// <summary>
+    /// Gets the fused activation type for IEngine fused operations.
+    /// </summary>
+    /// <returns>The FusedActivationType enum value for the current activation function.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method maps the layer's activation function to a FusedActivationType enum value,
+    /// allowing IEngine to use optimized fused GPU kernels (e.g., GEMM+Bias+ReLU in one kernel).
+    /// </para>
+    /// <para><b>For Beginners:</b> GPU operations are faster when combined.
+    /// Instead of doing MatMul, then adding bias, then applying ReLU as separate steps,
+    /// fused operations do all three in one GPU kernel - this is 20-50% faster.
+    /// This method tells the GPU which activation to fuse with other operations.
+    /// </para>
+    /// <para><b>Supported Activations:</b></para>
+    /// <list type="bullet">
+    /// <item><description>ReLU → FusedActivationType.ReLU</description></item>
+    /// <item><description>Sigmoid → FusedActivationType.Sigmoid</description></item>
+    /// <item><description>Tanh → FusedActivationType.Tanh</description></item>
+    /// <item><description>GELU → FusedActivationType.GELU</description></item>
+    /// <item><description>LeakyReLU → FusedActivationType.LeakyReLU</description></item>
+    /// <item><description>Swish/SiLU → FusedActivationType.Swish</description></item>
+    /// <item><description>Other/None → FusedActivationType.None (activation applied separately)</description></item>
+    /// </list>
+    /// </remarks>
+    protected FusedActivationType GetFusedActivationType()
+    {
+        return ScalarActivation switch
+        {
+            ReLUActivation<T> => FusedActivationType.ReLU,
+            SigmoidActivation<T> => FusedActivationType.Sigmoid,
+            TanhActivation<T> => FusedActivationType.Tanh,
+            GELUActivation<T> => FusedActivationType.GELU,
+            LeakyReLUActivation<T> => FusedActivationType.LeakyReLU,
+            SwishActivation<T> => FusedActivationType.Swish,
+            SiLUActivation<T> => FusedActivationType.Swish, // SiLU is the same as Swish
+            _ => FusedActivationType.None
+        };
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Releases all resources used by this layer, including any GPU resources.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method releases any resources allocated by the layer, including GPU memory for
+    /// persistent tensors. All layers that allocate resources should override Dispose(bool)
+    /// to properly release them.
+    /// </para>
+    /// <para><b>For Beginners:</b> GPU memory is limited and precious.
+    ///
+    /// When you're done with a layer:
+    /// - Call Dispose() or use a 'using' statement
+    /// - This frees up GPU memory for other operations
+    /// - Failing to dispose can cause memory leaks
+    ///
+    /// Example:
+    /// <code>
+    /// using var layer = new DenseLayer&lt;float&gt;(784, 128);
+    /// // ... use layer ...
+    /// // Automatically disposed when out of scope
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases resources used by this layer.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    /// <remarks>
+    /// <para>
+    /// Override this method in derived classes to release layer-specific resources.
+    /// Always call base.Dispose(disposing) after releasing your resources.
+    /// </para>
+    /// <para><b>For Beginners:</b> When creating a custom layer with resources:
+    ///
+    /// <code>
+    /// protected override void Dispose(bool disposing)
+    /// {
+    ///     if (disposing)
+    ///     {
+    ///         // Release your managed resources here
+    ///         _myGpuHandle?.Dispose();
+    ///         _myGpuHandle = null;
+    ///     }
+    ///     base.Dispose(disposing);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Unregister all persistent tensors from the engine
+            // This releases GPU memory that was cached for these tensors
+            foreach (var tensorObj in _registeredTensors)
+            {
+                // Use reflection to call the generic UnregisterPersistentTensor method
+                // since we stored tensors as object to support multiple generic types
+                if (tensorObj is Tensor<T> tensor)
+                {
+                    Engine.UnregisterPersistentTensor(tensor);
+                }
+            }
+            _registeredTensors.Clear();
+        }
+
+        _disposed = true;
+    }
+
+    // Note: No finalizer in base class - derived classes should implement their own
+    // finalizer only if they have unmanaged resources that need cleanup.
+    // Calling virtual methods from finalizers is unsafe because the derived class
+    // may have already been finalized.
+
+    #region IWeightLoadable Implementation
+
+    /// <summary>
+    /// Standard parameter name for weight tensors.
+    /// </summary>
+    protected const string WeightParameterName = "weight";
+
+    /// <summary>
+    /// Standard parameter name for bias tensors.
+    /// </summary>
+    protected const string BiasParameterName = "bias";
+
+    /// <summary>
+    /// Sets the weight tensor for this layer.
+    /// </summary>
+    /// <param name="weights">The weight tensor to set.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the layer does not support weights.</exception>
+    /// <remarks>
+    /// <para>
+    /// Derived classes with trainable weights should override this method to update their internal weight storage.
+    /// The default implementation throws an exception since LayerBase doesn't know the layer's weight structure.
+    /// </para>
+    /// </remarks>
+    protected virtual void SetWeights(Tensor<T> weights)
+    {
+        throw new InvalidOperationException(
+            $"Layer type {GetType().Name} does not support setting weights. " +
+            $"Override SetWeights(Tensor<T>) in derived class to enable weight loading.");
+    }
+
+    /// <summary>
+    /// Sets the bias tensor for this layer.
+    /// </summary>
+    /// <param name="biases">The bias tensor to set.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the layer does not support biases.</exception>
+    /// <remarks>
+    /// <para>
+    /// Derived classes with trainable biases should override this method to update their internal bias storage.
+    /// The default implementation throws an exception since LayerBase doesn't know the layer's bias structure.
+    /// </para>
+    /// </remarks>
+    protected virtual void SetBiases(Tensor<T> biases)
+    {
+        throw new InvalidOperationException(
+            $"Layer type {GetType().Name} does not support setting biases. " +
+            $"Override SetBiases(Tensor<T>) in derived class to enable bias loading.");
+    }
+
+    /// <summary>
+    /// Gets all parameter names in this layer.
+    /// </summary>
+    /// <returns>A collection of parameter names ("weight", "bias", or both depending on layer type).</returns>
+    /// <remarks>
+    /// <para>
+    /// The default implementation returns "weight" and/or "bias" based on whether
+    /// GetWeights() and GetBiases() return non-null values.
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<string> GetParameterNames()
+    {
+        var names = new List<string>();
+
+        if (GetWeights() is not null)
+        {
+            names.Add(WeightParameterName);
+        }
+
+        if (GetBiases() is not null)
+        {
+            names.Add(BiasParameterName);
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// Tries to get a parameter tensor by name.
+    /// </summary>
+    /// <param name="name">The parameter name ("weight" or "bias").</param>
+    /// <param name="tensor">The parameter tensor if found.</param>
+    /// <returns>True if the parameter was found, false otherwise.</returns>
+    public virtual bool TryGetParameter(string name, out Tensor<T>? tensor)
+    {
+        if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            tensor = GetWeights();
+            return tensor is not null;
+        }
+
+        if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            tensor = GetBiases();
+            return tensor is not null;
+        }
+
+        tensor = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Sets a parameter tensor by name.
+    /// </summary>
+    /// <param name="name">The parameter name ("weight" or "bias").</param>
+    /// <param name="value">The tensor value to set.</param>
+    /// <returns>True if the parameter was set successfully, false if the name was not found.</returns>
+    /// <exception cref="ArgumentException">Thrown when the tensor shape doesn't match expected shape.</exception>
+    public virtual bool SetParameter(string name, Tensor<T> value)
+    {
+        var expectedShape = GetParameterShape(name);
+        if (expectedShape is null)
+        {
+            return false;
+        }
+
+        // Validate shape
+        var actualShape = value.Shape;
+        if (actualShape.Length != expectedShape.Length)
+        {
+            throw new ArgumentException(
+                $"Shape mismatch for '{name}': expected rank {expectedShape.Length}, got {actualShape.Length}");
+        }
+
+        for (int i = 0; i < expectedShape.Length; i++)
+        {
+            if (actualShape[i] != expectedShape[i])
+            {
+                throw new ArgumentException(
+                    $"Shape mismatch for '{name}': expected [{string.Join(", ", expectedShape)}], " +
+                    $"got [{string.Join(", ", actualShape)}]");
+            }
+        }
+
+        if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            SetWeights(value);
+            return true;
+        }
+
+        if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            SetBiases(value);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the expected shape for a parameter.
+    /// </summary>
+    /// <param name="name">The parameter name ("weight" or "bias").</param>
+    /// <returns>The expected shape, or null if the parameter doesn't exist.</returns>
+    public virtual int[]? GetParameterShape(string name)
+    {
+        if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            var weights = GetWeights();
+            return weights?.Shape;
+        }
+
+        if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            var biases = GetBiases();
+            return biases?.Shape;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the total number of named parameters.
+    /// </summary>
+    public virtual int NamedParameterCount
+    {
+        get
+        {
+            int count = 0;
+            if (GetWeights() is not null) count++;
+            if (GetBiases() is not null) count++;
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// Validates that a set of weight names can be loaded into this layer.
+    /// </summary>
+    /// <param name="weightNames">Names of weights to validate.</param>
+    /// <param name="mapping">Optional weight name mapping function.</param>
+    /// <returns>Validation result with matched and unmatched names.</returns>
+    public virtual WeightLoadValidation ValidateWeights(
+        IEnumerable<string> weightNames,
+        Func<string, string?>? mapping = null)
+    {
+        var result = new WeightLoadValidation();
+        var paramNames = new HashSet<string>(GetParameterNames(), StringComparer.OrdinalIgnoreCase);
+        var matchedParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var weightName in weightNames)
+        {
+            var targetName = mapping?.Invoke(weightName) ?? weightName;
+            if (targetName is null)
+            {
+                result.UnmatchedWeights.Add(weightName);
+                continue;
+            }
+
+            if (paramNames.Contains(targetName))
+            {
+                result.Matched.Add(targetName);
+                matchedParams.Add(targetName);
+            }
+            else
+            {
+                result.UnmatchedWeights.Add(weightName);
+            }
+        }
+
+        // Find missing parameters
+        foreach (var paramName in paramNames)
+        {
+            if (!matchedParams.Contains(paramName))
+            {
+                result.MissingParameters.Add(paramName);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Loads weights from a dictionary of tensors using optional name mapping.
+    /// </summary>
+    /// <param name="weights">Dictionary of weight name to tensor.</param>
+    /// <param name="mapping">Optional function to map source names to target names.</param>
+    /// <param name="strict">If true, fails when any mapped weight fails to load.</param>
+    /// <returns>Load result with statistics.</returns>
+    public virtual WeightLoadResult LoadWeights(
+        Dictionary<string, Tensor<T>> weights,
+        Func<string, string?>? mapping = null,
+        bool strict = false)
+    {
+        var result = new WeightLoadResult { Success = true };
+
+        foreach (var kvp in weights)
+        {
+            var sourceName = kvp.Key;
+            var tensor = kvp.Value;
+
+            var targetName = mapping?.Invoke(sourceName) ?? sourceName;
+            if (targetName is null)
+            {
+                result.SkippedCount++;
+                continue;
+            }
+
+            try
+            {
+                if (SetParameter(targetName, tensor))
+                {
+                    result.LoadedCount++;
+                    result.LoadedParameters.Add(targetName);
+                }
+                else
+                {
+                    if (strict)
+                    {
+                        result.FailedCount++;
+                        result.FailedParameters.Add((targetName, "Parameter not found"));
+                        result.Success = false;
+                    }
+                    else
+                    {
+                        result.SkippedCount++;
+                    }
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                result.FailedCount++;
+                result.FailedParameters.Add((targetName, ex.Message));
+                if (strict)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Failed to load '{targetName}': {ex.Message}";
+                }
+            }
+        }
+
+        return result;
+    }
+
+    #endregion
 }

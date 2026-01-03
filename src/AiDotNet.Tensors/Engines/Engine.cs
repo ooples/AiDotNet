@@ -5,13 +5,7 @@ using System;
 using System.Numerics;
 using System.Runtime.Intrinsics;
 using System.Text;
-#if !NET462
-using ILGPU;
-using ILGPU.Algorithms;
-using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
-using ILGPU.Runtime.OpenCL;
-#endif
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Tensors.Engines
 {
@@ -21,16 +15,20 @@ namespace AiDotNet.Tensors.Engines
     /// this factory automatically selects GPU or CPU engine based on available hardware.
     /// </summary>
     /// <remarks>
-    /// The Default property lazily initializes on first access and probes for:
-    /// 1. GPU availability (via ILGPU) - preferred
-    /// 2. CPU with SIMD fallback - if no GPU
-    /// This ensures optimal performance without manual configuration.
+    /// <para><b>Priority Order (highest to lowest):</b></para>
+    /// <list type="number">
+    /// <item>DirectGpu - Custom kernels with CLBlast fallback (best performance)</item>
+    /// <item>CPU - Always available with SIMD acceleration</item>
+    /// </list>
+    /// <para>The Default property lazily initializes on first access and probes for
+    /// GPU availability. This ensures optimal performance without manual configuration.</para>
     /// </remarks>
     public static class Engine
     {
         private static IEngine? _default;
         private static HardwareCapabilities? _capabilities;
         private static readonly object _lock = new object();
+        private static DirectGpuEngine? _directGpuEngine;
 
         /// <summary>
         /// Gets the default engine instance, automatically selected based on available hardware.
@@ -105,34 +103,81 @@ namespace AiDotNet.Tensors.Engines
         }
 
         /// <summary>
-        /// Probes hardware and creates the optimal engine implementation.
-        /// Priority order: GPU &gt; CPU.
+        /// Gets the DirectGpu engine for high-performance GPU operations.
+        /// This provides direct access to optimized custom kernels for matrix operations.
+        /// Works on ALL .NET versions including .NET Framework 4.6.2.
+        /// </summary>
+        /// <remarks>
+        /// <para>The DirectGpuEngine provides:</para>
+        /// <list type="bullet">
+        /// <item>Optimized GEMM with hierarchical tiling and double-buffering</item>
+        /// <item>Fused operations (GEMM+Bias+Activation) to eliminate memory round-trips</item>
+        /// <item>Float32-only kernels for maximum GPU performance</item>
+        /// <item>Generic type support via boundary conversion</item>
+        /// <item>Pure P/Invoke - no managed GPU runtime dependency</item>
+        /// </list>
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// // Direct GPU matrix multiplication
+        /// var engine = Engine.DirectGpu;
+        /// if (engine != null &amp;&amp; engine.IsAvailable)
+        /// {
+        ///     float[]? result = engine.MatMul(A, B, M, K, N);
+        /// }
+        /// </code>
+        /// </example>
+        public static DirectGpuEngine? DirectGpu
+        {
+            get
+            {
+                if (_directGpuEngine == null)
+                {
+                    lock (_lock)
+                    {
+                        if (_directGpuEngine == null)
+                        {
+                            try
+                            {
+                                _directGpuEngine = new DirectGpuEngine();
+                            }
+                            catch
+                            {
+                                _directGpuEngine = null;
+                            }
+                        }
+                    }
+                }
+                return _directGpuEngine;
+            }
+        }
+
+        /// <summary>
+        /// Probes hardware and creates the optimal engine implementation.      
+        /// Priority order: DirectGpu &gt; CPU.
         /// </summary>
         /// <returns>GPU engine if available, otherwise CPU engine.</returns>
         private static IEngine CreateOptimalEngine()
         {
-#if !NET462
-            // Try GPU first (highest performance potential)
-            // Note: Use !NET462 to include both .NET Framework 4.7.1+ and .NET 8.0+
+            // Try DirectGpu first (highest performance - custom optimized kernels)
+            // Works on ALL .NET versions including .NET Framework 4.6.2
             try
             {
-                var gpuEngine = new GpuEngine();
-                if (gpuEngine.SupportsGpu)
+                var directGpu = DirectGpu;
+                if (directGpu != null && directGpu.IsAvailable)
                 {
-                    Console.WriteLine($"[Engine] Auto-selected: {gpuEngine.Name}");
-                    Console.WriteLine($"[Engine] GPU detected - operations will use GPU acceleration");
-                    return gpuEngine;
+                    var directEngine = new DirectGpuTensorEngine(directGpu);
+                    Console.WriteLine($"[Engine] DirectGpu available: {directGpu.BackendName} ({directGpu.DeviceName})");
+                    Console.WriteLine($"[Engine] DirectGpu: {directGpu.ComputeUnits} CUs, {directGpu.GlobalMemoryGB:F1}GB VRAM");
+                    return directEngine;
                 }
-            }
-            catch (DllNotFoundException ex)
-            {
-                Console.WriteLine($"[Engine] ILGPU runtime not found: {ex.Message}");
+
+                Console.WriteLine("[Engine] DirectGpu: Not available (no compatible GPU backends found)");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Engine] GPU initialization failed: {ex.Message}");
+                Console.WriteLine($"[Engine] DirectGpu initialization failed: {ex.Message}");
             }
-#endif
 
             // Fallback to CPU (always available)
             var cpuEngine = new CpuEngine();
@@ -155,6 +200,9 @@ namespace AiDotNet.Tensors.Engines
                 }
                 _default = null;
                 _capabilities = null;
+
+                _directGpuEngine?.Dispose();
+                _directGpuEngine = null;
             }
         }
     }
@@ -191,11 +239,32 @@ namespace AiDotNet.Tensors.Engines
         /// </summary>
         public string GpuName { get; set; } = string.Empty;
 
-#if !NET462
+        // DirectGpu properties - available on ALL .NET versions (pure P/Invoke)
         /// <summary>
-        /// Gets the GPU accelerator type (Cuda, OpenCL, Velocity, CPU).
+        /// Gets whether DirectGpu (custom optimized kernels) is available.
+        /// Works on ALL .NET versions including .NET Framework 4.6.2.
         /// </summary>
-        public AcceleratorType GpuType { get; set; }
+        public bool DirectGpuAvailable { get; set; }
+
+        /// <summary>
+        /// Gets the DirectGpu backend name (OpenCL, CUDA, etc.).
+        /// </summary>
+        public string DirectGpuBackend { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets the DirectGpu device name.
+        /// </summary>
+        public string DirectGpuDevice { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets the number of DirectGpu compute units.
+        /// </summary>
+        public int DirectGpuComputeUnits { get; set; }
+
+        /// <summary>
+        /// Gets the GPU backend type (CUDA/OpenCL/HIP) when available.
+        /// </summary>
+        public GpuBackendType GpuType { get; set; } = GpuBackendType.None;
 
         /// <summary>
         /// Gets the total GPU memory in bytes.
@@ -203,29 +272,19 @@ namespace AiDotNet.Tensors.Engines
         public long GpuMemory { get; set; }
 
         /// <summary>
-        /// Gets the maximum number of threads per GPU workgroup.
+        /// Gets the maximum number of threads per GPU workgroup (if known).
         /// </summary>
         public int GpuMaxThreads { get; set; }
 
         /// <summary>
-        /// Gets the GPU warp/wavefront size for optimal parallelism.
+        /// Gets the GPU warp/wavefront size for optimal parallelism (if known).
         /// </summary>
         public int GpuWarpSize { get; set; }
 
         /// <summary>
-        /// Gets the CUDA compute capability (e.g., "8.6" for RTX 3090), or empty if not CUDA.
+        /// Gets the CUDA compute capability (e.g., "8.6" for RTX 3090), or empty if unknown.
         /// </summary>
         public string GpuComputeCapability { get; set; } = string.Empty;
-#else
-        /// <summary>
-        /// GPU acceleration is not available on .NET Framework 4.6.2
-        /// </summary>
-        public int GpuType { get; set; } = 0;  // AcceleratorType.CPU equivalent
-        public long GpuMemory { get; set; } = 0;
-        public int GpuMaxThreads { get; set; } = 0;
-        public int GpuWarpSize { get; set; } = 0;
-        public string GpuComputeCapability { get; set; } = string.Empty;
-#endif
 
         /// <summary>
         /// Detects all hardware capabilities on the current machine.
@@ -238,13 +297,9 @@ namespace AiDotNet.Tensors.Engines
             // Detect SIMD capabilities
             caps = DetectSimd(caps);
 
-#if !NET462
-            // Detect GPU capabilities (available on net471+ and net8.0+)
-            caps = DetectGpu(caps);
-#else
-            // GPU detection not available on .NET Framework 4.6.2
-            caps.GpuAvailable = false;
-#endif
+            // Detect DirectGpu capabilities (custom optimized kernels)
+            // Works on ALL .NET versions including .NET Framework 4.6.2        
+            caps = DetectDirectGpu(caps);
 
             return caps;
         }
@@ -296,72 +351,56 @@ namespace AiDotNet.Tensors.Engines
             return caps;
         }
 
-#if !NET462
-        private static HardwareCapabilities DetectGpu(HardwareCapabilities caps)
+        /// <summary>
+        /// Detects DirectGpu capabilities.
+        /// Works on ALL .NET versions including .NET Framework 4.6.2.
+        /// </summary>
+        private static HardwareCapabilities DetectDirectGpu(HardwareCapabilities caps)
         {
             try
             {
-                // Don't use EnableAlgorithms() during detection - it can hide devices
-                // on some systems. EnableAlgorithms() is enabled during actual accelerator
-                // creation in GpuEngine where it's needed for algorithm operations.
-                using var context = Context.Create(builder => builder.Default());
-                var device = context.GetPreferredDevice(preferCPU: false);
-
-                if (device.AcceleratorType != AcceleratorType.CPU)
+                var directGpu = Engine.DirectGpu;
+                if (directGpu != null && directGpu.IsAvailable)
                 {
+                    caps.DirectGpuAvailable = true;
+                    caps.DirectGpuBackend = directGpu.BackendName;
+                    caps.DirectGpuDevice = directGpu.DeviceName;
+                    caps.DirectGpuComputeUnits = directGpu.ComputeUnits;
+
                     caps.GpuAvailable = true;
-                    caps.GpuName = device.Name;
-                    caps.GpuType = device.AcceleratorType;
-                    caps.GpuMemory = device.MemorySize;
-                    caps.GpuMaxThreads = device.MaxNumThreadsPerGroup;
-                    caps.GpuWarpSize = device.WarpSize;
-
-                    // CUDA-specific detection (optional - may not be available in all ILGPU versions)
-                    if (device is CudaDevice cudaDevice)
-                    {
-                        try
-                        {
-                            // ComputeCapability may not be available in all ILGPU versions
-                            var capability = cudaDevice.GetType().GetProperty("ComputeCapability");
-                            if (capability != null)
-                            {
-                                var value = capability.GetValue(cudaDevice);
-                                if (value != null)
-                                {
-                                    var majorProp = value.GetType().GetProperty("Major");
-                                    var minorProp = value.GetType().GetProperty("Minor");
-                                    if (majorProp != null && minorProp != null)
-                                    {
-                                        var major = majorProp.GetValue(value);
-                                        var minor = minorProp.GetValue(value);
-                                        caps.GpuComputeCapability = $"{major}.{minor}";
-                                    }
-                                }
-                            }
-                        }
-                        catch
-                        {
-                            // ComputeCapability detection failed - leave as default
-                        }
-                    }
-
-                    return caps;
+                    caps.GpuName = directGpu.DeviceName;
+                    caps.GpuType = MapBackendType(directGpu.BackendName);
+                    caps.GpuMemory = directGpu.GlobalMemoryBytes;
+                }
+                else
+                {
+                    caps.DirectGpuAvailable = false;
+                    caps.GpuAvailable = false;
+                    caps.GpuType = GpuBackendType.None;
                 }
             }
-            catch (DllNotFoundException)
+            catch
             {
-                // ILGPU runtime not available
+                caps.DirectGpuAvailable = false;
+                caps.GpuAvailable = false;
+                caps.GpuType = GpuBackendType.None;
             }
-            catch (Exception)
-            {
-                // GPU detection failed
-            }
-
-            caps.GpuAvailable = false;
-            caps.GpuType = AcceleratorType.CPU;
             return caps;
         }
-#endif
+
+        private static GpuBackendType MapBackendType(string backendName)
+        {
+            if (string.IsNullOrWhiteSpace(backendName))
+                return GpuBackendType.Unknown;
+
+            return backendName.Trim().ToLowerInvariant() switch
+            {
+                "cuda" => GpuBackendType.Cuda,
+                "opencl" => GpuBackendType.OpenCl,
+                "hip" => GpuBackendType.Hip,
+                _ => GpuBackendType.Unknown
+            };
+        }
 
         /// <summary>
         /// Returns a human-readable string describing all hardware capabilities.
@@ -381,12 +420,27 @@ namespace AiDotNet.Tensors.Engines
                 sb.AppendLine("  SIMD: Not Available (scalar fallback)");
             }
 
-            // GPU info
+            // DirectGpu info (highest performance tier)
+            if (DirectGpuAvailable)
+            {
+                sb.AppendLine($"  DirectGpu: Available ({DirectGpuBackend})");
+                sb.AppendLine($"        Device: {DirectGpuDevice}");
+                sb.AppendLine($"        Compute Units: {DirectGpuComputeUnits}");
+            }
+            else
+            {
+                sb.AppendLine("  DirectGpu: Not Available");
+            }
+
+            // GPU info (DirectGpu tier)
             if (GpuAvailable)
             {
                 long gbMemory = GpuMemory / (1024 * 1024 * 1024);
                 sb.AppendLine($"  GPU:  {GpuName} ({GpuType}, {gbMemory}GB)");
-                sb.AppendLine($"        Max Threads: {GpuMaxThreads}, Warp Size: {GpuWarpSize}");
+                if (GpuMaxThreads > 0 || GpuWarpSize > 0)
+                {
+                    sb.AppendLine($"        Max Threads: {GpuMaxThreads}, Warp Size: {GpuWarpSize}");
+                }
                 if (!string.IsNullOrEmpty(GpuComputeCapability))
                 {
                     sb.AppendLine($"        Compute Capability: {GpuComputeCapability}");

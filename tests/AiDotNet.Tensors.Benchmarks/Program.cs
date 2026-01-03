@@ -29,9 +29,45 @@ class Program
             return;
         }
 
+#if !NET462
+        // Run cuBLAS vs DirectGpu GEMM benchmark
+        if (args[0] == "--cublas")
+        {
+            CuBlasGemmBenchmark.Run();
+            return;
+        }
+
+        // Run OpenCL GEMM benchmark (AMD/Intel GPUs)
+        if (args[0] == "--opencl")
+        {
+            OpenClGemmBenchmark.Run();
+            return;
+        }
+
+        // Run CLBlast vs AiDotNet OpenCL comparison benchmark
+        if (args[0] == "--clblast")
+        {
+            ClBlastBenchmark.Run();
+            return;
+        }
+
+        // Run DirectGpu comprehensive benchmark (all 10 optimizations)
+        if (args[0] == "--directgpu")
+        {
+            DirectGpuGemmBenchmark.RunComprehensive();
+            return;
+        }
+#endif
+
         Console.WriteLine("Usage:");
-        Console.WriteLine("  --quick  : Run quick performance validation (default)");
-        Console.WriteLine("  --full   : Run full BenchmarkDotNet suite (trigonometric)");
-        Console.WriteLine("  --linalg : Run linear algebra benchmarks vs MathNet.Numerics");
+        Console.WriteLine("  --quick    : Run quick performance validation (default)");
+        Console.WriteLine("  --full     : Run full BenchmarkDotNet suite (trigonometric)");
+        Console.WriteLine("  --linalg   : Run linear algebra benchmarks vs MathNet.Numerics");
+#if !NET462
+        Console.WriteLine("  --cublas   : Run cuBLAS vs DirectGpu GEMM benchmark");
+        Console.WriteLine("  --opencl   : Run OpenCL GEMM benchmark (AMD/Intel GPUs)");
+        Console.WriteLine("  --clblast  : Run CLBlast vs AiDotNet OpenCL comparison (AMD/Intel)");
+        Console.WriteLine("  --directgpu: Run DirectGpu comprehensive benchmark (all 10 optimizations)");
+#endif
     }
 }

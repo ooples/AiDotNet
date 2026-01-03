@@ -230,8 +230,9 @@ public class MetaLearningAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.ProtoNets, algorithm.AlgorithmType);
-        Assert.Single(predictions.Shape);
-        Assert.Equal(task.NumWays, predictions.Shape[0]);
+        Assert.Equal(2, predictions.Shape.Length);
+        Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);
+        Assert.Equal(task.NumWays, predictions.Shape[1]);
     }
 
     [Fact]

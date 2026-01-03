@@ -1157,4 +1157,16 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
 
     public void MultiplyAdd(ReadOnlySpan<Complex<T>> x, ReadOnlySpan<Complex<T>> y, Complex<T> scalar, Span<Complex<T>> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    public void ToFloatSpan(ReadOnlySpan<Complex<T>> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<Complex<T>> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 }

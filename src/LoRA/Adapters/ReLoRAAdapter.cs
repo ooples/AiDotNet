@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -271,11 +272,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < matrixA.Columns; j++)
             {
-                // Box-Muller transform for Gaussian random numbers
-                double u1 = _rng.NextDouble();
-                double u2 = _rng.NextDouble();
-                double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                matrixA[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                matrixA[i, j] = NumOps.Multiply(NumOps.FromDouble(_rng.NextGaussian()), stddev);
             }
         }
 

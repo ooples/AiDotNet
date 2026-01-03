@@ -430,6 +430,88 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Creates a tensor filled with ones with the specified dimensions.
+    /// </summary>
+    /// <param name="dimensions">An array specifying the size of each dimension.</param>
+    /// <returns>A new tensor filled with ones.</returns>
+    /// <exception cref="ArgumentException">Thrown when dimensions are null or empty.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a tensor where every element is 1.
+    /// Ones tensors are commonly used in neural networks for:
+    /// - Creating mask tensors
+    /// - Computing (1 - x) operations in gating mechanisms
+    /// - Bias initialization
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> CreateOnes(params int[] dimensions)
+    {
+        if (dimensions == null || dimensions.Length == 0)
+            throw new ArgumentException("Dimensions cannot be null or empty.", nameof(dimensions));
+
+        return CreateDefault(dimensions, _numOps.One);
+    }
+
+    /// <summary>
+    /// Creates a tensor filled with zeros with the specified dimensions.
+    /// </summary>
+    /// <param name="dimensions">An array specifying the size of each dimension.</param>
+    /// <returns>A new tensor filled with zeros.</returns>
+    /// <exception cref="ArgumentException">Thrown when dimensions are null or empty.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a tensor where every element is 0.
+    /// Zero tensors are commonly used in neural networks for:
+    /// - Initializing accumulators
+    /// - Padding operations
+    /// - Creating empty output tensors before filling them
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> CreateZeros(params int[] dimensions)
+    {
+        if (dimensions == null || dimensions.Length == 0)
+            throw new ArgumentException("Dimensions cannot be null or empty.", nameof(dimensions));
+
+        return CreateDefault(dimensions, _numOps.Zero);
+    }
+
+    /// <summary>
+    /// Creates an identity matrix as a 2D tensor.
+    /// </summary>
+    /// <param name="size">The size of the square identity matrix.</param>
+    /// <returns>A new 2D tensor representing an identity matrix.</returns>
+    /// <exception cref="ArgumentException">Thrown when size is less than 1.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> An identity matrix is a square matrix with 1s on the diagonal
+    /// and 0s everywhere else. When you multiply any matrix by the identity matrix, you get
+    /// the original matrix back - it's like multiplying by 1 for numbers.
+    /// 
+    /// For example, a 3x3 identity matrix looks like:
+    /// [[1, 0, 0],
+    ///  [0, 1, 0],
+    ///  [0, 0, 1]]
+    /// 
+    /// Identity matrices are used in:
+    /// - Neural network weight initialization
+    /// - Skip connections and residual networks
+    /// - Regularization terms
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> CreateIdentity(int size)
+    {
+        if (size < 1)
+            throw new ArgumentException("Size must be at least 1.", nameof(size));
+
+        var tensor = new Tensor<T>([size, size]);
+        
+        // Fill with zeros first (default), then set diagonal to 1
+        for (int i = 0; i < size; i++)
+        {
+            tensor[i, i] = _numOps.One;
+        }
+
+        return tensor;
+    }
+
+    /// <summary>
     /// Gets the complex value from a tensor at the specified index.
     /// </summary>
     /// <param name="tensor">The tensor to retrieve the value from.</param>

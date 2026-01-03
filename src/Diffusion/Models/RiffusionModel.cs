@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -109,6 +110,16 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private readonly SpectrogramConfig _spectrogramConfig;
 
+    /// <summary>
+    /// GPU-accelerated Griffin-Lim processor for spectrogram inversion.
+    /// </summary>
+    private readonly GriffinLim<T> _griffinLim;
+
+    /// <summary>
+    /// GPU-accelerated mel spectrogram processor.
+    /// </summary>
+    private readonly MelSpectrogram<T> _melSpectrogram;
+
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _unet;
 
@@ -170,6 +181,23 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
 
         // Create VAE
         _vae = vae ?? CreateDefaultVAE(seed);
+
+        // Create GPU-accelerated audio processors
+        _griffinLim = new GriffinLim<T>(
+            nFft: _spectrogramConfig.FFTSize,
+            hopLength: _spectrogramConfig.HopLength,
+            iterations: 32,
+            momentum: 0.99,
+            seed: seed);
+
+        _melSpectrogram = new MelSpectrogram<T>(
+            sampleRate: _spectrogramConfig.SampleRate,
+            nFft: _spectrogramConfig.FFTSize,
+            hopLength: _spectrogramConfig.HopLength,
+            nMels: _spectrogramConfig.NumMelBins,
+            fMin: _spectrogramConfig.MinFrequency,
+            fMax: _spectrogramConfig.MaxFrequency,
+            logMel: _spectrogramConfig.UseLogScale);
     }
 
     /// <summary>
@@ -339,166 +367,16 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     public virtual Tensor<T> SpectrogramToAudio(Tensor<T> spectrogram)
     {
         // Extract spectrogram dimensions
-        var height = spectrogram.Shape.Length > 2 ? spectrogram.Shape[^2] : spectrogram.Shape[0];
         var width = spectrogram.Shape[^1];
 
         // Calculate audio length
         var audioLength = CalculateAudioLength(width);
 
-        // Apply Griffin-Lim algorithm (simplified)
-        return GriffinLim(spectrogram, audioLength);
-    }
+        // First invert mel spectrogram to linear magnitude spectrogram
+        var magnitude = _melSpectrogram.InvertMelToMagnitude(spectrogram);
 
-    /// <summary>
-    /// Griffin-Lim algorithm for spectrogram inversion.
-    /// Iteratively estimates phase from magnitude spectrogram.
-    /// </summary>
-    private Tensor<T> GriffinLim(Tensor<T> spectrogram, int audioLength)
-    {
-        var numIterations = 32;
-        var hopLength = _spectrogramConfig.HopLength;
-        var fftSize = _spectrogramConfig.FFTSize;
-        var numBins = fftSize / 2 + 1;
-
-        // Extract spectrogram dimensions
-        var specShape = spectrogram.Shape;
-        var numMelBins = specShape.Length > 2 ? specShape[^2] : specShape[0];
-        var numFrames = specShape[^1];
-
-        var specSpan = spectrogram.AsSpan();
-
-        // Convert mel spectrogram to linear spectrogram (approximation)
-        var magnitudes = new double[numFrames, numBins];
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            for (int bin = 0; bin < numBins; bin++)
-            {
-                // Map linear bin to mel bin
-                var melBin = (int)(bin * (double)numMelBins / numBins);
-                melBin = Math.Min(melBin, numMelBins - 1);
-
-                var specIdx = frame + melBin * numFrames;
-                if (specIdx < specSpan.Length)
-                {
-                    var val = NumOps.ToDouble(specSpan[specIdx]);
-                    // Convert from log scale if needed
-                    magnitudes[frame, bin] = _spectrogramConfig.UseLogScale
-                        ? Math.Exp(val) - 1e-5
-                        : val;
-                }
-            }
-        }
-
-        // Initialize audio signal
-        var audioData = new double[audioLength];
-
-        // Initialize phases randomly
-        var rng = RandomGenerator;
-        var phases = new double[numFrames, numBins];
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            for (int bin = 0; bin < numBins; bin++)
-            {
-                phases[frame, bin] = rng.NextDouble() * 2 * Math.PI;
-            }
-        }
-
-        // Create analysis window (Hann window)
-        var window = new double[fftSize];
-        for (int i = 0; i < fftSize; i++)
-        {
-            window[i] = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (fftSize - 1)));
-        }
-
-        // Griffin-Lim iterations
-        for (int iter = 0; iter < numIterations; iter++)
-        {
-            // Inverse STFT: Reconstruct audio from magnitudes and phases
-            Array.Clear(audioData, 0, audioData.Length);
-            var windowSum = new double[audioLength];
-
-            for (int frame = 0; frame < numFrames; frame++)
-            {
-                var frameStart = frame * hopLength;
-
-                // Inverse DFT for this frame
-                var frameData = new double[fftSize];
-                for (int n = 0; n < fftSize; n++)
-                {
-                    double sum = 0;
-                    for (int k = 0; k < numBins; k++)
-                    {
-                        var mag = magnitudes[frame, k];
-                        var phase = phases[frame, k];
-                        var angle = 2 * Math.PI * k * n / fftSize;
-                        sum += mag * Math.Cos(angle + phase);
-                    }
-                    frameData[n] = sum / fftSize;
-                }
-
-                // Apply window and overlap-add
-                for (int n = 0; n < fftSize; n++)
-                {
-                    var idx = frameStart + n;
-                    if (idx < audioLength)
-                    {
-                        audioData[idx] += frameData[n] * window[n];
-                        windowSum[idx] += window[n] * window[n];
-                    }
-                }
-            }
-
-            // Normalize by window sum
-            for (int i = 0; i < audioLength; i++)
-            {
-                if (windowSum[i] > 1e-8)
-                {
-                    audioData[i] /= windowSum[i];
-                }
-            }
-
-            // Forward STFT: Extract new phases from reconstructed audio
-            if (iter < numIterations - 1)
-            {
-                for (int frame = 0; frame < numFrames; frame++)
-                {
-                    var frameStart = frame * hopLength;
-
-                    // Extract windowed frame
-                    var frameData = new double[fftSize];
-                    for (int n = 0; n < fftSize; n++)
-                    {
-                        var idx = frameStart + n;
-                        if (idx < audioLength)
-                        {
-                            frameData[n] = audioData[idx] * window[n];
-                        }
-                    }
-
-                    // DFT to get new phases
-                    for (int k = 0; k < numBins; k++)
-                    {
-                        double real = 0, imag = 0;
-                        for (int n = 0; n < fftSize; n++)
-                        {
-                            var angle = -2 * Math.PI * k * n / fftSize;
-                            real += frameData[n] * Math.Cos(angle);
-                            imag += frameData[n] * Math.Sin(angle);
-                        }
-                        phases[frame, k] = Math.Atan2(imag, real);
-                    }
-                }
-            }
-        }
-
-        // Convert to output format
-        var result = new T[audioLength];
-        for (int i = 0; i < audioLength; i++)
-        {
-            result[i] = NumOps.FromDouble(audioData[i]);
-        }
-
-        return new Tensor<T>(new[] { 1, audioLength }, new Vector<T>(result));
+        // Use GPU-accelerated Griffin-Lim for phase reconstruction
+        return _griffinLim.Reconstruct(magnitude, audioLength);
     }
 
     /// <summary>

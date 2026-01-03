@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+using System.Reflection;
+using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
 
 namespace AiDotNetBenchmarkTests;
@@ -13,6 +14,8 @@ internal class Program
         //   dotnet run -c Release -- --filter *ActivationFunctionBenchmarks*
         //   dotnet run -c Release -- --list flat
         var switcher = BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly());
-        switcher.Run(args);
+        var config = ManualConfig.Create(DefaultConfig.Instance)
+            .WithOptions(ConfigOptions.DisableOptimizationsValidator);
+        switcher.Run(args, config);
     }
 }

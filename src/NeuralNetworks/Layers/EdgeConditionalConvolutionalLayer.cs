@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -153,6 +155,14 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         _bias = new Tensor<T>([outputFeatures]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_edgeNetworkWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_edgeNetworkWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_edgeNetworkBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_edgeNetworkBias2, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_selfWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     private void InitializeParameters()
@@ -796,6 +806,14 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient!, learningRate);
         _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
+
+        // Invalidate GPU cache after parameter updates
+        Engine.InvalidatePersistentTensor(_edgeNetworkWeights1);
+        Engine.InvalidatePersistentTensor(_edgeNetworkWeights2);
+        Engine.InvalidatePersistentTensor(_edgeNetworkBias1);
+        Engine.InvalidatePersistentTensor(_edgeNetworkBias2);
+        Engine.InvalidatePersistentTensor(_selfWeights);
+        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <inheritdoc/>
@@ -858,6 +876,14 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         // Set bias
         var biasParams = parameters.SubVector(index, biasSize);
         _bias = Tensor<T>.FromVector(biasParams);
+
+        // Invalidate GPU cache after parameter updates
+        Engine.InvalidatePersistentTensor(_edgeNetworkWeights1);
+        Engine.InvalidatePersistentTensor(_edgeNetworkWeights2);
+        Engine.InvalidatePersistentTensor(_edgeNetworkBias1);
+        Engine.InvalidatePersistentTensor(_edgeNetworkBias2);
+        Engine.InvalidatePersistentTensor(_selfWeights);
+        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <inheritdoc/>

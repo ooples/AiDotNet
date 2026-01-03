@@ -33,6 +33,21 @@ public interface IEngine
     /// </summary>
     bool SupportsGpu { get; }
 
+    /// <summary>
+    /// Gets the DirectGpu engine for high-performance fused GPU operations.
+    /// Returns null if DirectGpu is not available.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DirectGpu provides 10-100x faster operations than standard GPU paths by using
+    /// custom optimized kernels with fused operations (e.g., GEMM+Bias+Activation in one pass).
+    /// </para>
+    /// <para>
+    /// Works on ALL .NET versions including .NET Framework 4.6.2 via pure P/Invoke.
+    /// </para>
+    /// </remarks>
+    DirectGpu.DirectGpuEngine? DirectGpu { get; }
+
     #region Vector Operations
 
     /// <summary>
@@ -1273,7 +1288,7 @@ public interface IEngine
     /// Tanh activation function: tanh(x) = (e^x - e^-x) / (e^x + e^-x).
     /// Commonly used in hidden layers of neural networks.
     /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float).
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Vector<T> Tanh<T>(Vector<T> vector);
@@ -1289,7 +1304,7 @@ public interface IEngine
     /// Sigmoid activation function: ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢(x) = 1 / (1 + e^-x).
     /// Commonly used for binary classification and gate functions in LSTMs/GRUs.
     /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float).
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Vector<T> Sigmoid<T>(Vector<T> vector);
@@ -1305,7 +1320,7 @@ public interface IEngine
     /// ReLU activation function: ReLU(x) = max(0, x).
     /// Most commonly used activation in modern deep learning.
     /// CPU implementation uses TensorPrimitives for SIMD optimization.
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Vector<T> ReLU<T>(Vector<T> vector);
@@ -1320,7 +1335,7 @@ public interface IEngine
     /// <para>
     /// Tensor version of Tanh for multi-dimensional data.
     /// CPU implementation uses TensorPrimitives for SIMD optimization.
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Tensor<T> Tanh<T>(Tensor<T> tensor);
@@ -1335,7 +1350,7 @@ public interface IEngine
     /// <para>
     /// Tensor version of Sigmoid for multi-dimensional data.
     /// CPU implementation uses TensorPrimitives for SIMD optimization.
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Tensor<T> Sigmoid<T>(Tensor<T> tensor);
@@ -1350,7 +1365,7 @@ public interface IEngine
     /// <para>
     /// Tensor version of ReLU for multi-dimensional data.
     /// CPU implementation uses TensorPrimitives for SIMD optimization.
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Tensor<T> ReLU<T>(Tensor<T> tensor);
@@ -1429,9 +1444,135 @@ public interface IEngine
     Tensor<T> Swish<T>(Tensor<T> tensor);
 
     /// <summary>
+    /// Computes the Leaky ReLU of each element in the tensor: f(x) = max(alpha * x, x).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="alpha">The slope for negative values (typically 0.01).</param>
+    /// <returns>A new tensor with Leaky ReLU applied element-wise.</returns>
+    Tensor<T> LeakyReLU<T>(Tensor<T> tensor, T alpha);
+
+    /// <summary>
     /// Computes the ELU of each element in the tensor.
     /// </summary>
     Tensor<T> ELU<T>(Tensor<T> tensor, double alpha = 1.0);
+
+    /// <summary>
+    /// Applies the Gated Linear Unit (GLU) activation: GLU(a, b) = a * sigmoid(b).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., 2*dim] where the last dimension will be split in half.</param>
+    /// <param name="dim">The dimension to split (default: -1, last dimension).</param>
+    /// <returns>Output tensor with shape [..., dim].</returns>
+    /// <remarks>
+    /// <para>
+    /// GLU splits the input along the specified dimension into two halves (a and b),
+    /// then computes: output = a * sigmoid(b)
+    /// </para>
+    /// <para>
+    /// Introduced in "Language Modeling with Gated Convolutional Networks" (Dauphin et al., 2017).
+    /// </para>
+    /// </remarks>
+    Tensor<T> GLU<T>(Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Computes the backward pass for GLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="input">Original input tensor from forward pass.</param>
+    /// <param name="dim">The dimension that was split.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    Tensor<T> GLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Applies GeGLU activation: GeGLU(a, b) = a * GELU(b).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., 2*dim].</param>
+    /// <param name="dim">The dimension to split (default: -1, last dimension).</param>
+    /// <returns>Output tensor with shape [..., dim].</returns>
+    /// <remarks>
+    /// <para>
+    /// GeGLU splits the input and applies: output = a * GELU(b)
+    /// </para>
+    /// <para>
+    /// Used in PaLM, Gemma, and other modern transformers.
+    /// Provides better gradient flow than standard GLU.
+    /// </para>
+    /// <para>
+    /// Reference: "GLU Variants Improve Transformer" (Shazeer, 2020).
+    /// </para>
+    /// </remarks>
+    Tensor<T> GeGLU<T>(Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Computes the backward pass for GeGLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="input">Original input tensor from forward pass.</param>
+    /// <param name="dim">The dimension that was split.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    Tensor<T> GeGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Applies SwiGLU activation: SwiGLU(a, b) = a * Swish(b) = a * (b * sigmoid(b)).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., 2*dim].</param>
+    /// <param name="dim">The dimension to split (default: -1, last dimension).</param>
+    /// <returns>Output tensor with shape [..., dim].</returns>
+    /// <remarks>
+    /// <para>
+    /// SwiGLU splits the input and applies: output = a * Swish(b) = a * b * sigmoid(b)
+    /// </para>
+    /// <para>
+    /// Used in LLaMA, LLaMA-2, Mistral, and other modern LLMs.
+    /// Generally outperforms GELU and ReLU in transformer feed-forward networks.
+    /// </para>
+    /// <para>
+    /// Reference: "GLU Variants Improve Transformer" (Shazeer, 2020).
+    /// </para>
+    /// </remarks>
+    Tensor<T> SwiGLU<T>(Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Computes the backward pass for SwiGLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="input">Original input tensor from forward pass.</param>
+    /// <param name="dim">The dimension that was split.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    Tensor<T> SwiGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Applies ReGLU activation: ReGLU(a, b) = a * ReLU(b).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., 2*dim].</param>
+    /// <param name="dim">The dimension to split (default: -1, last dimension).</param>
+    /// <returns>Output tensor with shape [..., dim].</returns>
+    /// <remarks>
+    /// <para>
+    /// ReGLU splits the input and applies: output = a * ReLU(b)
+    /// </para>
+    /// <para>
+    /// Simpler than GeGLU/SwiGLU but can still outperform standard activations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ReGLU<T>(Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Computes the backward pass for ReGLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="input">Original input tensor from forward pass.</param>
+    /// <param name="dim">The dimension that was split.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    Tensor<T> ReGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
 
     #endregion
 
@@ -3250,6 +3391,774 @@ public interface IEngine
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> SphericalSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int axis = -1);
 
+    #endregion
+
+    #region Attention Operations
+
+    /// <summary>
+    /// Computes scaled dot-product attention as defined in "Attention Is All You Need" (Vaswani et al., 2017).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="query">Query tensor with shape [batch, heads, seq_q, d_k].</param>
+    /// <param name="key">Key tensor with shape [batch, heads, seq_k, d_k].</param>
+    /// <param name="value">Value tensor with shape [batch, heads, seq_k, d_v].</param>
+    /// <param name="mask">Optional attention mask with shape broadcastable to [batch, heads, seq_q, seq_k].
+    /// True values indicate positions to attend to, false values are masked out (set to -infinity before softmax).</param>
+    /// <param name="scale">Optional scaling factor. If null, uses 1/sqrt(d_k) as per the paper.</param>
+    /// <param name="attentionWeights">Output: the attention weights after softmax with shape [batch, heads, seq_q, seq_k].
+    /// Useful for visualization and backward pass.</param>
+    /// <returns>The attention output with shape [batch, heads, seq_q, d_v].</returns>
+    /// <remarks>
+    /// <para>
+    /// Implements the formula: Attention(Q, K, V) = softmax(Q @ K^T / sqrt(d_k)) @ V
+    /// </para>
+    /// <para><b>Usage in multi-head attention:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Split input into heads: [batch, seq, embed] -> [batch, heads, seq, head_dim]</description></item>
+    /// <item><description>Apply linear projections to get Q, K, V</description></item>
+    /// <item><description>Call ScaledDotProductAttention</description></item>
+    /// <item><description>Concatenate heads and apply output projection</description></item>
+    /// </list>
+    /// <para><b>Mask conventions:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Causal mask: Lower triangular matrix (for autoregressive models)</description></item>
+    /// <item><description>Padding mask: False for padded positions</description></item>
+    /// <item><description>Combined: Element-wise AND of causal and padding masks</description></item>
+    /// </list>
+    /// </remarks>
+    Tensor<T> ScaledDotProductAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<bool>? mask,
+        double? scale,
+        out Tensor<T> attentionWeights);
+
+    /// <summary>
+    /// Computes the backward pass for scaled dot-product attention.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with shape [batch, heads, seq_q, d_v].</param>
+    /// <param name="query">Original query tensor from forward pass.</param>
+    /// <param name="key">Original key tensor from forward pass.</param>
+    /// <param name="value">Original value tensor from forward pass.</param>
+    /// <param name="attentionWeights">Attention weights from forward pass (after softmax).</param>
+    /// <param name="scale">The scale factor used in forward pass.</param>
+    /// <param name="gradQuery">Output: gradient with respect to query.</param>
+    /// <param name="gradKey">Output: gradient with respect to key.</param>
+    /// <param name="gradValue">Output: gradient with respect to value.</param>
+    /// <returns>The gradient with respect to the output (same as gradOutput for chaining).</returns>
+    /// <remarks>
+    /// <para>
+    /// Gradient computation follows the chain rule through:
+    /// 1. V @ attention_weights^T for gradValue
+    /// 2. Softmax backward for attention score gradients
+    /// 3. Q @ grad_scores^T / scale for gradKey
+    /// 4. grad_scores @ K / scale for gradQuery
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScaledDotProductAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> attentionWeights,
+        double scale,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue);
+
+    /// <summary>
+    /// Computes memory-efficient attention using the FlashAttention algorithm.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="query">Query tensor with shape [batch, heads, seq_q, head_dim].</param>
+    /// <param name="key">Key tensor with shape [batch, heads, seq_kv, head_dim].</param>
+    /// <param name="value">Value tensor with shape [batch, heads, seq_kv, head_dim].</param>
+    /// <param name="scale">Optional scale factor. If null, uses 1/sqrt(head_dim).</param>
+    /// <param name="isCausal">If true, applies causal masking (lower triangular).</param>
+    /// <param name="softmaxStats">Output: log-sum-exp statistics for backward pass [batch, heads, seq_q].</param>
+    /// <returns>The attention output with shape [batch, heads, seq_q, head_dim].</returns>
+    /// <remarks>
+    /// <para><b>FlashAttention Algorithm (Dao et al., 2022):</b></para>
+    /// <para>
+    /// FlashAttention is a memory-efficient and IO-aware attention algorithm that:
+    /// - Uses tiling to compute attention in SRAM without materializing the full attention matrix
+    /// - Reduces memory usage from O(N²) to O(N) where N is sequence length
+    /// - Provides significant speedup on long sequences by minimizing HBM (GPU memory) accesses
+    /// </para>
+    /// <para><b>Key Benefits:</b></para>
+    /// <list type="bullet">
+    /// <item><description>O(N) memory vs O(N²) for standard attention</description></item>
+    /// <item><description>2-4x faster than standard attention for long sequences</description></item>
+    /// <item><description>Enables training on much longer sequences (16K-64K tokens)</description></item>
+    /// <item><description>Numerically equivalent to standard attention (uses online softmax)</description></item>
+    /// </list>
+    /// <para><b>Algorithm Overview:</b></para>
+    /// <list type="number">
+    /// <item><description>Tile Q, K, V into blocks that fit in SRAM</description></item>
+    /// <item><description>For each Q block, iterate over K,V blocks computing partial attention</description></item>
+    /// <item><description>Use online softmax to accumulate results without full materialization</description></item>
+    /// <item><description>Store softmax statistics (log-sum-exp) for backward pass</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Standard attention requires storing a huge attention matrix
+    /// (N×N for sequence length N). For a 4096-token sequence, that's 16 million values per head!
+    /// FlashAttention cleverly avoids this by computing attention in small chunks, dramatically
+    /// reducing memory usage while still getting the exact same results.</para>
+    /// </remarks>
+    Tensor<T> FlashAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        double? scale,
+        bool isCausal,
+        out Tensor<T> softmaxStats);
+
+    /// <summary>
+    /// Computes the backward pass for FlashAttention.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with shape [batch, heads, seq_q, head_dim].</param>
+    /// <param name="query">Original query tensor from forward pass.</param>
+    /// <param name="key">Original key tensor from forward pass.</param>
+    /// <param name="value">Original value tensor from forward pass.</param>
+    /// <param name="output">The output from the forward pass.</param>
+    /// <param name="softmaxStats">The log-sum-exp statistics from forward pass.</param>
+    /// <param name="scale">The scale factor used in forward pass.</param>
+    /// <param name="isCausal">Whether causal masking was used in forward pass.</param>
+    /// <param name="gradQuery">Output: gradient with respect to query.</param>
+    /// <param name="gradKey">Output: gradient with respect to key.</param>
+    /// <param name="gradValue">Output: gradient with respect to value.</param>
+    /// <returns>The gradient with respect to the output (same as gradOutput for chaining).</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass also uses tiling and recomputes attention weights from Q, K, and
+    /// the stored softmax statistics, maintaining the O(N) memory complexity.
+    /// </para>
+    /// </remarks>
+    Tensor<T> FlashAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> output,
+        Tensor<T> softmaxStats,
+        double scale,
+        bool isCausal,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue);
+
+    /// <summary>
+    /// Computes Grouped Query Attention (GQA) for efficient inference.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="query">Query tensor with shape [batch, num_q_heads, seq, head_dim].</param>
+    /// <param name="key">Key tensor with shape [batch, num_kv_heads, seq, head_dim].</param>
+    /// <param name="value">Value tensor with shape [batch, num_kv_heads, seq, head_dim].</param>
+    /// <param name="numQueriesPerKV">Number of query heads per key-value head (num_q_heads / num_kv_heads).</param>
+    /// <param name="scale">Optional scale factor. If null, uses 1/sqrt(head_dim).</param>
+    /// <param name="isCausal">If true, applies causal masking.</param>
+    /// <param name="attentionWeights">Output: attention weights [batch, num_q_heads, seq_q, seq_kv].</param>
+    /// <returns>The attention output with shape [batch, num_q_heads, seq, head_dim].</returns>
+    /// <remarks>
+    /// <para><b>Grouped Query Attention (Ainslie et al., 2023):</b></para>
+    /// <para>
+    /// GQA is a variant of multi-head attention that groups multiple query heads to share
+    /// the same key-value head. This reduces memory bandwidth and KV-cache size during inference
+    /// while maintaining most of the model quality.
+    /// </para>
+    /// <para><b>Key Benefits:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Reduces KV-cache memory by num_q_heads/num_kv_heads factor</description></item>
+    /// <item><description>Faster inference due to reduced memory bandwidth</description></item>
+    /// <item><description>Interpolates between MHA (all unique) and MQA (all shared)</description></item>
+    /// <item><description>Used in LLaMA 2, Mistral, and other modern LLMs</description></item>
+    /// </list>
+    /// <para><b>Example:</b> With 32 query heads and 8 KV heads, each KV head is shared by
+    /// 4 query heads, reducing KV-cache size by 4x compared to standard MHA.</para>
+    /// <para><b>For Beginners:</b> In standard attention, each query has its own key-value pair.
+    /// GQA is more efficient because multiple queries share the same key-value pair. It's like
+    /// having 32 students (queries) but only 8 teachers (key-value pairs) - each teacher handles
+    /// 4 students, using less resources while still providing good education.</para>
+    /// </remarks>
+    Tensor<T> GroupedQueryAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        int numQueriesPerKV,
+        double? scale,
+        bool isCausal,
+        out Tensor<T> attentionWeights);
+
+    /// <summary>
+    /// Computes the backward pass for Grouped Query Attention.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with shape [batch, num_q_heads, seq, head_dim].</param>
+    /// <param name="query">Original query tensor from forward pass.</param>
+    /// <param name="key">Original key tensor from forward pass.</param>
+    /// <param name="value">Original value tensor from forward pass.</param>
+    /// <param name="attentionWeights">Attention weights from forward pass.</param>
+    /// <param name="numQueriesPerKV">Number of query heads per key-value head.</param>
+    /// <param name="scale">The scale factor used in forward pass.</param>
+    /// <param name="gradQuery">Output: gradient with respect to query [batch, num_q_heads, seq, head_dim].</param>
+    /// <param name="gradKey">Output: gradient with respect to key [batch, num_kv_heads, seq, head_dim].</param>
+    /// <param name="gradValue">Output: gradient with respect to value [batch, num_kv_heads, seq, head_dim].</param>
+    /// <returns>The gradient with respect to the output (same as gradOutput for chaining).</returns>
+    /// <remarks>
+    /// <para>
+    /// The gradients for K and V are accumulated across all query heads that share them.
+    /// This is the reverse of the forward pass where K and V are broadcast to multiple query heads.
+    /// </para>
+    /// </remarks>
+    Tensor<T> GroupedQueryAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> attentionWeights,
+        int numQueriesPerKV,
+        double scale,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue);
+
+    /// <summary>
+    /// Computes Graph Attention Network (GAT) style attention over graph nodes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="nodeFeatures">Node feature tensor with shape [batch, nodes, features].</param>
+    /// <param name="edgeSourceIndices">Source node indices for each edge with shape [num_edges].</param>
+    /// <param name="edgeTargetIndices">Target node indices for each edge with shape [num_edges].</param>
+    /// <param name="attentionWeightSource">Attention weight vector for source nodes [features].</param>
+    /// <param name="attentionWeightTarget">Attention weight vector for target nodes [features].</param>
+    /// <param name="leakyReluAlpha">Negative slope for LeakyReLU activation (typically 0.2).</param>
+    /// <param name="attentionCoeffs">Output: attention coefficients for each edge [batch, num_edges].</param>
+    /// <returns>The aggregated node features with shape [batch, nodes, features].</returns>
+    /// <remarks>
+    /// <para>
+    /// Implements the GAT attention mechanism from Veličković et al.:
+    /// α_ij = softmax_j(LeakyReLU(a_src^T @ h_i + a_tgt^T @ h_j))
+    /// h'_i = Σ_j α_ij @ h_j
+    /// </para>
+    /// <para><b>Key differences from scaled dot-product attention:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Uses additive attention with learnable vectors instead of dot-product</description></item>
+    /// <item><description>Applies LeakyReLU before softmax for non-linearity</description></item>
+    /// <item><description>Operates on graph structure defined by edge indices</description></item>
+    /// <item><description>Softmax is computed per-node over its neighbors only</description></item>
+    /// </list>
+    /// </remarks>
+    Tensor<T> GraphAttention<T>(
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> attentionWeightSource,
+        Tensor<T> attentionWeightTarget,
+        double leakyReluAlpha,
+        out Tensor<T> attentionCoeffs);
+
+    /// <summary>
+    /// Computes the backward pass for Graph Attention Network attention.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with shape [batch, nodes, features].</param>
+    /// <param name="nodeFeatures">Original node features from forward pass.</param>
+    /// <param name="edgeSourceIndices">Source node indices for each edge.</param>
+    /// <param name="edgeTargetIndices">Target node indices for each edge.</param>
+    /// <param name="attentionWeightSource">Attention weight vector for source nodes.</param>
+    /// <param name="attentionWeightTarget">Attention weight vector for target nodes.</param>
+    /// <param name="attentionCoeffs">Attention coefficients from forward pass.</param>
+    /// <param name="leakyReluAlpha">Negative slope for LeakyReLU.</param>
+    /// <param name="gradNodeFeatures">Output: gradient with respect to node features.</param>
+    /// <param name="gradAttentionWeightSource">Output: gradient with respect to source attention weights.</param>
+    /// <param name="gradAttentionWeightTarget">Output: gradient with respect to target attention weights.</param>
+    /// <returns>The gradient with respect to the output (same as gradOutput for chaining).</returns>
+    Tensor<T> GraphAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> attentionWeightSource,
+        Tensor<T> attentionWeightTarget,
+        Tensor<T> attentionCoeffs,
+        double leakyReluAlpha,
+        out Tensor<T> gradNodeFeatures,
+        out Tensor<T> gradAttentionWeightSource,
+        out Tensor<T> gradAttentionWeightTarget);
+
+    /// <summary>
+    /// Computes multi-head Graph Attention with concatenation or averaging of heads.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="nodeFeatures">Node feature tensor with shape [batch, nodes, features].</param>
+    /// <param name="edgeSourceIndices">Source node indices for each edge.</param>
+    /// <param name="edgeTargetIndices">Target node indices for each edge.</param>
+    /// <param name="headWeights">Weight tensor for all heads [num_heads, features, head_dim].</param>
+    /// <param name="attentionWeightsSource">Attention weights for source [num_heads, head_dim].</param>
+    /// <param name="attentionWeightsTarget">Attention weights for target [num_heads, head_dim].</param>
+    /// <param name="leakyReluAlpha">Negative slope for LeakyReLU.</param>
+    /// <param name="concatenate">If true, concatenate heads; if false, average them.</param>
+    /// <param name="attentionCoeffs">Output: attention coefficients [batch, num_heads, num_edges].</param>
+    /// <returns>Output features [batch, nodes, num_heads * head_dim] if concat, else [batch, nodes, head_dim].</returns>
+    Tensor<T> MultiHeadGraphAttention<T>(
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> headWeights,
+        Tensor<T> attentionWeightsSource,
+        Tensor<T> attentionWeightsTarget,
+        double leakyReluAlpha,
+        bool concatenate,
+        out Tensor<T> attentionCoeffs);
+
+    #endregion
+
+    #region FFT and Signal Processing
+
+    /// <summary>
+    /// Computes the 1D Fast Fourier Transform of a real-valued signal.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Real-valued input tensor with shape [..., n] where n should be a power of 2.</param>
+    /// <returns>Complex output tensor with shape [..., n/2 + 1] containing positive frequency components.</returns>
+    /// <remarks>
+    /// <para><b>Real FFT (RFFT):</b></para>
+    /// <para>
+    /// For real-valued inputs, the FFT output has conjugate symmetry, meaning the negative frequency
+    /// components are redundant. RFFT exploits this by only computing and returning the positive
+    /// frequencies (0 to Nyquist), reducing computation and memory by approximately half.
+    /// </para>
+    /// <para><b>Output Format:</b></para>
+    /// <para>
+    /// Returns interleaved real/imaginary pairs: [re0, im0, re1, im1, ..., re(n/2), im(n/2)].
+    /// The output length is (n/2 + 1) * 2 = n + 2 elements total.
+    /// </para>
+    /// <para><b>For Beginners:</b> The FFT converts a signal from the time domain (amplitude over time)
+    /// to the frequency domain (amplitude at each frequency). This is essential for audio processing,
+    /// where you might want to analyze which frequencies are present in a sound, remove noise at
+    /// specific frequencies, or compress audio data.</para>
+    /// <para><b>Example:</b> A 440 Hz sine wave (musical note A) will show a peak at the 440 Hz
+    /// frequency bin in the FFT output.</para>
+    /// </remarks>
+    Tensor<T> RFFT<T>(Tensor<T> input);
+
+    /// <summary>
+    /// Computes the inverse 1D FFT, converting from frequency domain back to real-valued time domain.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Complex input tensor with shape [..., n/2 + 1] (interleaved real/imaginary).</param>
+    /// <param name="outputLength">The desired output length (original signal length before RFFT).</param>
+    /// <returns>Real-valued output tensor with shape [..., outputLength].</returns>
+    /// <remarks>
+    /// <para>
+    /// Reconstructs the original real-valued signal from its frequency representation.
+    /// The outputLength parameter is needed because the original length cannot always be
+    /// determined from the RFFT output (odd vs even input lengths).
+    /// </para>
+    /// <para><b>For Beginners:</b> This reverses the FFT operation. If you modified frequencies
+    /// (like removing noise or applying effects), IRFFT converts back to a playable audio signal.</para>
+    /// </remarks>
+    Tensor<T> IRFFT<T>(Tensor<T> input, int outputLength);
+
+    /// <summary>
+    /// Computes the 1D complex-to-complex Fast Fourier Transform.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="inputReal">Real part of input with shape [..., n].</param>
+    /// <param name="inputImag">Imaginary part of input with shape [..., n].</param>
+    /// <param name="outputReal">Output: Real part of FFT result with shape [..., n].</param>
+    /// <param name="outputImag">Output: Imaginary part of FFT result with shape [..., n].</param>
+    /// <remarks>
+    /// <para>
+    /// Full complex FFT that handles both real and imaginary input components.
+    /// Unlike RFFT, this returns all n frequency bins (including negative frequencies).
+    /// </para>
+    /// <para><b>When to use:</b></para>
+    /// <list type="bullet">
+    /// <item><description>When input is already complex (e.g., after previous FFT operations)</description></item>
+    /// <item><description>When you need both positive and negative frequency components</description></item>
+    /// <item><description>For 2D FFT building blocks</description></item>
+    /// </list>
+    /// </remarks>
+    void FFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag);
+
+    /// <summary>
+    /// Computes the inverse 1D complex-to-complex Fast Fourier Transform.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="inputReal">Real part of frequency domain input with shape [..., n].</param>
+    /// <param name="inputImag">Imaginary part of frequency domain input with shape [..., n].</param>
+    /// <param name="outputReal">Output: Real part of time domain result with shape [..., n].</param>
+    /// <param name="outputImag">Output: Imaginary part of time domain result with shape [..., n].</param>
+    /// <remarks>
+    /// <para>
+    /// Inverse of the complex FFT. Converts frequency domain representation back to time domain.
+    /// Applies 1/n normalization to ensure round-trip FFT->IFFT recovers the original signal.
+    /// </para>
+    /// </remarks>
+    void IFFT<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag);
+
+    /// <summary>
+    /// Computes the 2D Fast Fourier Transform for image and spectrogram processing.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="inputReal">Real part of input with shape [..., height, width].</param>
+    /// <param name="inputImag">Imaginary part of input with shape [..., height, width].</param>
+    /// <param name="outputReal">Output: Real part of 2D FFT result.</param>
+    /// <param name="outputImag">Output: Imaginary part of 2D FFT result.</param>
+    /// <remarks>
+    /// <para>
+    /// 2D FFT is computed as 1D FFT along each axis sequentially (separable property).
+    /// Used extensively in image processing and for analyzing 2D patterns.
+    /// </para>
+    /// <para><b>Applications:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Image filtering (blur, sharpen, edge detection)</description></item>
+    /// <item><description>Image compression (JPEG uses DCT, related to FFT)</description></item>
+    /// <item><description>Spectrogram analysis (time-frequency representations)</description></item>
+    /// <item><description>Convolution via frequency domain multiplication</description></item>
+    /// </list>
+    /// </remarks>
+    void FFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag);
+
+    /// <summary>
+    /// Computes the inverse 2D Fast Fourier Transform.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="inputReal">Real part of frequency domain input.</param>
+    /// <param name="inputImag">Imaginary part of frequency domain input.</param>
+    /// <param name="outputReal">Output: Real part of spatial domain result.</param>
+    /// <param name="outputImag">Output: Imaginary part of spatial domain result.</param>
+    void IFFT2D<T>(Tensor<T> inputReal, Tensor<T> inputImag, out Tensor<T> outputReal, out Tensor<T> outputImag);
+
+    /// <summary>
+    /// Computes the Short-Time Fourier Transform (STFT) for time-frequency analysis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Audio signal with shape [batch, samples] or [samples].</param>
+    /// <param name="nFft">FFT size (window size). Must be power of 2. Default: 2048.</param>
+    /// <param name="hopLength">Number of samples between frames. Default: nFft/4.</param>
+    /// <param name="window">Window function tensor of length nFft (e.g., Hann window).</param>
+    /// <param name="center">If true, pad signal by nFft/2 on each side. Default: true.</param>
+    /// <param name="magnitudeOut">Output: Magnitude spectrogram [..., numFrames, nFft/2+1].</param>
+    /// <param name="phaseOut">Output: Phase spectrogram [..., numFrames, nFft/2+1].</param>
+    /// <remarks>
+    /// <para><b>Short-Time Fourier Transform (STFT):</b></para>
+    /// <para>
+    /// STFT analyzes how the frequency content of a signal changes over time by computing
+    /// the FFT on overlapping windows of the signal. The result is a 2D spectrogram showing
+    /// frequency (vertical) vs time (horizontal).
+    /// </para>
+    /// <para><b>Parameters explained:</b></para>
+    /// <list type="bullet">
+    /// <item><description><b>nFft</b>: Larger = better frequency resolution, worse time resolution</description></item>
+    /// <item><description><b>hopLength</b>: Smaller = more frames, smoother time evolution</description></item>
+    /// <item><description><b>window</b>: Reduces spectral leakage (Hann window is standard for audio)</description></item>
+    /// <item><description><b>center</b>: Ensures first/last frames are centered on signal edges</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Think of STFT as taking "snapshots" of frequencies at different
+    /// points in time. A piano note will show its fundamental frequency appearing when the key is
+    /// pressed and fading as the note decays.</para>
+    /// </remarks>
+    void STFT<T>(
+        Tensor<T> input,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        out Tensor<T> magnitudeOut,
+        out Tensor<T> phaseOut);
+
+    /// <summary>
+    /// Computes the inverse Short-Time Fourier Transform to reconstruct audio from spectrogram.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="magnitude">Magnitude spectrogram [..., numFrames, numFreqs].</param>
+    /// <param name="phase">Phase spectrogram [..., numFrames, numFreqs].</param>
+    /// <param name="nFft">FFT size used in forward STFT.</param>
+    /// <param name="hopLength">Hop length used in forward STFT.</param>
+    /// <param name="window">Window function tensor (same as forward STFT).</param>
+    /// <param name="center">Whether centering was used in forward STFT.</param>
+    /// <param name="length">Optional: exact output length. If null, computed from spectrogram shape.</param>
+    /// <returns>Reconstructed audio signal [..., samples].</returns>
+    /// <remarks>
+    /// <para>
+    /// Reconstructs the time-domain signal from magnitude and phase spectrograms using
+    /// overlap-add synthesis. For perfect reconstruction, use the same parameters as forward STFT.
+    /// </para>
+    /// <para><b>Note:</b> If only magnitude is available (no phase), use Griffin-Lim algorithm
+    /// for iterative phase estimation.</para>
+    /// </remarks>
+    Tensor<T> ISTFT<T>(
+        Tensor<T> magnitude,
+        Tensor<T> phase,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        bool center,
+        int? length = null);
+
+    /// <summary>
+    /// Computes the Mel spectrogram from an audio signal.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Audio signal with shape [batch, samples] or [samples].</param>
+    /// <param name="sampleRate">Audio sample rate in Hz (e.g., 22050, 44100).</param>
+    /// <param name="nFft">FFT size. Default: 2048.</param>
+    /// <param name="hopLength">Hop length between frames. Default: 512.</param>
+    /// <param name="nMels">Number of Mel frequency bands. Default: 128.</param>
+    /// <param name="fMin">Minimum frequency in Hz. Default: 0.</param>
+    /// <param name="fMax">Maximum frequency in Hz. Default: sampleRate/2 (Nyquist).</param>
+    /// <param name="window">Window function tensor.</param>
+    /// <param name="powerToDb">If true, convert to decibel scale. Default: true.</param>
+    /// <returns>Mel spectrogram [..., numFrames, nMels].</returns>
+    /// <remarks>
+    /// <para><b>Mel Spectrogram:</b></para>
+    /// <para>
+    /// The Mel scale approximates human auditory perception, where we perceive pitch differences
+    /// logarithmically (an octave sounds like the same "distance" regardless of absolute frequency).
+    /// Mel spectrograms are the standard input representation for speech and music ML models.
+    /// </para>
+    /// <para><b>Common configurations:</b></para>
+    /// <list type="bullet">
+    /// <item><description><b>Speech:</b> nMels=80, nFft=1024, hopLength=256</description></item>
+    /// <item><description><b>Music:</b> nMels=128, nFft=2048, hopLength=512</description></item>
+    /// <item><description><b>Riffusion:</b> nMels=512, nFft=2048, hopLength=512</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> A Mel spectrogram is like a regular spectrogram but with frequency
+    /// bands spaced according to how humans hear. Low frequencies get more resolution (we're sensitive
+    /// to small pitch changes there), while high frequencies are grouped together.</para>
+    /// </remarks>
+    Tensor<T> MelSpectrogram<T>(
+        Tensor<T> input,
+        int sampleRate,
+        int nFft,
+        int hopLength,
+        int nMels,
+        T fMin,
+        T fMax,
+        Tensor<T> window,
+        bool powerToDb = true);
+
+    /// <summary>
+    /// Reconstructs audio from a magnitude spectrogram using the Griffin-Lim algorithm.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="magnitude">Magnitude spectrogram [..., numFrames, numFreqs].</param>
+    /// <param name="nFft">FFT size.</param>
+    /// <param name="hopLength">Hop length between frames.</param>
+    /// <param name="window">Window function tensor.</param>
+    /// <param name="iterations">Number of Griffin-Lim iterations. Default: 60.</param>
+    /// <param name="momentum">Momentum for faster convergence (0-0.99). Default: 0.99.</param>
+    /// <param name="length">Optional: exact output length.</param>
+    /// <returns>Reconstructed audio signal [..., samples].</returns>
+    /// <remarks>
+    /// <para><b>Griffin-Lim Algorithm:</b></para>
+    /// <para>
+    /// When only magnitude information is available (phase is unknown), Griffin-Lim iteratively
+    /// estimates the phase by repeatedly applying STFT/ISTFT and enforcing magnitude consistency.
+    /// </para>
+    /// <para><b>Algorithm steps:</b></para>
+    /// <list type="number">
+    /// <item><description>Initialize with random phase</description></item>
+    /// <item><description>Reconstruct signal: ISTFT(magnitude, estimated_phase)</description></item>
+    /// <item><description>Compute new STFT of reconstructed signal</description></item>
+    /// <item><description>Extract phase from new STFT, keep original magnitude</description></item>
+    /// <item><description>Repeat steps 2-4 for specified iterations</description></item>
+    /// </list>
+    /// <para><b>Quality vs Speed:</b></para>
+    /// <list type="bullet">
+    /// <item><description>30 iterations: Acceptable quality, some artifacts</description></item>
+    /// <item><description>60 iterations: Good quality for most applications</description></item>
+    /// <item><description>100+ iterations: Diminishing returns</description></item>
+    /// </list>
+    /// <para><b>Momentum:</b> Setting momentum > 0 accelerates convergence by using velocity
+    /// from previous iterations. 0.99 is recommended; set to 0 for original algorithm.</para>
+    /// </remarks>
+    Tensor<T> GriffinLim<T>(
+        Tensor<T> magnitude,
+        int nFft,
+        int hopLength,
+        Tensor<T> window,
+        int iterations = 60,
+        double momentum = 0.99,
+        int? length = null);
+
+    /// <summary>
+    /// Creates a Mel filterbank matrix for converting power spectrograms to Mel scale.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="nMels">Number of Mel bands.</param>
+    /// <param name="nFft">FFT size (filterbank will have nFft/2+1 frequency bins).</param>
+    /// <param name="sampleRate">Audio sample rate in Hz.</param>
+    /// <param name="fMin">Minimum frequency in Hz.</param>
+    /// <param name="fMax">Maximum frequency in Hz.</param>
+    /// <returns>Mel filterbank matrix [nMels, nFft/2+1].</returns>
+    /// <remarks>
+    /// <para>
+    /// Creates triangular filters spaced on the Mel scale. Each filter covers a range of
+    /// frequencies, with overlap between adjacent filters. The filterbank is applied by
+    /// matrix multiplication: melSpec = filterbank @ powerSpec.
+    /// </para>
+    /// <para><b>Mel scale formula:</b> mel = 2595 * log10(1 + hz/700)</para>
+    /// </remarks>
+    Tensor<T> CreateMelFilterbank<T>(int nMels, int nFft, int sampleRate, T fMin, T fMax);
+
+    /// <summary>
+    /// Creates a window function tensor for STFT analysis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="windowType">Type of window: "hann", "hamming", "blackman", "bartlett".</param>
+    /// <param name="length">Window length (typically equals nFft).</param>
+    /// <returns>Window function tensor of shape [length].</returns>
+    /// <remarks>
+    /// <para><b>Window functions</b> reduce spectral leakage in FFT analysis:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Hann (Hanning):</b> Most common for audio. Good frequency resolution.</description></item>
+    /// <item><description><b>Hamming:</b> Slightly better sidelobe suppression than Hann.</description></item>
+    /// <item><description><b>Blackman:</b> Best sidelobe suppression, wider main lobe.</description></item>
+    /// <item><description><b>Bartlett:</b> Triangular window, simple but less optimal.</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Without windowing, abrupt signal edges cause artifacts in the FFT.
+    /// Windows taper the signal smoothly to zero at the edges, producing cleaner frequency analysis.</para>
+    /// </remarks>
+    Tensor<T> CreateWindow<T>(string windowType, int length);
+
+    #endregion
+
+    #region Fused Operations
+
+    /// <summary>
+    /// Performs a fused linear transformation: output = activation(input @ weights + bias).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., inputFeatures].</param>
+    /// <param name="weights">Weight matrix with shape [inputFeatures, outputFeatures].</param>
+    /// <param name="bias">Optional bias vector with shape [outputFeatures].</param>
+    /// <param name="activation">Activation function to apply.</param>
+    /// <returns>Output tensor with shape [..., outputFeatures].</returns>
+    Tensor<T> FusedLinear<T>(
+        Tensor<T> input,
+        Tensor<T> weights,
+        Tensor<T>? bias,
+        FusedActivationType activation);
+
+    /// <summary>
+    /// Computes the backward pass for fused linear transformation.
+    /// </summary>
+    Tensor<T> FusedLinearBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> weights,
+        Tensor<T> preActivation,
+        FusedActivationType activation,
+        out Tensor<T> gradWeights,
+        out Tensor<T>? gradBias);
+
+    /// <summary>
+    /// Performs a fused 2D convolution: output = activation(conv2d(input, kernel) + bias).
+    /// </summary>
+    Tensor<T> FusedConv2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int dilationH, int dilationW,
+        FusedActivationType activation);
+
+    /// <summary>
+    /// Performs a fused 3D convolution: output = activation(conv3d(input, kernel) + bias).
+    /// Combines convolution, bias addition, and activation into a single optimized operation.
+    /// </summary>
+    /// <param name="input">Input tensor with shape [batch, channels, depth, height, width].</param>
+    /// <param name="kernel">Convolution kernels with shape [outChannels, inChannels, kD, kH, kW].</param>
+    /// <param name="bias">Optional bias vector with shape [outChannels].</param>
+    /// <param name="strideD">Stride in depth dimension.</param>
+    /// <param name="strideH">Stride in height dimension.</param>
+    /// <param name="strideW">Stride in width dimension.</param>
+    /// <param name="padD">Padding in depth dimension.</param>
+    /// <param name="padH">Padding in height dimension.</param>
+    /// <param name="padW">Padding in width dimension.</param>
+    /// <param name="dilationD">Dilation in depth dimension.</param>
+    /// <param name="dilationH">Dilation in height dimension.</param>
+    /// <param name="dilationW">Dilation in width dimension.</param>
+    /// <param name="activation">Activation function to apply.</param>
+    /// <returns>Output tensor with shape [batch, outChannels, outD, outH, outW].</returns>
+    Tensor<T> FusedConv3D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideD, int strideH, int strideW,
+        int padD, int padH, int padW,
+        int dilationD, int dilationH, int dilationW,
+        FusedActivationType activation);
+
+    /// <summary>
+    /// Performs a fused transposed 2D convolution: output = activation(convTranspose2d(input, kernel) + bias).
+    /// Combines transposed convolution, bias addition, and activation into a single optimized operation.
+    /// </summary>
+    /// <param name="input">Input tensor with shape [batch, channels, height, width].</param>
+    /// <param name="kernel">Convolution kernels with shape [inChannels, outChannels, kH, kW].</param>
+    /// <param name="bias">Optional bias vector with shape [outChannels].</param>
+    /// <param name="strideH">Stride in height dimension.</param>
+    /// <param name="strideW">Stride in width dimension.</param>
+    /// <param name="padH">Padding in height dimension.</param>
+    /// <param name="padW">Padding in width dimension.</param>
+    /// <param name="outputPadH">Output padding in height dimension.</param>
+    /// <param name="outputPadW">Output padding in width dimension.</param>
+    /// <param name="activation">Activation function to apply.</param>
+    /// <returns>Output tensor with upsampled spatial dimensions.</returns>
+    Tensor<T> FusedConvTranspose2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int outputPadH, int outputPadW,
+        FusedActivationType activation);
+
+    /// <summary>
+    /// Performs fused batch normalization with activation.
+    /// </summary>
+    Tensor<T> FusedBatchNorm<T>(
+        Tensor<T> input,
+        Tensor<T> gamma,
+        Tensor<T> beta,
+        Tensor<T> runningMean,
+        Tensor<T> runningVar,
+        double epsilon,
+        double momentum,
+        bool training,
+        FusedActivationType activation,
+        out Tensor<T> saveMean,
+        out Tensor<T> saveVar);
+
+    #endregion
+
+    #region Persistent Tensor Management
+
+    /// <summary>
+    /// Registers a tensor as persistent for GPU memory optimization.
+    /// </summary>
+    void RegisterPersistentTensor<T>(Tensor<T> tensor, PersistentTensorRole role);
+
+    /// <summary>
+    /// Unregisters a previously registered persistent tensor.
+    /// </summary>
+    void UnregisterPersistentTensor<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Notifies the engine that a persistent tensor's contents have been updated.
+    /// </summary>
+    void InvalidatePersistentTensor<T>(Tensor<T> tensor);
+
+    #endregion
+
+    #region Normalization Operations
+
     /// <summary>
     /// Applies batch normalization to a 2D tensor [batch, features].
     /// </summary>
@@ -3323,6 +4232,57 @@ public interface IEngine
     /// This backward pass supports the same any-rank tensor semantics as the forward pass.
     /// </remarks>
     Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
+
+    /// <summary>
+    /// Applies Root Mean Square Layer Normalization (RMSNorm) as introduced in "Root Mean Square Layer Normalization" (Zhang &amp; Sennrich, 2019).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, seq, features] or any rank.</param>
+    /// <param name="gamma">Scale parameter (gain) with shape matching the last dimension(s) to normalize over.</param>
+    /// <param name="epsilon">Small constant for numerical stability (typically 1e-6 or 1e-8).</param>
+    /// <param name="rms">Output: the computed root mean square values for backward pass.</param>
+    /// <returns>The normalized tensor with the same shape as input.</returns>
+    /// <remarks>
+    /// <para>
+    /// RMSNorm is computationally simpler than LayerNorm as it omits the mean centering step:
+    /// <code>
+    /// RMSNorm(x) = x / RMS(x) * gamma
+    /// where RMS(x) = sqrt(mean(x^2) + epsilon)
+    /// </code>
+    /// </para>
+    /// <para><b>Advantages over LayerNorm:</b></para>
+    /// <list type="bullet">
+    /// <item><description>~7-64% faster than LayerNorm (no mean computation/subtraction)</description></item>
+    /// <item><description>Simpler backward pass (fewer operations)</description></item>
+    /// <item><description>Used in LLaMA, T5, and other modern transformers</description></item>
+    /// <item><description>Empirically shows comparable or better performance</description></item>
+    /// </list>
+    /// <para><b>Key differences from LayerNorm:</b></para>
+    /// <list type="bullet">
+    /// <item><description>No mean subtraction (no re-centering)</description></item>
+    /// <item><description>No beta/bias parameter (only gamma/gain)</description></item>
+    /// <item><description>Normalizes by RMS instead of standard deviation</description></item>
+    /// </list>
+    /// </remarks>
+    Tensor<T> RMSNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms);
+
+    /// <summary>
+    /// Computes the backward pass for RMSNorm.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="gamma">Scale parameter (gain).</param>
+    /// <param name="rms">The RMS values computed during forward pass.</param>
+    /// <param name="epsilon">Small constant used during forward pass.</param>
+    /// <param name="gradGamma">Output: gradient with respect to gamma.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// The gradient computation is simpler than LayerNorm due to no mean centering.
+    /// </para>
+    /// </remarks>
+    Tensor<T> RMSNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma);
 
     /// <summary>
     /// Applies group normalization to a tensor with shape [batch, channels, ...spatial].
@@ -3442,6 +4402,141 @@ public interface IEngine
     /// <param name="axes">The axes that were reduced.</param>
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> ReduceLogVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, Tensor<T> variance, int[] axes);
+
+    #endregion
+
+    #region Scatter Operations (Graph Neural Networks)
+
+    /// <summary>
+    /// Performs scatter-add operation: aggregates source values into output by adding at indices.
+    /// Essential for Graph Neural Network message passing and sparse tensor operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">Source tensor with values to scatter.</param>
+    /// <param name="indices">Index tensor specifying where to scatter values along the given dimension.
+    /// Shape must be broadcastable to source shape.</param>
+    /// <param name="dim">The dimension along which to scatter (default: 0).</param>
+    /// <param name="outputSize">Size of the output along the scatter dimension.
+    /// If null, uses max(indices) + 1.</param>
+    /// <returns>Output tensor with scattered (summed) values.</returns>
+    /// <remarks>
+    /// <para>
+    /// For each index i in the index tensor:
+    /// <code>output[indices[i], ...] += source[i, ...]</code>
+    /// </para>
+    /// <para><b>Common GNN uses:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Aggregating neighbor messages to nodes</description></item>
+    /// <item><description>Edge-to-node aggregation in MessagePassingLayer</description></item>
+    /// <item><description>Pooling operations in graph classification</description></item>
+    /// </list>
+    /// </remarks>
+    Tensor<T> ScatterAdd<T>(Tensor<T> source, Tensor<int> indices, int dim = 0, int? outputSize = null);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-add.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="indices">The indices used in forward pass.</param>
+    /// <param name="sourceShape">The original source tensor shape.</param>
+    /// <param name="dim">The dimension along which scatter was performed.</param>
+    /// <returns>Gradient with respect to the source tensor.</returns>
+    Tensor<T> ScatterAddBackward<T>(Tensor<T> gradOutput, Tensor<int> indices, int[] sourceShape, int dim = 0);
+
+    /// <summary>
+    /// Performs scatter-mean operation: computes mean of scattered values at each index.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">Source tensor with values to scatter.</param>
+    /// <param name="indices">Index tensor specifying where to scatter values.</param>
+    /// <param name="dim">The dimension along which to scatter (default: 0).</param>
+    /// <param name="outputSize">Size of the output along the scatter dimension.</param>
+    /// <param name="counts">Output: count of elements at each index (for backward pass).</param>
+    /// <returns>Output tensor with mean values at each scattered position.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes: output[i] = sum(source[indices == i]) / count(indices == i)
+    /// </para>
+    /// <para>
+    /// Useful for mean aggregation in GNNs where node degree varies.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScatterMean<T>(Tensor<T> source, Tensor<int> indices, out Tensor<int>? counts, int dim = 0, int? outputSize = null);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-mean.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="indices">The indices used in forward pass.</param>
+    /// <param name="counts">The counts computed during forward pass.</param>
+    /// <param name="sourceShape">The original source tensor shape.</param>
+    /// <param name="dim">The dimension along which scatter was performed.</param>
+    /// <returns>Gradient with respect to the source tensor.</returns>
+    Tensor<T> ScatterMeanBackward<T>(Tensor<T> gradOutput, Tensor<int> indices, Tensor<int> counts, int[] sourceShape, int dim = 0);
+
+    /// <summary>
+    /// Performs scatter-max operation: takes maximum of scattered values at each index.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">Source tensor with values to scatter.</param>
+    /// <param name="indices">Index tensor specifying where to scatter values.</param>
+    /// <param name="dim">The dimension along which to scatter (default: 0).</param>
+    /// <param name="outputSize">Size of the output along the scatter dimension.</param>
+    /// <param name="argmax">Output: indices of maximum values (for backward pass).</param>
+    /// <returns>Output tensor with maximum values at each scattered position.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes: output[i] = max(source[indices == i])
+    /// </para>
+    /// <para>
+    /// Useful for max-pooling aggregation in GNNs.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScatterMax<T>(Tensor<T> source, Tensor<int> indices, out Tensor<int>? argmax, int dim = 0, int? outputSize = null);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-max.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="argmax">The argmax indices from forward pass.</param>
+    /// <param name="sourceShape">The original source tensor shape.</param>
+    /// <param name="dim">The dimension along which scatter was performed.</param>
+    /// <returns>Gradient with respect to the source tensor.</returns>
+    Tensor<T> ScatterMaxBackward<T>(Tensor<T> gradOutput, Tensor<int> argmax, int[] sourceShape, int dim = 0);
+
+    /// <summary>
+    /// Performs scatter-softmax operation: applies softmax over scattered groups.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">Source tensor with values to scatter.</param>
+    /// <param name="indices">Index tensor specifying group membership.</param>
+    /// <param name="dim">The dimension along which to scatter (default: 0).</param>
+    /// <param name="outputSize">Size of the output along the scatter dimension.</param>
+    /// <returns>Output tensor with softmax applied within each scatter group.</returns>
+    /// <remarks>
+    /// <para>
+    /// For each unique index i, computes softmax over all source values with that index:
+    /// <code>output[j] = exp(source[j]) / sum(exp(source[indices == indices[j]]))</code>
+    /// </para>
+    /// <para>
+    /// Essential for attention mechanisms in Graph Attention Networks (GAT).
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScatterSoftmax<T>(Tensor<T> source, Tensor<int> indices, int dim = 0, int? outputSize = null);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-softmax.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="output">The output from forward scatter-softmax (softmax values).</param>
+    /// <param name="indices">The indices used in forward pass.</param>
+    /// <param name="dim">The dimension along which scatter was performed.</param>
+    /// <returns>Gradient with respect to the source tensor.</returns>
+    Tensor<T> ScatterSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, Tensor<int> indices, int dim = 0);
 
     #endregion
 
