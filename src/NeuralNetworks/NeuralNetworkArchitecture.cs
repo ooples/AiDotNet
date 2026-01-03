@@ -877,8 +877,8 @@ public class NeuralNetworkArchitecture<T>
                     }
                     else if (InputSize == 0)
                     {
-                        // InputHeight intentionally 0 for runtime-determined batch size
-                        // Default to 1 (single sample configuration that will be batched at runtime)
+                        // No InputSize or InputHeight provided: assume a 1 x InputWidth 2D input
+                        // Configure a single-row input shape; batching is handled separately from these dimensions
                         InputHeight = 1;
                         InputSize = InputWidth;
                     }
