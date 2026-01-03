@@ -180,9 +180,13 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         if (state is not null)
         {
             var weightsObj = state.Weights;
-            if (weightsObj is not null)
+            if (weightsObj is Newtonsoft.Json.Linq.JArray jArray)
             {
-                Vector<T> weights = weightsObj;
+                var weights = new Vector<T>(jArray.Count);
+                for (int i = 0; i < jArray.Count; i++)
+                {
+                    weights[i] = NumOps.FromDouble((double)jArray[i]);
+                }
                 SetParameters(weights);
             }
             if (state.Epsilon != null)

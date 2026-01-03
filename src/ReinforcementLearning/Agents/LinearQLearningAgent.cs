@@ -196,13 +196,19 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         double epsilonEnd = reader.ReadDouble();
         double epsilonDecay = reader.ReadDouble();
 
+        // Preserve required base class options that aren't serialized
         _options = new LinearQLearningOptions<T>
         {
             ActionSize = actionSize,
             FeatureSize = featureSize,
             EpsilonStart = epsilonStart,
             EpsilonEnd = epsilonEnd,
-            EpsilonDecay = epsilonDecay
+            EpsilonDecay = epsilonDecay,
+            // Preserve required properties from original options
+            LossFunction = _options.LossFunction,
+            LearningRate = _options.LearningRate,
+            DiscountFactor = _options.DiscountFactor,
+            Seed = _options.Seed
         };
 
         // Read current epsilon

@@ -307,7 +307,25 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
             throw new InvalidOperationException("Deserialization returned null");
         }
 
-        _weights = JsonConvert.DeserializeObject<Matrix<T>>(state.Weights.ToString()) ?? new Matrix<T>(_options.ActionSize, _options.FeatureSize);
+        // Create matrix with correct dimensions from options
+        _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
+
+        // Parse matrix from JArray structure (Matrix serializes as 2D array)
+        var weightsObj = state.Weights;
+        if (weightsObj is Newtonsoft.Json.Linq.JArray jArray)
+        {
+            for (int r = 0; r < _options.ActionSize && r < jArray.Count; r++)
+            {
+                var rowArray = jArray[r] as Newtonsoft.Json.Linq.JArray;
+                if (rowArray is not null)
+                {
+                    for (int c = 0; c < _options.FeatureSize && c < rowArray.Count; c++)
+                    {
+                        _weights[r, c] = NumOps.FromDouble((double)rowArray[c]);
+                    }
+                }
+            }
+        }
     }
 
     public override Vector<T> GetParameters()
