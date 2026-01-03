@@ -32,7 +32,9 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         if (weights == null || biases == null)
             throw new ArgumentException("Dense layer must expose weights and biases.", nameof(source));
 
-        var q = Int8WeightOnlyQuantization.QuantizePerRow(weights.ToArray(), rows: _outputSize, cols: _inputSize);
+        // DenseLayer uses [inputSize, outputSize] but we need [outputSize, inputSize] for row-major quantization
+        var transposedWeights = TransposeWeights(weights, _inputSize, _outputSize);
+        var q = Int8WeightOnlyQuantization.QuantizePerRow(transposedWeights, rows: _outputSize, cols: _inputSize);
         _weightsInt8 = q.Weights;
         _rowScales = q.Scales;
 
@@ -53,11 +55,27 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         if (weights == null || biases == null)
             throw new ArgumentException("Dense layer must expose weights and biases.", nameof(source));
 
-        var q = Int8WeightOnlyQuantization.QuantizePerRow(weights.ToArray(), rows: _outputSize, cols: _inputSize);
+        // DenseLayer uses [inputSize, outputSize] but we need [outputSize, inputSize] for row-major quantization
+        var transposedWeights = TransposeWeights(weights, _inputSize, _outputSize);
+        var q = Int8WeightOnlyQuantization.QuantizePerRow(transposedWeights, rows: _outputSize, cols: _inputSize);
         _weightsInt8 = q.Weights;
         _rowScales = q.Scales;
 
         _biases = biases.ToArray();
+    }
+
+    private static float[] TransposeWeights(Tensor<float> weights, int inputSize, int outputSize)
+    {
+        // weights is [inputSize, outputSize], we need [outputSize, inputSize]
+        var transposed = new float[outputSize * inputSize];
+        for (int o = 0; o < outputSize; o++)
+        {
+            for (int i = 0; i < inputSize; i++)
+            {
+                transposed[o * inputSize + i] = weights[i, o];
+            }
+        }
+        return transposed;
     }
 
     public override bool SupportsTraining => false;

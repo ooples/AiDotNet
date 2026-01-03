@@ -35,7 +35,12 @@ public class NeuralNetworkDerivativesTests
     public void ComputeGradient_LinearLayer_ReturnsExpectedJacobian()
     {
         var layer = new DenseLayer<double>(2, 2, (IActivationFunction<double>)new IdentityActivation<double>());
-        layer.SetParameters(new Vector<double>(new[] { 1.0, 2.0, 0.5, -1.0, -2.0, 0.25 }));
+        // DenseLayer uses [inputSize, outputSize] convention. Parameters are: weights in row-major, then biases.
+        // weights[0,0]=1.0, weights[0,1]=0.5, weights[1,0]=2.0, weights[1,1]=-1.0, bias[0]=-2.0, bias[1]=0.25
+        // This gives gradient[i,j] = dOutput[i]/dInput[j]:
+        // gradient[0,0] = weights[0,0] = 1.0, gradient[0,1] = weights[1,0] = 2.0
+        // gradient[1,0] = weights[0,1] = 0.5, gradient[1,1] = weights[1,1] = -1.0
+        layer.SetParameters(new Vector<double>(new[] { 1.0, 0.5, 2.0, -1.0, -2.0, 0.25 }));
 
         var network = CreateNetwork(new List<ILayer<double>> { layer }, inputSize: 2, outputSize: 2);
         var gradient = NeuralNetworkDerivatives<double>.ComputeGradient(network, new[] { 0.1, -0.3 }, 2);

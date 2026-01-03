@@ -494,8 +494,9 @@ namespace AiDotNet.Autodiff
                 throw new NotSupportedException("Vector activations are not supported for PDE derivatives.");
             }
 
-            int outputSize = weights.Shape[0];
-            int inputSize = weights.Shape[1];
+            // DenseLayer uses industry standard [inputSize, outputSize] weight convention
+            int inputSize = weights.Shape[0];
+            int outputSize = weights.Shape[1];
 
             if (prevActivations.Length != inputSize)
             {
@@ -519,7 +520,8 @@ namespace AiDotNet.Autodiff
                 T z = biases[i];
                 for (int j = 0; j < inputSize; j++)
                 {
-                    z = numOps.Add(z, numOps.Multiply(weights[i, j], prevActivations[j]));
+                    // weights[j, i] = weights[inputIndex, outputIndex] for [inputSize, outputSize] convention
+                    z = numOps.Add(z, numOps.Multiply(weights[j, i], prevActivations[j]));
                 }
 
                 EvaluateActivation(activation, z, numOps, out T value, out T first, out T second);
@@ -530,7 +532,8 @@ namespace AiDotNet.Autodiff
 
                 for (int j = 0; j < inputSize; j++)
                 {
-                    var weight = weights[i, j];
+                    // weights[j, i] = weights[inputIndex, outputIndex] for [inputSize, outputSize] convention
+                    var weight = weights[j, i];
                     var prevGradient = prevGradients[j];
                     var prevHessian = prevHessians[j];
 
