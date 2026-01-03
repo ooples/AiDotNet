@@ -2274,30 +2274,32 @@ public static class LayerHelper<T>
         int inputSize = inputShape[0];
         int outputSize = architecture.OutputSize;
 
-        // Define recommended default sizes for quantum networks
+        // QuantumLayer outputs 2^numQubits probability values, not the configured outputSize
+        int quantumDim = 1 << numQubits; // 2^numQubits
         int hiddenSize = Math.Max(32, Math.Max(inputSize, outputSize));
 
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
         // First quantum layer with measurement
-        yield return new QuantumLayer<T>(inputSize, hiddenSize, numQubits);
-        yield return new MeasurementLayer<T>(hiddenSize);
+        // QuantumLayer outputs quantumDim values regardless of its outputSize parameter
+        yield return new QuantumLayer<T>(inputSize, quantumDim, numQubits);
+        yield return new MeasurementLayer<T>(quantumDim);
 
-        // Add a dense layer after measurement
+        // Add a dense layer after measurement to project to hiddenSize
         yield return new DenseLayer<T>(
-            inputSize: hiddenSize,
+            inputSize: quantumDim,
             outputSize: hiddenSize,
             activationFunction: new ReLUActivation<T>()
         );
 
         // Second quantum layer with measurement
-        yield return new QuantumLayer<T>(hiddenSize, hiddenSize, numQubits);
-        yield return new MeasurementLayer<T>(hiddenSize);
+        yield return new QuantumLayer<T>(hiddenSize, quantumDim, numQubits);
+        yield return new MeasurementLayer<T>(quantumDim);
 
         // Final dense layer to map to output size
         yield return new DenseLayer<T>(
-            inputSize: hiddenSize,
+            inputSize: quantumDim,
             outputSize: outputSize,
             activationFunction: null
         );

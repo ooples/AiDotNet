@@ -1045,7 +1045,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         var options = new PredictionModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput>(),
+            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() },
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -1222,7 +1222,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         var options = new PredictionModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput>(),
+            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() },
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -1594,8 +1594,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
                 targetPipeline: null // Target pipeline can be added later if needed
             );
 
-            // Create a legacy normInfo for backward compatibility (empty but non-null)
-            normInfo = new NormalizationInfo<T, TInput, TOutput>();
+            // Create a legacy normInfo for backward compatibility with NoNormalizer
+            normInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() };
         }
         else
         {
@@ -2625,8 +2625,11 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             BestSolution = _model
         };
 
-        // Create normalization info (RL doesn't use normalization like supervised learning)
-        var normInfo = new NormalizationInfo<T, TInput, TOutput>();
+        // Create normalization info with NoNormalizer (RL doesn't use normalization like supervised learning)
+        var normInfo = new NormalizationInfo<T, TInput, TOutput>
+        {
+            Normalizer = new NoNormalizer<T, TInput, TOutput>()
+        };
         PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
 
         // Create deployment configuration from individual configs

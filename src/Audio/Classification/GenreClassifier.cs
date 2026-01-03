@@ -273,8 +273,8 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
     {
         ThrowIfDisposed();
 
-        // Extract features
-        var featuresTensor = ExtractFeatures(audio);
+        // Extract features with metadata
+        var (featuresTensor, genreFeatures) = ExtractFeaturesWithMeta(audio);
 
         // Get logits from model
         Tensor<T> logits;
@@ -309,7 +309,8 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
             PredictedGenre = predictedGenre,
             Confidence = confidence,
             AllGenres = allGenres,
-            IsMultiLabel = false
+            IsMultiLabel = false,
+            Features = genreFeatures
         };
     }
 
@@ -670,6 +671,12 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
 
     private Tensor<T> ExtractFeatures(Tensor<T> audio)
     {
+        // Delegate to ExtractFeaturesWithMeta to eliminate code duplication
+        return ExtractFeaturesWithMeta(audio).Tensor;
+    }
+
+    private (Tensor<T> Tensor, GenreFeatures<T> Features) ExtractFeaturesWithMeta(Tensor<T> audio)
+    {
         // Extract MFCCs
         var mfccs = _mfccExtractor.Extract(audio);
 
@@ -687,7 +694,6 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
             {
                 sum += NumOps.ToDouble(mfccs[t, c]);
             }
-            // Guard against division by zero for empty MFCC frames
             mfccMean[c] = numFrames > 0 ? sum / numFrames : 0.0;
 
             double sumSq = 0;
@@ -696,7 +702,6 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
                 double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
                 sumSq += diff * diff;
             }
-            // Guard against division by zero for empty MFCC frames
             mfccStd[c] = numFrames > 0 ? Math.Sqrt(sumSq / numFrames) : 0.0;
         }
 
@@ -730,9 +735,17 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         features[0, idx++] = NumOps.FromDouble(ComputeStd(spectralCentroid));
         features[0, idx++] = NumOps.FromDouble(zeroCrossingRate);
         features[0, idx++] = NumOps.FromDouble(rmsEnergy);
-        features[0, idx++] = NumOps.FromDouble(tempo / 200.0);
+        features[0, idx] = NumOps.FromDouble(tempo / 200.0);
 
-        return features;
+        // Create genre features metadata
+        var genreFeatures = new GenreFeatures<T>
+        {
+            MfccMean = mfccMean.Select(v => NumOps.FromDouble(v)).ToArray(),
+            MfccStd = mfccStd.Select(v => NumOps.FromDouble(v)).ToArray(),
+            Tempo = NumOps.FromDouble(tempo)
+        };
+
+        return (features, genreFeatures);
     }
 
     private double ComputeMean(Tensor<T> tensor)

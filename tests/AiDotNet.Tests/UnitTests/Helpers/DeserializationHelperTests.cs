@@ -28,8 +28,8 @@ namespace AiDotNetTests.UnitTests.Helpers
         [Fact]
         public void CreateLayerFromType_WithConvolutionalLayer_CreatesCorrectly()
         {
-            // Arrange
-            var inputShape = new int[] { 28, 28, 1 };
+            // Arrange - NCHW format: [batch, channels, height, width]
+            var inputShape = new int[] { 1, 1, 28, 28 };
             var outputShape = new int[] { 32 };
             var additionalParams = new Dictionary<string, object>
             {
@@ -114,8 +114,8 @@ namespace AiDotNetTests.UnitTests.Helpers
         [Fact]
         public void CreateLayerFromType_WithConvolutionalLayerAndDefaultParams_UsesDefaults()
         {
-            // Arrange
-            var inputShape = new int[] { 28, 28, 1 };
+            // Arrange - NCHW format: [batch, channels, height, width]
+            var inputShape = new int[] { 1, 1, 28, 28 };
             var outputShape = new int[] { 32 };
 
             // Act
@@ -244,8 +244,8 @@ namespace AiDotNetTests.UnitTests.Helpers
         [Fact]
         public void CreateLayerFromType_WithConvolutionalLayerAndCustomFilterSize_UsesCustomValue()
         {
-            // Arrange
-            var inputShape = new int[] { 28, 28, 1 };
+            // Arrange - NCHW format: [batch, channels, height, width]
+            var inputShape = new int[] { 1, 1, 28, 28 };
             var outputShape = new int[] { 64 };
             var additionalParams = new Dictionary<string, object>
             {

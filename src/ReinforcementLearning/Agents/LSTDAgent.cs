@@ -286,7 +286,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var state = new
         {
-            Weights = _weights,
+            Weights = GetParameters(),  // Serialize as flat vector for consistency
             Options = _options
         };
         string json = JsonConvert.SerializeObject(state);
@@ -307,7 +307,30 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
             throw new InvalidOperationException("Deserialization returned null");
         }
 
-        _weights = JsonConvert.DeserializeObject<Matrix<T>>(state.Weights.ToString()) ?? new Matrix<T>(_options.ActionSize, _options.FeatureSize);
+        // Parse and validate weights as flat vector
+        var weightsObj = state.Weights;
+        if (weightsObj is null)
+        {
+            throw new InvalidOperationException("Failed to deserialize agent state: Weights property is missing or null.");
+        }
+
+        if (weightsObj is not Newtonsoft.Json.Linq.JArray jArray)
+        {
+            throw new InvalidOperationException($"Failed to deserialize agent state: Weights must be a JSON array, got {weightsObj.GetType().Name}.");
+        }
+
+        int expectedCount = _options.ActionSize * _options.FeatureSize;
+        if (jArray.Count != expectedCount)
+        {
+            throw new InvalidOperationException($"Weight count mismatch: expected {expectedCount} (ActionSize={_options.ActionSize} × FeatureSize={_options.FeatureSize}), got {jArray.Count}.");
+        }
+
+        var weights = new Vector<T>(jArray.Count);
+        for (int i = 0; i < jArray.Count; i++)
+        {
+            weights[i] = NumOps.FromDouble((double)jArray[i]);
+        }
+        SetParameters(weights);
     }
 
     public override Vector<T> GetParameters()

@@ -514,7 +514,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Reshape coupling coefficients to broadcast: [batchSize, inputCapsules, numCapsules, 1]
             var coefExpanded = couplingCoefficients.Reshape([batchSize, inputCapsules, _numCapsules, 1]);
 
-            // Element-wise multiply with broadcasting to weight the capsules
+            // Element-wise multiply to weight the capsules (broadcast multiply for dimension mismatch)
             var weighted = Engine.TensorBroadcastMultiply(transformedInput, coefExpanded);
 
             // Sum over input capsules (axis 1) to get weighted sum: [batchSize, numCapsules, capsuleDimension]
@@ -523,7 +523,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // === VECTORIZED Bias Addition ===
             // Reshape bias from [numCapsules * capsuleDimension] to [1, numCapsules, capsuleDimension]
             var biasReshaped = _bias.Reshape([1, _numCapsules, _capsuleDimension]);
-            weightedSum = Engine.TensorAdd(weightedSum, biasReshaped);
+            weightedSum = Engine.TensorBroadcastAdd(weightedSum, biasReshaped);
 
             // Apply squash activation
             output = ApplyActivation(weightedSum);
@@ -540,7 +540,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 // Reshape output to broadcast: [batchSize, 1, numCapsules, capsuleDimension]
                 var outputExpanded = output.Reshape([batchSize, 1, _numCapsules, _capsuleDimension]);
 
-                // Element-wise multiply with broadcasting
+                // Element-wise multiply (broadcast multiply for dimension mismatch)
                 var agreementProduct = Engine.TensorBroadcastMultiply(transformedInput, outputExpanded);
 
                 // Sum over capsule dimension (axis 3) to get agreement: [batchSize, inputCapsules, numCapsules]

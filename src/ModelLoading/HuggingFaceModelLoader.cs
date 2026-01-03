@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -169,7 +170,9 @@ public class HuggingFaceModelLoader<T>
 
         try
         {
-            var response = await _httpClient.GetStringAsync(url, cancellationToken);
+            // Note: GetStringAsync with CancellationToken not available in .NET Framework 4.7.1
+            cancellationToken.ThrowIfCancellationRequested();
+            var response = await _httpClient.GetStringAsync(url);
             var files = JArray.Parse(response);
 
             return files
@@ -239,7 +242,9 @@ public class HuggingFaceModelLoader<T>
             // Download to temp file first
             var tempPath = localPath + ".tmp";
 
-            using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+            // Note: ReadAsStreamAsync with CancellationToken not available in .NET Framework 4.7.1
+            cancellationToken.ThrowIfCancellationRequested();
+            using (var contentStream = await response.Content.ReadAsStreamAsync())
             using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
             {
                 if (_verbose && totalBytes > 0)
@@ -248,12 +253,18 @@ public class HuggingFaceModelLoader<T>
                 }
                 else
                 {
-                    await contentStream.CopyToAsync(fileStream, cancellationToken);
+                    // Note: CopyToAsync with CancellationToken not available in .NET Framework 4.7.1
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await contentStream.CopyToAsync(fileStream);
                 }
             }
 
-            // Move temp to final location
-            File.Move(tempPath, localPath, overwrite: true);
+            // Move temp to final location (overwrite parameter not available in .NET Framework 4.7.1)
+            if (File.Exists(localPath))
+            {
+                File.Delete(localPath);
+            }
+            File.Move(tempPath, localPath);
         }
         catch (HttpRequestException ex)
         {
@@ -280,11 +291,12 @@ public class HuggingFaceModelLoader<T>
 
         while (true)
         {
-            var count = await source.ReadAsync(buffer, cancellationToken);
+            // Note: ReadAsync/WriteAsync with Memory<byte> not available in .NET Framework 4.7.1
+            var count = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
             if (count == 0)
                 break;
 
-            await destination.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+            await destination.WriteAsync(buffer, 0, count, cancellationToken);
             bytesRead += count;
 
             var percent = (int)(bytesRead * 100 / totalBytes);
@@ -415,8 +427,18 @@ public class HuggingFaceModelLoader<T>
     private static string ComputeHash(string input)
     {
         var bytes = Encoding.UTF8.GetBytes(input);
-        var hashBytes = SHA256.HashData(bytes);
-        return Convert.ToHexString(hashBytes).Substring(0, 12).ToLowerInvariant();
+        // Note: SHA256.HashData and Convert.ToHexString not available in .NET Framework 4.7.1
+        using (var sha256 = SHA256.Create())
+        {
+            var hashBytes = sha256.ComputeHash(bytes);
+            // Convert to hex string manually (BitConverter adds dashes)
+            var sb = new StringBuilder(hashBytes.Length * 2);
+            foreach (var b in hashBytes)
+            {
+                sb.AppendFormat("{0:x2}", b);
+            }
+            return sb.ToString().Substring(0, 12);
+        }
     }
 
     /// <summary>

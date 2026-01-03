@@ -395,7 +395,8 @@ public class ONNXImporter<T>
                     {
                         // BFloat16 to float: shift left by 16 bits
                         var floatBits = (uint)bf16[i] << 16;
-                        var value = BitConverter.Int32BitsToSingle((int)floatBits);
+                        // Note: BitConverter.Int32BitsToSingle not available in .NET Framework 4.7.1
+                        var value = BitConverter.ToSingle(BitConverter.GetBytes((int)floatBits), 0);
                         tensor.Data[i] = NumOps.FromDouble(value);
                     }
                     break;

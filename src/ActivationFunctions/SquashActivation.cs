@@ -183,23 +183,67 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Activate(Tensor<T> input)
     {
         Tensor<T> output = new Tensor<T>(input.Shape);
-        int batchSize = input.Shape[0];
-        int vectorLength = input.Shape[1];
 
-        for (int i = 0; i < batchSize; i++)
+        if (input.Shape.Length == 2)
         {
-            Vector<T> vector = new Vector<T>(vectorLength);
-            for (int j = 0; j < vectorLength; j++)
-            {
-                vector[j] = input[i, j];
-            }
+            // 2D input: [batchSize, vectorLength]
+            int batchSize = input.Shape[0];
+            int vectorLength = input.Shape[1];
 
-            Vector<T> activatedVector = Activate(vector);
-
-            for (int j = 0; j < vectorLength; j++)
+            for (int i = 0; i < batchSize; i++)
             {
-                output[i, j] = activatedVector[j];
+                Vector<T> vector = new Vector<T>(vectorLength);
+                for (int j = 0; j < vectorLength; j++)
+                {
+                    vector[j] = input[i, j];
+                }
+
+                Vector<T> activatedVector = Activate(vector);
+
+                for (int j = 0; j < vectorLength; j++)
+                {
+                    output[i, j] = activatedVector[j];
+                }
             }
+        }
+        else if (input.Shape.Length == 3)
+        {
+            // 3D input: [batchSize, numCapsules, capsuleDimension]
+            // Squash each capsule vector independently
+            int batchSize = input.Shape[0];
+            int numCapsules = input.Shape[1];
+            int capsuleDim = input.Shape[2];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int c = 0; c < numCapsules; c++)
+                {
+                    Vector<T> vector = new Vector<T>(capsuleDim);
+                    for (int d = 0; d < capsuleDim; d++)
+                    {
+                        vector[d] = input[b, c, d];
+                    }
+
+                    Vector<T> activatedVector = Activate(vector);
+
+                    for (int d = 0; d < capsuleDim; d++)
+                    {
+                        output[b, c, d] = activatedVector[d];
+                    }
+                }
+            }
+        }
+        else
+        {
+            // For other ranks, flatten to 2D, process, and reshape back
+            int totalVectors = 1;
+            for (int d = 0; d < input.Shape.Length - 1; d++)
+                totalVectors *= input.Shape[d];
+            int vectorLength = input.Shape[input.Shape.Length - 1];
+
+            var flat = input.Reshape([totalVectors, vectorLength]);
+            var flatOutput = Activate(flat);
+            output = flatOutput.Reshape(input.Shape);
         }
 
         return output;

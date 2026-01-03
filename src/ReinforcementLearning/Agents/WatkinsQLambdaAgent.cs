@@ -33,14 +33,15 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        // Ensure states exist BEFORE accessing Q-table
+        EnsureStateExists(state);
+        EnsureStateExists(nextState);
+
         string stateKey = GetStateKey(state);
         string nextStateKey = GetStateKey(nextState);
         int actionIndex = ArgMax(action);
         int greedyCurrentAction = GetGreedyAction(stateKey);
         int greedyNextAction = GetGreedyAction(nextStateKey);
-
-        EnsureStateExists(state);
-        EnsureStateExists(nextState);
 
         T currentQ = _qTable[stateKey][actionIndex];
         T maxNextQ = _qTable[nextStateKey][greedyNextAction];

@@ -824,6 +824,10 @@ public class NeuralNetworkArchitecture<T>
     /// </remarks>
     private void ValidateInputDimensions()
     {
+        // Track whether InputSize was originally provided by the user (before any inference)
+        // This is used later to distinguish between "user provided InputSize" vs "computed InputSize"
+        bool inputSizeWasProvided = InputSize > 0;
+
         // First, validate and infer dimensions based on InputType
         switch (InputType)
         {
@@ -875,6 +879,13 @@ public class NeuralNetworkArchitecture<T>
                     {
                         InputHeight = InputSize / InputWidth;
                     }
+                    else if (InputSize == 0)
+                    {
+                        // No InputSize or InputHeight provided: assume a 1 x InputWidth 2D input
+                        // Configure a single-row input shape; batching is handled separately from these dimensions
+                        InputHeight = 1;
+                        InputSize = InputWidth;
+                    }
                     else
                     {
                         // Default InputHeight=1 for single-sample or variable batch processing
@@ -925,7 +936,9 @@ public class NeuralNetworkArchitecture<T>
             _ => throw new InvalidOperationException("Invalid InputDimensionality"),
         };
 
-        if (InputSize > 0 && InputSize != calculatedSize)
+        // Only validate if InputSize was explicitly provided by the user (not inferred/computed)
+        // This prevents false positives when InputSize was set during dimension inference
+        if (inputSizeWasProvided && InputSize != calculatedSize)
         {
             throw new ArgumentException($"Provided InputSize ({InputSize}) does not match the calculated size based on dimensions ({calculatedSize}). For {InputType} input, use either InputSize or the appropriate dimension parameters, not both.");
         }

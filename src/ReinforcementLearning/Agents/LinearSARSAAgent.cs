@@ -177,22 +177,42 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     {
         string json = System.Text.Encoding.UTF8.GetString(data);
         var state = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is not null)
+        if (state is null)
         {
-            var weightsObj = state.Weights;
-            if (weightsObj is not null)
-            {
-                Vector<T> weights = weightsObj;
-                SetParameters(weights);
-            }
-            if (state.Epsilon != null)
-            {
-                _epsilon = (double)state.Epsilon;
-            }
-            if (state.LastAction != null)
-            {
-                _lastAction = (int)state.LastAction;
-            }
+            throw new InvalidOperationException("Failed to deserialize agent state: JSON deserialization returned null.");
+        }
+
+        var weightsObj = state.Weights;
+        if (weightsObj is null)
+        {
+            throw new InvalidOperationException("Failed to deserialize agent state: Weights property is missing or null.");
+        }
+
+        if (weightsObj is not Newtonsoft.Json.Linq.JArray jArray)
+        {
+            throw new InvalidOperationException($"Failed to deserialize agent state: Weights must be a JSON array, got {weightsObj.GetType().Name}.");
+        }
+
+        int expectedCount = _options.ActionSize * _options.FeatureSize;
+        if (jArray.Count != expectedCount)
+        {
+            throw new InvalidOperationException($"Weight count mismatch: expected {expectedCount} (ActionSize={_options.ActionSize} × FeatureSize={_options.FeatureSize}), got {jArray.Count}.");
+        }
+
+        var weights = new Vector<T>(jArray.Count);
+        for (int i = 0; i < jArray.Count; i++)
+        {
+            weights[i] = NumOps.FromDouble((double)jArray[i]);
+        }
+        SetParameters(weights);
+
+        if (state.Epsilon != null)
+        {
+            _epsilon = Convert.ToDouble(state.Epsilon);
+        }
+        if (state.LastAction != null)
+        {
+            _lastAction = Convert.ToInt32(state.LastAction);
         }
     }
 

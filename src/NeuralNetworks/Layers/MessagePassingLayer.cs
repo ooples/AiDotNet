@@ -448,40 +448,44 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: reshape to 3D [batch, nodes, features]
-        // Consistent with GraphConvolutionalLayer pattern
+        // Handle any-rank tensor: need at least 2D for [nodes, features] or 3D for [batch, nodes, features]
         Tensor<T> processInput;
         int batchSize;
+        int numNodes;
 
         if (rank == 2)
         {
-            // 2D input [nodes, features] -> [1, nodes, features]
+            // 2D: [nodes, features] - single unbatched graph
             batchSize = 1;
+            numNodes = input.Shape[0];
             processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
-        }
-        else if (rank == 3)
-        {
-            // 3D input [batch, nodes, features]
-            batchSize = input.Shape[0];
-            processInput = input;
         }
         else
         {
-            // Higher rank: collapse leading dimensions
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 2; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            // 3D+: [batch, nodes, features] or [..., nodes, features]
+            batchSize = input.Shape[0];
+            numNodes = input.Shape[1];
+            processInput = input;
+            if (rank > 3)
+            {
+                // Flatten extra dimensions into batch
+                int flatBatch = 1;
+                for (int d = 0; d < rank - 2; d++)
+                    flatBatch *= input.Shape[d];
+                batchSize = flatBatch;
+                numNodes = input.Shape[rank - 2];
+                processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            }
         }
 
         _lastInput = processInput;
-        int numNodes = processInput.Shape[1];
-
 
         // Step 1: Compute messages
         _lastMessages = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
         _lastMessageHidden = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
+
+        // Handle adjacency matrix that may be 2D [nodes, nodes] or 3D [batch, nodes, nodes]
+        bool adj2D = _adjacencyMatrix.Shape.Length == 2;
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -490,20 +494,22 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 for (int j = 0; j < numNodes; j++)
                 {
                     // Only compute messages for connected nodes
-                    if (NumOps.Equals(GetAdjacency(b, i, j), NumOps.Zero))
+                    // Use 2D or 3D indexing based on adjacency matrix shape
+                    T adjValue = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[b, i, j];
+                    if (NumOps.Equals(adjValue, NumOps.Zero))
                         continue;
 
                     // Concatenate source and target features
                     var messageInput = new Vector<T>(_messageWeights1.Shape[0]);
                     int idx = 0;
 
-                    // Source node features
+                    // Source node features (use processInput which is always 3D)
                     for (int f = 0; f < _inputFeatures; f++)
                     {
                         messageInput[idx++] = processInput[b, j, f];
                     }
 
-                    // Target node features
+                    // Target node features (use processInput which is always 3D)
                     for (int f = 0; f < _inputFeatures; f++)
                     {
                         messageInput[idx++] = processInput[b, i, f];
@@ -571,7 +577,9 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     T sum = NumOps.Zero;
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (!NumOps.Equals(GetAdjacency(b, i, j), NumOps.Zero))
+                        // Use 2D or 3D indexing based on adjacency matrix shape
+                        T adjVal = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[b, i, j];
+                        if (!NumOps.Equals(adjVal, NumOps.Zero))
                         {
                             sum = NumOps.Add(sum, _lastMessages[b, i, j, h]);
                         }
@@ -595,7 +603,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 {
                     T sum = _resetBias[f];
 
-                    // Contribution from node features
+                    // Contribution from node features (use processInput which is always 3D)
                     for (int k = 0; k < _inputFeatures; k++)
                     {
                         sum = NumOps.Add(sum, NumOps.Multiply(processInput[b, i, k], _resetWeights[k, f]));

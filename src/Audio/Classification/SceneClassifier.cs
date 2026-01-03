@@ -339,13 +339,24 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
             })
             .ToList();
 
+        // Convert extracted features to generic SceneFeatures<T>
+        // Note: SceneClassifier doesn't compute tempo (beat detection not implemented)
+        var sceneFeatures = new SceneFeatures<T>
+        {
+            MfccMean = featureStruct.MfccMean.Select(v => NumOps.FromDouble(v)).ToArray(),
+            MfccStd = featureStruct.MfccStd.Select(v => NumOps.FromDouble(v)).ToArray(),
+            BandEnergies = featureStruct.BandEnergies.Select(v => NumOps.FromDouble(v)).ToArray(),
+            Tempo = NumOps.Zero // Tempo detection not implemented
+        };
+
         return new SceneClassificationResult<T>
         {
             PredictedScene = predictedScene,
             Category = category,
             Confidence = confidence,
             AllScenes = allScenes,
-            Characteristics = ExtractAcousticCharacteristics(featureStruct)
+            Characteristics = ExtractAcousticCharacteristics(featureStruct),
+            Features = sceneFeatures
         };
     }
 

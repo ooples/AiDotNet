@@ -632,7 +632,7 @@ public static class InputHelper<T, TInput>
             if (index >= matrix.Rows)
                 throw new ArgumentOutOfRangeException(nameof(index), "Index exceeds matrix row count.");
 
-            // Return a single row as a 1-row Matrix<T> to preserve TInput type
+            // Return a single row as a 1-row Matrix<T> to maintain TInput type consistency
             var rowMatrix = new Matrix<T>(1, matrix.Columns);
             for (int i = 0; i < matrix.Columns; i++)
             {

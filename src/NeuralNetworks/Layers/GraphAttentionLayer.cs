@@ -617,7 +617,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var lastPreSoftmaxScores = _lastPreSoftmaxScores;
         var lastAttentionCoefficients = _lastAttentionCoefficients;
 
-
+        // Handle 2D or 3D adjacency matrix
+        bool adj2D = adjacencyMatrix.Shape.Length == 2;
 
         // Compute attention scores with LeakyReLU and softmax
         var maxScores = new T[numNodes];
@@ -627,19 +628,20 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // First pass: compute raw scores and find max for numerical stability
-        // Adjacency matrix can be 2D [numNodes, numNodes] or 3D [batch, numNodes, numNodes]
+        // Adjacency matrix may be 2D [numNodes, numNodes] or 3D [batch, numNodes, numNodes]
         for (int i = 0; i < numNodes; i++)
         {
             for (int j = 0; j < numNodes; j++)
             {
-                if (NumOps.Equals(GetAdjacencyValue(b, i, j), NumOps.Zero))
+                T adjValue = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
+                if (NumOps.Equals(adjValue, NumOps.Zero))
                 {
                     lastPreSoftmaxScores[b, h, i, j] = NumOps.FromDouble(double.NegativeInfinity);
                     continue;
                 }
 
                 // e_ij = LeakyReLU(a_1^T * Wh_i + a_2^T * Wh_j)
-                T score = NumOps.Add(selfScores[i], neighborScores[j]);
+                T score = NumOps.Add(selfScores.GetFlat(i), neighborScores.GetFlat(j));
                 score = LeakyReLU(score);
                 lastPreSoftmaxScores[b, h, i, j] = score;
 
@@ -658,7 +660,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // Compute exp(score - max) for numerical stability
             for (int j = 0; j < numNodes; j++)
             {
-                if (!NumOps.Equals(GetAdjacencyValue(b, i, j), NumOps.Zero))
+                T adjVal = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
+                if (!NumOps.Equals(adjVal, NumOps.Zero))
                 {
                     T expVal = NumOps.Exp(NumOps.Subtract(lastPreSoftmaxScores[b, h, i, j], maxScores[i]));
                     lastAttentionCoefficients[b, h, i, j] = expVal;
@@ -669,7 +672,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // Normalize and apply dropout
             for (int j = 0; j < numNodes; j++)
             {
-                if (!NumOps.Equals(GetAdjacencyValue(b, i, j), NumOps.Zero))
+                T adjVal2 = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
+                if (!NumOps.Equals(adjVal2, NumOps.Zero))
                 {
                     T coeff = NumOps.Divide(lastAttentionCoefficients[b, h, i, j], sumExp);
 
@@ -720,6 +724,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Capture non-null adjacency matrix for use in the method
         var adjacencyMatrix = _adjacencyMatrix;
+        bool adj2D = adjacencyMatrix.Shape.Length == 2;
         var rawActivationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
@@ -779,7 +784,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 {
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (!NumOps.Equals(GetAdjacencyValue(b, i, j), NumOps.Zero))
+                        T adjVal = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
+                        if (!NumOps.Equals(adjVal, NumOps.Zero))
                         {
                             T attnCoeff = _lastAttentionCoefficients[b, h, i, j];
 
@@ -816,7 +822,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     T weightedSum = NumOps.Zero;
                     for (int k = 0; k < numNodes; k++)
                     {
-                        if (!NumOps.Equals(adjacencyMatrix[i, k], NumOps.Zero))
+                        T adjValK = adj2D ? adjacencyMatrix[i, k] : adjacencyMatrix[b, i, k];
+                        if (!NumOps.Equals(adjValK, NumOps.Zero))
                         {
                             T attnCoeff_ik = _lastAttentionCoefficients[b, h, i, k];
                             weightedSum = NumOps.Add(weightedSum,
@@ -827,7 +834,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     // Compute score gradients for each edge
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (!NumOps.Equals(GetAdjacencyValue(b, i, j), NumOps.Zero))
+                        T adjValJ = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
+                        if (!NumOps.Equals(adjValJ, NumOps.Zero))
                         {
                             T attnCoeff = _lastAttentionCoefficients[b, h, i, j];
 
@@ -1136,6 +1144,9 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var weightsGradient = _weightsGradient;
         var attentionWeightsGradient = _attentionWeightsGradient;
 
+        // Check if adjacency matrix is 2D (shared across batches) or 3D (per-batch)
+        bool adj2D = adjacencyMatrix.Shape.Length == 2;
+
         // Gradient from averaging heads: dL/d(headOutput) = dL/d(output) / numHeads
         var headOutputGrad = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
         for (int b = 0; b < batchSize; b++)
@@ -1202,7 +1213,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 {
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (!NumOps.Equals(GetAdjacencyValue(b, i, j), NumOps.Zero))
+                        T adjValue = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
+                        if (!NumOps.Equals(adjValue, NumOps.Zero))
                         {
                             T attnGrad = NumOps.Zero;
                             for (int f = 0; f < _outputFeatures; f++)
@@ -1226,7 +1238,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     T weightedSum = NumOps.Zero;
                     for (int k = 0; k < numNodes; k++)
                     {
-                        if (!NumOps.Equals(adjacencyMatrix[i, k], NumOps.Zero))
+                        T adjValueK = adj2D ? adjacencyMatrix[i, k] : adjacencyMatrix[b, i, k];
+                        if (!NumOps.Equals(adjValueK, NumOps.Zero))
                         {
                             T attnCoeff_ik = lastAttentionCoefficients[b, h, i, k];
                             weightedSum = NumOps.Add(weightedSum,
@@ -1237,7 +1250,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     // Compute score gradients for each edge
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (!NumOps.Equals(GetAdjacencyValue(b, i, j), NumOps.Zero))
+                        T adjValueJ = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
+                        if (!NumOps.Equals(adjValueJ, NumOps.Zero))
                         {
                             T attnCoeff = lastAttentionCoefficients[b, h, i, j];
 

@@ -1656,7 +1656,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             discriminatorFeatureMaps: 8);
 
         // Create noise input matching the generator's expected input shape
-        var noiseInput = CreateRandomTensor([8, 4, 4]); // [channels, height, width]
+        // DCGAN generator expects input depth = featureMaps * 8 = 64, spatial size = 4x4
+        var noiseInput = CreateRandomTensor([64, 4, 4]); // [channels, height, width]
 
         // Act
         var output = dcgan.Predict(noiseInput);
@@ -2053,11 +2054,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     public void RecurrentNeuralNetwork_Predict_ProducesOutput()
     {
         // Arrange
+        // For RNN with 2D input [seqLen, features], set inputHeight (seqLen) and inputWidth (features)
         var architecture = new NeuralNetworkArchitecture<float>(
             InputType.TwoDimensional,
             NeuralNetworkTaskType.MultiClassClassification,
             NetworkComplexity.Simple,
-            inputSize: 16,
+            inputHeight: 10,  // sequence length
+            inputWidth: 16,   // features
             outputSize: 5);
 
         var rnn = new RecurrentNeuralNetwork<float>(architecture);
@@ -2075,11 +2078,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     public void RecurrentNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
+        // For RNN with 2D input [seqLen, features], set inputHeight (seqLen) and inputWidth (features)
         var architecture = new NeuralNetworkArchitecture<float>(
             InputType.TwoDimensional,
             NeuralNetworkTaskType.MultiClassClassification,
             NetworkComplexity.Simple,
-            inputSize: 16,
+            inputHeight: 10,  // sequence length
+            inputWidth: 16,   // features
             outputSize: 5);
 
         var rnn = new RecurrentNeuralNetwork<float>(architecture);
