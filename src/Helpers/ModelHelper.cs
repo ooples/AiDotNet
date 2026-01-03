@@ -67,6 +67,33 @@ public static class ModelHelper<T, TInput, TOutput>
 
             return (x, y, predictions);
         }
+        else if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Tensor<T>))
+        {
+            // Support Matrix input with Tensor output (used in some meta-learning scenarios)
+            var x = (TInput)(object)Matrix<T>.Empty();
+            var y = (TOutput)(object)Tensor<T>.Empty();
+            var predictions = (TOutput)(object)Tensor<T>.Empty();
+
+            return (x, y, predictions);
+        }
+        else if (typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            // Support Tensor input with Vector output
+            var x = (TInput)(object)Tensor<T>.Empty();
+            var y = (TOutput)(object)Vector<T>.Empty();
+            var predictions = (TOutput)(object)Vector<T>.Empty();
+
+            return (x, y, predictions);
+        }
+        else if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Matrix<T>))
+        {
+            // Support Matrix input with Matrix output
+            var x = (TInput)(object)Matrix<T>.Empty();
+            var y = (TOutput)(object)Matrix<T>.Empty();
+            var predictions = (TOutput)(object)Matrix<T>.Empty();
+
+            return (x, y, predictions);
+        }
         else
         {
             throw new InvalidOperationException("Unsupported types for TInput and TOutput");
