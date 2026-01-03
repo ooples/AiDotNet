@@ -132,15 +132,15 @@ protected override void Dispose(bool disposing)
 | Layer | Has Weights | Has Bias | Status |
 |-------|-------------|----------|--------|
 | [x] DenseLayer | Yes | Yes | ✅ Complete - Uses FusedLinear, RegisterTrainableParameter |
-| [ ] FullyConnectedLayer | Yes | Yes | Needs update |
-| [ ] SparseLinearLayer | Yes | Yes | Needs update |
-| [ ] LocallyConnectedLayer | Yes | Yes | Needs update |
-| [ ] HyperbolicLinearLayer | Yes | Yes | Needs update |
-| [ ] OctonionLinearLayer | Yes | Yes | Needs update |
-| [ ] FeedForwardLayer | Yes | Yes | Needs update |
-| [ ] GatedLinearUnitLayer | Yes | Yes | Needs update |
-| [ ] HighwayLayer | Yes | Yes | Needs update |
-| [ ] ExpertLayer | Yes | Yes | Needs update |
+| [x] FullyConnectedLayer | Yes | Yes | ✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor |
+| [x] SparseLinearLayer | Yes | Yes | ⏭️ Skipped - Uses SparseTensor (incompatible) |
+| [x] LocallyConnectedLayer | Yes | Yes | ✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor |
+| [x] HyperbolicLinearLayer | Yes | Yes | ⏭️ Skipped - Uses Matrix<T> (incompatible) |
+| [x] OctonionLinearLayer | Yes | Yes | ⏭️ Skipped - Uses Octonion arrays (incompatible) |
+| [x] FeedForwardLayer | Yes | Yes | ✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor |
+| [x] GatedLinearUnitLayer | Yes | Yes | ✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor |
+| [x] HighwayLayer | Yes | Yes | ✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor |
+| [x] ExpertLayer | Yes | Yes | ⏭️ Skipped - Delegates to contained layers |
 
 ### Priority 2: Convolutional Layers (High GPU Impact - FusedConv2D/3D)
 
@@ -543,6 +543,44 @@ These layers have significant manual implementations that should use IEngine:
 - Added missing `BiasAdd()` method (row-wise bias addition to matrix)
 - These methods are required by IDirectGpuBackend interface for FusedLinear operations
 
+### 2026-01-02: Phase 3 Continuation - All Priority 1 Layers Complete
+
+**LayerBase.cs Enhancement:**
+- Added `GetFusedActivationType()` method with comprehensive activation mapping
+- Supports: ReLU, Sigmoid, Tanh, GELU, LeakyReLU, Swish/SiLU
+- Enables all layers to use fused GPU operations without code duplication
+
+**FullyConnectedLayer.cs Refactoring:**
+- Added `RegisterTrainableParameter(_weights/_biases)` in both constructors
+- Added `Engine.InvalidatePersistentTensor(_weights/_biases)` in UpdateParameters, SetParameters
+
+**FeedForwardLayer.cs Refactoring:**
+- Added `RegisterTrainableParameter(Weights/Biases)` in both constructors
+- Added `Engine.InvalidatePersistentTensor(Weights/Biases)` in UpdateParameters, SetParameters
+
+**GatedLinearUnitLayer.cs Refactoring:**
+- Added `RegisterTrainableParameter` for all 4 tensors (_linearWeights, _gateWeights, _linearBias, _gateBias)
+- Added `Engine.InvalidatePersistentTensor` for all 4 tensors in UpdateParameters, SetParameters
+
+**HighwayLayer.cs Refactoring:**
+- Added `RegisterTrainableParameter` for all 4 tensors (_transformWeights, _transformBias, _gateWeights, _gateBias)
+- Added `Engine.InvalidatePersistentTensor` for all 4 tensors in UpdateParameters, SetParameters
+
+**LocallyConnectedLayer.cs Refactoring:**
+- Added `RegisterTrainableParameter(_weights/_biases)` in both constructors
+- Added `Engine.InvalidatePersistentTensor(_weights/_biases)` in UpdateParameters, SetParameters
+
+**Layers Skipped (Incompatible Types):**
+- ExpertLayer: Delegates parameter management to contained layers
+- SparseLinearLayer: Uses SparseTensor<T> which is not compatible with Tensor<T>-based API
+- HyperbolicLinearLayer: Uses Matrix<T> instead of Tensor<T>
+- OctonionLinearLayer: Uses Octonion<T> arrays instead of Tensor<T>
+
+**Priority 1 Status: ✅ COMPLETE (10/10 layers)**
+- 6 layers fully refactored with GPU tensor registration
+- 4 layers appropriately skipped due to type incompatibility
+
 **Next Steps:**
-- Phase 4: Update attention layers to use ScaledDotProductAttention/FlashAttention
-- Phase 5: Update remaining 115 layers
+- Phase 4: Update Priority 2 (Convolutional) layers
+- Phase 5: Update attention layers to use ScaledDotProductAttention/FlashAttention
+- Phase 6: Update remaining layers (normalization, pooling, etc.)
