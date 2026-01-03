@@ -1106,7 +1106,25 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
 
         if (output is Tensor<T> tensor)
         {
-            return tensor.ToVector();
+            // Convert tensor to matrix format, then extract first row
+            // This ensures the vector dimension matches prototypes computed from rows
+            var matrix = TensorToMatrix(tensor);
+            if (matrix.Rows == 1)
+            {
+                // Single sample - extract as vector
+                return GetRow(matrix, 0);
+            }
+            else
+            {
+                // Multiple samples - for single prediction, use first row
+                return GetRow(matrix, 0);
+            }
+        }
+
+        if (output is Matrix<T> matrix2)
+        {
+            // Extract first row as vector
+            return GetRow(matrix2, 0);
         }
 
         return null;
