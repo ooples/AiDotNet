@@ -1,5 +1,6 @@
 
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Attention;
 
@@ -47,6 +48,8 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _lastKey;
     private Tensor<T>? _lastValue;
     private Tensor<T>? _lastAttentionOutput;
+    private Tensor<T>? _lastSoftmaxStats;
+    private double _lastScale;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -230,10 +233,23 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         _lastKey = keys;
         _lastValue = values;
 
-        // Apply Flash Attention
-        var (attentionOutput, _) = FlashAttention<T>.Forward(queries, keys, values, _config);
+        // Compute scale factor for attention
+        double? scale = _config.ScaleFactor.HasValue
+            ? (double)_config.ScaleFactor.Value
+            : null; // null means 1/sqrt(headDim) will be computed by IEngine
+        _lastScale = scale ?? 1.0 / Math.Sqrt(_headDimension);
+
+        // Apply Flash Attention using IEngine for GPU acceleration
+        var attentionOutput = Engine.FlashAttention(
+            queries,
+            keys,
+            values,
+            scale,
+            _config.UseCausalMask,
+            out var softmaxStats);
 
         _lastAttentionOutput = attentionOutput;
+        _lastSoftmaxStats = softmaxStats;
 
         // Reshape back to [batch, seq, embedding]
         attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
@@ -268,7 +284,8 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _lastQuery == null ||
-            _lastKey == null || _lastValue == null || _lastAttentionOutput == null)
+            _lastKey == null || _lastValue == null || _lastAttentionOutput == null ||
+            _lastSoftmaxStats == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
@@ -289,14 +306,19 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         // Reshape gradient for attention backward
         attentionOutputGradient = attentionOutputGradient.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
-        // Flash Attention backward pass with recomputation
-        var (gradQuery, gradKey, gradValue) = FlashAttention<T>.Backward(
+        // Flash Attention backward pass using IEngine for GPU acceleration
+        Engine.FlashAttentionBackward(
             attentionOutputGradient,
             _lastQuery,
             _lastKey,
             _lastValue,
             _lastAttentionOutput,
-            _config);
+            _lastSoftmaxStats,
+            _lastScale,
+            _config.UseCausalMask,
+            out var gradQuery,
+            out var gradKey,
+            out var gradValue);
 
         // Reshape gradients back to [batch, seq, embedding]
         gradQuery = gradQuery.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
@@ -507,6 +529,8 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         _lastKey = null;
         _lastValue = null;
         _lastAttentionOutput = null;
+        _lastSoftmaxStats = null;
+        _lastScale = 0;
         _originalInputShape = null;
 
         _queryWeightsGradient = null;

@@ -204,6 +204,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected MixedPrecisionContext? _mixedPrecisionContext;
 
     /// <summary>
+    /// Memory manager for gradient checkpointing and activation pooling.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The memory manager helps train larger models by reducing memory usage.
+    /// It implements gradient checkpointing (trading compute for memory) and activation pooling
+    /// (reusing tensor allocations to reduce garbage collection).
+    /// </para>
+    /// </remarks>
+    protected Training.Memory.TrainingMemoryManager<T>? _memoryManager;
+
+    /// <summary>
+    /// Gets whether memory management (gradient checkpointing/pooling) is enabled.
+    /// </summary>
+    public bool IsMemoryManagementEnabled => _memoryManager is not null;
+
+    /// <summary>
+    /// Gets whether gradient checkpointing is enabled.
+    /// </summary>
+    public bool IsGradientCheckpointingEnabled => _memoryManager?.IsCheckpointingEnabled ?? false;
+
+    /// <summary>
     /// Gets whether mixed-precision training is enabled.
     /// </summary>
     /// <remarks>
@@ -398,12 +420,50 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new InvalidOperationException("This network does not support backpropagation");
         }
 
-        // Backpropagate through layers in reverse order
+        // Use memory-managed backward if gradient checkpointing is enabled
+        if (_memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
+        {
+            return BackpropagateWithRecompute(outputGradients);
+        }
+
+        // Standard backpropagation through layers in reverse order
         var gradientTensor = outputGradients;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             gradientTensor = Layers[i].Backward(gradientTensor);
         }
+
+        return gradientTensor;
+    }
+
+    /// <summary>
+    /// Performs backpropagation with activation recomputation for non-checkpointed layers.
+    /// </summary>
+    /// <param name="outputGradients">Gradients from the loss function.</param>
+    /// <returns>Gradients with respect to input.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When gradient checkpointing is enabled, we don't store all layer
+    /// activations during forward pass (to save memory). During backprop, we need those
+    /// activations, so we recompute them from the nearest checkpoint.
+    /// </para>
+    /// </remarks>
+    protected virtual Tensor<T> BackpropagateWithRecompute(Tensor<T> outputGradients)
+    {
+        if (_memoryManager is null)
+            throw new InvalidOperationException("Memory manager is not configured.");
+
+        var gradientTensor = outputGradients;
+
+        // Backpropagate through layers in reverse order with recomputation
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            // Use memory manager to handle recomputation from checkpoints
+            gradientTensor = _memoryManager.BackwardWithRecompute(Layers[i], gradientTensor, i);
+        }
+
+        // Clear checkpoints after backprop to free memory
+        _memoryManager.ClearCheckpoints();
 
         return gradientTensor;
     }
@@ -448,6 +508,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new InvalidOperationException("This network does not support training mode");
         }
 
+        // Use memory-managed forward if gradient checkpointing is enabled
+        if (_memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
+        {
+            return ForwardWithCheckpointing(input);
+        }
+
+        // Standard forward pass - store all activations
         Tensor<T> current = input;
 
         for (int i = 0; i < Layers.Count; i++)
@@ -460,6 +527,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Store output from each layer for backpropagation
             _layerOutputs[i] = current;
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Performs forward pass with gradient checkpointing to reduce memory usage.
+    /// </summary>
+    /// <param name="input">Input tensor.</param>
+    /// <returns>Output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Gradient checkpointing trades compute for memory:
+    /// - Instead of storing ALL layer activations (high memory), only store SOME checkpoints
+    /// - During backprop, recompute the missing activations from the nearest checkpoint
+    /// - Typical memory savings: 40-50% with only ~20% extra compute time
+    /// </para>
+    /// </remarks>
+    protected virtual Tensor<T> ForwardWithCheckpointing(Tensor<T> input)
+    {
+        if (_memoryManager is null)
+            throw new InvalidOperationException("Memory manager is not configured.");
+
+        Tensor<T> current = input;
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            // Only store inputs for checkpointed layers
+            if (_memoryManager.ShouldCheckpoint(i))
+            {
+                _layerInputs[i] = current;
+            }
+
+            // Forward pass with checkpointing
+            current = _memoryManager.ForwardWithCheckpoint(Layers[i], current, i);
+
+            // Only store outputs for checkpointed layers
+            if (_memoryManager.ShouldCheckpoint(i))
+            {
+                _layerOutputs[i] = current;
+            }
         }
 
         return current;
@@ -1044,6 +1152,74 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _mixedPrecisionContext.Dispose();
             _mixedPrecisionContext = null;
         }
+    }
+
+    /// <summary>
+    /// Enables memory management with the specified configuration.
+    /// </summary>
+    /// <param name="config">Memory management configuration. If null, uses default settings.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Memory management helps train larger models by:
+    ///
+    /// 1. <b>Gradient Checkpointing</b>: Instead of storing all layer activations (which uses lots of memory),
+    ///    only store some "checkpoints". During backpropagation, recompute the missing activations from
+    ///    the checkpoints. This trades compute time for memory (typically 40-50% memory savings).
+    ///
+    /// 2. <b>Activation Pooling</b>: Reuse tensor memory instead of allocating new tensors each time.
+    ///    This reduces garbage collection overhead and memory fragmentation.
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable memory-efficient training
+    /// network.EnableMemoryManagement(TrainingMemoryConfig.MemoryEfficient());
+    ///
+    /// // Or with custom settings
+    /// network.EnableMemoryManagement(new TrainingMemoryConfig
+    /// {
+    ///     UseGradientCheckpointing = true,
+    ///     CheckpointEveryNLayers = 2,
+    ///     UseActivationPooling = true
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public virtual void EnableMemoryManagement(Training.Memory.TrainingMemoryConfig? config = null)
+    {
+        if (_memoryManager is not null)
+        {
+            _memoryManager.Dispose();
+        }
+
+        _memoryManager = new Training.Memory.TrainingMemoryManager<T>(config, Layers);
+
+        // Precompute which layers should be checkpointed
+        var layerTypes = Layers.Select(l => l.GetType().Name).ToList();
+        _memoryManager.ComputeCheckpointIndices(Layers.Count, layerTypes);
+    }
+
+    /// <summary>
+    /// Disables memory management and releases associated resources.
+    /// </summary>
+    public virtual void DisableMemoryManagement()
+    {
+        if (_memoryManager is not null)
+        {
+            _memoryManager.Dispose();
+            _memoryManager = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets memory usage statistics if memory management is enabled.
+    /// </summary>
+    /// <returns>Memory savings estimate, or null if memory management is disabled.</returns>
+    public Training.Memory.MemorySavingsEstimate? GetMemoryEstimate(int batchSize = 32, int sequenceLength = 512)
+    {
+        if (_memoryManager is null)
+            return null;
+
+        return _memoryManager.EstimateMemorySavings(ParameterCount, batchSize, sequenceLength);
     }
 
     /// <summary>

@@ -243,16 +243,18 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Validate input rank: requires at least 2D [..., seq, embed]
-        if (input.Shape.Length < 2)
+        // Handle 1D input by treating it as [1, embed] (single position with embedding)
+        bool was1D = input.Shape.Length == 1;
+        Tensor<T> workingInput = input;
+
+        if (was1D)
         {
-            throw new ArgumentException(
-                $"PositionalEncodingLayer expects at least 2D input [..., seq, embed], " +
-                $"but received {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}].");
+            // Reshape [embed] -> [1, embed]
+            workingInput = input.Reshape([1, input.Shape[0]]);
         }
 
         // Handle any rank >= 2: last dim is embed, second-to-last is sequence
-        int rank = input.Shape.Length;
+        int rank = workingInput.Shape.Length;
         int seqLength = input.Shape[rank - 2];
         int inputEmbedDim = input.Shape[rank - 1];
 
