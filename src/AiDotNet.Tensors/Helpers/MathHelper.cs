@@ -1012,6 +1012,19 @@ public static class MathHelper
     }
 
     /// <summary>
+    /// Calculates the base-2 logarithm (log2) of a single-precision floating point value.
+    /// </summary>
+    /// <param name="x">The value to calculate the logarithm of.</param>
+    /// <returns>The base-2 logarithm of x.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if x is less than or equal to 0.</exception>
+    public static float Log2(float x)
+    {
+        if (x <= 0)
+            throw new ArgumentOutOfRangeException(nameof(x), "Logarithm is undefined for non-positive numbers.");
+        return (float)(Math.Log(x) / Math.Log(2));
+    }
+
+    /// <summary>
     /// Returns the smaller of two values.
     /// </summary>
     /// <typeparam name="T">The numeric type of the values to compare.</typeparam>

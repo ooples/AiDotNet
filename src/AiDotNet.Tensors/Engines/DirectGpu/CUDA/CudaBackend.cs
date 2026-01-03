@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu.CUDA.Kernels;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.CUDA;
 
@@ -3066,7 +3067,7 @@ public sealed class CudaBackend : IDirectGpuBackend
         CudaCopyBuffer(inputReal, outputReal, n);
         CudaCopyBuffer(inputImag, outputImag, n);
 
-        int log2n = (int)Math.Log2(n);
+        int log2n = (int)MathHelper.Log2(n);
         IntPtr outRealPtr = outputReal.Handle;
         IntPtr outImagPtr = outputImag.Handle;
         int inv = inverse ? 1 : 0;
@@ -3211,7 +3212,7 @@ public sealed class CudaBackend : IDirectGpuBackend
         CudaCopyBuffer(inputReal, outputReal, batch * n);
         CudaCopyBuffer(inputImag, outputImag, batch * n);
 
-        int log2n = (int)Math.Log2(n);
+        int log2n = (int)MathHelper.Log2(n);
         IntPtr outRealPtr = outputReal.Handle;
         IntPtr outImagPtr = outputImag.Handle;
         int inv = inverse ? 1 : 0;
@@ -3270,8 +3271,8 @@ public sealed class CudaBackend : IDirectGpuBackend
         CudaCopyBuffer(inputReal, outputReal, height * width);
         CudaCopyBuffer(inputImag, outputImag, height * width);
 
-        int log2Width = (int)Math.Log2(width);
-        int log2Height = (int)Math.Log2(height);
+        int log2Width = (int)MathHelper.Log2(width);
+        int log2Height = (int)MathHelper.Log2(height);
         IntPtr outRealPtr = outputReal.Handle;
         IntPtr outImagPtr = outputImag.Handle;
         int inv = inverse ? 1 : 0;

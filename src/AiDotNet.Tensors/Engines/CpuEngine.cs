@@ -16214,7 +16214,7 @@ public class CpuEngine : IEngine
         // Bit-reversal permutation
         var real = new Vector<T>(n);
         var imag = new Vector<T>(n);
-        int bits = (int)Math.Log2(n);
+        int bits = (int)MathHelper.Log2(n);
 
         for (int i = 0; i < n; i++)
         {

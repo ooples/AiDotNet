@@ -27,7 +27,7 @@ public readonly struct Log2OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-            values[i] = Math.Log2(values[i]);
+            values[i] = MathHelper.Log2(values[i]);
         }
 
         return Vector128.Create(values);
@@ -44,7 +44,7 @@ public readonly struct Log2OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-            values[i] = Math.Log2(values[i]);
+            values[i] = MathHelper.Log2(values[i]);
         }
 
         return Vector256.Create(values);
@@ -61,7 +61,7 @@ public readonly struct Log2OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-            values[i] = Math.Log2(values[i]);
+            values[i] = MathHelper.Log2(values[i]);
         }
 
         return Vector512.Create(values);
@@ -91,7 +91,7 @@ public readonly struct Log2OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-            values[i] = MathF.Log2(values[i]);
+            values[i] = MathHelper.Log2(values[i]);
         }
 
         return Vector128.Create(values);
@@ -108,7 +108,7 @@ public readonly struct Log2OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-            values[i] = MathF.Log2(values[i]);
+            values[i] = MathHelper.Log2(values[i]);
         }
 
         return Vector256.Create(values);
@@ -125,7 +125,7 @@ public readonly struct Log2OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-            values[i] = MathF.Log2(values[i]);
+            values[i] = MathHelper.Log2(values[i]);
         }
 
         return Vector512.Create(values);

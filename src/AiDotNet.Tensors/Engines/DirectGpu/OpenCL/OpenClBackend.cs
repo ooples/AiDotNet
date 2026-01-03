@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels;
+using AiDotNet.Tensors.Helpers;
 using Microsoft.Extensions.Logging;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
@@ -5555,7 +5556,7 @@ KERNEL VARIANTS (A/B testing):
             CopyBuffer(inputReal, outputReal, n);
             CopyBuffer(inputImag, outputImag, n);
 
-            int log2n = (int)Math.Log2(n);
+            int log2n = (int)MathHelper.Log2(n);
 
             // Bit-reversal permutation
             var bitRevKernel = _kernelCache["bit_reverse_permutation"];
@@ -5667,7 +5668,7 @@ KERNEL VARIANTS (A/B testing):
             CopyBuffer(inputReal, outputReal, batch * n);
             CopyBuffer(inputImag, outputImag, batch * n);
 
-            int log2n = (int)Math.Log2(n);
+            int log2n = (int)MathHelper.Log2(n);
 
             // Batched bit-reversal
             var bitRevKernel = _kernelCache["batched_bit_reverse"];
@@ -5713,8 +5714,8 @@ KERNEL VARIANTS (A/B testing):
             CopyBuffer(inputReal, outputReal, height * width);
             CopyBuffer(inputImag, outputImag, height * width);
 
-            int log2Width = (int)Math.Log2(width);
-            int log2Height = (int)Math.Log2(height);
+            int log2Width = (int)MathHelper.Log2(width);
+            int log2Height = (int)MathHelper.Log2(height);
 
             // Row-wise bit reversal
             var bitRevRowsKernel = _kernelCache["bit_reverse_rows"];
