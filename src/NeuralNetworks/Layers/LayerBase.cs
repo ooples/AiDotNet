@@ -2004,4 +2004,297 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     // finalizer only if they have unmanaged resources that need cleanup.
     // Calling virtual methods from finalizers is unsafe because the derived class
     // may have already been finalized.
+
+    #region IWeightLoadable Implementation
+
+    /// <summary>
+    /// Standard parameter name for weight tensors.
+    /// </summary>
+    protected const string WeightParameterName = "weight";
+
+    /// <summary>
+    /// Standard parameter name for bias tensors.
+    /// </summary>
+    protected const string BiasParameterName = "bias";
+
+    /// <summary>
+    /// Sets the weight tensor for this layer.
+    /// </summary>
+    /// <param name="weights">The weight tensor to set.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the layer does not support weights.</exception>
+    /// <remarks>
+    /// <para>
+    /// Derived classes with trainable weights should override this method to update their internal weight storage.
+    /// The default implementation throws an exception since LayerBase doesn't know the layer's weight structure.
+    /// </para>
+    /// </remarks>
+    protected virtual void SetWeights(Tensor<T> weights)
+    {
+        throw new InvalidOperationException(
+            $"Layer type {GetType().Name} does not support setting weights. " +
+            $"Override SetWeights(Tensor<T>) in derived class to enable weight loading.");
+    }
+
+    /// <summary>
+    /// Sets the bias tensor for this layer.
+    /// </summary>
+    /// <param name="biases">The bias tensor to set.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the layer does not support biases.</exception>
+    /// <remarks>
+    /// <para>
+    /// Derived classes with trainable biases should override this method to update their internal bias storage.
+    /// The default implementation throws an exception since LayerBase doesn't know the layer's bias structure.
+    /// </para>
+    /// </remarks>
+    protected virtual void SetBiases(Tensor<T> biases)
+    {
+        throw new InvalidOperationException(
+            $"Layer type {GetType().Name} does not support setting biases. " +
+            $"Override SetBiases(Tensor<T>) in derived class to enable bias loading.");
+    }
+
+    /// <summary>
+    /// Gets all parameter names in this layer.
+    /// </summary>
+    /// <returns>A collection of parameter names ("weight", "bias", or both depending on layer type).</returns>
+    /// <remarks>
+    /// <para>
+    /// The default implementation returns "weight" and/or "bias" based on whether
+    /// GetWeights() and GetBiases() return non-null values.
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<string> GetParameterNames()
+    {
+        var names = new List<string>();
+
+        if (GetWeights() is not null)
+        {
+            names.Add(WeightParameterName);
+        }
+
+        if (GetBiases() is not null)
+        {
+            names.Add(BiasParameterName);
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// Tries to get a parameter tensor by name.
+    /// </summary>
+    /// <param name="name">The parameter name ("weight" or "bias").</param>
+    /// <param name="tensor">The parameter tensor if found.</param>
+    /// <returns>True if the parameter was found, false otherwise.</returns>
+    public virtual bool TryGetParameter(string name, out Tensor<T>? tensor)
+    {
+        if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            tensor = GetWeights();
+            return tensor is not null;
+        }
+
+        if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            tensor = GetBiases();
+            return tensor is not null;
+        }
+
+        tensor = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Sets a parameter tensor by name.
+    /// </summary>
+    /// <param name="name">The parameter name ("weight" or "bias").</param>
+    /// <param name="value">The tensor value to set.</param>
+    /// <returns>True if the parameter was set successfully, false if the name was not found.</returns>
+    /// <exception cref="ArgumentException">Thrown when the tensor shape doesn't match expected shape.</exception>
+    public virtual bool SetParameter(string name, Tensor<T> value)
+    {
+        var expectedShape = GetParameterShape(name);
+        if (expectedShape is null)
+        {
+            return false;
+        }
+
+        // Validate shape
+        var actualShape = value.Shape;
+        if (actualShape.Length != expectedShape.Length)
+        {
+            throw new ArgumentException(
+                $"Shape mismatch for '{name}': expected rank {expectedShape.Length}, got {actualShape.Length}");
+        }
+
+        for (int i = 0; i < expectedShape.Length; i++)
+        {
+            if (actualShape[i] != expectedShape[i])
+            {
+                throw new ArgumentException(
+                    $"Shape mismatch for '{name}': expected [{string.Join(", ", expectedShape)}], " +
+                    $"got [{string.Join(", ", actualShape)}]");
+            }
+        }
+
+        if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            SetWeights(value);
+            return true;
+        }
+
+        if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            SetBiases(value);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the expected shape for a parameter.
+    /// </summary>
+    /// <param name="name">The parameter name ("weight" or "bias").</param>
+    /// <returns>The expected shape, or null if the parameter doesn't exist.</returns>
+    public virtual int[]? GetParameterShape(string name)
+    {
+        if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            var weights = GetWeights();
+            return weights?.Shape;
+        }
+
+        if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            var biases = GetBiases();
+            return biases?.Shape;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the total number of named parameters.
+    /// </summary>
+    public virtual int NamedParameterCount
+    {
+        get
+        {
+            int count = 0;
+            if (GetWeights() is not null) count++;
+            if (GetBiases() is not null) count++;
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// Validates that a set of weight names can be loaded into this layer.
+    /// </summary>
+    /// <param name="weightNames">Names of weights to validate.</param>
+    /// <param name="mapping">Optional weight name mapping function.</param>
+    /// <returns>Validation result with matched and unmatched names.</returns>
+    public virtual WeightLoadValidation ValidateWeights(
+        IEnumerable<string> weightNames,
+        Func<string, string?>? mapping = null)
+    {
+        var result = new WeightLoadValidation();
+        var paramNames = new HashSet<string>(GetParameterNames(), StringComparer.OrdinalIgnoreCase);
+        var matchedParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var weightName in weightNames)
+        {
+            var targetName = mapping?.Invoke(weightName) ?? weightName;
+            if (targetName is null)
+            {
+                result.UnmatchedWeights.Add(weightName);
+                continue;
+            }
+
+            if (paramNames.Contains(targetName))
+            {
+                result.Matched.Add(targetName);
+                matchedParams.Add(targetName);
+            }
+            else
+            {
+                result.UnmatchedWeights.Add(weightName);
+            }
+        }
+
+        // Find missing parameters
+        foreach (var paramName in paramNames)
+        {
+            if (!matchedParams.Contains(paramName))
+            {
+                result.MissingParameters.Add(paramName);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Loads weights from a dictionary of tensors using optional name mapping.
+    /// </summary>
+    /// <param name="weights">Dictionary of weight name to tensor.</param>
+    /// <param name="mapping">Optional function to map source names to target names.</param>
+    /// <param name="strict">If true, fails when any mapped weight fails to load.</param>
+    /// <returns>Load result with statistics.</returns>
+    public virtual WeightLoadResult LoadWeights(
+        Dictionary<string, Tensor<T>> weights,
+        Func<string, string?>? mapping = null,
+        bool strict = false)
+    {
+        var result = new WeightLoadResult { Success = true };
+
+        foreach (var kvp in weights)
+        {
+            var sourceName = kvp.Key;
+            var tensor = kvp.Value;
+
+            var targetName = mapping?.Invoke(sourceName) ?? sourceName;
+            if (targetName is null)
+            {
+                result.SkippedCount++;
+                continue;
+            }
+
+            try
+            {
+                if (SetParameter(targetName, tensor))
+                {
+                    result.LoadedCount++;
+                    result.LoadedParameters.Add(targetName);
+                }
+                else
+                {
+                    if (strict)
+                    {
+                        result.FailedCount++;
+                        result.FailedParameters.Add((targetName, "Parameter not found"));
+                        result.Success = false;
+                    }
+                    else
+                    {
+                        result.SkippedCount++;
+                    }
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                result.FailedCount++;
+                result.FailedParameters.Add((targetName, ex.Message));
+                if (strict)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Failed to load '{targetName}': {ex.Message}";
+                }
+            }
+        }
+
+        return result;
+    }
+
+    #endregion
 }

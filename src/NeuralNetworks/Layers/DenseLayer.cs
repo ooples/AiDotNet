@@ -618,7 +618,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// If the dimensions don't match, the method will throw an error.
     /// </para>
     /// </remarks>
-    public void SetWeights(Tensor<T> weights)
+    protected override void SetWeights(Tensor<T> weights)
     {
         if (weights == null)
         {

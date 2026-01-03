@@ -11,7 +11,7 @@ namespace AiDotNet.Interfaces;
 /// This interface defines what all layers must be able to do, regardless of their specific type.
 /// Think of it as a checklist of abilities that every layer must have to work within our neural network.
 /// </remarks>
-public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider
+public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoadable<T>
 {
     /// <summary>
     /// Gets the shape (dimensions) of the input data expected by this layer.
