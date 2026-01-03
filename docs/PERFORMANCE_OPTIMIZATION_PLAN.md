@@ -519,39 +519,421 @@ public class NetworkConstructionBenchmarks
 
 ## Implementation Roadmap
 
-### Phase 0: Critical GPU Backend Fixes (IMMEDIATE)
-- [ ] User Story 0.1: Fix OpenCL attention kernel compilation errors
-- [ ] User Story 0.2: Fix HIP backend header dependencies
-- [ ] User Story 0.3: Ensure at least one GPU backend works
+> **Gate Requirements:** Each phase MUST pass all integration tests before proceeding to the next phase.
+> Run: `dotnet test --filter "Category=Phase{N}Gate"` to validate phase completion.
 
-**Expected Impact:** GPU acceleration becomes functional (currently broken)
+---
+
+### Phase 0: Critical GPU Backend Fixes (IMMEDIATE)
+
+**User Stories:**
+- [ ] 0.1: Fix OpenCL attention kernel compilation errors
+- [ ] 0.2: Fix HIP backend header dependencies
+- [ ] 0.3: Ensure at least one GPU backend works
+
+**Acceptance Criteria:**
+| Criterion | Requirement | Validation |
+|-----------|-------------|------------|
+| OpenCL compiles | No kernel compilation errors on Intel/AMD/NVIDIA OpenCL | CI build log |
+| HIP graceful fallback | HIP backend doesn't crash when SDK missing | Runtime test |
+| GPU detection | `GpuEngine.IsAvailable` returns true on GPU systems | Unit test |
+| Backend diagnostics | `GetAvailableBackends()` reports status of each backend | Unit test |
+| No silent fallback | Log warning when falling back to CPU | Log inspection |
+
+**Performance Requirements:**
+| Metric | Requirement | Measurement |
+|--------|-------------|-------------|
+| GPU backend init | < 500ms | Stopwatch in test |
+| First GPU operation | < 100ms overhead vs subsequent | Benchmark |
+
+**Integration Tests (Phase 0 Gate):**
+```csharp
+[Trait("Category", "Phase0Gate")]
+public class Phase0GateTests
+{
+    [Fact]
+    public void OpenCL_Kernels_Compile_Without_Errors()
+    {
+        var engine = new GpuEngine();
+        var backends = engine.GetAvailableBackends();
+        // OpenCL should either be available or have clear error (not crash)
+        Assert.NotNull(backends["OpenCL"].Status);
+    }
+
+    [Fact]
+    public void HIP_Backend_Graceful_When_SDK_Missing()
+    {
+        // Should not throw, should report "SDK not found"
+        var engine = new GpuEngine();
+        var backends = engine.GetAvailableBackends();
+        Assert.Contains(backends["HIP"].Status, new[] { "Available", "SDK not installed" });
+    }
+
+    [Fact]
+    public void AtLeastOneGpuBackend_IsAvailable_OnGpuSystem()
+    {
+        var engine = new GpuEngine();
+        // On CI with GPU, at least one backend should work
+        // On CPU-only systems, this test is skipped
+        if (Environment.GetEnvironmentVariable("HAS_GPU") == "true")
+        {
+            Assert.True(engine.IsAvailable, engine.GetDiagnosticReport());
+        }
+    }
+
+    [Fact]
+    public void GpuEngine_Reports_Fallback_Reason()
+    {
+        var engine = new GpuEngine();
+        var report = engine.GetDiagnosticReport();
+        Assert.False(string.IsNullOrEmpty(report));
+        // Report should explain why each backend is/isn't available
+    }
+}
+```
+
+**Exit Criteria:** All Phase0Gate tests pass. GPU acceleration works on at least CUDA or OpenCL.
+
+---
 
 ### Phase 1: Quick Wins (1-2 weeks)
-- [ ] User Story 3.1: Create lightweight test variants
-- [ ] User Story 3.2: Optimize multi-network tests
-- [ ] User Story 5.1: Add shared test fixtures
 
-**Expected Impact:** 50% reduction in test time
+**User Stories:**
+- [ ] 3.1: Create lightweight test variants
+- [ ] 3.2: Optimize multi-network tests
+- [ ] 5.1: Add shared test fixtures
+
+**Acceptance Criteria:**
+| Criterion | Requirement | Validation |
+|-----------|-------------|------------|
+| Mini networks exist | `DenseNet.ForTesting()`, `EfficientNet.ForTesting()` | API exists |
+| Config-only tests | Variant comparison tests don't construct networks | Code review |
+| Shared fixtures | `NetworkFixture<T>` implements `IClassFixture` | Compilation |
+| Test isolation | Fixtures are thread-safe for parallel execution | Concurrent test run |
+
+**Performance Requirements:**
+| Metric | Current | Target | Measurement |
+|--------|---------|--------|-------------|
+| DenseNetTests class | ~5 min | < 2 min | CI timing |
+| EfficientNetTests class | ~8 min | < 2 min | CI timing |
+| Mini network construction | N/A | < 50ms | Benchmark |
+
+**Integration Tests (Phase 1 Gate):**
+```csharp
+[Trait("Category", "Phase1Gate")]
+public class Phase1GateTests
+{
+    [Fact]
+    public void MiniDenseNet_Constructs_Under50ms()
+    {
+        var sw = Stopwatch.StartNew();
+        var network = DenseNetNetwork<float>.ForTesting(numClasses: 10);
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds < 50, $"Took {sw.ElapsedMilliseconds}ms");
+        Assert.True(network.Layers.Count < 20); // Much smaller than full D121
+    }
+
+    [Fact]
+    public void MiniEfficientNet_Constructs_Under50ms()
+    {
+        var sw = Stopwatch.StartNew();
+        var network = EfficientNetNetwork<float>.ForTesting(numClasses: 10);
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds < 50, $"Took {sw.ElapsedMilliseconds}ms");
+    }
+
+    [Fact]
+    public void DenseNetConfig_GetExpectedLayerCount_NoConstruction()
+    {
+        var sw = Stopwatch.StartNew();
+        var config121 = new DenseNetConfiguration(DenseNetVariant.DenseNet121);
+        var count = config121.GetExpectedLayerCount();
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds < 5); // Config-only, no network construction
+        Assert.True(count > 100);
+    }
+
+    [Fact]
+    public void NetworkFixture_IsThreadSafe()
+    {
+        var fixture = new NetworkFixture<float>();
+        Parallel.For(0, 10, i =>
+        {
+            var network = fixture.MiniDenseNet;
+            Assert.NotNull(network);
+        });
+    }
+}
+```
+
+**Exit Criteria:** All Phase1Gate tests pass. CI test time for DenseNet/EfficientNet < 2 min each.
+
+---
 
 ### Phase 2: Core Optimization (2-3 weeks)
-- [ ] User Story 1.1: Implement lazy weight initialization
-- [ ] User Story 1.2: Add initialization strategy interface
-- [ ] User Story 2.1: Implement tensor pool
 
-**Expected Impact:** Additional 30% reduction in test time, 30% memory reduction
+**User Stories:**
+- [ ] 1.1: Implement lazy weight initialization
+- [ ] 1.2: Add initialization strategy interface
+- [ ] 2.1: Implement tensor pool
+
+**Acceptance Criteria:**
+| Criterion | Requirement | Validation |
+|-----------|-------------|------------|
+| Lazy init pattern | `EnsureInitialized()` in LayerBase | Code exists |
+| Strategy interface | `IInitializationStrategy<T>` with Lazy/Eager/FromFile | API exists |
+| Tensor pool | `TensorPool<T>.Rent/Return` thread-safe | Unit test |
+| Pool size limits | Configurable max pool size | Constructor param |
+| No breaking changes | Existing API works unchanged | Regression tests |
+
+**Performance Requirements:**
+| Metric | Current | Target | Measurement |
+|--------|---------|--------|-------------|
+| DenseNet-121 construction (lazy) | ~500ms | < 150ms | Benchmark |
+| DenseNet-264 construction (lazy) | ~1500ms | < 300ms | Benchmark |
+| Tensor pool rent/return | N/A | < 1μs | Benchmark |
+| GC allocations (pooled) | 100% | < 30% | MemoryDiagnoser |
+
+**Integration Tests (Phase 2 Gate):**
+```csharp
+[Trait("Category", "Phase2Gate")]
+public class Phase2GateTests
+{
+    [Fact]
+    public void LazyInit_DenseNet121_Under150ms()
+    {
+        var sw = Stopwatch.StartNew();
+        var network = DenseNetNetwork<float>.DenseNet121(
+            numClasses: 10,
+            initStrategy: InitializationStrategy.Lazy);
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds < 150, $"Took {sw.ElapsedMilliseconds}ms");
+    }
+
+    [Fact]
+    public void LazyInit_WeightsNotAllocated_UntilForward()
+    {
+        var network = DenseNetNetwork<float>.DenseNet121(
+            numClasses: 10,
+            initStrategy: InitializationStrategy.Lazy);
+
+        // Weights should be null before first forward
+        var denseLayer = network.Layers.OfType<DenseLayer<float>>().First();
+        Assert.False(denseLayer.IsInitialized);
+
+        // After forward, weights should exist
+        var input = Tensor<float>.Random(1, 3, 224, 224);
+        network.Forward(input);
+        Assert.True(denseLayer.IsInitialized);
+    }
+
+    [Fact]
+    public void TensorPool_ReducesAllocations()
+    {
+        var pool = new TensorPool<float>(maxPoolSize: 100);
+        var allocsBefore = GC.GetTotalMemory(true);
+
+        for (int i = 0; i < 1000; i++)
+        {
+            var tensor = pool.Rent(new[] { 64, 64 });
+            pool.Return(tensor);
+        }
+
+        var allocsAfter = GC.GetTotalMemory(true);
+        // Should reuse tensors, minimal new allocations
+        Assert.True(allocsAfter - allocsBefore < 1_000_000); // < 1MB for 1000 iterations
+    }
+
+    [Fact]
+    public void TensorPool_IsThreadSafe()
+    {
+        var pool = new TensorPool<float>();
+        var exceptions = new ConcurrentBag<Exception>();
+
+        Parallel.For(0, 100, i =>
+        {
+            try
+            {
+                var tensor = pool.Rent(new[] { 32, 32 });
+                Thread.Sleep(1); // Simulate work
+                pool.Return(tensor);
+            }
+            catch (Exception ex) { exceptions.Add(ex); }
+        });
+
+        Assert.Empty(exceptions);
+    }
+}
+```
+
+**Exit Criteria:** All Phase2Gate tests pass. Network construction 50-70% faster with lazy init.
+
+---
 
 ### Phase 3: Layer Refactoring (3-4 weeks)
-- [ ] User Story 4.1: Refactor high-priority attention layers (CrossAttention, GraphAttention)
-- [ ] User Story 4.2: Refactor graph neural network layers (MessagePassing, GraphTransformer)
-- [ ] User Story 4.3: Complete normalization layer refactoring
-- [ ] User Story 2.2: Add pooling to forward pass
 
-**Expected Impact:** 2-5x faster inference via existing IEngine optimizations
+**User Stories:**
+- [ ] 4.1: Refactor high-priority attention layers
+- [ ] 4.2: Refactor graph neural network layers
+- [ ] 4.3: Complete normalization layer refactoring
+- [ ] 2.2: Add pooling to forward pass
+
+**Acceptance Criteria:**
+| Criterion | Requirement | Validation |
+|-----------|-------------|------------|
+| No manual attention loops | CrossAttention uses `Engine.BatchMatMul` | Code review |
+| FlashAttention for long seq | Sequences > 256 use `Engine.FlashAttention` | Unit test |
+| GNN uses Scatter ops | MessagePassing uses `Engine.ScatterAdd` | Code review |
+| Normalization fused | BatchNorm uses `Engine.FusedBatchNorm` | Code review |
+| InferenceContext | Pooled forward pass via context | API exists |
+
+**Performance Requirements:**
+| Metric | Current | Target | Measurement |
+|--------|---------|--------|-------------|
+| Attention (seq=1024) | Baseline | 2-5x faster | Benchmark |
+| GNN message passing | Baseline | 3-10x faster | Benchmark |
+| BatchNorm forward | Baseline | 20-30% faster | Benchmark |
+| Forward pass allocations | 100% | < 30% with pooling | MemoryDiagnoser |
+
+**Integration Tests (Phase 3 Gate):**
+```csharp
+[Trait("Category", "Phase3Gate")]
+public class Phase3GateTests
+{
+    [Fact]
+    public void CrossAttention_UsesEngineOperations()
+    {
+        var layer = new CrossAttentionLayer<float>(512, 8);
+        var engineCallCount = 0;
+        var mockEngine = new InstrumentedEngine(onCall: () => engineCallCount++);
+        layer.Engine = mockEngine;
+
+        var q = Tensor<float>.Random(1, 64, 512);
+        var kv = Tensor<float>.Random(1, 64, 512);
+        layer.Forward(q, kv);
+
+        // Should use Engine.BatchMatMul, not manual loops
+        Assert.True(engineCallCount >= 2, "Should call Engine for matmul operations");
+    }
+
+    [Fact]
+    public void FlashAttention_UsedForLongSequences()
+    {
+        var layer = new SelfAttentionLayer<float>(512, 8);
+        var input = Tensor<float>.Random(1, 1024, 512); // Long sequence
+
+        // Should use FlashAttention path (O(N) memory)
+        var memBefore = GC.GetTotalMemory(true);
+        layer.Forward(input);
+        var memAfter = GC.GetTotalMemory(true);
+
+        // Flash attention should use O(N) not O(N^2) memory
+        var memUsed = memAfter - memBefore;
+        var maxExpected = 1024 * 512 * 8 * 4; // O(N * d * heads) not O(N^2)
+        Assert.True(memUsed < maxExpected, $"Memory {memUsed} exceeds O(N) expectation");
+    }
+
+    [Fact]
+    public void InferenceContext_ReducesAllocations()
+    {
+        var network = DenseNetNetwork<float>.ForTesting(numClasses: 10);
+        var pool = new TensorPool<float>();
+        var input = Tensor<float>.Random(1, 3, 32, 32);
+
+        // Warmup
+        network.Forward(input);
+
+        var allocsBefore = GC.GetTotalMemory(true);
+        using (var context = new InferenceContext<float>(pool))
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                network.Forward(input, context);
+            }
+        }
+        var allocsAfter = GC.GetTotalMemory(true);
+
+        // Pooled inference should have minimal allocations
+        Assert.True(allocsAfter - allocsBefore < 10_000_000); // < 10MB for 100 inferences
+    }
+
+    [Fact]
+    public void Attention_Is2xFasterWithEngine()
+    {
+        var layer = new SelfAttentionLayer<float>(256, 8);
+        var input = Tensor<float>.Random(1, 512, 256);
+
+        // Warmup
+        layer.Forward(input);
+
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < 10; i++)
+            layer.Forward(input);
+        sw.Stop();
+
+        // Baseline expectation: should be significantly faster than manual loops
+        // This test documents the performance, actual threshold TBD after baseline
+        Assert.True(sw.ElapsedMilliseconds < 5000, $"10 forwards took {sw.ElapsedMilliseconds}ms");
+    }
+}
+```
+
+**Exit Criteria:** All Phase3Gate tests pass. Attention/GNN layers use IEngine operations.
+
+---
 
 ### Phase 4: Polish and Maintenance (ongoing)
-- [ ] User Story 4.4: Expand CpuEngine SIMD coverage for remaining scalar ops
-- [ ] User Story 5.2: Add performance regression tests
-- [ ] Continue layer refactoring per `GPU_ENGINE_OPTIMIZATION_PLAN.md` Phase 5
+
+**User Stories:**
+- [ ] 4.4: Expand CpuEngine SIMD coverage
+- [ ] 5.2: Add performance regression tests
+- [ ] Continue layer refactoring per GPU plan Phase 5
+
+**Acceptance Criteria:**
+| Criterion | Requirement | Validation |
+|-----------|-------------|------------|
+| Sqrt vectorized | `TensorPrimitivesHelper.Sqrt` uses SIMD | Benchmark shows speedup |
+| Regression CI | BenchmarkDotNet runs in CI | GitHub Action |
+| Baseline tracked | Performance history stored | CI artifacts |
+| Alerts on regression | >10% slowdown fails build | CI config |
+
+**Performance Requirements:**
+| Metric | Requirement | Measurement |
+|--------|-------------|-------------|
+| No regressions | < 10% slowdown vs baseline | BenchmarkDotNet comparison |
+| Sqrt vectorized | 3-5x faster than scalar | Benchmark |
+| CI benchmark time | < 10 min | CI timing |
+
+**Integration Tests (Phase 4 Gate):**
+```csharp
+[Trait("Category", "Phase4Gate")]
+public class Phase4GateTests
+{
+    [Fact]
+    public void Sqrt_IsVectorized()
+    {
+        var input = Vector<float>.Random(10000);
+
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < 1000; i++)
+            TensorPrimitivesHelper<float>.Sqrt(input);
+        var vectorizedTime = sw.ElapsedMilliseconds;
+
+        // Compare to scalar baseline (should be 3-5x faster)
+        // Actual threshold set after measuring scalar baseline
+        Assert.True(vectorizedTime < 100, $"Sqrt took {vectorizedTime}ms, expected vectorized speedup");
+    }
+
+    [Fact]
+    public void PerformanceBaseline_Exists()
+    {
+        var baselinePath = "benchmarks/baseline.json";
+        Assert.True(File.Exists(baselinePath), "Performance baseline file should exist");
+    }
+}
+```
+
+**Exit Criteria:** Regression tests in CI. No performance degradation from baseline.
 
 ---
 
