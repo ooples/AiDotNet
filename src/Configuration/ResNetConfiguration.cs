@@ -327,4 +327,24 @@ public class ResNetConfiguration
     {
         return new ResNetConfiguration(ResNetVariant.ResNet18, numClasses);
     }
+
+    /// <summary>
+    /// Creates a minimal ResNet configuration optimized for fast test execution.
+    /// </summary>
+    /// <remarks>
+    /// Uses ResNet18 (smallest variant) with 32x32 input resolution,
+    /// resulting in minimal network construction time suitable for unit tests.
+    /// Construction time is typically under 50ms.
+    /// </remarks>
+    /// <param name="numClasses">The number of output classes.</param>
+    /// <returns>A minimal ResNet configuration for testing.</returns>
+    public static ResNetConfiguration CreateForTesting(int numClasses)
+    {
+        return new ResNetConfiguration(
+            variant: ResNetVariant.ResNet18,
+            numClasses: numClasses,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputChannels: 3);
+    }
 }
