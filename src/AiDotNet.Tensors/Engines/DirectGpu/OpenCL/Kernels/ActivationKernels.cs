@@ -601,6 +601,27 @@ __kernel void trunc_vector(
 
     B[idx] = trunc(A[idx]);
 }
+
+// ===========================================================================
+// BROADCAST OPERATIONS
+// ===========================================================================
+
+// Bias addition with broadcast: C[i,j] = A[i,j] + bias[j]
+// Broadcasts bias vector (N elements) across M rows
+__kernel void bias_add(
+    __global const float* A,
+    __global const float* bias,
+    __global float* C,
+    const int M,
+    const int N)
+{
+    const int row = get_global_id(0);
+    const int col = get_global_id(1);
+    if (row >= M || col >= N) return;
+
+    const int idx = row * N + col;
+    C[idx] = A[idx] + bias[col];
+}
 ";
         }
 
@@ -633,7 +654,9 @@ __kernel void trunc_vector(
                 // Additional unary
                 "reciprocal_vector", "cbrt_vector", "log10_vector",
                 "negate_vector", "floor_vector", "ceil_vector",
-                "round_vector", "trunc_vector"
+                "round_vector", "trunc_vector",
+                // Broadcast operations
+                "bias_add"
             };
         }
     }

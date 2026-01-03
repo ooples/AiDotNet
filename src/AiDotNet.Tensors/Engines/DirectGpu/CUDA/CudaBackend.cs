@@ -36,7 +36,11 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     public static bool IsCudaAvailable => CudaNativeBindings.IsAvailable && NvrtcNativeBindings.IsAvailable;
 
-    public CudaBackend()
+    public CudaBackend() : this(0)
+    {
+    }
+
+    public CudaBackend(int deviceIndex)
     {
         _kernelCache = new Dictionary<string, IntPtr>(StringComparer.Ordinal);
 
@@ -50,7 +54,7 @@ public sealed class CudaBackend : IDirectGpuBackend
         try
         {
             CuBlasNative.CheckCudaResult(CuBlasNative.cuInit(0), "cuInit");
-            CuBlasNative.CheckCudaResult(CuBlasNative.cuDeviceGet(out int device, 0), "cuDeviceGet");
+            CuBlasNative.CheckCudaResult(CuBlasNative.cuDeviceGet(out int device, deviceIndex), "cuDeviceGet");
 
             var nameBuilder = new StringBuilder(256);
             CuBlasNative.CheckCudaResult(
@@ -456,6 +460,36 @@ public sealed class CudaBackend : IDirectGpuBackend
         var output = AllocateBuffer(M * N);
         ExecuteFusedGemm("gemm_bias_tanh", A, B, bias, output, M, N, K);
         return output;
+    }
+
+    public IGpuBuffer GemmBias(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
+    {
+        ValidateBiasBuffer(bias, N);
+        var output = MatMul(A, B, M, N, K);
+        ApplyBiasInPlace(output, bias, M, N);
+        return output;
+    }
+
+    public unsafe void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N)
+    {
+        if (!_kernelCache.TryGetValue("bias_add_out", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: bias_add_out");
+
+        using var _ = PushContext();
+        int size = M * N;
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr aPtr = A.Handle;
+        IntPtr biasPtr = bias.Handle;
+        IntPtr cPtr = C.Handle;
+        int rows = M;
+        int cols = N;
+        void** args = stackalloc void*[5];
+        args[0] = &aPtr;
+        args[1] = &biasPtr;
+        args[2] = &cPtr;
+        args[3] = &rows;
+        args[4] = &cols;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
     public void Add(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)

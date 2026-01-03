@@ -593,6 +593,49 @@ internal static class OpenClKernelSources
                 C[row * N + col] = tanh(x);
             }
         }
+
+        // Fused: output = A * B + bias (no activation)
+        __kernel void gemm_bias(
+            __global const float* A,
+            __global const float* B,
+            __global const float* bias,
+            __global float* C,
+            const int M,
+            const int N,
+            const int K)
+        {
+            __local float tileA[FUSED_TILE_SIZE][FUSED_TILE_SIZE + FUSED_PAD];
+            __local float tileB[FUSED_TILE_SIZE][FUSED_TILE_SIZE + FUSED_PAD];
+
+            int tx = get_local_id(0);
+            int ty = get_local_id(1);
+            int row = get_group_id(0) * FUSED_TILE_SIZE + tx;
+            int col = get_group_id(1) * FUSED_TILE_SIZE + ty;
+
+            float acc = 0.0f;
+
+            int numTiles = (K + FUSED_TILE_SIZE - 1) / FUSED_TILE_SIZE;
+            for (int t = 0; t < numTiles; t++) {
+                int aCol = t * FUSED_TILE_SIZE + ty;
+                int bRow = t * FUSED_TILE_SIZE + tx;
+
+                tileA[tx][ty] = (row < M && aCol < K) ? A[row * K + aCol] : 0.0f;
+                tileB[tx][ty] = (bRow < K && col < N) ? B[bRow * N + col] : 0.0f;
+
+                barrier(CLK_LOCAL_MEM_FENCE);
+
+                #pragma unroll
+                for (int k = 0; k < FUSED_TILE_SIZE; k++) {
+                    acc += tileA[tx][k] * tileB[k][ty];
+                }
+
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }
+
+            if (row < M && col < N) {
+                C[row * N + col] = acc + bias[col];
+            }
+        }
         """;
 }
 #endif

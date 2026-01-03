@@ -163,6 +163,32 @@ public interface IDirectGpuBackend : IDisposable
     /// </summary>
     IGpuBuffer GemmBiasTanh(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K);
 
+    /// <summary>
+    /// Fused GEMM + Bias (no activation): output = A * B + bias
+    /// </summary>
+    /// <param name="A">Input matrix (M x K).</param>
+    /// <param name="B">Weight matrix (K x N).</param>
+    /// <param name="bias">Bias vector (N elements), broadcast across all M rows.</param>
+    /// <param name="M">Batch size / rows.</param>
+    /// <param name="N">Output features.</param>
+    /// <param name="K">Input features.</param>
+    /// <returns>Output buffer (M x N).</returns>
+    IGpuBuffer GemmBias(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K);
+
+    #endregion
+
+    #region Broadcast Operations
+
+    /// <summary>
+    /// Adds a bias vector to each row of a matrix: C[i,j] = A[i,j] + bias[j]
+    /// </summary>
+    /// <param name="A">Input matrix (M x N).</param>
+    /// <param name="bias">Bias vector (N elements).</param>
+    /// <param name="C">Output matrix (M x N).</param>
+    /// <param name="M">Number of rows (batch size).</param>
+    /// <param name="N">Number of columns (features).</param>
+    void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N);
+
     #endregion
 
     #region Element-wise Operations

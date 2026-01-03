@@ -90,12 +90,16 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// </summary>
         public static bool IsAvailable => OpenClNativeBindings.IsAvailable;
 
-        public DirectOpenClContext()
+        public DirectOpenClContext() : this(0)
         {
-            Initialize();
         }
 
-        private void Initialize()
+        public DirectOpenClContext(int deviceIndex)
+        {
+            Initialize(deviceIndex);
+        }
+
+        private void Initialize(int deviceIndex)
         {
             // Get platforms
             int err = OpenClNativeBindings.GetPlatformIDs(0, null, out uint numPlatforms);
@@ -107,7 +111,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             if (err != OpenClNativeBindings.CL_SUCCESS)
                 throw new InvalidOperationException($"Failed to get OpenCL platforms: {err}");
 
-            // Find a GPU device
+            // Find GPU devices across all platforms and select by index
+            int currentIndex = 0;
             foreach (var platform in platforms)
             {
                 err = OpenClNativeBindings.GetDeviceIDs(platform, OpenClNativeBindings.CL_DEVICE_TYPE_GPU, 0, null, out uint numDevices);
@@ -117,9 +122,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     err = OpenClNativeBindings.GetDeviceIDs(platform, OpenClNativeBindings.CL_DEVICE_TYPE_GPU, numDevices, devices, out _);
                     if (err == OpenClNativeBindings.CL_SUCCESS)
                     {
-                        _platform = platform;
-                        _device = devices[0]; // Use first GPU
-                        break;
+                        // Check if the requested device index is within this platform's devices
+                        if (deviceIndex >= currentIndex && deviceIndex < currentIndex + (int)numDevices)
+                        {
+                            _platform = platform;
+                            _device = devices[deviceIndex - currentIndex];
+                            break;
+                        }
+                        currentIndex += (int)numDevices;
                     }
                 }
             }

@@ -228,9 +228,9 @@ If results differ from expected:
 
 ## References
 
-- BenchmarkDotNet Documentation: https://benchmarkdotnet.org/
-- OpenCL Documentation: https://www.khronos.org/opencl/
-- CUDA Documentation: https://developer.nvidia.com/cuda-toolkit
+- [BenchmarkDotNet Documentation](https://benchmarkdotnet.org/)
+- [OpenCL Documentation](https://www.khronos.org/opencl/)
+- [CUDA Documentation](https://developer.nvidia.com/cuda-toolkit)
 - Phase B Implementation: See Epic 1-4 user stories in issue #496
 
 ---

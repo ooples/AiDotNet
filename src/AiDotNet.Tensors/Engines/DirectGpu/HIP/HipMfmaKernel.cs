@@ -315,8 +315,8 @@ extern ""C"" __global__ void mfma_gemm_f16(
                 b_frag[i] = Bs[swizzledRow][col];
             }
 
-#if __gfx90a__ || __gfx908__ || __gfx940__
-            // FP16 MFMA - 2x throughput of FP32
+#if __gfx90a__ || __gfx908__ || __gfx940__ || __gfx941__ || __gfx942__
+            // FP16 MFMA - 2x throughput of FP32 (includes MI300 variants)
             typedef __half half4 __attribute__((ext_vector_type(4)));
             typedef float float16 __attribute__((ext_vector_type(16)));
 

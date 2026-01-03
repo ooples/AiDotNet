@@ -90,7 +90,18 @@ public sealed class HipBackend : IDirectGpuBackend
         set => HipNativeBindings.EnableDiagnostics = value;
     }
 
-    public HipBackend()
+    /// <summary>
+    /// Gets whether elementwise operations are GPU-accelerated.
+    /// Returns false for HipBackend as elementwise operations currently use CPU fallback.
+    /// Only GEMM (matrix multiply) is GPU-accelerated via rocBLAS.
+    /// </summary>
+    public bool SupportsElementwiseGpu => false;
+
+    public HipBackend() : this(0)
+    {
+    }
+
+    public HipBackend(int deviceIndex)
     {
         _kernelCache = new Dictionary<string, IntPtr>();
 
@@ -104,7 +115,7 @@ public sealed class HipBackend : IDirectGpuBackend
         try
         {
             // Initialize HIP and get device info
-            var result = HipNativeBindings.hipSetDevice(0);
+            var result = HipNativeBindings.hipSetDevice(deviceIndex);
             if (result != HipError.Success)
             {
                 IsAvailable = false;
@@ -114,7 +125,7 @@ public sealed class HipBackend : IDirectGpuBackend
 
             // Get device properties
             _deviceProps = new HipDeviceProperties();
-            result = HipNativeBindings.hipGetDeviceProperties(ref _deviceProps, 0);
+            result = HipNativeBindings.hipGetDeviceProperties(ref _deviceProps, deviceIndex);
             if (result != HipError.Success)
             {
                 IsAvailable = false;

@@ -220,7 +220,6 @@ public sealed class GemmBenchmark
         {
             Console.WriteLine();
             Console.WriteLine($"vs CLBlast (2,500 GFLOPS): {result.GFlops / 2500:F1}x faster");
-            Console.WriteLine($"vs CLBlast (2,500 GFLOPS): {result.GFlops / 2500:F1}x faster");
         }
     }
 }
