@@ -530,7 +530,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// This matches the manual implementation behavior.
     /// </para>
     /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)        
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
         return CreateZeroInputGradient();
     }

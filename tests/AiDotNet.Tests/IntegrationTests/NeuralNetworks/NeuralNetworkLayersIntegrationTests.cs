@@ -1,8 +1,8 @@
+using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
-using System.Reflection;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;

@@ -566,7 +566,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _normalizedAdjacencyMatrix == null || _normalizedEdgeFeatures == null || _lastEdgeWeights == null || _lastHidden == null)  
+        if (_lastInput == null || _lastOutput == null || _normalizedAdjacencyMatrix == null || _normalizedEdgeFeatures == null || _lastEdgeWeights == null || _lastHidden == null)
         {
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }

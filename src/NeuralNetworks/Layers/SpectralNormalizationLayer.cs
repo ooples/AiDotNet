@@ -429,7 +429,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
             T normPlusEps = NumOps.Add(spectralNorm, _epsilon);
 
             // Normalize weight parameters
-            var normalizedParams = new Vector<T>(paramCount);        
+            var normalizedParams = new Vector<T>(paramCount);
             for (int i = 0; i < weightCount; i++)
             {
                 normalizedParams[i] = NumOps.Divide(originalParams[i], normPlusEps);
