@@ -871,6 +871,13 @@ public class NeuralNetworkArchitecture<T>
                     {
                         InputHeight = InputSize / InputWidth;
                     }
+                    else if (InputSize == 0)
+                    {
+                        // InputHeight intentionally 0 for runtime-determined batch size
+                        // Default to 1 (single sample configuration that will be batched at runtime)
+                        InputHeight = 1;
+                        InputSize = InputWidth;
+                    }
                     else
                     {
                         throw new ArgumentException($"Cannot infer InputHeight: InputSize ({InputSize}) must be divisible by InputWidth ({InputWidth}).");
