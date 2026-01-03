@@ -208,11 +208,11 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
         if (state.Epsilon != null)
         {
-            _epsilon = (double)state.Epsilon;
+            _epsilon = Convert.ToDouble(state.Epsilon);
         }
         if (state.LastAction != null)
         {
-            _lastAction = (int)state.LastAction;
+            _lastAction = Convert.ToInt32(state.LastAction);
         }
     }
 
