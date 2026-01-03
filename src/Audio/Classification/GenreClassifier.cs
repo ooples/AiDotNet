@@ -671,69 +671,8 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
 
     private Tensor<T> ExtractFeatures(Tensor<T> audio)
     {
-        // Extract MFCCs
-        var mfccs = _mfccExtractor.Extract(audio);
-
-        // Compute MFCC statistics (mean, std)
-        int numFrames = mfccs.Shape[0];
-        int numCoeffs = mfccs.Shape[1];
-
-        var mfccMean = new double[numCoeffs];
-        var mfccStd = new double[numCoeffs];
-
-        for (int c = 0; c < numCoeffs; c++)
-        {
-            double sum = 0;
-            for (int t = 0; t < numFrames; t++)
-            {
-                sum += NumOps.ToDouble(mfccs[t, c]);
-            }
-            // Guard against division by zero for empty MFCC frames
-            mfccMean[c] = numFrames > 0 ? sum / numFrames : 0.0;
-
-            double sumSq = 0;
-            for (int t = 0; t < numFrames; t++)
-            {
-                double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
-                sumSq += diff * diff;
-            }
-            // Guard against division by zero for empty MFCC frames
-            mfccStd[c] = numFrames > 0 ? Math.Sqrt(sumSq / numFrames) : 0.0;
-        }
-
-        // Extract spectral features
-        var spectralResult = _spectralExtractor.Extract(audio);
-        int spectralFrames = spectralResult.Shape[0];
-
-        var spectralCentroid = new Tensor<T>([spectralFrames]);
-        var spectralRolloff = new Tensor<T>([spectralFrames]);
-        for (int t = 0; t < spectralFrames; t++)
-        {
-            spectralCentroid[t] = spectralResult[t, 0];
-            spectralRolloff[t] = spectralResult.Shape[1] > 1 ? spectralResult[t, 1] : NumOps.Zero;
-        }
-
-        // Compute temporal features
-        double zeroCrossingRate = ComputeZeroCrossingRate(audio);
-        double rmsEnergy = ComputeRmsEnergy(audio);
-        double tempo = EstimateTempo(audio);
-
-        // Flatten features to tensor
-        int numFeatures = numCoeffs * 2 + 5;
-        var features = new Tensor<T>([1, numFeatures]);
-
-        int idx = 0;
-        foreach (var val in mfccMean)
-            features[0, idx++] = NumOps.FromDouble(val);
-        foreach (var val in mfccStd)
-            features[0, idx++] = NumOps.FromDouble(val);
-        features[0, idx++] = NumOps.FromDouble(ComputeMean(spectralCentroid));
-        features[0, idx++] = NumOps.FromDouble(ComputeStd(spectralCentroid));
-        features[0, idx++] = NumOps.FromDouble(zeroCrossingRate);
-        features[0, idx++] = NumOps.FromDouble(rmsEnergy);
-        features[0, idx++] = NumOps.FromDouble(tempo / 200.0);
-
-        return features;
+        // Delegate to ExtractFeaturesWithMeta to eliminate code duplication
+        return ExtractFeaturesWithMeta(audio).Tensor;
     }
 
     private (Tensor<T> Tensor, GenreFeatures<T> Features) ExtractFeaturesWithMeta(Tensor<T> audio)
@@ -796,7 +735,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         features[0, idx++] = NumOps.FromDouble(ComputeStd(spectralCentroid));
         features[0, idx++] = NumOps.FromDouble(zeroCrossingRate);
         features[0, idx++] = NumOps.FromDouble(rmsEnergy);
-        features[0, idx++] = NumOps.FromDouble(tempo / 200.0);
+        features[0, idx] = NumOps.FromDouble(tempo / 200.0);
 
         // Create genre features metadata
         var genreFeatures = new GenreFeatures<T>
