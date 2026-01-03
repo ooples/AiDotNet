@@ -460,4 +460,106 @@ public class Phase2GateTests
         Assert.Empty(exceptions);
         Assert.True(layer.IsInitialized);
     }
+
+    [Fact]
+    public void ConvolutionalLayer_LazyInit_IsNotInitializedAfterConstruction()
+    {
+        var layer = new ConvolutionalLayer<float>(
+            inputDepth: 3, inputHeight: 32, inputWidth: 32,
+            outputDepth: 16, kernelSize: 3,
+            initializationStrategy: InitializationStrategy<float>.Lazy);
+
+        Assert.False(layer.IsInitialized);
+    }
+
+    [Fact]
+    public void ConvolutionalLayer_LazyInit_IsInitializedAfterForward()
+    {
+        var layer = new ConvolutionalLayer<float>(
+            inputDepth: 3, inputHeight: 32, inputWidth: 32,
+            outputDepth: 16, kernelSize: 3,
+            initializationStrategy: InitializationStrategy<float>.Lazy);
+
+        Assert.False(layer.IsInitialized);
+
+        // Perform forward pass to trigger initialization
+        var input = new Tensor<float>(new[] { 1, 3, 32, 32 });
+        layer.Forward(input);
+
+        Assert.True(layer.IsInitialized);
+    }
+
+    [Fact]
+    public void ConvolutionalLayer_EagerInit_IsInitializedImmediately()
+    {
+        var layer = new ConvolutionalLayer<float>(
+            inputDepth: 3, inputHeight: 32, inputWidth: 32,
+            outputDepth: 16, kernelSize: 3,
+            initializationStrategy: InitializationStrategy<float>.Eager);
+
+        Assert.True(layer.IsInitialized);
+    }
+
+    [Fact]
+    public void ConvolutionalLayer_DefaultInit_IsInitializedImmediately()
+    {
+        var layer = new ConvolutionalLayer<float>(
+            inputDepth: 3, inputHeight: 32, inputWidth: 32,
+            outputDepth: 16, kernelSize: 3);
+
+        Assert.True(layer.IsInitialized);
+    }
+
+    [Fact]
+    public void ConvolutionalLayer_LazyInit_ConstructsFaster()
+    {
+        const int inputDepth = 64;
+        const int inputHeight = 64;
+        const int inputWidth = 64;
+        const int outputDepth = 128;
+        const int kernelSize = 5;
+        const int iterations = 50;
+
+        // Measure eager construction time
+        var swEager = Stopwatch.StartNew();
+        for (int i = 0; i < iterations; i++)
+        {
+            var layer = new ConvolutionalLayer<float>(
+                inputDepth, inputHeight, inputWidth, outputDepth, kernelSize,
+                initializationStrategy: InitializationStrategy<float>.Eager);
+        }
+        swEager.Stop();
+
+        // Measure lazy construction time
+        var swLazy = Stopwatch.StartNew();
+        for (int i = 0; i < iterations; i++)
+        {
+            var layer = new ConvolutionalLayer<float>(
+                inputDepth, inputHeight, inputWidth, outputDepth, kernelSize,
+                initializationStrategy: InitializationStrategy<float>.Lazy);
+        }
+        swLazy.Stop();
+
+        // Lazy should be significantly faster
+        Assert.True(swLazy.ElapsedMilliseconds < swEager.ElapsedMilliseconds,
+            $"Lazy ({swLazy.ElapsedMilliseconds}ms) should be faster than Eager ({swEager.ElapsedMilliseconds}ms)");
+    }
+
+    [Fact]
+    public void ConvolutionalLayer_LazyInit_ProducesValidOutput()
+    {
+        var layer = new ConvolutionalLayer<float>(
+            inputDepth: 3, inputHeight: 32, inputWidth: 32,
+            outputDepth: 16, kernelSize: 3, stride: 1, padding: 1,
+            initializationStrategy: InitializationStrategy<float>.Lazy);
+
+        var input = new Tensor<float>(new[] { 1, 3, 32, 32 });
+        var output = layer.Forward(input);
+
+        Assert.NotNull(output);
+        Assert.True(layer.IsInitialized);
+        // With padding=1, stride=1, kernel=3: output size = input size = 32
+        Assert.Equal(32, output.Shape[^2]); // Height
+        Assert.Equal(32, output.Shape[^1]); // Width
+    }
 }
