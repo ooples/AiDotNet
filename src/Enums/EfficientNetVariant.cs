@@ -61,5 +61,14 @@ public enum EfficientNetVariant
     /// <remarks>
     /// The largest standard variant, offering state-of-the-art accuracy.
     /// </remarks>
-    B7
+    B7,
+
+    /// <summary>
+    /// Custom EfficientNet variant for testing with minimal layers.
+    /// </summary>
+    /// <remarks>
+    /// Use this variant for unit tests to minimize construction time.
+    /// Typically uses 32x32 input with 1.0 width/depth multipliers.
+    /// </remarks>
+    Custom
 }

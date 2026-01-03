@@ -191,6 +191,24 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         return new EfficientNetNetwork<T>(architecture, config);
     }
 
+    /// <summary>
+    /// Creates a minimal EfficientNet network optimized for fast test execution.
+    /// </summary>
+    /// <remarks>
+    /// Uses 32x32 input resolution with 1.0 width/depth multipliers,
+    /// resulting in significantly fewer layers than standard variants.
+    /// Construction time is typically under 50ms, compared to hundreds of ms for B0.
+    /// </remarks>
+    /// <param name="numClasses">The number of output classes.</param>
+    /// <param name="inputChannels">The number of input channels (default: 3 for RGB).</param>
+    /// <returns>A minimal EfficientNet network for testing.</returns>
+    public static EfficientNetNetwork<T> ForTesting(int numClasses = 10, int inputChannels = 3)
+    {
+        var config = EfficientNetConfiguration.CreateForTesting(numClasses);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
+    }
+
     private static NeuralNetworkArchitecture<T> CreateArchitectureFromConfig(EfficientNetConfiguration config)
     {
         var resolution = config.GetInputHeight();

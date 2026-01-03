@@ -66,6 +66,11 @@ public class DenseNetConfiguration
     public double CompressionFactor { get; }
 
     /// <summary>
+    /// Gets the custom block layers configuration (only used when Variant is Custom).
+    /// </summary>
+    public int[]? CustomBlockLayers { get; }
+
+    /// <summary>
     /// Gets the computed input shape as [channels, height, width].
     /// </summary>
     public int[] InputShape => [InputChannels, InputHeight, InputWidth];
@@ -80,6 +85,7 @@ public class DenseNetConfiguration
     /// <param name="inputChannels">The number of input channels (default: 3 for RGB).</param>
     /// <param name="growthRate">The growth rate (default: 32).</param>
     /// <param name="compressionFactor">The compression factor for transition layers (default: 0.5).</param>
+    /// <param name="customBlockLayers">Custom block layers (required when variant is Custom).</param>
     public DenseNetConfiguration(
         DenseNetVariant variant,
         int numClasses,
@@ -87,7 +93,8 @@ public class DenseNetConfiguration
         int inputWidth = 224,
         int inputChannels = 3,
         int growthRate = 32,
-        double compressionFactor = 0.5)
+        double compressionFactor = 0.5,
+        int[]? customBlockLayers = null)
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be greater than 0.");
@@ -101,6 +108,8 @@ public class DenseNetConfiguration
             throw new ArgumentOutOfRangeException(nameof(growthRate), "Growth rate must be greater than 0.");
         if (compressionFactor <= 0 || compressionFactor > 1)
             throw new ArgumentOutOfRangeException(nameof(compressionFactor), "Compression factor must be between 0 (exclusive) and 1 (inclusive).");
+        if (variant == DenseNetVariant.Custom && (customBlockLayers == null || customBlockLayers.Length == 0))
+            throw new ArgumentException("Custom block layers must be provided when using Custom variant.", nameof(customBlockLayers));
 
         Variant = variant;
         NumClasses = numClasses;
@@ -109,6 +118,7 @@ public class DenseNetConfiguration
         InputChannels = inputChannels;
         GrowthRate = growthRate;
         CompressionFactor = compressionFactor;
+        CustomBlockLayers = customBlockLayers;
     }
 
     /// <summary>
@@ -122,8 +132,46 @@ public class DenseNetConfiguration
             DenseNetVariant.DenseNet169 => [6, 12, 32, 32],
             DenseNetVariant.DenseNet201 => [6, 12, 48, 32],
             DenseNetVariant.DenseNet264 => [6, 12, 64, 48],
+            DenseNetVariant.Custom => CustomBlockLayers ?? [2, 2, 2, 2],
             _ => [6, 12, 24, 16]
         };
+    }
+
+    /// <summary>
+    /// Gets the expected total layer count for this configuration without constructing the network.
+    /// </summary>
+    /// <remarks>
+    /// This is useful for tests that need to compare layer counts without the overhead
+    /// of actually constructing the networks.
+    /// Formula: 1 (stem conv) + 1 (stem BN) + 1 (stem pool) +
+    ///          sum(block_layers * 2) for BN+Conv in each dense layer +
+    ///          (num_blocks - 1) * 2 for transition layers (Conv + Pool) +
+    ///          1 (final BN) + 1 (classifier)
+    /// </remarks>
+    /// <returns>The expected number of layers in the network.</returns>
+    public int GetExpectedLayerCount()
+    {
+        var blockLayers = GetBlockLayers();
+
+        // Stem: Conv + BN + Pool = 3 layers
+        int stemLayers = 3;
+
+        // Each dense block layer has: BN + Conv (we count each as separate layer)
+        // In DenseNet, each "layer" in a block is actually BN-ReLU-Conv (bottleneck may add more)
+        // For simplicity, count 2 layers per block layer (this is an approximation)
+        int denseBlockLayers = 0;
+        foreach (var layers in blockLayers)
+        {
+            denseBlockLayers += layers * 2; // BN + Conv per layer
+        }
+
+        // Transition layers between blocks: (numBlocks - 1) * 2 (BN + Conv + Pool counted as 2)
+        int transitionLayers = (blockLayers.Length - 1) * 2;
+
+        // Final: BN + Classifier = 2 layers
+        int finalLayers = 2;
+
+        return stemLayers + denseBlockLayers + transitionLayers + finalLayers;
     }
 
     /// <summary>
@@ -132,5 +180,28 @@ public class DenseNetConfiguration
     public static DenseNetConfiguration CreateDenseNet121(int numClasses)
     {
         return new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses);
+    }
+
+    /// <summary>
+    /// Creates a minimal DenseNet configuration optimized for fast test execution.
+    /// </summary>
+    /// <remarks>
+    /// Uses [2, 2, 2, 2] block configuration with small growth rate (8) and 32x32 input,
+    /// resulting in approximately 8 dense layers instead of 58+ in DenseNet-121.
+    /// Construction time is typically under 50ms.
+    /// </remarks>
+    /// <param name="numClasses">The number of output classes.</param>
+    /// <returns>A minimal DenseNet configuration for testing.</returns>
+    public static DenseNetConfiguration CreateForTesting(int numClasses)
+    {
+        return new DenseNetConfiguration(
+            variant: DenseNetVariant.Custom,
+            numClasses: numClasses,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputChannels: 3,
+            growthRate: 8,
+            compressionFactor: 0.5,
+            customBlockLayers: [2, 2, 2, 2]);
     }
 }

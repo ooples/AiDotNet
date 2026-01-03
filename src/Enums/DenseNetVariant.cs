@@ -46,5 +46,14 @@ public enum DenseNetVariant
     /// <remarks>
     /// The deepest standard variant, offering maximum accuracy potential.
     /// </remarks>
-    DenseNet264
+    DenseNet264,
+
+    /// <summary>
+    /// Custom DenseNet variant for testing with minimal layers.
+    /// </summary>
+    /// <remarks>
+    /// Use this variant for unit tests to minimize construction time.
+    /// Typically uses [2, 2, 2, 2] block configuration with small growth rate.
+    /// </remarks>
+    Custom
 }

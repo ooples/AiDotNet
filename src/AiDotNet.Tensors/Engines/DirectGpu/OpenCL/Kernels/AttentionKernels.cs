@@ -16,6 +16,28 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
         {
             return @"
 // ===========================================================================
+// COMPATIBILITY DEFINITIONS
+// OpenCL compatibility - define NEGATIVE_INFINITY as explicit float constant
+// (avoids issues with -INFINITY macro on some OpenCL drivers)
+// ===========================================================================
+#define NEGATIVE_INFINITY (-3.402823466e+38f)
+
+// Atomic add for float (not natively supported in OpenCL, uses CAS loop)
+inline void atomic_add_float(__global float* addr, float val) {
+    union {
+        unsigned int u32;
+        float f32;
+    } next, expected, current;
+    current.f32 = *addr;
+    do {
+        expected.f32 = current.f32;
+        next.f32 = expected.f32 + val;
+        current.u32 = atomic_cmpxchg((volatile __global unsigned int*)addr,
+                                      expected.u32, next.u32);
+    } while (current.u32 != expected.u32);
+}
+
+// ===========================================================================
 // SCALED DOT-PRODUCT ATTENTION
 // ===========================================================================
 
@@ -54,7 +76,7 @@ __kernel void scaled_dot_product_attention(
     const int wOffset = bh * seqQ * seqK + qi * seqK;
 
     // Compute attention scores and find max for numerical stability
-    float maxScore = -INFINITY;
+    float maxScore = NEGATIVE_INFINITY;
     for (int ki = 0; ki < seqK; ki++) {
         // Causal mask
         if (isCausal && ki > qi) continue;
@@ -140,7 +162,7 @@ __kernel void flash_attention_v2(
     const int sOffset = bh * seqQ + qi;
 
     // Initialize accumulators for online softmax
-    float rowMax = -INFINITY;
+    float rowMax = NEGATIVE_INFINITY;
     float rowSum = 0.0f;
 
     // Initialize output to zero
@@ -157,7 +179,7 @@ __kernel void flash_attention_v2(
         if (isCausal && kvBlockStart > qi) continue;
 
         // Find max in this block
-        float blockMax = -INFINITY;
+        float blockMax = NEGATIVE_INFINITY;
         for (int ki = kvBlockStart; ki < kvBlockEnd; ki++) {
             if (isCausal && ki > qi) continue;
 
@@ -269,8 +291,8 @@ __kernel void flash_attention_backward(
 
         // Gradient w.r.t. V: attnWeight * gradOutput
         for (int d = 0; d < headDim; d++) {
-            atomic_add(&gradValue[vOffset + ki * headDim + d],
-                       attnWeight * gradOutput[gOffset + d]);
+            atomic_add_float(&gradValue[vOffset + ki * headDim + d],
+                             attnWeight * gradOutput[gOffset + d]);
         }
 
         // Compute dO @ v
@@ -289,8 +311,8 @@ __kernel void flash_attention_backward(
 
         // Gradient w.r.t. K: dS * Q
         for (int d = 0; d < headDim; d++) {
-            atomic_add(&gradKey[kOffset + ki * headDim + d],
-                       dS * query[qOffset + d]);
+            atomic_add_float(&gradKey[kOffset + ki * headDim + d],
+                             dS * query[qOffset + d]);
         }
     }
 }
@@ -336,13 +358,13 @@ __kernel void grouped_query_attention(
 
     // Compute attention scores and softmax (only thread d=0 does this)
     if (d == 0) {
-        float maxScore = -INFINITY;
+        float maxScore = NEGATIVE_INFINITY;
         float scores[1024];
 
         // Compute scores and find max
         for (int ki = 0; ki < seqK; ki++) {
             if (isCausal && ki > qi) {
-                scores[ki] = -INFINITY;
+                scores[ki] = NEGATIVE_INFINITY;
                 continue;
             }
 
@@ -438,8 +460,8 @@ __kernel void grouped_query_attention_backward(
 
             // Gradient w.r.t. V (accumulated across query heads)
             for (int dd = 0; dd < headDim; dd++) {
-                atomic_add(&gradValue[vOffset + ki * headDim + dd],
-                           weight * gradOutput[gOffset + dd]);
+                atomic_add_float(&gradValue[vOffset + ki * headDim + dd],
+                                 weight * gradOutput[gOffset + dd]);
             }
 
             // Gradient w.r.t. Q
@@ -449,26 +471,11 @@ __kernel void grouped_query_attention_backward(
 
             // Gradient w.r.t. K (accumulated across query heads)
             for (int dd = 0; dd < headDim; dd++) {
-                atomic_add(&gradKey[kOffset + ki * headDim + dd],
-                           gradScore * query[qOffset + dd]);
+                atomic_add_float(&gradKey[kOffset + ki * headDim + dd],
+                                 gradScore * query[qOffset + dd]);
             }
         }
     }
-}
-
-// Atomic add for float (not natively supported in all OpenCL versions)
-inline void atomic_add_float(__global float* addr, float val) {
-    union {
-        unsigned int u32;
-        float f32;
-    } next, expected, current;
-    current.f32 = *addr;
-    do {
-        expected.f32 = current.f32;
-        next.f32 = expected.f32 + val;
-        current.u32 = atomic_cmpxchg((volatile __global unsigned int*)addr,
-                                      expected.u32, next.u32);
-    } while (current.u32 != expected.u32);
 }
 
 // ===========================================================================
@@ -500,7 +507,7 @@ __kernel void flash_attention_forward(
     const int vOffset = bh * seqLen * headDim;
     const int oOffset = bh * seqLen * headDim + qi * headDim;
 
-    float rowMax = -INFINITY;
+    float rowMax = NEGATIVE_INFINITY;
     float rowSum = 0.0f;
     float outAcc[128];
     for (int d = 0; d < headDim; d++) outAcc[d] = 0.0f;

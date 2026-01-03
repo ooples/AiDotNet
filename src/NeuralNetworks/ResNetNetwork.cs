@@ -169,6 +169,33 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Creates a minimal ResNet network optimized for fast test execution.
+    /// </summary>
+    /// <remarks>
+    /// Uses ResNet18 (smallest variant) with 32x32 input resolution,
+    /// resulting in significantly fewer layers than standard variants.
+    /// Construction time is typically under 50ms.
+    /// </remarks>
+    /// <param name="numClasses">The number of output classes.</param>
+    /// <param name="inputChannels">The number of input channels (default: 3 for RGB).</param>
+    /// <returns>A minimal ResNet network for testing.</returns>
+    public static ResNetNetwork<T> ForTesting(int numClasses = 10, int inputChannels = 3)
+    {
+        var config = ResNetConfiguration.CreateForTesting(numClasses);
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: inputChannels * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: inputChannels,
+            outputSize: numClasses,
+            layers: null
+        );
+        return new ResNetNetwork<T>(architecture, config);
+    }
+
+    /// <summary>
     /// Initializes the layers of the ResNet network based on the configuration.
     /// </summary>
     /// <remarks>

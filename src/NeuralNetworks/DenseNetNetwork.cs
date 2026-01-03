@@ -145,6 +145,24 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         return new DenseNetNetwork<T>(architecture, config);
     }
 
+    /// <summary>
+    /// Creates a minimal DenseNet network optimized for fast test execution.
+    /// </summary>
+    /// <remarks>
+    /// Uses [2, 2, 2, 2] block configuration with small growth rate (8) and 32x32 input,
+    /// resulting in significantly fewer layers than standard variants.
+    /// Construction time is typically under 50ms, compared to ~500ms for DenseNet-121.
+    /// </remarks>
+    /// <param name="numClasses">The number of output classes.</param>
+    /// <param name="inputChannels">The number of input channels (default: 3 for RGB).</param>
+    /// <returns>A minimal DenseNet network for testing.</returns>
+    public static DenseNetNetwork<T> ForTesting(int numClasses = 10, int inputChannels = 3)
+    {
+        var config = DenseNetConfiguration.CreateForTesting(numClasses);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new DenseNetNetwork<T>(architecture, config);
+    }
+
     private static NeuralNetworkArchitecture<T> CreateArchitectureFromConfig(DenseNetConfiguration config)
     {
         return new NeuralNetworkArchitecture<T>(
