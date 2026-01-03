@@ -1,5 +1,5 @@
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Diffusion.ModelLoading;
+using AiDotNet.ModelLoading;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
