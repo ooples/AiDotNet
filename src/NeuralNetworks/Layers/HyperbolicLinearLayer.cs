@@ -163,7 +163,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [inputFeatures] or [batch, inputFeatures].</param>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
-        public override Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _originalInputShape = input.Shape;
 
@@ -285,7 +285,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">Gradient from the next layer.</param>
     /// <returns>Gradient to pass to the previous layer.</returns>
-        public override Tensor<T> Backward(Tensor<T> outputGradient)
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
         {
