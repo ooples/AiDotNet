@@ -313,18 +313,19 @@ protected override void Dispose(bool disposing)
 - **With trainable parameters: ~85 layers**
 - **Without trainable parameters: ~32 layers**
 
-## Critical Findings: Missing IEngine Operations
+## Critical Findings: IEngine Operations Status
 
-### Missing Standard Operations (Per Research Papers)
+### Standard Operations (Per Research Papers)
 
 | Operation | Reference | Current Status | Impact |
 |-----------|-----------|----------------|--------|
-| ScaledDotProductAttention | "Attention Is All You Need" (Vaswani 2017) | **MISSING** | All attention layers do manual matmul+softmax |
-| FlashAttention | FlashAttention papers (2022-2023) | **MISSING** | No memory-efficient attention |
-| GroupedQueryAttention | "GQA" (Ainslie 2023) | **MISSING** | Manual implementation |
-| RMSNorm | "Root Mean Square Layer Normalization" | **MISSING** | LayerNorm without mean subtraction |
-| SiLU/Swish | "Swish: A Self-Gated Activation Function" | Partial | In activations, not fused |
-| GeGLU | "GLU Variants Improve Transformer" | **MISSING** | Used in modern transformers |
+| ScaledDotProductAttention | "Attention Is All You Need" (Vaswani 2017) | ✅ COMPLETE | Attention layers can use Engine.ScaledDotProductAttention |
+| FlashAttention | FlashAttention papers (2022-2023) | ✅ COMPLETE | Memory-efficient attention available |
+| GroupedQueryAttention | "GQA" (Ainslie 2023) | ✅ COMPLETE | Engine.GroupedQueryAttention implemented |
+| RMSNorm | "Root Mean Square Layer Normalization" | ✅ COMPLETE | Engine.RMSNorm with backward pass |
+| SiLU/Swish | "Swish: A Self-Gated Activation Function" | ✅ COMPLETE | Fused activations available |
+| GeGLU | "GLU Variants Improve Transformer" | ✅ COMPLETE | Engine.GeGLU with backward pass |
+| ScatterAdd/Mean/Max | Graph Neural Networks | ✅ COMPLETE | All scatter operations with backward passes |
 
 ### Layers Using Manual Implementations Instead of IEngine
 
@@ -349,63 +350,22 @@ protected override void Dispose(bool disposing)
 | BatchNormalizationLayer | Many | 5 | Good - uses Engine.BatchNorm |
 | SelfAttentionLayer | Many | Few | Good - uses Engine.Softmax |
 
-### Proposed New IEngine Operations
+### Implemented IEngine Operations
 
-```csharp
-/// <summary>
-/// Scaled dot-product attention as per "Attention Is All You Need".
-/// attention(Q,K,V) = softmax(Q @ K.T / sqrt(d_k)) @ V
-/// </summary>
-Tensor<T> ScaledDotProductAttention<T>(
-    Tensor<T> query,    // [batch, heads, seq_q, d_k]
-    Tensor<T> key,      // [batch, heads, seq_k, d_k]
-    Tensor<T> value,    // [batch, heads, seq_k, d_v]
-    Tensor<T>? mask = null,
-    float dropout = 0.0f);
+All proposed operations have been implemented in IEngine.cs with full forward and backward passes:
 
-Tensor<T> ScaledDotProductAttentionBackward<T>(
-    Tensor<T> gradOutput,
-    Tensor<T> query,
-    Tensor<T> key,
-    Tensor<T> value,
-    Tensor<T> attentionWeights,
-    out Tensor<T> gradQuery,
-    out Tensor<T> gradKey,
-    out Tensor<T> gradValue);
-
-/// <summary>
-/// Root Mean Square Layer Normalization (faster than LayerNorm).
-/// RMSNorm(x) = x / sqrt(mean(x^2) + eps) * gamma
-/// </summary>
-Tensor<T> RMSNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon);
-
-Tensor<T> RMSNormBackward<T>(
-    Tensor<T> gradOutput,
-    Tensor<T> input,
-    Tensor<T> gamma,
-    double epsilon,
-    out Tensor<T> gradGamma);
-
-/// <summary>
-/// Gated Linear Unit variants (GeGLU, SwiGLU, ReGLU).
-/// GLU(x) = (x @ W1 + b1) * activation(x @ W2 + b2)
-/// </summary>
-Tensor<T> GatedLinearUnit<T>(
-    Tensor<T> input,
-    Tensor<T> gateWeights,
-    Tensor<T> valueWeights,
-    Tensor<T>? gateBias,
-    Tensor<T>? valueBias,
-    GatedActivationType activation);
-
-/// <summary>
-/// Graph message passing scatter operation.
-/// Efficiently aggregates neighbor messages by destination node.
-/// </summary>
-Tensor<T> ScatterAdd<T>(Tensor<T> source, Tensor<int> indices, int dimSize);
-Tensor<T> ScatterMean<T>(Tensor<T> source, Tensor<int> indices, int dimSize);
-Tensor<T> ScatterMax<T>(Tensor<T> source, Tensor<int> indices, int dimSize);
-```
+- `ScaledDotProductAttention<T>` - Standard attention mechanism
+- `ScaledDotProductAttentionBackward<T>` - Gradient computation
+- `FlashAttention<T>` - Memory-efficient attention (O(N) memory)
+- `FlashAttentionBackward<T>` - Gradient computation
+- `GroupedQueryAttention<T>` - GQA for efficient inference
+- `GroupedQueryAttentionBackward<T>` - Gradient computation
+- `RMSNorm<T>` - Root Mean Square normalization
+- `RMSNormBackward<T>` - Gradient computation
+- `GeGLU<T>` - Gated Linear Unit with GELU
+- `GeGLUBackward<T>` - Gradient computation
+- `ScatterAdd<T>` / `ScatterMean<T>` / `ScatterMax<T>` - Graph operations
+- `ScatterAddBackward<T>` / `ScatterMeanBackward<T>` / `ScatterMaxBackward<T>` - Gradients
 
 ## Layers Requiring Immediate Refactoring
 
@@ -425,21 +385,25 @@ These layers have significant manual implementations that should use IEngine:
 
 ## Implementation Order
 
-1. **Phase 1: IEngine Interface** ✅ (Complete)
+1. **Phase 1: IEngine Interface** ✅ COMPLETE
    - [x] Add `PersistentTensorRole` enum - `src/AiDotNet.Tensors/Engines/PersistentTensorRole.cs`
    - [x] Add `FusedActivationType` enum - `src/AiDotNet.Tensors/Engines/FusedActivationType.cs`
    - [x] Add `RegisterPersistentTensor`/`UnregisterPersistentTensor`/`InvalidatePersistentTensor` to IEngine
    - [x] Add `FusedLinear`, `FusedLinearBackward` to IEngine
    - [x] Add `FusedConv2D`, `FusedBatchNorm` to IEngine
    - [x] Add `LeakyReLU` tensor operation to IEngine
+   - [x] Add `ScaledDotProductAttention`, `FlashAttention`, `GroupedQueryAttention` to IEngine
+   - [x] Add `RMSNorm`, `GeGLU` to IEngine
+   - [x] Add `ScatterAdd`, `ScatterMean`, `ScatterMax` to IEngine
    - [x] Implement in CpuEngine (CPU fallback path with vectorized SIMD operations)
    - [x] Implement in GpuEngine (DirectGpu path with proper GPU kernels)
    - [x] Implement persistent tensor GPU buffer caching in DirectGpuTensorEngine
 
-2. **Phase 2: LayerBase Integration**
-   - Add `RegisterTrainableParameter` helper
-   - Add disposal cleanup for registered tensors
-   - Document pattern for derived layers
+2. **Phase 2: LayerBase Integration** ✅ COMPLETE
+   - [x] Add `RegisterTrainableParameter` helper to LayerBase<T>
+   - [x] Add `_registeredTensors` list for tracking
+   - [x] Add disposal cleanup for registered tensors in Dispose(bool)
+   - [x] Document pattern for derived layers
 
 3. **Phase 3: Priority 1 Layers**
    - Refactor DenseLayer to use FusedLinear
@@ -465,9 +429,10 @@ These layers have significant manual implementations that should use IEngine:
 ## Success Criteria
 
 - [ ] No layer directly references DirectGpu, CUDA, OpenCL, or HIP
-- [ ] All trainable parameters registered via LayerBase helper
-- [ ] GPU acceleration works transparently when available
+- [x] LayerBase has `RegisterTrainableParameter` helper available for layers
+- [x] GPU acceleration infrastructure available (IEngine operations implemented)
 - [x] CPU fallback works correctly when GPU unavailable (implemented in CpuEngine)
+- [ ] All 117 layers refactored to use IEngine operations
 - [ ] Performance improvement measurable in benchmarks
 
 ## Implementation Progress Log
@@ -530,6 +495,22 @@ These layers have significant manual implementations that should use IEngine:
 - `FusedScaledSoftmax` - Fused scaling with softmax
 - `FusedBiasDropout` - Fused bias addition with dropout
 
+### 2026-01-02: Phase 2 LayerBase Integration Complete
+
+**LayerBase.cs Additions:**
+- `RegisterTrainableParameter(Tensor<T> tensor, PersistentTensorRole role)` - Helper method at line 1877
+- `_registeredTensors` list for tracking registered tensors at line 285
+- Proper disposal cleanup in `Dispose(bool)` that unregisters all tensors
+
+**Additional IEngine Operations Added:**
+- `ScaledDotProductAttention<T>` with backward pass
+- `FlashAttention<T>` with backward pass (memory-efficient O(N) attention)
+- `GroupedQueryAttention<T>` with backward pass
+- `RMSNorm<T>` with backward pass
+- `GeGLU<T>` with backward pass
+- `ScatterAdd<T>`, `ScatterMean<T>`, `ScatterMax<T>` with backward passes
+
 **Next Steps:**
-- Implement Phase 2: LayerBase Integration
-- Refactor Priority 1 layers to use fused operations
+- Phase 3: Refactor Priority 1 layers (DenseLayer, ConvolutionalLayer) to use fused operations
+- Phase 4: Update attention layers to use ScaledDotProductAttention/FlashAttention
+- Phase 5: Update remaining 117 layers
