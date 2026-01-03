@@ -130,17 +130,18 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix represents the strength of connections between input and output neurons. Each row
-    /// corresponds to an output neuron, and each column corresponds to an input neuron. The value at
-    /// position [i, j] is the weight of the connection from input j to output i.
+    /// This matrix represents the strength of connections between input and output neurons.
+    /// Shape: [inputSize, outputSize] (industry standard convention).
+    /// Each row corresponds to an input neuron, and each column corresponds to an output neuron.
+    /// The value at position [i, j] is the weight of the connection from input i to output j.
     /// </para>
     /// <para><b>For Beginners:</b> The weights matrix is like a table of importance scores.
-    /// 
+    ///
     /// Imagine a table where:
-    /// - Each row represents one output neuron
-    /// - Each column represents one input neuron
+    /// - Each row represents one input neuron
+    /// - Each column represents one output neuron
     /// - Each cell contains a number (weight) showing how strongly that input affects that output
-    /// 
+    ///
     /// During training, these numbers change to help the network make better predictions.
     /// Positive weights strengthen connections, negative weights create inhibitory connections,
     /// and weights close to zero mean the connection is weak or unimportant.
@@ -328,7 +329,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         L2Strength = NumOps.FromDouble(0.01);
         _lastRegularizationLoss = NumOps.Zero;
 
-        _weights = new Tensor<T>([outputSize, inputSize]);
+        // Industry standard: weights shape is [inputSize, outputSize]
+        // This allows input @ weights without transpose: [batch, inputSize] @ [inputSize, outputSize] -> [batch, outputSize]
+        _weights = new Tensor<T>([inputSize, outputSize]);
         _biases = new Tensor<T>([outputSize]);
 
         InitializeParameters();
@@ -386,7 +389,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         L2Strength = NumOps.FromDouble(0.01);
         _lastRegularizationLoss = NumOps.Zero;
 
-        _weights = new Tensor<T>([outputSize, inputSize]);
+        // Industry standard: weights shape is [inputSize, outputSize]
+        // This allows input @ weights without transpose: [batch, inputSize] @ [inputSize, outputSize] -> [batch, outputSize]
+        _weights = new Tensor<T>([inputSize, outputSize]);
         _biases = new Tensor<T>([outputSize]);
 
         InitializeParameters();
@@ -588,16 +593,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// provided matrix must match the layer's input and output dimensions.
     /// </para>
     /// <para><b>For Beginners:</b> This method lets you directly set all connection strengths at once.
-    /// 
+    ///
     /// You might use this to:
     /// - Load pre-trained weights from another model
     /// - Test the layer with specific weight values
     /// - Implement custom initialization strategies
-    /// 
+    ///
     /// The weight matrix must have exactly the right dimensions:
-    /// - Rows equal to the number of outputs
-    /// - Columns equal to the number of inputs
-    /// 
+    /// - Rows equal to the number of inputs (inputSize)
+    /// - Columns equal to the number of outputs (outputSize)
+    ///
     /// If the dimensions don't match, the method will throw an error.
     /// </para>
     /// </remarks>
@@ -608,7 +613,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentNullException(nameof(weights));
         }
 
-        // Validate dimensions against current weights
+        // Validate dimensions against current weights: [inputSize, outputSize]
         if (weights.Shape[0] != _weights.Shape[0] || weights.Shape[1] != _weights.Shape[1])
         {
             throw new ArgumentException(
@@ -618,10 +623,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Set the weights directly
         _weights = weights;
 
-        // Update input shape if needed (from master merge)
-        if (InputShape.Length == 0 || InputShape[0] != weights.Shape[1])
+        // Update input shape if needed - Shape[0] is inputSize in new convention
+        if (InputShape.Length == 0 || InputShape[0] != weights.Shape[0])
         {
-            UpdateInputShape([weights.Shape[1]]);
+            UpdateInputShape([weights.Shape[0]]);
         }
 
         // Notify engine that weights have changed (for GPU cache invalidation)
@@ -691,7 +696,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Output shape: [..., outputSize]
 
         int actualInputSize = input.Shape[^1]; // Last dimension
-        int expectedInputSize = _weights.Shape[1];
+        int expectedInputSize = _weights.Shape[0]; // Weights are [inputSize, outputSize]
 
         // Dynamic input size adaptation: resize weights if input size doesn't match
         if (actualInputSize != expectedInputSize)
@@ -728,9 +733,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             flattenedInput = input.Reshape(batchDim, inputSize);
         }
 
-        // Forward: output = Activation(input @ weights.T + biases)
+        // Forward: output = Activation(input @ weights + biases)
         // input: [batchDim, inputSize]
-        // weights: [outputSize, inputSize]
+        // weights: [inputSize, outputSize] (industry standard - no transpose needed)
         // result: [batchDim, outputSize]
 
         // Get the fused activation type for the engine
@@ -781,21 +786,22 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     private void EnsureWeightShapeForInput(int actualInputSize)
     {
-        if (_weights.Shape[1] == actualInputSize)
+        // Weights are [inputSize, outputSize]
+        if (_weights.Shape[0] == actualInputSize)
         {
             return;
         }
 
-        int outputSize = _weights.Shape[0];
-        int existingInputSize = _weights.Shape[1];
-        var resizedWeights = new Tensor<T>([outputSize, actualInputSize]);
+        int existingInputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+        var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
-        for (int o = 0; o < outputSize; o++)
+        for (int i = 0; i < sharedInputSize; i++)
         {
-            for (int i = 0; i < sharedInputSize; i++)
+            for (int o = 0; o < outputSize; o++)
             {
-                resizedWeights[o, i] = _weights[o, i];
+                resizedWeights[i, o] = _weights[i, o];
             }
         }
 
@@ -803,11 +809,11 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
             var random = RandomHelper.CreateSecureRandom();
-            for (int o = 0; o < outputSize; o++)
+            for (int i = sharedInputSize; i < actualInputSize; i++)
             {
-                for (int i = sharedInputSize; i < actualInputSize; i++)
+                for (int o = 0; o < outputSize; o++)
                 {
-                    resizedWeights[o, i] = NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1));
+                    resizedWeights[i, o] = NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1));
                 }
             }
         }
@@ -935,18 +941,21 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             flattenedGradient = activationGradient.Reshape(batchDim, OutputShape[0]);
         }
 
-        // 2. Compute Weight Gradients: dW = (dL/dz)^T @ input
-        // [batchDim, output]^T @ [batchDim, input] -> [output, batchDim] @ [batchDim, input] -> [output, input]
-        var gradientTransposed = Engine.TensorTranspose(flattenedGradient);
-        _weightsGradient = Engine.TensorMatMul(gradientTransposed, flattenedInput);
+        // 2. Compute Weight Gradients: dW = input^T @ dL/dz
+        // Weights are [inputSize, outputSize], so gradient must have same shape
+        // [inputSize, batchDim] @ [batchDim, outputSize] -> [inputSize, outputSize]
+        var inputTransposed = Engine.TensorTranspose(flattenedInput);
+        _weightsGradient = Engine.TensorMatMul(inputTransposed, flattenedGradient);
 
         // 3. Compute Bias Gradients: dB = sum(dL/dz, axis=0)
         // Sum gradients across the batch dimension
         _biasesGradient = flattenedGradient.Sum([0]);
 
-        // 4. Compute Input Gradient: dX = dL/dz @ W
-        // [batchDim, output] @ [output, input] -> [batchDim, input]
-        var inputGradient = Engine.TensorMatMul(flattenedGradient, _weights);
+        // 4. Compute Input Gradient: dX = dL/dz @ W^T
+        // Weights are [inputSize, outputSize], need transpose for backward pass
+        // [batchDim, outputSize] @ [outputSize, inputSize] -> [batchDim, inputSize]
+        var weightsTransposed = Engine.TensorTranspose(_weights);
+        var inputGradient = Engine.TensorMatMul(flattenedGradient, weightsTransposed);
 
         // Reshape back to original input shape
         return inputGradient.Reshape(_originalInputShape);
@@ -1000,9 +1009,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var biases = Autodiff.TensorOperations<T>.Variable(_biases, "biases", requiresGradient: true);
 
         // Forward computation using autodiff ops
-        // output = input @ weights.T + biases
-        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
-        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
+        // output = input @ weights + biases (industry standard: no transpose needed)
+        // Weights are [inputSize, outputSize]
+        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weights);
 
         // Add biases directly - autodiff Add operation handles broadcasting and gradient reduction
         // matmul is [batchSize, outputSize], biases is [outputSize]
@@ -1369,7 +1378,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Input shape: [batchSize, inputSize]
-        int inputSize = _weights.Shape[1];
+        // Weights are [inputSize, outputSize] in industry standard convention
+        int inputSize = _weights.Shape[0];
 
         // Create placeholder for input data
         // Note: Using batch size 1 for placeholder; actual batch size is determined at runtime
@@ -1377,7 +1387,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
 
         // Create constant nodes for weights and biases
-        // Weights shape: [outputSize, inputSize] - transposed for efficient computation
+        // Weights shape: [inputSize, outputSize] (industry standard - no transpose needed)
         var weightsNode = TensorOperations<T>.Variable(_weights, "weights");
 
         // Biases shape: [outputSize]
@@ -1388,19 +1398,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         inputNodes.Add(weightsNode);
         inputNodes.Add(biasesNode);
 
-        // Build computation graph: output = (input x weights^T) + biases
-        // This mirrors the Forward() method logic at line 622
+        // Build computation graph: output = (input x weights) + biases
+        // Industry standard: no transpose needed with [inputSize, outputSize] weights
 
-        // Step 1: Transpose weights for matrix multiplication
-        var weightsTransposed = TensorOperations<T>.Transpose(weightsNode);
+        // Step 1: Matrix multiply: input x weights
+        var matmulResult = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
 
-        // Step 2: Matrix multiply: input x weights^T
-        var matmulResult = TensorOperations<T>.MatrixMultiply(inputNode, weightsTransposed);
-
-        // Step 3: Add biases (uses IEngine.TensorAdd for GPU acceleration!)
+        // Step 2: Add biases (uses IEngine.TensorAdd for GPU acceleration!)
         var outputNode = TensorOperations<T>.Add(matmulResult, biasesNode);
 
-        // Step 4: Apply activation function
+        // Step 3: Apply activation function
         var activatedOutput = ApplyActivationToGraph(outputNode);
 
         return activatedOutput;
