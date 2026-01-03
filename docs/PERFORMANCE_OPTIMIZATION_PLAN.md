@@ -53,6 +53,85 @@ This document outlines a comprehensive plan to address performance bottlenecks i
 
 ---
 
+## Epic 0: Critical GPU Backend Fixes (BLOCKERS)
+
+> **CRITICAL:** These issues prevent GPU acceleration from working entirely. Users report that
+> all GPU backends fail and fall back to CPU. These must be fixed before any other GPU-related
+> work can be validated.
+
+### User Story 0.1: Fix OpenCL Attention Kernel Compilation Errors
+**As a** user with an OpenCL-capable GPU,
+**I want** the OpenCL backend to compile and run correctly,
+**So that** I can use GPU acceleration on my hardware.
+
+**Current Issues:**
+1. `atomic_add` is ambiguous - float atomics not supported on many OpenCL drivers
+2. `-INFINITY` macro usage causes undefined behavior with current floating-point options
+3. Result: OpenCL backend marked as unavailable
+
+**Acceptance Criteria:**
+- OpenCL attention kernels compile without errors on common drivers (Intel, AMD, NVIDIA)
+- Replace `atomic_add` with compatible atomic operations or algorithmic alternatives
+- Replace `-INFINITY` with `FLT_MIN` or explicit float constant `-3.402823466e+38f`
+- Add fallback paths for hardware without float atomics support
+
+**Files to Modify:**
+- `src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/AttentionKernels.cs`
+- `src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/NormalizationKernels.cs`
+
+**Priority:** P0 - Blocker
+
+---
+
+### User Story 0.2: Fix HIP Backend Header Dependencies
+**As a** user with an AMD GPU,
+**I want** the HIP backend to compile correctly,
+**So that** I can use GPU acceleration on AMD hardware.
+
+**Current Issues:**
+1. `hip/hip_runtime.h` header not found (AMD HIP SDK not installed on build machine)
+2. HIP backend fails to initialize
+
+**Acceptance Criteria:**
+- HIP backend gracefully handles missing HIP SDK at runtime (not compile time)
+- Clear error message when HIP SDK is not installed
+- Conditional compilation or runtime detection to avoid hard dependency
+- Documentation on how to install AMD HIP SDK for HIP support
+
+**Files to Modify:**
+- `src/AiDotNet.Tensors/Engines/DirectGpu/HIP/HipBackend.cs`
+- Build configuration to make HIP optional
+
+**Priority:** P0 - Blocker
+
+---
+
+### User Story 0.3: Ensure At Least One GPU Backend Works
+**As a** user with any GPU,
+**I want** at least one GPU backend to work out of the box,
+**So that** GPU acceleration is functional without special setup.
+
+**Current Issues:**
+- OpenCL fails (kernel compilation errors)
+- HIP fails (missing headers)
+- CUDA may fail if CUDA toolkit not installed
+- Result: All GPU backends fail, system falls back to CPU silently
+
+**Acceptance Criteria:**
+- CUDA backend works when NVIDIA GPU and CUDA toolkit present
+- OpenCL backend works on any OpenCL 1.2+ capable GPU
+- Clear diagnostic output showing which backends are available/unavailable and why
+- `IEngine.SupportsGPU` returns true when at least one backend works
+- Add `IEngine.GetAvailableBackends()` or similar diagnostic method
+
+**Files to Modify:**
+- `src/AiDotNet.Tensors/Engines/DirectGpuTensorEngine.cs`
+- `src/AiDotNet.Tensors/Engines/GpuEngine.cs`
+
+**Priority:** P0 - Blocker
+
+---
+
 ## Epic 1: Lazy Layer Initialization
 
 ### User Story 1.1: Implement Lazy Weight Initialization
@@ -440,6 +519,13 @@ public class NetworkConstructionBenchmarks
 
 ## Implementation Roadmap
 
+### Phase 0: Critical GPU Backend Fixes (IMMEDIATE)
+- [ ] User Story 0.1: Fix OpenCL attention kernel compilation errors
+- [ ] User Story 0.2: Fix HIP backend header dependencies
+- [ ] User Story 0.3: Ensure at least one GPU backend works
+
+**Expected Impact:** GPU acceleration becomes functional (currently broken)
+
 ### Phase 1: Quick Wins (1-2 weeks)
 - [ ] User Story 3.1: Create lightweight test variants
 - [ ] User Story 3.2: Optimize multi-network tests
@@ -489,6 +575,23 @@ public class NetworkConstructionBenchmarks
 - BenchmarkDotNet for performance testing
 - Existing IEngine infrastructure (see `GPU_ENGINE_OPTIMIZATION_PLAN.md`)
 
+### Known Issues (CRITICAL)
+> **⚠️ GPU acceleration is currently non-functional due to these issues:**
+
+1. **OpenCL Kernel Compilation Failures** (Epic 0, Story 0.1)
+   - `atomic_add` ambiguous - float atomics not supported on many OpenCL drivers
+   - `-INFINITY` macro undefined behavior
+   - Status: OpenCL backend marked as unavailable
+
+2. **HIP Backend Missing Dependencies** (Epic 0, Story 0.2)
+   - `hip/hip_runtime.h` header not found
+   - AMD HIP SDK required but not documented
+   - Status: HIP backend fails to initialize
+
+3. **No Working GPU Backend** (Epic 0, Story 0.3)
+   - All GPU backends fail, silent fallback to CPU
+   - Users unaware GPU acceleration is not working
+
 ### Risks
 1. **API Breaking Changes**: Lazy initialization changes constructor semantics
    - Mitigation: Make lazy opt-in via strategy parameter
@@ -496,7 +599,9 @@ public class NetworkConstructionBenchmarks
    - Mitigation: Use `LazyInitializer.EnsureInitialized` pattern
 3. **Layer Refactoring Scope**: 85+ layers need updates to use IEngine
    - Mitigation: Prioritize by usage frequency and performance impact
-   - Mitigation: Follow patterns established in Phase 3 of GPU plan (DenseLayer, ConvolutionalLayer)
+4. **GPU Backend Portability**: Different GPU vendors have different capabilities
+   - Mitigation: Runtime capability detection, graceful fallbacks
+   - Mitigation: Follow patterns established in Phase 3 of GPU plan
 
 ### Related Documentation
 - `GPU_ENGINE_OPTIMIZATION_PLAN.md` - Comprehensive GPU optimization plan (Phase 1-3 complete)
