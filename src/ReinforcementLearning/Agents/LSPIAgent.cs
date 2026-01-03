@@ -414,7 +414,7 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
 
-        _iterations = (int)state.Iterations;
+        _iterations = Convert.ToInt32(state.Iterations);
     }
 
     public override Vector<T> GetParameters()
