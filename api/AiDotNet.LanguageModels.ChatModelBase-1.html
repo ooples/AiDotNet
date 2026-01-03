@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ChatModelBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ChatModelBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a base implementation for chat-based language models with common functionality including HTTP communication, retry logic, rate limiting, and error handling.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LanguageModels_ChatModelBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.LanguageModels.ChatModelBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LanguageModels.ChatModelBase`1">
+
+
+
+  <h1 id="AiDotNet_LanguageModels_ChatModelBase_1" data-uid="AiDotNet.LanguageModels.ChatModelBase`1" class="text-break">
+Class ChatModelBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LanguageModels.html">LanguageModels</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a base implementation for chat-based language models with common functionality
+including HTTP communication, retry logic, rate limiting, and error handling.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class ChatModelBase&lt;T&gt; : IChatModel&lt;T&gt;, ILanguageModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters and operations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ChatModelBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILanguageModel-1.html">ILanguageModel</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.LanguageModels.AnthropicChatModel-1.html">AnthropicChatModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LanguageModels.AzureOpenAIChatModel-1.html">AzureOpenAIChatModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LanguageModels.OpenAIChatModel-1.html">OpenAIChatModel&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_LanguageModels_ChatModelBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+This base class handles all the complex infrastructure needed to communicate with language model APIs:</p>
+<ul>
+<li>Making HTTP requests to API endpoints</li>
+<li>Retrying failed requests (network issues, temporary errors)</li>
+<li>Handling rate limits (not sending too many requests too fast)</li>
+<li>Managing timeouts</li>
+<li>Logging errors</li>
+</ul>
+<p>When creating a new language model implementation (like OpenAIChatModel or AnthropicChatModel):</p>
+<ol>
+<li>Inherit from this class</li>
+<li>Set ModelName, MaxContextTokens, MaxGenerationTokens in your constructor</li>
+<li>Implement GenerateAsyncCore() with your specific API logic</li>
+<li>Everything else (retries, rate limiting, error handling) is handled automatically</li>
+</ol>
+<p>This design pattern is called the &quot;Template Method Pattern&quot; - the base class provides
+the structure and common code, while derived classes fill in the specific details.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1__ctor_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1__ctor_System_Net_Http_HttpClient_System_Int32_System_Int32_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.#ctor(System.Net.Http.HttpClient,System.Int32,System.Int32)">
+  ChatModelBase(HttpClient?, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html">ChatModelBase&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ChatModelBase(HttpClient? httpClient, int maxContextTokens, int maxGenerationTokens)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>httpClient</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.http.httpclient">HttpClient</a></dt>
+    <dd><p>Optional HTTP client. If null, a new one will be created.</p>
+</dd>
+    <dt><code>maxContextTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum context window size in tokens.</p>
+</dd>
+    <dt><code>maxGenerationTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of tokens to generate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1__ctor_System_Net_Http_HttpClient_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This constructor sets up the infrastructure for communicating with language model APIs.</p>
+<p>The httpClient parameter:</p>
+<ul>
+<li>If you pass null, a new HttpClient is created automatically</li>
+<li>If you pass your own, you can customize headers, timeouts, etc.</li>
+<li>In production, consider using IHttpClientFactory for better performance</li>
+</ul>
+<p>The token parameters control how much text the model can process and generate:</p>
+<ul>
+<li>maxContextTokens: How much text can be in the prompt</li>
+<li>maxGenerationTokens: How long the response can be</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_HttpClient" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.HttpClient">
+  HttpClient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The HTTP client used for API communication.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly HttpClient HttpClient</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.http.httpclient">HttpClient</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_EnableDetailedLogging_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.EnableDetailedLogging*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_EnableDetailedLogging" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.EnableDetailedLogging">
+  EnableDetailedLogging
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to log detailed error information.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool EnableDetailedLogging { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_InitialRetryDelayMs_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.InitialRetryDelayMs*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_InitialRetryDelayMs" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.InitialRetryDelayMs">
+  InitialRetryDelayMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The initial retry delay in milliseconds (doubles with each retry).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int InitialRetryDelayMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_MaxContextTokens_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.MaxContextTokens*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_MaxContextTokens" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.MaxContextTokens">
+  MaxContextTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of tokens this model can process in a single request (context window).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxContextTokens { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The context window size in tokens.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_MaxContextTokens_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is how much text the model can &quot;remember&quot; or process at once. Think of it as
+the model's working memory.</p>
+<p>Token counts (approximate):</p>
+<ul>
+<li>1 token ≈ 0.75 words</li>
+<li>100 tokens ≈ 75 words ≈ 1 paragraph</li>
+<li>1000 tokens ≈ 750 words ≈ 1 page</li>
+<li>8000 tokens ≈ 6000 words ≈ 8-10 pages</li>
+</ul>
+<p>Common context window sizes:</p>
+<ul>
+<li>GPT-3.5-turbo: 4,096 tokens (3 pages)</li>
+<li>GPT-4: 8,192 tokens (6 pages) or 32,768 tokens (24 pages)</li>
+<li>Claude 3: 200,000 tokens (150 pages)</li>
+<li>Gemini 1.5: 1,000,000 tokens (750 pages!)</li>
+</ul>
+<p>Why it matters:</p>
+<ul>
+<li>If your prompt + desired response exceeds this, the request will fail</li>
+<li>Larger contexts let you provide more information but may be slower/costlier</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_MaxGenerationTokens_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.MaxGenerationTokens*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_MaxGenerationTokens" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.MaxGenerationTokens">
+  MaxGenerationTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of tokens this model can generate in a single response.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxGenerationTokens { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum generation length in tokens.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_MaxGenerationTokens_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This limits how long the model's response can be. It's usually smaller than
+MaxContextTokens because you need room for your input prompt too.</p>
+<p>Typical values:</p>
+<ul>
+<li>512 tokens ≈ 384 words ≈ short answer (1-2 paragraphs)</li>
+<li>2048 tokens ≈ 1536 words ≈ medium answer (1 page)</li>
+<li>4096 tokens ≈ 3072 words ≈ long answer (2-3 pages)</li>
+</ul>
+<p>You can usually configure this when creating the model to balance:</p>
+<ul>
+<li>Shorter responses: Faster and cheaper</li>
+<li>Longer responses: More detailed but slower and more expensive</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_MaxRetries_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.MaxRetries*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_MaxRetries" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.MaxRetries">
+  MaxRetries
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The maximum number of retry attempts for failed requests.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int MaxRetries { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_ModelName_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.ModelName*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_ModelName" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.ModelName">
+  ModelName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name or identifier of the language model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ModelName { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string representing the model's name (e.g., &quot;gpt-4&quot;, &quot;claude-3-opus&quot;, &quot;llama-2-7b&quot;).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_ModelName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This identifies which specific model you're using. Different models have different:</p>
+<ul>
+<li>Capabilities (some are better at code, others at creative writing)</li>
+<li>Costs (GPT-4 is more expensive than GPT-3.5)</li>
+<li>Speed (smaller models are faster)</li>
+<li>Context windows (how much text they can process at once)</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>&quot;gpt-4&quot; or &quot;gpt-3.5-turbo&quot; (OpenAI)</li>
+<li>&quot;claude-3-opus-20240229&quot; or &quot;claude-3-sonnet-20240229&quot; (Anthropic)</li>
+<li>&quot;llama-2-7b&quot; or &quot;mixtral-8x7b&quot; (Open source models)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_TimeoutMs_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.TimeoutMs*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_TimeoutMs" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.TimeoutMs">
+  TimeoutMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The request timeout in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int TimeoutMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_EstimateTokenCount_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.EstimateTokenCount*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_EstimateTokenCount_System_String_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.EstimateTokenCount(System.String)">
+  EstimateTokenCount(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates the number of tokens in a text string.
+This is a rough approximation - actual tokenization varies by model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual int EstimateTokenCount(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to estimate tokens for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The estimated number of tokens.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_EstimateTokenCount_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Tokens are the units that language models process. They're not quite words:</p>
+<ul>
+<li>Common words are usually 1 token: &quot;cat&quot;, &quot;the&quot;, &quot;is&quot;</li>
+<li>Uncommon words might be 2-3 tokens: &quot;ChatGPT&quot; = &quot;Chat&quot; + &quot;G&quot; + &quot;PT&quot;</li>
+<li>Numbers and punctuation: varies</li>
+</ul>
+<p>This method uses a simple heuristic: 1 token ≈ 4 characters (or 0.75 words).
+This works reasonably well for English but is less accurate for other languages.</p>
+<p>For precise token counts, use the model's official tokenizer (e.g., tiktoken for OpenAI).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_Generate_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.Generate*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_Generate_System_String_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.Generate(System.String)">
+  Generate(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text response to the given prompt synchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Generate(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input text prompt to send to the language model.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The model's generated response as a string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_Generate_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is a synchronous version of GenerateAsync - it blocks until the response is ready.</p>
+<p>When to use this:</p>
+<ul>
+<li>Simple command-line scripts</li>
+<li>Batch processing where you process one request at a time</li>
+<li>When you can't use async/await for some reason</li>
+</ul>
+<p>When NOT to use this:</p>
+<ul>
+<li>Web applications (will block request threads)</li>
+<li>UI applications (will freeze the interface)</li>
+<li>When processing multiple requests (use GenerateAsync and Task.WhenAll)</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Simple script usage
+string response = model.Generate("What is 2 + 2?");
+Console.WriteLine(response); // "2 + 2 equals 4."</code></pre>
+<p>Note: Many implementations just call GenerateAsync().GetAwaiter().GetResult()
+internally, so the async version is usually the &quot;real&quot; implementation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateAsync_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.GenerateAsync*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.GenerateAsync(System.String,System.Threading.CancellationToken)">
+  GenerateAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text response to the given prompt asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;string&gt; GenerateAsync(string prompt, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input text prompt to send to the language model.
+This can be a question, instruction, or any text that requires a response.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Optional cancellation token to cancel the generation operation.
+Use this to implement timeouts or allow users to cancel long-running requests.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains
+the model's generated response as a string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateAsync_System_String_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is the main method for getting responses from the language model. It's asynchronous
+(uses async/await) which means your application won't freeze while waiting for the response.</p>
+<p>The method is asynchronous because:</p>
+<ul>
+<li>API calls to cloud models can take 1-10 seconds</li>
+<li>Local models might need time to process</li>
+<li>Your UI stays responsive while waiting</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">string prompt = "Write a haiku about programming";
+string response = await model.GenerateAsync(prompt);
+Console.WriteLine(response);
+// Output: "Code flows like water
+//          Bugs emerge then disappear
+//          Peace in the logic"</code></pre>
+<p>Best practices:</p>
+<ul>
+<li>Always use try-catch to handle errors (API failures, rate limits, etc.)</li>
+<li>Consider retry logic for transient failures</li>
+<li>Monitor token usage to control costs</li>
+<li>Use CancellationToken to implement timeouts and allow cancellation
+(e.g., var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateAsyncCore_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.GenerateAsyncCore*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateAsyncCore_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.GenerateAsyncCore(System.String,System.Threading.CancellationToken)">
+  GenerateAsyncCore(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core generation logic to be implemented by derived classes.
+This method should make the actual API call to the language model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract Task&lt;string&gt; GenerateAsyncCore(string prompt, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated prompt string.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains the generated response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateAsyncCore_System_String_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is where you implement the specific logic for your language model API.
+The base class handles retries, timeouts, and error handling, so you only need to:</p>
+<ol>
+<li>Build the API request (JSON body, headers, etc.)</li>
+<li>Send it to the API endpoint</li>
+<li>Parse the response</li>
+<li>Return the generated text</li>
+</ol>
+<p>If anything goes wrong, just throw an exception - the base class will handle retries.</p>
+<p>IMPORTANT: Pass the cancellationToken to your HTTP calls (e.g., HttpClient.PostAsync)
+to enable proper cancellation support.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateResponseAsync_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.GenerateResponseAsync*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateResponseAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.GenerateResponseAsync(System.String,System.Threading.CancellationToken)">
+  GenerateResponseAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text response to the given prompt asynchronously.
+This is an alias for GenerateAsync() provided for backward compatibility and clarity in chat contexts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;string&gt; GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input text prompt to send to the language model.
+This can be a question, instruction, or any text that requires a response.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Optional cancellation token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains
+the model's generated response as a string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_GenerateResponseAsync_System_String_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method is the core of how we communicate with a language model. You give it a prompt
+(what you want to ask or tell the model), and it generates a response.</p>
+<p>This method is identical to GenerateAsync() from ILanguageModel - it's provided as an
+alias because &quot;GenerateResponseAsync&quot; is clearer in chat/agent contexts.</p>
+<p>The method is asynchronous (uses async/await) because communicating with language models
+can take time, especially when calling external APIs. This prevents your application from
+freezing while waiting for a response.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">string prompt = "Explain what a neural network is in simple terms.";
+string response = await chatModel.GenerateResponseAsync(prompt);
+Console.WriteLine(response);</code></pre>
+<p>Implementation notes for developers:</p>
+<ul>
+<li>Most implementations just call GenerateAsync() internally</li>
+<li>Handle API errors gracefully and return meaningful error messages</li>
+<li>Consider implementing retry logic for transient failures</li>
+<li>Respect rate limits and timeouts</li>
+<li>Sanitize sensitive information from logs</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_IsRetryable_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.IsRetryable*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_IsRetryable_System_Net_Http_HttpRequestException_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.IsRetryable(System.Net.Http.HttpRequestException)">
+  IsRetryable(HttpRequestException)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether an exception is retryable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual bool IsRetryable(HttpRequestException ex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.http.httprequestexception">HttpRequestException</a></dt>
+    <dd><p>The exception to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the exception indicates a transient error that might succeed on retry.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_IsRetryable_System_Net_Http_HttpRequestException__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Some errors are temporary and worth retrying:</p>
+<ul>
+<li>Network timeouts</li>
+<li>Server overload (503 errors)</li>
+<li>Rate limiting (429 errors)</li>
+</ul>
+<p>Other errors are permanent and won't be fixed by retrying:</p>
+<ul>
+<li>Invalid API key (401 errors)</li>
+<li>Malformed request (400 errors)</li>
+<li>Resource not found (404 errors)</li>
+</ul>
+<p>This method helps distinguish between the two.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LanguageModels_ChatModelBase_1_ValidateApiKey_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.ValidateApiKey*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_ChatModelBase_1_ValidateApiKey_System_String_System_String_" data-uid="AiDotNet.LanguageModels.ChatModelBase`1.ValidateApiKey(System.String,System.String)">
+  ValidateApiKey(string?, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the API key is not empty.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static void ValidateApiKey(string? apiKey, string paramName = &quot;apiKey&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>apiKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The API key to validate.</p>
+</dd>
+    <dt><code>paramName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The parameter name for error messages.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_ChatModelBase_1_ValidateApiKey_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Most language model APIs require an API key for authentication. This is like a password
+that proves you're authorized to use the service and allows billing.</p>
+<p>This helper method checks that:</p>
+<ul>
+<li>The API key exists (not null)</li>
+<li>The API key isn't just whitespace</li>
+</ul>
+<p>Always keep API keys secret! Don't commit them to git or share them publicly.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when the API key is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the API key is empty or whitespace.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/ChatModelBase.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

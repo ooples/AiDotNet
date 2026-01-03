@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Experience&lt;T, TState, TAction&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Experience&lt;T, TState, TAction&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a single experience tuple (s, a, r, s&#39;, done) for reinforcement learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3.md&amp;value=---%0Auid%3A%20AiDotNet.ReinforcementLearning.ReplayBuffers.Experience%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3">
+
+
+
+  <h1 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3" class="text-break">
+Class Experience&lt;T, TState, TAction&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.html">ReinforcementLearning</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.html">ReplayBuffers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a single experience tuple (s, a, r, s', done) for reinforcement learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public record Experience&lt;T, TState, TAction&gt; : IEquatable&lt;Experience&lt;T, TState, TAction&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TState</code></dt>
+    <dd><p>The type representing the state observation (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TAction</code></dt>
+    <dd><p>The type representing the action (e.g., Vector&lt;T&gt; for continuous, int for discrete).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">Experience&lt;T, TState, TAction&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iequatable-1">IEquatable</a>&lt;<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, TState, TAction&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+An Experience is a fundamental data structure in reinforcement learning that captures a single
+interaction between an agent and its environment. It consists of five components: the current state,
+the action taken, the reward received, the resulting next state, and a flag indicating whether
+the episode has ended. This tuple is used to train reinforcement learning agents in algorithms
+like Q-learning, Deep Q-Networks (DQN), PPO, and many others.
+</p>
+<p><b>For Beginners:</b> An experience is one step of interaction with the environment.
+It contains everything the agent needs to learn from that step:
+<ul>
+<li><strong>State</strong>: What the situation looked like before the agent acted (like a snapshot)</li>
+<li><strong>Action</strong>: What the agent decided to do</li>
+<li><strong>Reward</strong>: The feedback received (positive = good, negative = bad, zero = neutral)</li>
+<li><strong>NextState</strong>: What the situation looks like after the action</li>
+<li><strong>Done</strong>: Whether this action ended the episode (game over, goal reached, etc.)</li>
+</ul>
+<p>For example, in a maze-solving robot:</p>
+<ul>
+<li>State: Robot's current position and sensor readings</li>
+<li>Action: &quot;move forward&quot; or &quot;turn left&quot;</li>
+<li>Reward: +10 for reaching the exit, -1 for hitting a wall, 0 otherwise</li>
+<li>NextState: Robot's new position after the action</li>
+<li>Done: True if robot reached the exit or got stuck</li>
+</ul>
+<p><strong>Common Type Combinations:</strong></p>
+<ul>
+<li><code>Experience&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;</code> - For continuous actions (e.g., robotic control)</li>
+<li><code>Experience&lt;double, Vector&lt;double&gt;, int&gt;</code> - For discrete actions (e.g., game playing)</li>
+<li><code>Experience&lt;float, Tensor&lt;float&gt;, int&gt;</code> - For image-based states (e.g., Atari games)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3__ctor_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3__ctor__1__2__0__1_System_Boolean_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.#ctor(`1,`2,`0,`1,System.Boolean)">
+  Experience(TState, TAction, T, TState, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Represents a single experience tuple (s, a, r, s', done) for reinforcement learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Experience(TState State, TAction Action, T Reward, TState NextState, bool Done)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>State</code> <span class="xref">TState</span></dt>
+    <dd></dd>
+    <dt><code>Action</code> <span class="xref">TAction</span></dt>
+    <dd></dd>
+    <dt><code>Reward</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>NextState</code> <span class="xref">TState</span></dt>
+    <dd></dd>
+    <dt><code>Done</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3__ctor__1__2__0__1_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+An Experience is a fundamental data structure in reinforcement learning that captures a single
+interaction between an agent and its environment. It consists of five components: the current state,
+the action taken, the reward received, the resulting next state, and a flag indicating whether
+the episode has ended. This tuple is used to train reinforcement learning agents in algorithms
+like Q-learning, Deep Q-Networks (DQN), PPO, and many others.
+</p>
+<p><b>For Beginners:</b> An experience is one step of interaction with the environment.
+It contains everything the agent needs to learn from that step:
+<ul>
+<li><strong>State</strong>: What the situation looked like before the agent acted (like a snapshot)</li>
+<li><strong>Action</strong>: What the agent decided to do</li>
+<li><strong>Reward</strong>: The feedback received (positive = good, negative = bad, zero = neutral)</li>
+<li><strong>NextState</strong>: What the situation looks like after the action</li>
+<li><strong>Done</strong>: Whether this action ended the episode (game over, goal reached, etc.)</li>
+</ul>
+<p>For example, in a maze-solving robot:</p>
+<ul>
+<li>State: Robot's current position and sensor readings</li>
+<li>Action: &quot;move forward&quot; or &quot;turn left&quot;</li>
+<li>Reward: +10 for reaching the exit, -1 for hitting a wall, 0 otherwise</li>
+<li>NextState: Robot's new position after the action</li>
+<li>Done: True if robot reached the exit or got stuck</li>
+</ul>
+<p><strong>Common Type Combinations:</strong></p>
+<ul>
+<li><code>Experience&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;</code> - For continuous actions (e.g., robotic control)</li>
+<li><code>Experience&lt;double, Vector&lt;double&gt;, int&gt;</code> - For discrete actions (e.g., game playing)</li>
+<li><code>Experience&lt;float, Tensor&lt;float&gt;, int&gt;</code> - For image-based states (e.g., Atari games)</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Action_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.Action*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Action" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.Action">
+  Action
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TAction Action { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TAction</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Done_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.Done*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Done" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.Done">
+  Done
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Done { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_NextState_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.NextState*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_NextState" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.NextState">
+  NextState
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TState NextState { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TState</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Priority_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.Priority*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Priority" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.Priority">
+  Priority
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the priority for prioritized experience replay.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Priority { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double representing the experience's sampling priority. Default is 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Priority_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In prioritized experience replay, experiences with higher priority are sampled more frequently.
+The priority is typically based on the TD-error (temporal difference error), meaning experiences
+that surprise the agent (large prediction errors) are replayed more often.
+</p>
+<p><b>For Beginners:</b> Priority determines how often this experience gets picked for learning.
+<p>Think of it like highlighting important notes in a textbook:</p>
+<ul>
+<li>Higher priority = more important = reviewed more often</li>
+<li>Experiences where the agent made big mistakes get higher priority</li>
+<li>This helps the agent learn from its most surprising or educational moments</li>
+</ul>
+<p>Default is 1.0 (all experiences equal). Values greater than 1.0 mean &quot;sample this more often.&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Reward_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.Reward*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_Reward" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.Reward">
+  Reward
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Reward { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_State_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.State*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_Experience_3_State" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience`3.State">
+  State
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TState State { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TState</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/Experience.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

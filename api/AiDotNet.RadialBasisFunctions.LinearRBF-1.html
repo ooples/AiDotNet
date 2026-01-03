@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LinearRBF&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LinearRBF&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Linear Radial Basis Function (RBF) of the form f(r) = r.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RadialBasisFunctions_LinearRBF_1.md&amp;value=---%0Auid%3A%20AiDotNet.RadialBasisFunctions.LinearRBF%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1">
+
+
+
+  <h1 id="AiDotNet_RadialBasisFunctions_LinearRBF_1" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1" class="text-break">
+Class LinearRBF&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/LinearRBF.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RadialBasisFunctions.html">RadialBasisFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Linear Radial Basis Function (RBF) of the form f(r) = r.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LinearRBF&lt;T&gt; : IRadialBasisFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">LinearRBF&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRadialBasisFunction-1.html">IRadialBasisFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RadialBasisFunctions_LinearRBF_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides an implementation of a Radial Basis Function (RBF) that simply returns the radius itself.
+Unlike most RBFs which reach their maximum at the center and decrease with distance, the Linear RBF
+increases linearly with distance from the center. It has the simplest possible form of any RBF: f(r) = r.
+Note that this function does not have a width parameter like most other RBFs.
+</p>
+<p>
+The Linear RBF can be useful in specific applications where a direct proportionality to distance is desired.
+It is also sometimes used as a component in more complex kernels or in combination with other RBFs.
+However, it should be noted that this function does not approach zero as distance increases, which may
+make it unsuitable for many typical RBF applications requiring localized influence.
+</p>
+<p><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
+that depends only on the distance from a center point.
+<p>The Linear RBF is the simplest possible RBF - it's just the distance itself. Think of it as a straight line
+starting from zero at the center and growing uniformly as you move away in any direction.</p>
+<p>This is different from most other RBFs because:</p>
+<ul>
+<li>Most RBFs have their highest value at the center and decrease with distance</li>
+<li>The Linear RBF starts at zero at the center and increases with distance</li>
+<li>Most RBFs have a &quot;width&quot; parameter to control how quickly they change with distance</li>
+<li>The Linear RBF has no width parameter - it always increases at the same rate</li>
+</ul>
+<p>The Linear RBF is rarely used alone in practice, but it can be useful in certain specific applications
+or as a building block for more complex functions.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_LinearRBF_1__ctor_" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_LinearRBF_1__ctor" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1.#ctor">
+  LinearRBF()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/LinearRBF.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RadialBasisFunctions.LinearRBF-1.html">LinearRBF&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LinearRBF()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_LinearRBF_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the Linear Radial Basis Function. Unlike most other RBFs,
+the Linear RBF does not take any parameters as it has the fixed form f(r) = r.
+</p>
+<p><b>For Beginners:</b> This creates a new Linear RBF.
+<p>Unlike other RBFs we've seen, the Linear RBF doesn't need any configuration parameters
+because its behavior is fixed - it always returns exactly the distance value.
+There's no &quot;width&quot; parameter or other settings to adjust.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_LinearRBF_1_Compute_" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1.Compute*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_LinearRBF_1_Compute__0_" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1.Compute(`0)">
+  Compute(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/LinearRBF.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the value of the Linear Radial Basis Function for a given radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Compute(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The radius value itself.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_LinearRBF_1_Compute__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the value of the Linear RBF for a given radius r.
+For the Linear RBF, this is simply the radius itself: f(r) = r.
+</p>
+<p><b>For Beginners:</b> This method simply returns the distance value unchanged.
+<p>For example:</p>
+<ul>
+<li>If you input a distance of 2.5, you get back 2.5</li>
+<li>If you input a distance of 10, you get back 10</li>
+</ul>
+<p>There's no complex calculation needed - this function passes through the input value
+without modifying it.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_LinearRBF_1_ComputeDerivative_" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_LinearRBF_1_ComputeDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1.ComputeDerivative(`0)">
+  ComputeDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/LinearRBF.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Linear RBF with respect to the radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The constant value 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_LinearRBF_1_ComputeDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Linear RBF with respect to the radius r.
+Since the function is f(r) = r, its derivative is simply 1, regardless of the radius value.
+</p>
+<p><b>For Beginners:</b> This method tells you how fast the function's value changes
+as you move away from the center point.
+<p>For the Linear RBF, the rate of change is constant: the function value increases by exactly 1
+for each unit of distance you move. This is why the derivative is always 1, regardless of
+where you are.</p>
+<p>Think of it like walking up a ramp with a steady incline - no matter where you are on the ramp,
+you're always climbing at the same rate.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_LinearRBF_1_ComputeWidthDerivative_" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1.ComputeWidthDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_LinearRBF_1_ComputeWidthDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.LinearRBF`1.ComputeWidthDerivative(`0)">
+  ComputeWidthDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/LinearRBF.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Linear RBF with respect to a width parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeWidthDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The constant value 0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_LinearRBF_1_ComputeWidthDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Linear RBF with respect to a width parameter.
+Since the Linear RBF does not have a width parameter (it has the fixed form f(r) = r),
+this derivative is zero. The method is implemented only to satisfy the interface requirements.
+</p>
+<p><b>For Beginners:</b> This method would normally tell you how the function's value
+would change if you adjusted the width parameter.
+<p>However, the Linear RBF doesn't have a width parameter to adjust - its behavior is fixed.
+Since there's no parameter to vary, changing a non-existent parameter has no effect,
+so the derivative is zero.</p>
+<p>This method only exists because all RBFs in this library are required to have it,
+but for the Linear RBF, it will always return zero.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/LinearRBF.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum PredictionType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum PredictionType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies the type of prediction task that a machine learning model performs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_PredictionType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.PredictionType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.PredictionType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_PredictionType" data-uid="AiDotNet.Enums.PredictionType" class="text-break">
+Enum PredictionType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/PredictionType.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies the type of prediction task that a machine learning model performs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum PredictionType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_PredictionType_BinaryClassification"><code>BinaryClassification = 0</code></dt>
+  <dd><p>Represents a binary classification task where the output is one of two possible classes.</p>
+<p><b>For Beginners:</b> Use this when your prediction has only two possible outcomes, like:</p>
+<ul>
+<li>Yes or No</li>
+<li>True or False</li>
+<li>Spam or Not Spam</li>
+<li>Positive or Negative</li>
+</ul>
+<p>Binary predictions typically output a probability between 0 and 1, where:</p>
+<ul>
+<li>Values closer to 0 indicate the first class (e.g., &quot;No&quot;)</li>
+<li>Values closer to 1 indicate the second class (e.g., &quot;Yes&quot;)</li>
+</ul>
+<p>Examples: Email spam detection, disease diagnosis, fraud detection</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PredictionType_MultiClass"><code>MultiClass = 2</code></dt>
+  <dd><p>Represents a multi-class classification task where the output is one of many possible classes.</p>
+<p><b>For Beginners:</b> Use this when your prediction can be one of several categories, like:</p>
+<ul>
+<li>Classifying an image as Cat, Dog, or Bird</li>
+<li>Categorizing a news article as Sports, Politics, or Technology</li>
+<li>Predicting a product type from a list of many product categories</li>
+</ul>
+<p>Multi-class predictions usually output either:</p>
+<ul>
+<li>A single class label (e.g., 0, 1, 2, ...)</li>
+<li>A set of probabilities, one per class (often handled via a separate API)</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PredictionType_MultiLabel"><code>MultiLabel = 3</code></dt>
+  <dd><p>Represents a multi-label classification task where multiple labels can be true at the same time.</p>
+<p><b>For Beginners:</b> Use this when each sample can have multiple categories, like:</p>
+<ul>
+<li>An image that contains both a Dog AND a Person</li>
+<li>A document tagged with multiple topics (Finance, Legal, HR)</li>
+</ul>
+<p>Multi-label predictions are commonly represented as a vector of independent probabilities (one per label),
+which are then thresholded (e.g., &gt; 0.5) to decide which labels are present.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PredictionType_Regression"><code>Regression = 1</code></dt>
+  <dd><p>Represents a regression task where the output is a continuous numerical value.</p>
+<p><b>For Beginners:</b> Use this when your prediction is a number that can take any value within a range, like:</p>
+<ul>
+<li>Price of a house</li>
+<li>Temperature tomorrow</li>
+<li>Number of sales next month</li>
+<li>Age of a person from their photo</li>
+</ul>
+<p>Unlike Binary prediction, Regression doesn't have fixed categories - it predicts
+actual numerical values that can be any number (like 42.5, 1000, or -3.14).</p>
+<p>Examples: Price prediction, weather forecasting, age estimation, stock market prediction</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_PredictionType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This enum helps you tell the library what kind of prediction you're trying to make.
+Think of it as telling the AI system what type of question you're asking:</p>
+<ul>
+<li>Are you asking a yes/no question? Use BinaryClassification.</li>
+<li>Are you asking &quot;how much&quot; or &quot;what value&quot;? Use Regression.</li>
+</ul>
+<p>Choosing the right prediction type helps the AI model understand what you're trying to accomplish
+and use the appropriate techniques for your specific problem.</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/PredictionType.cs/#L16" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

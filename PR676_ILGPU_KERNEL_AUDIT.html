@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>PR676 Legacy ILGPU Kernel Audit | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="PR676 Legacy ILGPU Kernel Audit | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/PR676_ILGPU_KERNEL_AUDIT.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="pr676-legacy-ilgpu-kernel-audit">PR676 Legacy ILGPU Kernel Audit</h1>
+
+<h2 id="scope">Scope</h2>
+<p>This inventory captures operations previously accelerated by ILGPU in the legacy <code>GpuEngine</code> and maps them to the direct backends that must replace them (DirectOpenClBackend + DirectCudaBackend).</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Direct GPU path is float32-first. Double/other types are converted via INumericOperations.</li>
+<li>CUDA path uses custom kernels as primary, cuBLAS for GEMM fallback, and cuDNN for conv/pool/norm fallback.</li>
+<li>ILGPU has been removed; this audit is retained for parity tracking.</li>
+</ul>
+<h2 id="progress">Progress</h2>
+<ul>
+<li>CUDA/OpenCL elementwise + unary kernels expanded (add/sub/mul/div/min/max, abs/exp/log/log2/exp2/exp10/expm1/log1p/sqrt/sign, power-scalar).</li>
+<li>HIP backend mirrors these ops via CPU fallback for now.</li>
+<li>OpenCL/CUDA sum/max reductions now use GPU partial reduction kernels.</li>
+<li>CUDA sum-axis reduction now uses a direct kernel.</li>
+</ul>
+<h2 id="kernel-families-to-replace">Kernel Families to Replace</h2>
+<ul>
+<li>Elementwise arithmetic: add/sub/mul/div, scalar ops, negate, clamp, lerp, reciprocal, rsqrt, min/max magnitude, round/floor/ceil/truncate/frac.</li>
+<li>Activation + math: relu/sigmoid/tanh/gelu/mish/swish/elu, sin/cos/tan, sinh/cosh/tanh, exp/log/log2/exp2/exp10/log1p/expm1, asin/acos/atan, asinh/acosh/atanh, pow/power-scalar.</li>
+<li>Matrix ops: matmul (tiled + transposed-B), batch matmul, matvec, transpose, add, scale, swap rows/cols, get/set column, outer product.</li>
+<li>Convolution: conv2d/conv3d, depthwise conv2d, locally-connected conv2d, conv-transpose2d, plus backward input/weights/bias kernels.</li>
+<li>Pooling: max/avg pool 2d/3d + backward + maxpool-with-indices.</li>
+<li>Normalization: batch norm forward/backward, layer norm forward/backward.</li>
+<li>Reductions: reduce sum/mean/max/min/variance, partial sums, partial dot, partial sum of squares.</li>
+<li>Softmax family: softmax + backward, tensor softmax, gumbel softmax + backward, taylor softmax + backward, sparsemax + backward, spherical softmax + backward.</li>
+<li>Indexing: gather, scatter, scatter-add, copy, tensor slice/set-slice.</li>
+<li>Embedding: embedding lookup + backward.</li>
+<li>Resampling: upsample + backward (including any-rank), pixel shuffle + backward.</li>
+<li>Misc: positional encoding forward/backward, volume rendering forward, trilinear interpolate + backward, crop/pad, concat.</li>
+</ul>
+<h2 id="replacement-checklist-per-operation-family">Replacement Checklist (per operation family)</h2>
+<ul>
+<li>[ ] Elementwise arithmetic (vector/matrix/tensor): add/sub/mul/div, scalar ops, negate, clamp, lerp, reciprocal, rsqrt, min/max magnitude, round/floor/ceil/truncate/frac.</li>
+<li>[ ] Activation + math: relu/sigmoid/tanh/gelu/mish/swish/elu, sin/cos/tan, sinh/cosh/tanh, exp/log/log2/exp2/exp10/log1p/expm1, asin/acos/atan, asinh/acosh/atanh, pow/power-scalar.</li>
+<li>[ ] Matrix ops: matmul (tiled + transposed-B), batch matmul, matvec, transpose, add, scale, swap rows/cols, get/set column, outer product.</li>
+<li>[ ] Convolution: conv2d/conv3d, depthwise conv2d, locally-connected conv2d, conv-transpose2d, backward input/weights/bias.</li>
+<li>[ ] Pooling: max/avg pool 2d/3d + backward + maxpool-with-indices.</li>
+<li>[ ] Normalization: batch norm forward/backward, layer norm forward/backward.</li>
+<li>[ ] Reductions: reduce sum/mean/max/min/variance, partial sums, partial dot, partial sum of squares.</li>
+<li>[ ] Softmax family: softmax + backward, tensor softmax, gumbel softmax + backward, taylor softmax + backward, sparsemax + backward, spherical softmax + backward.</li>
+<li>[ ] Indexing: gather, scatter, scatter-add, copy, tensor slice/set-slice.</li>
+<li>[ ] Embedding: embedding lookup + backward.</li>
+<li>[ ] Resampling: upsample + backward (including any-rank), pixel shuffle + backward.</li>
+<li>[ ] Misc: positional encoding forward/backward, volume rendering forward, trilinear interpolate + backward, crop/pad, concat.</li>
+</ul>
+<h2 id="backend-mapping-initial">Backend Mapping (Initial)</h2>
+<ul>
+<li>DirectOpenClBackend: implement full kernel coverage in OpenCL C sources.</li>
+<li>DirectCudaBackend:
+<ul>
+<li>GEMM -&gt; custom kernel + cuBLAS fallback.</li>
+<li>Conv/pool/norm/activation -&gt; cuDNN (if accepted) or custom CUDA kernels.</li>
+<li>Elementwise/reduction/indexing -&gt; NVRTC-compiled kernels.</li>
+</ul>
+</li>
+</ul>
+<h2 id="open-questions">Open Questions</h2>
+<ul>
+<li>Should double-precision ops run via float conversion on GPU or force CPU fallback for correctness?</li>
+<li>Do we adopt cuDNN for NVIDIA non-GEMM primitives?</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/PR676_ILGPU_KERNEL_AUDIT.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

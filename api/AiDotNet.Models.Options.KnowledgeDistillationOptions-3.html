@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class KnowledgeDistillationOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class KnowledgeDistillationOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for knowledge distillation training.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_KnowledgeDistillationOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.KnowledgeDistillationOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3" class="text-break">
+Class KnowledgeDistillationOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for knowledge distillation training.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class KnowledgeDistillationOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">KnowledgeDistillationOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This class configures how knowledge distillation works.
+Think of it as the "settings" for transferring knowledge from a large teacher model
+to a smaller student model.</p>
+<p><b>Quick Start Example:</b>
+<pre><code class="lang-csharp">var options = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
+{
+    TeacherModelType = TeacherModelType.NeuralNetwork,
+    StrategyType = DistillationStrategyType.ResponseBased,
+    Temperature = 3.0,  // Soft predictions
+    Alpha = 0.3,        // 30% hard labels, 70% teacher
+    Epochs = 20,
+    BatchSize = 32
+};</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Alpha_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Alpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Alpha" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Alpha">
+  Alpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the alpha parameter balancing hard and soft loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Alpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Alpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Alpha controls the balance:
+- 0.0: Only learn from teacher
+- 0.3-0.5: Balanced (recommended)
+- 1.0: Only learn from labels (no distillation)</p>
+<p>Use lower alpha when labels are noisy or you want to rely more on the teacher.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_AttentionLayers_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.AttentionLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_AttentionLayers" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.AttentionLayers">
+  AttentionLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets attention layer names (if using attention-based distillation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;string&gt;? AttentionLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_AttentionLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Attention-Based Distillation:</b> Specify attention layers to match.
+Example: ["attention1", "attention2"]</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_AttentionWeight_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.AttentionWeight*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_AttentionWeight" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.AttentionWeight">
+  AttentionWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L279"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets weight for attention loss (if using attention-based distillation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AttentionWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_AttentionWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Controls how much to weight attention matching.
+Typical values: 0.2-0.4</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Batch size is how many samples to process at once:
+- Small (16-32): Less memory, noisier gradients
+- Medium (64-128): Balanced
+- Large (256+): More memory, smoother gradients</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_CheckpointDirectory_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.CheckpointDirectory*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_CheckpointDirectory" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.CheckpointDirectory">
+  CheckpointDirectory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L348"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets checkpoint directory path (if checkpoints are enabled).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? CheckpointDirectory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_CheckpointDirectory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If null, uses "./checkpoints" by default.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_CheckpointFrequency_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.CheckpointFrequency*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_CheckpointFrequency" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.CheckpointFrequency">
+  CheckpointFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L356"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets checkpoint frequency (save every N epochs).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_CheckpointFrequency_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Set to 1 to save after every epoch. Higher values save less frequently.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EMADecay_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.EMADecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EMADecay" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.EMADecay">
+  EMADecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L296"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the EMA decay rate (if using EMA).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EMADecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EMADecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.99-0.999. Higher values give more weight to history.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EarlyStoppingMinDelta_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.EarlyStoppingMinDelta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EarlyStoppingMinDelta" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.EarlyStoppingMinDelta">
+  EarlyStoppingMinDelta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets minimum improvement delta for early stopping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EarlyStoppingMinDelta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EarlyStoppingMinDelta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Loss must improve by at least this amount to count as improvement.
+Typical values: 0.001-0.01</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EarlyStoppingPatience_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.EarlyStoppingPatience*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EarlyStoppingPatience" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.EarlyStoppingPatience">
+  EarlyStoppingPatience
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L322"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets patience for early stopping (epochs without improvement).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EarlyStoppingPatience { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EarlyStoppingPatience_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 3-10. Higher patience allows more time for improvement.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EnsembleWeights_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.EnsembleWeights*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EnsembleWeights" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.EnsembleWeights">
+  EnsembleWeights
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets ensemble weights (if using multiple teachers).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;double&gt;? EnsembleWeights { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_EnsembleWeights_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Optional weights for each teacher. Must sum to 1.0.
+If null, uniform weights are used.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Epochs_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Epochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Epochs" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Epochs">
+  Epochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of training epochs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Epochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Epochs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> An epoch is one complete pass through the training data.
+Typical values: 10-50 epochs depending on dataset size and complexity.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FeatureLayerPairs_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.FeatureLayerPairs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FeatureLayerPairs" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.FeatureLayerPairs">
+  FeatureLayerPairs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets layer pairs for feature-based distillation.
+Format: &quot;teacher_layer:student_layer&quot;</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;string&gt;? FeatureLayerPairs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FeatureLayerPairs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Feature-Based Distillation:</b> Specify which layers to match.
+Example: ["conv3:conv2", "conv4:conv3"]</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FeatureWeight_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.FeatureWeight*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FeatureWeight" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.FeatureWeight">
+  FeatureWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets weight for feature loss (if using feature-based distillation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FeatureWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FeatureWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Controls how much to weight feature matching vs output matching.
+Typical values: 0.3-0.7</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FreezeTeacher_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.FreezeTeacher*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FreezeTeacher" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.FreezeTeacher">
+  FreezeTeacher
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to freeze teacher model during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool FreezeTeacher { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_FreezeTeacher_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Usually true - teacher should remain fixed.
+Set to false for online distillation where teacher updates with student.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_LabelSmoothingFactor_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.LabelSmoothingFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_LabelSmoothingFactor" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.LabelSmoothingFactor">
+  LabelSmoothingFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the label smoothing factor (if enabled).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LabelSmoothingFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_LabelSmoothingFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.1-0.2. Higher values smooth labels more.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_LearningRate_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_LearningRate" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for student training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Learning rate controls how fast the student learns:
+- Too low: Slow training
+- Too high: Unstable training
+- Typical: 0.001-0.01</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_OnEpochComplete_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.OnEpochComplete*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_OnEpochComplete" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.OnEpochComplete">
+  OnEpochComplete
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets callback function invoked after each epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Action&lt;int, T&gt;? OnEpochComplete { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_OnEpochComplete_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Advanced Users:</b> Use this to log progress, save checkpoints,
+or implement custom logic during training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_OutputDimension_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.OutputDimension*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_OutputDimension" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.OutputDimension">
+  OutputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L373"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets output dimension for models (if not inferrable from teacher).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? OutputDimension { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_OutputDimension_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Usually inferred automatically. Set manually if needed.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_RandomSeed_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_RandomSeed" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_RandomSeed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Set a seed to get reproducible results.
+Useful for debugging and comparing experiments.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SaveCheckpoints_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.SaveCheckpoints*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SaveCheckpoints" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.SaveCheckpoints">
+  SaveCheckpoints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L340"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to save checkpoints during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SaveCheckpoints { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SaveCheckpoints_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Production:</b> Saves best model automatically.
+Essential for long-running training and recovery from failures.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SaveOnlyBestCheckpoint_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.SaveOnlyBestCheckpoint*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SaveOnlyBestCheckpoint" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.SaveOnlyBestCheckpoint">
+  SaveOnlyBestCheckpoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L365"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to only save the best model checkpoint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SaveOnlyBestCheckpoint { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SaveOnlyBestCheckpoint_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If true, only keeps the checkpoint with best validation loss.
+If false, keeps all checkpoints.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SelfDistillationGenerations_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.SelfDistillationGenerations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SelfDistillationGenerations" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.SelfDistillationGenerations">
+  SelfDistillationGenerations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of self-distillation generations (if using self-distillation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SelfDistillationGenerations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_SelfDistillationGenerations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Self-Distillation:</b> How many times the model re-teaches itself.
+Typical values: 1-3 generations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Strategy_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Strategy*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Strategy" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Strategy">
+  Strategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distillation strategy instance (if using custom strategy).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDistillationStrategy&lt;T&gt;? Strategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDistillationStrategy-1.html">IDistillationStrategy</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Strategy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Advanced Users:</b> Provide a custom distillation strategy.
+If null, one will be created based on StrategyType.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_StrategyType_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.StrategyType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_StrategyType" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.StrategyType">
+  StrategyType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distillation strategy type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DistillationStrategyType StrategyType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.DistillationStrategyType.html">DistillationStrategyType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_StrategyType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The strategy determines what knowledge to transfer:
+- ResponseBased: Match final outputs (most common)
+- FeatureBased: Match intermediate layers
+- AttentionBased: Match attention patterns (for transformers)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Teacher_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Teacher*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Teacher" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Teacher">
+  Teacher
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the teacher model instance (if using pre-instantiated teacher).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ITeacherModel&lt;TInput, TOutput&gt;? Teacher { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ITeacherModel-2.html">ITeacherModel</a>&lt;TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Teacher_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Advanced Users:</b> Provide a custom teacher model instance.
+If null, one will be created based on TeacherModelType.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherForward_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.TeacherForward*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherForward" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.TeacherForward">
+  TeacherForward
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the teacher model forward function (alternative approach).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;TInput, TOutput&gt;? TeacherForward { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherForward_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Advanced Users:</b> If you have a trained model with a forward function,
+provide it and it will be automatically wrapped as a teacher.</p>
+<p>Example:
+<pre><code class="lang-csharp">TeacherForward = input =&gt; myTrainedModel.Predict(input)</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherModel_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.TeacherModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherModel" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.TeacherModel">
+  TeacherModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the teacher IFullModel (recommended approach).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? TeacherModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners (Recommended):</b> Pass your trained IFullModel directly.
+This is the standard way to provide a teacher model in the AiDotNet architecture.</p>
+<p>Example:
+<pre><code class="lang-csharp">// After training
+var trainedModel = await builder.ConfigureModel(model).BuildAsync();
+<p>// Use as teacher
+TeacherModel = trainedModel.Model</p></code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherModelType_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.TeacherModelType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherModelType" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.TeacherModelType">
+  TeacherModelType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of teacher model to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TeacherModelType TeacherModelType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.TeacherModelType.html">TeacherModelType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_TeacherModelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The teacher is the "expert" model. Choose:
+- NeuralNetwork: Standard pre-trained model
+- Ensemble: Multiple teachers for better knowledge
+- Self: Model teaches itself (no separate teacher needed)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Teachers_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Teachers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Teachers" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Teachers">
+  Teachers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets multiple teacher models (for ensemble distillation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;ITeacherModel&lt;TInput, TOutput&gt;&gt;? Teachers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ITeacherModel-2.html">ITeacherModel</a>&lt;TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Teachers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Ensemble Distillation:</b> Provide multiple teacher models.
+They will be automatically combined into an ensemble.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Temperature_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Temperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Temperature" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Temperature">
+  Temperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the temperature for softmax scaling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Temperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Temperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Temperature controls how "soft" predictions are:
+- Low (1-2): Sharp predictions
+- Medium (3-5): Balanced (recommended)
+- High (6-10): Very soft predictions</p>
+<p>Higher temperature reveals more about class relationships but may be harder to optimize.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseEMA_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.UseEMA*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseEMA" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.UseEMA">
+  UseEMA
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use exponential moving average for teacher predictions (self-distillation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseEMA { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseEMA_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Self-Distillation:</b> EMA smooths teacher predictions over time,
+improving stability.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseEarlyStopping_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.UseEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseEarlyStopping" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.UseEarlyStopping">
+  UseEarlyStopping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable early stopping based on validation loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseEarlyStopping { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseEarlyStopping_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Production:</b> Stops training when validation loss stops improving.
+Prevents overfitting and saves compute time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseLabelSmoothing_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.UseLabelSmoothing*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseLabelSmoothing" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.UseLabelSmoothing">
+  UseLabelSmoothing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use label smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseLabelSmoothing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_UseLabelSmoothing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Label smoothing softens hard labels slightly,
+which can improve generalization. Usually not needed with distillation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_ValidateAfterEpoch_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.ValidateAfterEpoch*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_ValidateAfterEpoch" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.ValidateAfterEpoch">
+  ValidateAfterEpoch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to validate model after each epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ValidateAfterEpoch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_ValidateAfterEpoch_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If true, evaluates student on validation set
+after each epoch to monitor progress.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_ValidationInputs_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.ValidationInputs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_ValidationInputs" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.ValidationInputs">
+  ValidationInputs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets validation data inputs (if validation is enabled).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput[]? ValidationInputs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>TInput[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_ValidationLabels_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.ValidationLabels*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_ValidationLabels" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.ValidationLabels">
+  ValidationLabels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets validation data labels (if validation is enabled).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput[]? ValidationLabels { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>TOutput[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Validate_" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Validate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KnowledgeDistillationOptions_3_Validate" data-uid="AiDotNet.Models.Options.KnowledgeDistillationOptions`3.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L378"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the options and throws if any are invalid.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Validate()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KnowledgeDistillationOptions.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

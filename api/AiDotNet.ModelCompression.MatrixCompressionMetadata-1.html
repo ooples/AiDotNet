@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MatrixCompressionMetadata&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MatrixCompressionMetadata&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Metadata for matrix compression operations that wraps the underlying vector compression metadata.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ModelCompression_MatrixCompressionMetadata_1.md&amp;value=---%0Auid%3A%20AiDotNet.ModelCompression.MatrixCompressionMetadata%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1">
+
+
+
+  <h1 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1" class="text-break">
+Class MatrixCompressionMetadata&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ModelCompression.html">ModelCompression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Metadata for matrix compression operations that wraps the underlying vector compression metadata.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MatrixCompressionMetadata&lt;T&gt; : ICompressionMetadata&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MatrixCompressionMetadata&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+MatrixCompressionMetadata stores the information needed to decompress a 2D weight matrix that was
+compressed by first flattening it to a vector. It preserves the original matrix dimensions and
+delegates the actual compression metadata to an inner ICompressionMetadata instance.
+</p>
+<p><b>For Beginners:</b> When compressing a 2D matrix (like weights in a fully connected layer),
+we need to remember:
+<ol>
+<li>The original shape - how many rows and columns the matrix had</li>
+<li>How the flattened data was compressed (the inner compression details)</li>
+</ol>
+<p>Think of it like folding a shirt to pack in a suitcase:</p>
+<ul>
+<li>You flatten the shirt (2D to 1D)</li>
+<li>You compress it in a vacuum bag (apply compression algorithm)</li>
+<li>You need to remember the original shirt size to unfold it properly later</li>
+</ul>
+<p>This metadata class keeps track of all that information so we can perfectly restore
+the original matrix shape after decompression.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1__ctor_" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1__ctor_System_Int32_System_Int32_AiDotNet_Interfaces_ICompressionMetadata__0__" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.#ctor(System.Int32,System.Int32,AiDotNet.Interfaces.ICompressionMetadata{`0})">
+  MatrixCompressionMetadata(int, int, ICompressionMetadata&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MatrixCompressionMetadata class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixCompressionMetadata(int originalRows, int originalColumns, ICompressionMetadata&lt;T&gt; innerMetadata)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>originalRows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows in the original matrix.</p>
+</dd>
+    <dt><code>originalColumns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns in the original matrix.</p>
+</dd>
+    <dt><code>innerMetadata</code> <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The compression metadata from the underlying vector compression.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1__ctor_System_Int32_System_Int32_AiDotNet_Interfaces_ICompressionMetadata__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When creating matrix compression metadata, you specify:
+<ul>
+<li>originalRows: How tall the matrix was (e.g., 100 for a 100x50 matrix)</li>
+<li>originalColumns: How wide the matrix was (e.g., 50 for a 100x50 matrix)</li>
+<li>innerMetadata: The details of how the flattened weights were compressed</li>
+</ul>
+<p>This information is essential for restoring the matrix to its exact original shape.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when rows or columns are not positive.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when innerMetadata is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_InnerMetadata_" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.InnerMetadata*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_InnerMetadata" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.InnerMetadata">
+  InnerMetadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the inner compression metadata from the underlying vector compression algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICompressionMetadata&lt;T&gt; InnerMetadata { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_InnerMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This contains the actual compression details from whatever
+algorithm was used (weight clustering, Huffman encoding, etc.). The matrix compression
+is just a wrapper that remembers the shape; the real compression work is tracked here.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalColumns_" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.OriginalColumns*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalColumns" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.OriginalColumns">
+  OriginalColumns
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of columns in the original matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int OriginalColumns { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalColumns_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The column count of the original weight matrix before compression.
+In neural networks, this often corresponds to the number of output neurons in a layer.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalLength_" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.OriginalLength*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalLength" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.OriginalLength">
+  OriginalLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the original total number of elements in the flattened matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int OriginalLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalLength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the total count of weight values in the original matrix,
+calculated as rows multiplied by columns. For example, a 100x50 matrix has 5,000 elements.
+This is needed to allocate the right amount of memory when decompressing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalRows_" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.OriginalRows*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalRows" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.OriginalRows">
+  OriginalRows
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of rows in the original matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int OriginalRows { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_OriginalRows_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The row count of the original weight matrix before compression.
+In neural networks, this often corresponds to the number of input features or neurons.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_Type_" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.Type*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_Type" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.Type">
+  Type
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the compression type from the underlying compression algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CompressionType Type { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.CompressionType.html">CompressionType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_Type_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This returns the actual compression algorithm type (like WeightClustering
+or HuffmanEncoding) that was used to compress the flattened matrix data. The matrix metadata itself
+is just a shape container - it delegates to the inner metadata for the real compression type.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_GetMetadataSize_" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.GetMetadataSize*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_GetMetadataSize" data-uid="AiDotNet.ModelCompression.MatrixCompressionMetadata`1.GetMetadataSize">
+  GetMetadataSize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total size in bytes of this metadata structure, including the inner metadata.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long GetMetadataSize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The metadata size in bytes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_MatrixCompressionMetadata_1_GetMetadataSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When calculating the total compressed size, you need to include
+the metadata overhead. This method calculates:
+<ul>
+<li>The size of the shape information (2 integers for rows and columns = 8 bytes)</li>
+<li>Plus the size of the inner compression metadata</li>
+</ul>
+<p>This gives an accurate picture of the total storage needed for decompression.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/MatrixCompressionMetadata.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

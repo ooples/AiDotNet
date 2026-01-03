@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BayesianOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BayesianOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Bayesian optimization algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_BayesianOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.BayesianOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3" class="text-break">
+Class BayesianOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Bayesian optimization algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BayesianOptimizerOptions&lt;T, TInput, TOutput&gt; : OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used by the kernel function.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">BayesianOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Bayesian optimization is a sequential design strategy for global optimization of black-box functions
+that doesn't require derivatives. It's particularly useful for optimizing expensive-to-evaluate functions.
+</p>
+<p><b>For Beginners:</b> Bayesian optimization is like a smart search strategy. Imagine you're trying to find 
+the highest point in a hilly landscape while blindfolded - you can only ask for the height at specific locations. 
+Instead of checking every possible spot (which would take too long), Bayesian optimization uses what it learns from 
+previous measurements to make educated guesses about where the highest point might be. It balances between exploring 
+new areas and focusing on promising regions, making it efficient for finding optimal solutions when each evaluation 
+is time-consuming or expensive.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_AcquisitionFunction_" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.AcquisitionFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_AcquisitionFunction" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.AcquisitionFunction">
+  AcquisitionFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of acquisition function to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AcquisitionFunctionType AcquisitionFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.AcquisitionFunctionType.html">AcquisitionFunctionType</a></dt>
+    <dd><p>The acquisition function type, defaulting to UpperConfidenceBound.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_AcquisitionFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The acquisition function determines the strategy for selecting the next point to evaluate.
+Common options include Upper Confidence Bound (UCB), Expected Improvement (EI), and Probability of Improvement (PI).
+</p>
+<p><b>For Beginners:</b> This determines the strategy the algorithm uses to decide where to look next. 
+The default (UpperConfidenceBound) balances exploring uncertain areas and exploiting promising ones. Think of it like:
+<ul><li>Upper Confidence Bound: "I'll check places that might be good or that I'm uncertain about"</li><li>Expected Improvement: "I'll check places likely to be better than the best I've found so far"</li><li>Probability of Improvement: "I'll check places most likely to be at least slightly better than my current best"</li></ul>
+Different strategies work better for different problems, but the default is a good starting point.
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_AcquisitionOptimizationSamples_" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.AcquisitionOptimizationSamples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_AcquisitionOptimizationSamples" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.AcquisitionOptimizationSamples">
+  AcquisitionOptimizationSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of samples used when optimizing the acquisition function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AcquisitionOptimizationSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of acquisition optimization samples, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_AcquisitionOptimizationSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The acquisition function helps decide where to sample next. This parameter controls how thoroughly
+the algorithm searches for the best next point to evaluate.
+</p>
+<p><b>For Beginners:</b> After taking some measurements, the algorithm needs to decide where to look next. 
+This parameter (default: 1000) controls how carefully it considers its options. Think of it like considering 1000 
+possible locations and picking the most promising one. A higher number means more thorough consideration but takes 
+longer to compute. For most problems, the default value provides a good balance between computation time and 
+optimization quality.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_ExplorationFactor_" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.ExplorationFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_ExplorationFactor" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.ExplorationFactor">
+  ExplorationFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the exploration factor (kappa) used in the acquisition function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ExplorationFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The exploration factor, defaulting to 2.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_ExplorationFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter balances exploration (searching new areas) versus exploitation (refining known good areas).
+Higher values favor exploration, while lower values favor exploitation.
+</p>
+<p><b>For Beginners:</b> This controls the balance between trying new areas (exploration) and focusing on 
+promising areas already discovered (exploitation). The default value of 2.0 provides a balanced approach. Think of 
+it like deciding whether to visit new restaurants or return to ones you already know are good. A higher value means 
+more adventurous exploration, while a lower value means sticking closer to what's already known to work well.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_InitialSamples_" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.InitialSamples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_InitialSamples" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.InitialSamples">
+  InitialSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of initial random samples to evaluate before starting the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int InitialSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of initial samples, defaulting to 5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_InitialSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+These initial samples help build the first Gaussian Process model before the algorithm
+starts making informed decisions about where to sample next.
+</p>
+<p><b>For Beginners:</b> This is like taking a few random measurements in our hilly landscape example 
+before starting to make educated guesses. The default value of 5 means the algorithm will first check 5 random 
+locations to get a basic understanding of what the landscape looks like. Too few initial samples might give an 
+incomplete picture, while too many might waste evaluations on potentially uninteresting areas.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_IsMaximization_" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.IsMaximization*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_IsMaximization" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.IsMaximization">
+  IsMaximization
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether the objective should be maximized (true) or minimized (false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsMaximization { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_KernelFunction_" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.KernelFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_KernelFunction" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.KernelFunction">
+  KernelFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the kernel function used by the Gaussian Process model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IKernelFunction&lt;T&gt; KernelFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IKernelFunction-1.html">IKernelFunction</a>&lt;T&gt;</dt>
+    <dd><p>The kernel function, defaulting to Gaussian kernel (also known as Radial Basis Function kernel).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_KernelFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The kernel function determines how the algorithm measures similarity between points in the search space,
+which affects how it generalizes from observed data points to unobserved points.
+</p>
+<p><b>For Beginners:</b> The kernel function helps the algorithm understand how similar different points are
+to each other. The default Gaussian kernel (also called Radial Basis Function kernel) assumes that points close to each other will
+have similar values, with the similarity decreasing smoothly as distance increases. This is like assuming that in
+our hilly landscape, nearby locations tend to have similar heights. The Gaussian kernel works well for many problems,
+especially when the underlying function is smooth.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_LowerBound_" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.LowerBound*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_LowerBound" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.LowerBound">
+  LowerBound
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the lower bound for the search space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LowerBound { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The lower bound value, defaulting to -10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_LowerBound_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value defines the minimum value for each dimension in the search space.
+</p>
+<p><b>For Beginners:</b> This sets the minimum value the algorithm will consider for each variable 
+(default: -10). In our landscape analogy, this would be like setting the western and southern boundaries of 
+the area you're willing to explore. You should set this based on what makes sense for your specific problem - 
+for example, if you're optimizing a learning rate that can't be negative, you might set this to 0 instead.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_UpperBound_" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.UpperBound*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_UpperBound" data-uid="AiDotNet.Models.Options.BayesianOptimizerOptions`3.UpperBound">
+  UpperBound
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the upper bound for the search space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UpperBound { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The upper bound value, defaulting to 10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianOptimizerOptions_3_UpperBound_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value defines the maximum value for each dimension in the search space.
+</p>
+<p><b>For Beginners:</b> This sets the maximum value the algorithm will consider for each variable 
+(default: 10). Continuing our landscape analogy, this would be like setting the eastern and northern boundaries 
+of your search area. Setting appropriate bounds helps the algorithm focus on realistic values and can significantly 
+improve optimization efficiency.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianOptimizerOptions.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

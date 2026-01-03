@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ModelEvaluationData&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ModelEvaluationData&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a comprehensive collection of evaluation data for a model across training, validation, and test datasets.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_ModelEvaluationData_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.ModelEvaluationData%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.ModelEvaluationData`3">
+
+
+
+  <h1 id="AiDotNet_Models_ModelEvaluationData_3" data-uid="AiDotNet.Models.ModelEvaluationData`3" class="text-break">
+Class ModelEvaluationData&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/ModelEvaluationData.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a comprehensive collection of evaluation data for a model across training, validation, and test datasets.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ModelEvaluationData&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ModelEvaluationData&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_ModelEvaluationData_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class encapsulates all the evaluation data for a machine learning model, including detailed statistics for the 
+training, validation, and test datasets, as well as overall model statistics. It provides a complete picture of how 
+the model performs across different datasets, which is essential for assessing model quality, diagnosing issues like 
+overfitting or underfitting, and making informed decisions about model selection and improvement.
+</p>
+<p><b>For Beginners:</b> This class stores all the performance information about a model across different datasets.
+<p>When evaluating a machine learning model:</p>
+<ul>
+<li>You typically split your data into training, validation, and test sets</li>
+<li>You need to track how well the model performs on each set</li>
+<li>You want to compare performance across these sets to detect issues like overfitting</li>
+</ul>
+<p>This class organizes all that information in one place, including:</p>
+<ul>
+<li>Detailed statistics for each dataset (training, validation, test)</li>
+<li>Overall model statistics and metrics</li>
+</ul>
+<p>Having this structured collection makes it easier to:</p>
+<ul>
+<li>Evaluate model quality</li>
+<li>Compare different models</li>
+<li>Generate reports and visualizations</li>
+<li>Make informed decisions about model selection and improvement</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_ModelEvaluationData_3_ModelStats_" data-uid="AiDotNet.Models.ModelEvaluationData`3.ModelStats*"></a>
+
+  <h3 id="AiDotNet_Models_ModelEvaluationData_3_ModelStats" data-uid="AiDotNet.Models.ModelEvaluationData`3.ModelStats">
+  ModelStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/ModelEvaluationData.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the overall statistics for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelStats&lt;T, TInput, TOutput&gt; ModelStats { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.ModelStats-3.html">ModelStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A ModelStats&lt;T&gt; object containing overall model statistics and metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_ModelEvaluationData_3_ModelStats_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains overall statistics and metrics for the model that are not specific to any particular dataset. 
+These might include information about the model's complexity, training time, memory usage, and other characteristics 
+that are important for understanding the model's behavior and performance. The model statistics complement the 
+dataset-specific statistics by providing a broader view of the model's qualities and limitations.
+</p>
+<p><b>For Beginners:</b> This contains general information about the model itself, not tied to a specific dataset.
+<p>The model statistics:</p>
+<ul>
+<li>Describe characteristics of the model itself</li>
+<li>May include information about model complexity, size, or training process</li>
+<li>Provide metrics that apply to the model as a whole</li>
+</ul>
+<p>This information is important because:</p>
+<ul>
+<li>It helps you understand the model's overall characteristics</li>
+<li>It can include metrics that aren't specific to a single dataset</li>
+<li>It provides context for interpreting the dataset-specific results</li>
+</ul>
+<p>For example, this might include information about:</p>
+<ul>
+<li>The number of parameters in the model</li>
+<li>How long the model took to train</li>
+<li>Memory requirements for the model</li>
+<li>Overall complexity measures</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_ModelEvaluationData_3_TestSet_" data-uid="AiDotNet.Models.ModelEvaluationData`3.TestSet*"></a>
+
+  <h3 id="AiDotNet_Models_ModelEvaluationData_3_TestSet" data-uid="AiDotNet.Models.ModelEvaluationData`3.TestSet">
+  TestSet
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/ModelEvaluationData.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the statistics for the test dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DataSetStats&lt;T, TInput, TOutput&gt; TestSet { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A DataSetStats&lt;T&gt; object containing detailed statistics for the test dataset.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_ModelEvaluationData_3_TestSet_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains detailed statistics for the model's performance on the test dataset. The test dataset is a 
+portion of the data that is set aside and not used during training or validation. It provides an unbiased evaluation 
+of the final model's performance and an estimate of how well the model will perform on new, unseen data in the real 
+world. The test dataset should only be used once, after all model selection and tuning is complete, to avoid 
+inadvertently fitting the model to the test data through multiple evaluations and adjustments.
+</p>
+<p><b>For Beginners:</b> This contains detailed information about how the model performs on completely new data.
+<p>The test set statistics:</p>
+<ul>
+<li>Show how well the model will likely perform in the real world</li>
+<li>Provide the final evaluation of model quality</li>
+<li>Represent the most realistic assessment of model performance</li>
+</ul>
+<p>This information is important because:</p>
+<ul>
+<li>It gives you an unbiased estimate of how your model will perform on new data</li>
+<li>It's the ultimate measure of whether your model is ready for deployment</li>
+<li>It helps set realistic expectations for real-world performance</li>
+</ul>
+<p>The test set should only be used once, after all model development is complete,
+to get a true measure of performance without any bias from the development process.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_ModelEvaluationData_3_TrainingSet_" data-uid="AiDotNet.Models.ModelEvaluationData`3.TrainingSet*"></a>
+
+  <h3 id="AiDotNet_Models_ModelEvaluationData_3_TrainingSet" data-uid="AiDotNet.Models.ModelEvaluationData`3.TrainingSet">
+  TrainingSet
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/ModelEvaluationData.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the statistics for the training dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DataSetStats&lt;T, TInput, TOutput&gt; TrainingSet { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A DataSetStats&lt;T&gt; object containing detailed statistics for the training dataset.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_ModelEvaluationData_3_TrainingSet_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains detailed statistics for the model's performance on the training dataset. The training dataset 
+is the portion of the data used to train the model, and the model's performance on this dataset indicates how well 
+it has learned the patterns in the training data. However, good performance on the training dataset alone does not 
+guarantee that the model will generalize well to new, unseen data. Comparing the model's performance on the training 
+dataset with its performance on the validation and test datasets can help identify issues like overfitting.
+</p>
+<p><b>For Beginners:</b> This contains detailed information about how the model performs on the data it was trained with.
+<p>The training set statistics:</p>
+<ul>
+<li>Show how well the model learned from the training data</li>
+<li>Include error measurements, prediction quality metrics, and basic statistics</li>
+<li>Store the actual input features, target values, and model predictions</li>
+</ul>
+<p>This information is important because:</p>
+<ul>
+<li>It helps you understand what the model learned</li>
+<li>It serves as a baseline for comparison with validation and test performance</li>
+<li>Very high performance here but poor performance on other sets can indicate overfitting</li>
+</ul>
+<p>For example, if your model achieves 95% accuracy on the training data but only 70%
+on the validation data, it might be memorizing the training data rather than learning
+generalizable patterns.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_ModelEvaluationData_3_ValidationSet_" data-uid="AiDotNet.Models.ModelEvaluationData`3.ValidationSet*"></a>
+
+  <h3 id="AiDotNet_Models_ModelEvaluationData_3_ValidationSet" data-uid="AiDotNet.Models.ModelEvaluationData`3.ValidationSet">
+  ValidationSet
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/ModelEvaluationData.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the statistics for the validation dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DataSetStats&lt;T, TInput, TOutput&gt; ValidationSet { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A DataSetStats&lt;T&gt; object containing detailed statistics for the validation dataset.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_ModelEvaluationData_3_ValidationSet_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains detailed statistics for the model's performance on the validation dataset. The validation 
+dataset is a portion of the data that is not used for training but is used to tune hyperparameters and make decisions 
+about model selection. The model's performance on the validation dataset provides an estimate of how well it will 
+generalize to new, unseen data. Comparing the model's performance on the validation dataset with its performance on 
+the training dataset can help identify issues like overfitting, where the model performs well on the training data 
+but poorly on new data.
+</p>
+<p><b>For Beginners:</b> This contains detailed information about how the model performs on data it has seen but wasn't trained with.
+<p>The validation set statistics:</p>
+<ul>
+<li>Show how well the model generalizes to data it wasn't trained on</li>
+<li>Help detect overfitting (when the model performs much better on training than validation)</li>
+<li>Guide decisions about model selection and hyperparameter tuning</li>
+</ul>
+<p>This information is important because:</p>
+<ul>
+<li>It provides a more realistic estimate of model performance than training data</li>
+<li>It helps you make decisions about when to stop training or which model to choose</li>
+<li>It can reveal problems before you test on your final test set</li>
+</ul>
+<p>For example, if you're trying different model configurations, you would compare
+their performance on the validation set to decide which one to use.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/ModelEvaluationData.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

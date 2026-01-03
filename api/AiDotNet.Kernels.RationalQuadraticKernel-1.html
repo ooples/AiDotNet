@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RationalQuadraticKernel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RationalQuadraticKernel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Rational Quadratic kernel for measuring similarity between data points.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Kernels_RationalQuadraticKernel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Kernels.RationalQuadraticKernel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Kernels.RationalQuadraticKernel`1">
+
+
+
+  <h1 id="AiDotNet_Kernels_RationalQuadraticKernel_1" data-uid="AiDotNet.Kernels.RationalQuadraticKernel`1" class="text-break">
+Class RationalQuadraticKernel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Kernels/RationalQuadraticKernel.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Kernels.html">Kernels</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Rational Quadratic kernel for measuring similarity between data points.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RationalQuadraticKernel&lt;T&gt; : IKernelFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">RationalQuadraticKernel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IKernelFunction-1.html">IKernelFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Kernels_RationalQuadraticKernel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Rational Quadratic kernel is a similarity measure that behaves like a mixture of
+Gaussian kernels with different length scales. It's particularly useful for data with
+patterns occurring at multiple scales.
+</p>
+<p>
+<b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
+The Rational Quadratic kernel is like a "smooth similarity detector" that works well for data
+with both small and large-scale patterns.
+</p>
+<p>
+Think of it like this: If you're looking at a landscape, some features are small (like rocks)
+and some are large (like mountains). The Rational Quadratic kernel can detect similarities
+at both these scales simultaneously, unlike some other kernels that might focus on just one scale.
+</p>
+<p>
+The formula for the Rational Quadratic kernel is:
+k(x, y) = 1 - ||x - y||²/(||x - y||² + c)
+where:
+- x and y are the two data points being compared
+- ||x - y||² is the squared Euclidean distance between them
+- c is a parameter that controls the kernel's behavior
+</p>
+<p>
+Common uses include:
+- Time series analysis where patterns occur at different time scales
+- Image processing where features exist at different resolutions
+- Any data where both local and global patterns are important
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Kernels_RationalQuadraticKernel_1__ctor_" data-uid="AiDotNet.Kernels.RationalQuadraticKernel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Kernels_RationalQuadraticKernel_1__ctor__0_" data-uid="AiDotNet.Kernels.RationalQuadraticKernel`1.#ctor(`0)">
+  RationalQuadraticKernel(T?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Kernels/RationalQuadraticKernel.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Rational Quadratic kernel with an optional scale parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RationalQuadraticKernel(T? c = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>c</code> <span class="xref">T</span></dt>
+    <dd><p>The scale parameter that controls how quickly similarity decreases with distance. Default is 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Kernels_RationalQuadraticKernel_1__ctor__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor sets up the Rational Quadratic kernel for use. You can optionally
+provide a value for the c parameter:
+</p>
+<p>
+The c parameter controls how the kernel responds to distance between points:
+- Smaller values make the kernel more sensitive to small distances (local patterns)
+- Larger values make the kernel more sensitive to large distances (global patterns)
+- The default value is 1.0, which works well for many applications
+</p>
+<p>
+When might you want to change this parameter?
+- Use a smaller c when you want to focus on very local, fine-grained patterns in your data
+- Use a larger c when you want to capture broader, more global patterns
+</p>
+<p>
+The best value often depends on your specific dataset and problem, so you might
+need to experiment with different values to find what works best.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Kernels_RationalQuadraticKernel_1_Calculate_" data-uid="AiDotNet.Kernels.RationalQuadraticKernel`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_Kernels_RationalQuadraticKernel_1_Calculate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Kernels.RationalQuadraticKernel`1.Calculate(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Calculate(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Kernels/RationalQuadraticKernel.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Rational Quadratic kernel value between two vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Calculate(Vector&lt;T&gt; x1, Vector&lt;T&gt; x2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first vector.</p>
+</dd>
+    <dt><code>x2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The kernel value representing the similarity between the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Kernels_RationalQuadraticKernel_1_Calculate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
+how similar they are to each other using the Rational Quadratic kernel formula.
+</p>
+<p>
+The calculation works by:
+1. Finding the difference between the two vectors (x1 - x2)
+2. Calculating the squared distance between them
+3. Applying the formula: 1 - distance²/(distance² + c)
+</p>
+<p>
+The result is a similarity measure where:
+- Values closer to 1 mean the points are very similar
+- Values closer to 0 mean the points are very different
+- The value is always between 0 and 1
+</p>
+<p>
+What makes this kernel special is that it can detect similarities at multiple scales simultaneously.
+This means it works well for complex data where patterns exist at different levels of detail.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Kernels/RationalQuadraticKernel.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

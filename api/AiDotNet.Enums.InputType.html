@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum InputType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum InputType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies the dimensionality of input data for machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_InputType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.InputType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.InputType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_InputType" data-uid="AiDotNet.Enums.InputType" class="text-break">
+Enum InputType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/InputType.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies the dimensionality of input data for machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum InputType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_InputType_OneDimensional"><code>OneDimensional = 0</code></dt>
+  <dd><p>Represents input data with a single value per data point.</p>
+<p>
+<b>For Beginners:</b> One-dimensional data means each data point is represented by a single number.
+<p>Examples:</p>
+<ul>
+<li>A list of temperatures (each day has one temperature value)</li>
+<li>A list of prices (each item has one price)</li>
+<li>A list of ages (each person has one age)</li>
+</ul>
+<p>Visualize it as points on a line or a simple list of numbers.
+In code, this is typically represented as a simple array or list: [1, 2, 3, 4, 5]</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_InputType_ThreeDimensional"><code>ThreeDimensional = 2</code></dt>
+  <dd><p>Represents input data with three values per data point.</p>
+<p>
+<b>For Beginners:</b> Three-dimensional data means each data point has three values associated with it.
+<p>Examples:</p>
+<ul>
+<li>3D coordinates in space (x, y, z)</li>
+<li>RGB color values (red, green, blue)</li>
+<li>Height, weight, and age of a person</li>
+</ul>
+<p>Visualize it as points in 3D space or a table with three columns.
+In code, this might be represented as triplets: [(1,2,3), (4,5,6)]
+or as three parallel arrays: [1,4], [2,5], and [3,6]</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_InputType_TwoDimensional"><code>TwoDimensional = 1</code></dt>
+  <dd><p>Represents input data with two values per data point.</p>
+<p>
+<b>For Beginners:</b> Two-dimensional data means each data point has two values associated with it.
+<p>Examples:</p>
+<ul>
+<li>Coordinates on a map (latitude and longitude)</li>
+<li>Height and weight measurements</li>
+<li>Price and square footage of houses</li>
+</ul>
+<p>Visualize it as points on a plane or a table with two columns.
+In code, this might be represented as pairs of values: [(1,2), (3,4), (5,6)]
+or as two parallel arrays: [1,3,5] and [2,4,6]</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_InputType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Dimensionality refers to how many separate values are used to represent each data point.
+Think of dimensions like coordinates - a 1D point needs just one number (like a position on a line),
+a 2D point needs two numbers (like a position on a map), and a 3D point needs three numbers
+(like a position in a room).
+</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/InputType.cs/#L14" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IPromptTemplate | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IPromptTemplate | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for prompt templates used in language model interactions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IPromptTemplate.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IPromptTemplate%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IPromptTemplate">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IPromptTemplate" data-uid="AiDotNet.Interfaces.IPromptTemplate" class="text-break">
+Interface IPromptTemplate  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptTemplate.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for prompt templates used in language model interactions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IPromptTemplate</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IPromptTemplate_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A prompt template provides a structured way to create prompts for language models by combining
+a template string with runtime variables. Templates support variable substitution, formatting,
+and composition of complex prompts from reusable components.
+</p>
+<p><b>For Beginners:</b> A prompt template is like a form with blanks to fill in.
+<p>Think of it like a mad lib:</p>
+<ul>
+<li>Template: &quot;The {adjective} {noun} {verb} over the {place}.&quot;</li>
+<li>Variables: adjective=&quot;quick&quot;, noun=&quot;fox&quot;, verb=&quot;jumped&quot;, place=&quot;fence&quot;</li>
+<li>Result: &quot;The quick fox jumped over the fence.&quot;</li>
+</ul>
+<p>In LLM applications:</p>
+<ul>
+<li>Template: &quot;Translate the following {source_lang} to {target_lang}: {text}&quot;</li>
+<li>Variables: source_lang=&quot;English&quot;, target_lang=&quot;French&quot;, text=&quot;Hello&quot;</li>
+<li>Result: &quot;Translate the following English to French: Hello&quot;</li>
+</ul>
+<p>Benefits of using templates:</p>
+<ul>
+<li>Reusability: Write the template once, use it many times</li>
+<li>Consistency: All prompts have the same structure</li>
+<li>Maintainability: Change the template in one place</li>
+<li>Safety: Validate inputs before insertion</li>
+<li>Clarity: Separate prompt logic from data</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IPromptTemplate_InputVariables_" data-uid="AiDotNet.Interfaces.IPromptTemplate.InputVariables*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptTemplate_InputVariables" data-uid="AiDotNet.Interfaces.IPromptTemplate.InputVariables">
+  InputVariables
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptTemplate.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the list of variable names that this template expects.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;string&gt; InputVariables { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptTemplate_InputVariables_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Returns the names of all variables that should be provided when formatting the template.
+This allows validation and introspection of template requirements.
+</p>
+<p><b>For Beginners:</b> This tells you what blanks need to be filled in.
+<p>Example:
+Template: &quot;Convert {amount} {from_currency} to {to_currency}&quot;
+InputVariables: [&quot;amount&quot;, &quot;from_currency&quot;, &quot;to_currency&quot;]</p>
+<p>This is helpful for:</p>
+<ul>
+<li>Validation: Check if you have all required variables before formatting</li>
+<li>Documentation: See what inputs a template needs</li>
+<li>UI generation: Automatically create input forms</li>
+<li>Error prevention: Catch missing variables early</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IPromptTemplate_Template_" data-uid="AiDotNet.Interfaces.IPromptTemplate.Template*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptTemplate_Template" data-uid="AiDotNet.Interfaces.IPromptTemplate.Template">
+  Template
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptTemplate.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the raw template string before variable substitution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Template { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptTemplate_Template_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The template string defines the structure of the prompt with placeholders for variables.
+Placeholders are typically denoted with curly braces, e.g., {variable_name}.
+</p>
+<p><b>For Beginners:</b> This is the original template with the placeholders.
+<p>Example:
+Template: &quot;Explain {concept} to a {audience} in {style} language.&quot;</p>
+<p>You can inspect the template to:</p>
+<ul>
+<li>See the prompt structure</li>
+<li>Debug issues</li>
+<li>Create variations</li>
+<li>Document your system</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IPromptTemplate_Format_" data-uid="AiDotNet.Interfaces.IPromptTemplate.Format*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptTemplate_Format_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.Interfaces.IPromptTemplate.Format(System.Collections.Generic.Dictionary{System.String,System.String})">
+  Format(Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptTemplate.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Formats the template with the provided variables to create a complete prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Format(Dictionary&lt;string, string&gt; variables)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>variables</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Dictionary of variable names and their values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The formatted prompt string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptTemplate_Format_System_Collections_Generic_Dictionary_System_String_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method takes a dictionary of variables and substitutes them into the template
+to produce the final prompt string. Variable names in the template are typically
+enclosed in curly braces like {variable_name}.
+</p>
+<p><b>For Beginners:</b> This fills in the blanks in your template.
+<p>Example:
+Template: &quot;Summarize this article about {topic} in {num_sentences} sentences: {article_text}&quot;</p>
+<p>Variables:</p>
+<ul>
+<li>topic: &quot;climate change&quot;</li>
+<li>num_sentences: &quot;3&quot;</li>
+<li>article_text: &quot;Global temperatures are rising...&quot;</li>
+</ul>
+<p>Result:
+&quot;Summarize this article about climate change in 3 sentences: Global temperatures are rising...&quot;</p>
+<p>Error handling:</p>
+<ul>
+<li>If a required variable is missing, an exception is thrown</li>
+<li>If extra variables are provided, they're typically ignored</li>
+<li>Variable values are safely inserted (no injection attacks)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IPromptTemplate_Validate_" data-uid="AiDotNet.Interfaces.IPromptTemplate.Validate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptTemplate_Validate_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.Interfaces.IPromptTemplate.Validate(System.Collections.Generic.Dictionary{System.String,System.String})">
+  Validate(Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptTemplate.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the provided variables match the template's requirements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool Validate(Dictionary&lt;string, string&gt; variables)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>variables</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Dictionary of variable names and their values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if all required variables are present and valid; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptTemplate_Validate_System_Collections_Generic_Dictionary_System_String_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Checks whether the provided variables satisfy the template's requirements,
+including presence of all required variables and validity of their values.
+</p>
+<p><b>For Beginners:</b> This checks if you have all the required pieces before formatting.
+<p>Example:
+Template needs: [&quot;question&quot;, &quot;context&quot;]</p>
+<p>Variables provided: {&quot;question&quot;: &quot;What is AI?&quot;}
+Validate() → False (missing &quot;context&quot;)</p>
+<p>Variables provided: {&quot;question&quot;: &quot;What is AI?&quot;, &quot;context&quot;: &quot;AI stands for...&quot;}
+Validate() → True (all required variables present)</p>
+<p>This helps you catch errors before sending prompts to the model:</p>
+<ul>
+<li>Prevents runtime errors</li>
+<li>Gives clear error messages</li>
+<li>Ensures prompt quality</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptTemplate.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

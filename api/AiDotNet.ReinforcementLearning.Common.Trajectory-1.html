@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Trajectory&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Trajectory&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a trajectory of experience for on-policy RL algorithms (PPO, A2C, etc.).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ReinforcementLearning_Common_Trajectory_1.md&amp;value=---%0Auid%3A%20AiDotNet.ReinforcementLearning.Common.Trajectory%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1">
+
+
+
+  <h1 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1" class="text-break">
+Class Trajectory&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.html">ReinforcementLearning</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.Common.html">Common</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a trajectory of experience for on-policy RL algorithms (PPO, A2C, etc.).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Trajectory&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">Trajectory&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A trajectory is a sequence of states, actions, and rewards collected by an agent
+interacting with an environment. Unlike experience replay (used in DQN), trajectories
+are used immediately for training and then discarded in on-policy algorithms.
+</p>
+<p><b>For Beginners:</b>
+A trajectory is like recording a game session. It contains:
+- Every state you saw
+- Every action you took
+- Every reward you got
+- Additional info (value estimates, action probabilities)
+<p>On-policy algorithms like PPO collect these trajectories, learn from them immediately,
+then throw them away and collect new ones. This is different from DQN which stores
+experiences in a replay buffer and samples from them multiple times.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1__ctor_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1__ctor" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.#ctor">
+  Trajectory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes an empty trajectory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Trajectory()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Actions_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Actions*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Actions" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Actions">
+  Actions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Actions taken during the trajectory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Vector&lt;T&gt;&gt; Actions { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Advantages_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Advantages*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Advantages" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Advantages">
+  Advantages
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computed advantages (used during training).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt;? Advantages { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Dones_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Dones*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Dones" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Dones">
+  Dones
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether each step was terminal (episode ended).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;bool&gt; Dones { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Length_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Length*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Length" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Length">
+  Length
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of steps in the trajectory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Length { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_LogProbs_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.LogProbs*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_LogProbs" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.LogProbs">
+  LogProbs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Log probabilities of actions taken (for policy gradient).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; LogProbs { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Returns_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Returns*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Returns" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Returns">
+  Returns
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computed returns (discounted sum of rewards).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt;? Returns { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Rewards_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Rewards*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Rewards" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Rewards">
+  Rewards
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rewards received during the trajectory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; Rewards { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_States_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.States*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_States" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.States">
+  States
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>States observed during the trajectory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Vector&lt;T&gt;&gt; States { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Values_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Values*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Values" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Values">
+  Values
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Value estimates for each state (from critic).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; Values { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_AddStep_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.AddStep*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_AddStep_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___0__0__0_System_Boolean_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.AddStep(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0,`0,`0,System.Boolean)">
+  AddStep(Vector&lt;T&gt;, Vector&lt;T&gt;, T, T, T, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a step to the trajectory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddStep(Vector&lt;T&gt; state, Vector&lt;T&gt; action, T reward, T value, T logProb, bool done)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>state</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>action</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>reward</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>logProb</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>done</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Clear_" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Clear*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Common_Trajectory_1_Clear" data-uid="AiDotNet.ReinforcementLearning.Common.Trajectory`1.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears the trajectory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Common/Trajectory.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

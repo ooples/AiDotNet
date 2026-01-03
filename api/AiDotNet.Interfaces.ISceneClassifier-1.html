@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ISceneClassifier&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ISceneClassifier&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for acoustic scene classification models that identify the environment/context of audio.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ISceneClassifier_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ISceneClassifier%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ISceneClassifier`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ISceneClassifier_1" data-uid="AiDotNet.Interfaces.ISceneClassifier`1" class="text-break">
+Interface ISceneClassifier&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for acoustic scene classification models that identify the environment/context of audio.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ISceneClassifier&lt;T&gt; : IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html#AiDotNet_Interfaces_IFullModel_3_DefaultLossFunction">IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Train__0__1_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Predict__0_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_GetModelMetadata">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_">ICheckpointableModel.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_">ICheckpointableModel.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_GetParameters">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_GetActiveFeatureIndices">IFeatureAware.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">IFeatureAware.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_IsFeatureUsed_System_Int32_">IFeatureAware.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html#AiDotNet_Interfaces_IFeatureImportance_1_GetFeatureImportance">IFeatureImportance&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_DeepCopy">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_Clone">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Interfaces_ISceneClassifier_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Acoustic scene classification (ASC) identifies the environment or context where audio was recorded.
+Unlike event detection which finds specific sounds, scene classification characterizes the overall
+acoustic atmosphere.
+</p>
+<p>
+<b>For Beginners:</b> Scene classification is like asking "Where was this recording made?"
+<p>How it works:</p>
+<ol>
+<li>Audio features capture the overall acoustic character</li>
+<li>A classifier matches these features to known scene types</li>
+<li>The most likely scene (and alternatives) are returned</li>
+</ol>
+<p>Example scenes:</p>
+<ul>
+<li>Indoor: Office, restaurant, kitchen, library, shopping mall</li>
+<li>Outdoor: Park, street, beach, forest, construction site</li>
+<li>Transportation: Car, bus, train, metro, airport</li>
+</ul>
+<p>How scenes differ from events:</p>
+<ul>
+<li>Event: &quot;A dog barked&quot; (specific sound)</li>
+<li>Scene: &quot;This was recorded in a park&quot; (overall environment)</li>
+</ul>
+<p>Use cases:</p>
+<ul>
+<li>Context-aware devices (adjust phone behavior based on location)</li>
+<li>Audio organization (group recordings by location)</li>
+<li>Surveillance (detect unusual environments)</li>
+<li>AR/VR (match virtual audio to real environment)</li>
+<li>Assistive technology (describe environment to blind users)</li>
+</ul>
+
+<p>
+This interface extends <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel&lt;T, TInput, TOutput&gt;</a> for Tensor-based audio processing.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_IsOnnxMode_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.IsOnnxMode*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_IsOnnxMode" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.IsOnnxMode">
+  IsOnnxMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model is running in ONNX inference mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsOnnxMode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_MinimumDurationSeconds_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.MinimumDurationSeconds*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_MinimumDurationSeconds" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.MinimumDurationSeconds">
+  MinimumDurationSeconds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum audio duration required for reliable classification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double MinimumDurationSeconds { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_SampleRate_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_SampleRate" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the expected sample rate for input audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_SupportedScenes_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.SupportedScenes*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_SupportedScenes" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.SupportedScenes">
+  SupportedScenes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the list of scenes this model can classify.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;string&gt; SupportedScenes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_Classify_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.Classify*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_Classify_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.Classify(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Classify(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Classifies the acoustic scene of audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">SceneClassificationResult&lt;T&gt; Classify(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [samples] or [channels, samples].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.SceneClassificationResult-1.html">SceneClassificationResult</a>&lt;T&gt;</dt>
+    <dd><p>Scene classification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISceneClassifier_1_Classify_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the main method for identifying the scene.
+- Pass in a recording
+- Get back where it was likely recorded (office, park, etc.)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_ClassifyAsync_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.ClassifyAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_ClassifyAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.ClassifyAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Threading.CancellationToken)">
+  ClassifyAsync(Tensor&lt;T&gt;, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Classifies acoustic scene asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;SceneClassificationResult&lt;T&gt;&gt; ClassifyAsync(Tensor&lt;T&gt; audio, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token for async operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.SceneClassificationResult-1.html">SceneClassificationResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Scene classification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_ExtractAcousticFeatures_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.ExtractAcousticFeatures*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_ExtractAcousticFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.ExtractAcousticFeatures(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ExtractAcousticFeatures(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts acoustic features used for scene classification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ExtractAcousticFeatures(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Feature tensor capturing acoustic characteristics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_GetSceneProbabilities_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.GetSceneProbabilities*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_GetSceneProbabilities_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.GetSceneProbabilities(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetSceneProbabilities(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets scene probabilities for all supported scenes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyDictionary&lt;string, T&gt; GetSceneProbabilities(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Dictionary mapping scene names to probability scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_GetTopScenes_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.GetTopScenes*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_GetTopScenes_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.GetTopScenes(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  GetTopScenes(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets top-K scene predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;ScenePrediction&lt;T&gt;&gt; GetTopScenes(Tensor&lt;T&gt; audio, int k = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of top scenes to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ScenePrediction-1.html">ScenePrediction</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of top scene predictions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISceneClassifier_1_TrackSceneChanges_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.TrackSceneChanges*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISceneClassifier_1_TrackSceneChanges_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.Interfaces.ISceneClassifier`1.TrackSceneChanges(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  TrackSceneChanges(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Tracks scene changes over time in longer audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">SceneTrackingResult&lt;T&gt; TrackSceneChanges(Tensor&lt;T&gt; audio, double segmentDuration = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+    <dt><code>segmentDuration</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Duration of each analysis segment in seconds.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.SceneTrackingResult-1.html">SceneTrackingResult</a>&lt;T&gt;</dt>
+    <dd><p>Scene tracking result showing scene over time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISceneClassifier_1_TrackSceneChanges_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> For longer recordings that might move between places
+(like walking from street to inside a building), this tracks the scene changes.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISceneClassifier.cs/#L41" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

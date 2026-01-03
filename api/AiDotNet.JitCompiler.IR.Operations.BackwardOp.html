@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BackwardOp | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BackwardOp | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for backward (gradient) operations in the IR.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_IR_Operations_BackwardOp.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.IR.Operations.BackwardOp%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.IR.Operations.BackwardOp">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_IR_Operations_BackwardOp" data-uid="AiDotNet.JitCompiler.IR.Operations.BackwardOp" class="text-break">
+Class BackwardOp  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/Operations/BackwardOp.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a>.<a class="xref" href="AiDotNet.JitCompiler.IR.html">IR</a>.<a class="xref" href="AiDotNet.JitCompiler.IR.Operations.html">Operations</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for backward (gradient) operations in the IR.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class BackwardOp : IROp</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html">IROp</a></div>
+      <div><span class="xref">BackwardOp</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradAccumulateOp.html">GradAccumulateOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradAddOp.html">GradAddOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradAttentionOp.html">GradAttentionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradAvgPool2DOp.html">GradAvgPool2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradBatchNormOp.html">GradBatchNormOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradBentIdentityOp.html">GradBentIdentityOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradBroadcastOp.html">GradBroadcastOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradCELUOp.html">GradCELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradConcatOp.html">GradConcatOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradConv2DOp.html">GradConv2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradConvTranspose2DOp.html">GradConvTranspose2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradCropOp.html">GradCropOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradDepthwiseConv2DOp.html">GradDepthwiseConv2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradDivideOp.html">GradDivideOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradDropoutOp.html">GradDropoutOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradELUOp.html">GradELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradElementwiseMultiplyOp.html">GradElementwiseMultiplyOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradEmbeddingOp.html">GradEmbeddingOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradExpOp.html">GradExpOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGELUOp.html">GradGELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGRUCellOp.html">GradGRUCellOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGRUSequenceOp.html">GradGRUSequenceOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGatherOp.html">GradGatherOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGaussianOp.html">GradGaussianOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradHardSigmoidOp.html">GradHardSigmoidOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradHardTanhOp.html">GradHardTanhOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradISRUOp.html">GradISRUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLSTMCellInputOp.html">GradLSTMCellInputOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLSTMSequenceOp.html">GradLSTMSequenceOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLayerNormOp.html">GradLayerNormOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLeakyReLUOp.html">GradLeakyReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLiSHTOp.html">GradLiSHTOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLogOp.html">GradLogOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLogSoftmaxOp.html">GradLogSoftmaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMatMulLeftOp.html">GradMatMulLeftOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMatMulRightOp.html">GradMatMulRightOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMaxPool2DOp.html">GradMaxPool2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMeanOp.html">GradMeanOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMishOp.html">GradMishOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMultiHeadAttentionOp.html">GradMultiHeadAttentionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradPReLUOp.html">GradPReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradPadOp.html">GradPadOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradPowerOp.html">GradPowerOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradRReLUOp.html">GradRReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradReLUOp.html">GradReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradReshapeOp.html">GradReshapeOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSELUOp.html">GradSELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradScaledTanhOp.html">GradScaledTanhOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSigmoidOp.html">GradSigmoidOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSliceOp.html">GradSliceOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSoftPlusOp.html">GradSoftPlusOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSoftSignOp.html">GradSoftSignOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSoftmaxOp.html">GradSoftmaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSparsemaxOp.html">GradSparsemaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSplitOp.html">GradSplitOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSqrtOp.html">GradSqrtOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSubtractOp.html">GradSubtractOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSumOp.html">GradSumOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSwishOp.html">GradSwishOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradTanhOp.html">GradTanhOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradThresholdedReLUOp.html">GradThresholdedReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradTransposeOp.html">GradTransposeOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradUpsampleOp.html">GradUpsampleOp</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html#AiDotNet_JitCompiler_IR_IROp_OutputIds">IROp.OutputIds</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html#AiDotNet_JitCompiler_IR_IROp_OutputId">IROp.OutputId</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html#AiDotNet_JitCompiler_IR_IROp_InputIds">IROp.InputIds</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html#AiDotNet_JitCompiler_IR_IROp_OutputType">IROp.OutputType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html#AiDotNet_JitCompiler_IR_IROp_OutputShape">IROp.OutputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html#AiDotNet_JitCompiler_IR_IROp_OpType">IROp.OpType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html#AiDotNet_JitCompiler_IR_IROp_Validate">IROp.Validate()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html#AiDotNet_JitCompiler_IR_IROp_ToString">IROp.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_IR_Operations_BackwardOp_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Backward operations compute gradients during backpropagation for training.
+Each forward operation has corresponding backward operation(s) that compute
+the gradient with respect to its inputs.
+</p>
+<p><b>For Beginners:</b> These operations compute gradients for training.
+<p>In neural network training:</p>
+<ul>
+<li>Forward pass: Compute outputs from inputs</li>
+<li>Backward pass: Compute how to adjust weights to reduce error</li>
+</ul>
+<p>Backward operations implement the chain rule of calculus to flow
+gradients backward through the network.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_IR_Operations_BackwardOp_SavedForwardTensorId_" data-uid="AiDotNet.JitCompiler.IR.Operations.BackwardOp.SavedForwardTensorId*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_Operations_BackwardOp_SavedForwardTensorId" data-uid="AiDotNet.JitCompiler.IR.Operations.BackwardOp.SavedForwardTensorId">
+  SavedForwardTensorId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/Operations/BackwardOp.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The tensor ID from the forward pass that may be needed for gradient computation.
+Many backward operations need the forward pass output or inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? SavedForwardTensorId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/Operations/BackwardOp.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

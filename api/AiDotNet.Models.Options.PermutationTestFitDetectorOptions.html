@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PermutationTestFitDetectorOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PermutationTestFitDetectorOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the permutation test fit detector, which helps identify overfitting, underfitting, and high variance in machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_PermutationTestFitDetectorOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.PermutationTestFitDetectorOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions" class="text-break">
+Class PermutationTestFitDetectorOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PermutationTestFitDetectorOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the permutation test fit detector, which helps identify overfitting,
+underfitting, and high variance in machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PermutationTestFitDetectorOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PermutationTestFitDetectorOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The permutation test is a statistical method used to evaluate model performance by comparing
+the actual model performance against performance on randomly shuffled (permuted) data. This approach
+helps determine if the model is truly learning patterns in the data or merely capitalizing on random
+correlations. By running multiple permutation tests, we can establish statistical confidence in our
+model's performance and detect common issues like overfitting, underfitting, and high variance.
+The permutation test is particularly valuable when working with small datasets or when evaluating
+complex models where traditional validation methods might be insufficient.
+</p>
+<p><b>For Beginners:</b> The permutation test fit detector is a tool to check if your AI model is learning properly.
+<p>Imagine you're teaching someone to identify birds:</p>
+<ul>
+<li>You want them to learn actual bird characteristics (feathers, beak shape, etc.)</li>
+<li>Not just memorize the specific pictures you showed them</li>
+</ul>
+<p>What this detector does:</p>
+<ul>
+<li>It takes your data and randomly shuffles it many times</li>
+<li>It checks how your model performs on the shuffled data</li>
+<li>It compares this to performance on the real, unshuffled data</li>
+<li>If your model only works well on the original arrangement, it's learning real patterns</li>
+<li>If it works equally well on random arrangements, it might be &quot;cheating&quot; or guessing</li>
+</ul>
+<p>This helps detect three common problems:</p>
+<ol>
+<li><p>Overfitting: Your model memorized examples instead of learning general rules
+(like knowing what a robin looks like only if it's in the exact same pose as your training image)</p>
+</li>
+<li><p>Underfitting: Your model is too simple to capture the patterns in your data
+(like only using bird size to identify species, ignoring color, shape, etc.)</p>
+</li>
+<li><p>High Variance: Your model gives inconsistent results with small data changes
+(like completely changing its bird identification if the lighting is slightly different)</p>
+</li>
+</ol>
+<p>This class lets you configure different aspects of this testing process.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_HighVarianceThreshold_" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.HighVarianceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_HighVarianceThreshold" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.HighVarianceThreshold">
+  HighVarianceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PermutationTestFitDetectorOptions.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting high variance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HighVarianceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The high variance threshold, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_HighVarianceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is classified as having high variance based on the standard deviation
+of its performance across multiple runs or cross-validation folds. If the standard deviation exceeds this
+threshold, the model is considered to have high variance. High variance indicates that the model is unstable
+and sensitive to the specific data points used for training, often resulting in significantly different
+performance on different subsets of the data. The appropriate threshold depends on the specific application,
+the expected variability in the domain, and the consequences of inconsistent model behavior.
+</p>
+<p><b>For Beginners:</b> This setting determines when your model is considered too inconsistent in its predictions.
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>If your model's performance varies by more than 10% across different data subsets</li>
+<li>We'll flag it as having high variance (too sensitive to the specific training examples)</li>
+</ul>
+<p>Think of it like asking different people for directions:</p>
+<ul>
+<li>Ideally, everyone would give you roughly the same route</li>
+<li>If each person suggests a completely different path</li>
+<li>You'd be uncertain which way to go</li>
+<li>This inconsistency represents high variance - your model gives very different answers depending on which training examples it sees</li>
+</ul>
+<p>You might want a smaller threshold (like 0.05 or 5%):</p>
+<ul>
+<li>For applications requiring highly stable predictions</li>
+<li>When consistency across different scenarios is critical</li>
+<li>In regulated environments where predictability is valued</li>
+</ul>
+<p>You might accept a larger threshold (like 0.15 or 15%):</p>
+<ul>
+<li>For naturally variable domains where some inconsistency is expected</li>
+<li>When exploring complex relationships that might legitimately have different solutions</li>
+<li>During early experimentation phases before focusing on stability</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_NumberOfPermutations_" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.NumberOfPermutations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_NumberOfPermutations" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.NumberOfPermutations">
+  NumberOfPermutations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PermutationTestFitDetectorOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of random permutations to perform during the test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumberOfPermutations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of permutations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_NumberOfPermutations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines how many times the data will be randomly shuffled to create permuted
+datasets. For each permutation, the model performance is measured and compared against the 
+performance on the original, unpermuted dataset. A higher number of permutations provides more
+statistically robust results, at the cost of increased computation time. The distribution of 
+performance metrics across all permutations forms the basis for calculating p-values and 
+determining statistical significance.
+</p>
+<p><b>For Beginners:</b> This setting controls how many random shuffles of your data the test will perform.
+<p>The default value of 1000 means:</p>
+<ul>
+<li>The system will shuffle your data 1000 different ways</li>
+<li>It will test your model on each of these random arrangements</li>
+<li>More shuffles give more reliable results but take longer to run</li>
+</ul>
+<p>Think of it like shuffling a deck of cards:</p>
+<ul>
+<li>If you only shuffle once or twice, you might not get a truly random arrangement</li>
+<li>With 1000 different shuffles, you can be confident you've tested many possible arrangements</li>
+</ul>
+<p>You might want more permutations (like 5000 or 10000) if:</p>
+<ul>
+<li>You need very precise statistical results</li>
+<li>You're working on a critical application where accuracy is paramount</li>
+<li>You have the computational resources and time available</li>
+</ul>
+<p>You might want fewer permutations (like 100 or 500) if:</p>
+<ul>
+<li>You're doing quick preliminary tests</li>
+<li>You have limited computational resources</li>
+<li>You're working with very large datasets where each evaluation is time-consuming</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_OverfitThreshold_" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.OverfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_OverfitThreshold" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.OverfitThreshold">
+  OverfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PermutationTestFitDetectorOptions.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting overfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OverfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The overfitting threshold, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_OverfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is classified as overfitting based on the difference between
+training and validation performance. If the gap between training and validation metrics exceeds this value,
+the model is considered to be overfitting to the training data. Overfitting occurs when a model learns
+the training data too well, including its noise and peculiarities, resulting in poor generalization to
+new, unseen data. The appropriate threshold depends on the specific application, the complexity of the 
+underlying patterns, and the noise level in the data.
+</p>
+<p><b>For Beginners:</b> This setting determines when your model is considered to be "memorizing" rather than "learning."
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>If your model does more than 10% better on training data than on test data</li>
+<li>We'll flag it as overfitting (memorizing rather than learning general rules)</li>
+</ul>
+<p>Think of it like a student studying for a test:</p>
+<ul>
+<li>A student who only memorizes exact questions and answers from practice tests</li>
+<li>Might do perfectly on questions they've seen before</li>
+<li>But will struggle with new questions that test the same concepts</li>
+<li>That performance gap indicates memorization rather than understanding</li>
+</ul>
+<p>You might want a smaller threshold (like 0.05 or 5%):</p>
+<ul>
+<li>For applications requiring very reliable generalization</li>
+<li>When even small drops in performance on new data would be problematic</li>
+</ul>
+<p>You might accept a larger threshold (like 0.15 or 15%):</p>
+<ul>
+<li>For very complex problems where some performance gap is expected</li>
+<li>When the training and validation data might have inherent differences</li>
+<li>In cases where some overfitting is acceptable for your application</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_SignificanceLevel_" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.SignificanceLevel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_SignificanceLevel" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.SignificanceLevel">
+  SignificanceLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PermutationTestFitDetectorOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the statistical significance level for the permutation test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SignificanceLevel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The significance level, defaulting to 0.05 (5%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_SignificanceLevel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The significance level determines the threshold for statistical significance in the permutation test.
+It represents the probability of rejecting the null hypothesis when it is actually true (Type I error).
+The null hypothesis in this context is that the model is not learning any meaningful patterns from the data.
+A common value is 0.05, which means there is a 5% chance of concluding the model is learning significant
+patterns when it is not. Lower values (e.g., 0.01) make the test more conservative, requiring stronger
+evidence to conclude the model is performing better than random chance.
+</p>
+<p><b>For Beginners:</b> This setting determines how confident we need to be before concluding that
+your model is truly learning patterns rather than getting lucky.
+<p>The default value of 0.05 means:</p>
+<ul>
+<li>We need to be 95% confident that your model's performance isn't due to random chance</li>
+<li>Only 5% chance that we're wrong when we say &quot;this model is learning real patterns&quot;</li>
+</ul>
+<p>Think of it like a weather forecast:</p>
+<ul>
+<li>If a meteorologist says there's a 95% chance of rain, you'd bring an umbrella</li>
+<li>Similarly, with 95% confidence that your model is learning, you can trust its predictions</li>
+</ul>
+<p>You might want a lower significance level (like 0.01 = 99% confidence):</p>
+<ul>
+<li>For critical applications where mistakes are costly</li>
+<li>When you need extra assurance your model is truly learning</li>
+</ul>
+<p>You might accept a higher significance level (like 0.1 = 90% confidence):</p>
+<ul>
+<li>During early exploration or when consequences of errors are minor</li>
+<li>When you're more concerned about missing potentially useful patterns</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_UnderfitThreshold_" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.UnderfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_UnderfitThreshold" data-uid="AiDotNet.Models.Options.PermutationTestFitDetectorOptions.UnderfitThreshold">
+  UnderfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PermutationTestFitDetectorOptions.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting underfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UnderfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The underfitting threshold, defaulting to 0.05 (5%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PermutationTestFitDetectorOptions_UnderfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is classified as underfitting based on its overall performance level.
+If the model's performance on both training and validation data is below this threshold above random chance,
+the model is considered to be underfitting. Underfitting occurs when a model is too simple to capture the 
+underlying patterns in the data, resulting in poor performance across all datasets. The appropriate threshold
+depends on the specific application, the complexity of the task, and the baseline performance expected from
+a minimal model.
+</p>
+<p><b>For Beginners:</b> This setting determines when your model is considered too simple to capture the patterns in your data.
+<p>The default value of 0.05 means:</p>
+<ul>
+<li>If your model performs less than 5% better than random guessing</li>
+<li>We'll flag it as underfitting (too simple to learn the patterns)</li>
+</ul>
+<p>Think of it like trying to draw a complex shape:</p>
+<ul>
+<li>If you're limited to using only straight lines</li>
+<li>You'll never accurately represent a circle</li>
+<li>No matter how many straight lines you use, there's a limit to how well you can approximate the curve</li>
+<li>This limitation represents underfitting - your model is too simplistic for the task</li>
+</ul>
+<p>You might want a smaller threshold (like 0.02 or 2%):</p>
+<ul>
+<li>For problems where even small improvements over random are valuable</li>
+<li>When the relationships in the data are known to be very subtle</li>
+<li>In early exploratory phases where you want to catch any potential signal</li>
+</ul>
+<p>You might set a larger threshold (like 0.1 or 10%):</p>
+<ul>
+<li>When you expect strong relationships in your data</li>
+<li>For problems where minor improvements aren't practically useful</li>
+<li>When you want to ensure your model has substantial predictive power</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PermutationTestFitDetectorOptions.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

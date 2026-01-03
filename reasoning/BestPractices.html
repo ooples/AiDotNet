@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Best Practices for AiDotNet Reasoning Framework | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Best Practices for AiDotNet Reasoning Framework | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/reasoning/BestPractices.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="best-practices-for-aidotnet-reasoning-framework">Best Practices for AiDotNet Reasoning Framework</h1>
+
+<p>Essential patterns, tips, and best practices for building production-ready reasoning systems.</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#strategy-selection">Strategy Selection</a></li>
+<li><a href="#configuration-tuning">Configuration Tuning</a></li>
+<li><a href="#performance-optimization">Performance Optimization</a></li>
+<li><a href="#error-handling">Error Handling</a></li>
+<li><a href="#testing--validation">Testing &amp; Validation</a></li>
+<li><a href="#production-deployment">Production Deployment</a></li>
+<li><a href="#common-pitfalls">Common Pitfalls</a></li>
+</ol>
+<hr>
+<h2 id="strategy-selection">Strategy Selection</h2>
+<h3 id="when-to-use-each-strategy">When to Use Each Strategy</h3>
+<h4 id="chain-of-thought-cot"><strong>Chain-of-Thought (CoT)</strong></h4>
+<p>✅ <strong>Use when:</strong></p>
+<ul>
+<li>Problem has a clear, linear solution path</li>
+<li>Speed is important</li>
+<li>Single correct answer expected</li>
+<li>Simple to moderate complexity</li>
+</ul>
+<p>❌ <strong>Avoid when:</strong></p>
+<ul>
+<li>Multiple valid approaches exist</li>
+<li>Problem is highly ambiguous</li>
+<li>Need exploration of alternatives</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="lang-csharp">// Good: Straightforward calculation
+await cotStrategy.ReasonAsync(&quot;What is 347 + 892?&quot;);
+
+// Not ideal: Requires exploration
+await cotStrategy.ReasonAsync(&quot;Find all possible solutions to this riddle&quot;);
+</code></pre>
+<h4 id="self-consistency"><strong>Self-Consistency</strong></h4>
+<p>✅ <strong>Use when:</strong></p>
+<ul>
+<li>Multiple reasoning paths are valid</li>
+<li>Want to reduce variance</li>
+<li>Need confidence estimation</li>
+<li>Accuracy &gt; speed</li>
+</ul>
+<p>❌ <strong>Avoid when:</strong></p>
+<ul>
+<li>Only one correct path exists</li>
+<li>Tight latency requirements</li>
+<li>Resource constraints</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="lang-csharp">// Good: Benefits from multiple perspectives
+var config = new ReasoningConfig { NumSamples = 5 };
+await scStrategy.ReasonAsync(
+    &quot;What are the possible causes of global warming?&quot;,
+    config
+);
+
+// Overkill: Simple arithmetic
+await scStrategy.ReasonAsync(&quot;What is 2 + 2?&quot;, config);  // Don't do this!
+</code></pre>
+<h4 id="tree-of-thoughts-tot"><strong>Tree-of-Thoughts (ToT)</strong></h4>
+<p>✅ <strong>Use when:</strong></p>
+<ul>
+<li>Complex problem requiring exploration</li>
+<li>Multiple decision points</li>
+<li>Backtracking may be needed</li>
+<li>Quality &gt; speed</li>
+</ul>
+<p>❌ <strong>Avoid when:</strong></p>
+<ul>
+<li>Simple problems</li>
+<li>Strict latency requirements</li>
+<li>Limited compute budget</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="lang-csharp">// Good: Complex logic puzzle
+var config = new ReasoningConfig
+{
+    ExplorationDepth = 5,
+    BranchingFactor = 3
+};
+await totStrategy.ReasonAsync(&quot;Solve this sudoku puzzle: ...&quot;, config);
+
+// Wasteful: Simple question
+await totStrategy.ReasonAsync(&quot;What is the capital of France?&quot;, config);
+</code></pre>
+<h3 id="strategy-combination-pattern">Strategy Combination Pattern</h3>
+<pre><code class="lang-csharp">// Adaptive strategy selection
+public async Task&lt;ReasoningResult&lt;T&gt;&gt; SolveAdaptiveAsync(string problem)
+{
+    var difficulty = EstimateDifficulty(problem);
+
+    return difficulty switch
+    {
+        &lt; 0.3 =&gt; await _cotStrategy.ReasonAsync(problem),
+        &lt; 0.7 =&gt; await _scStrategy.ReasonAsync(problem, NumSamples: 3),
+        _ =&gt; await _totStrategy.ReasonAsync(problem, ExplorationDepth: 5)
+    };
+}
+</code></pre>
+<hr>
+<h2 id="configuration-tuning">Configuration Tuning</h2>
+<h3 id="start-with-presets">Start with Presets</h3>
+<pre><code class="lang-csharp">// Fast: 3 steps, depth 2, 1 sample
+var fastConfig = ReasoningConfig.Fast;  // ~200ms
+
+// Default: 10 steps, depth 3, 3 samples
+var defaultConfig = ReasoningConfig.Default;  // ~2s
+
+// Thorough: 20 steps, depth 5, 5 samples
+var thoroughConfig = ReasoningConfig.Thorough;  // ~10s
+</code></pre>
+<h3 id="progressive-refinement">Progressive Refinement</h3>
+<pre><code class="lang-csharp">// Start fast, refine if needed
+var result = await strategy.ReasonAsync(problem, ReasoningConfig.Fast);
+
+if (result.ConfidenceScore &lt; 0.8)
+{
+    // Try again with more compute
+    result = await strategy.ReasonAsync(problem, ReasoningConfig.Default);
+}
+
+if (result.ConfidenceScore &lt; 0.9)
+{
+    // Last resort: thorough analysis
+    result = await strategy.ReasonAsync(problem, ReasoningConfig.Thorough);
+}
+</code></pre>
+<h3 id="custom-configuration-guidelines">Custom Configuration Guidelines</h3>
+<h4 id="maxsteps">MaxSteps</h4>
+<pre><code class="lang-csharp">// Too few: May not complete reasoning
+MaxSteps = 3  // Only for very simple problems
+
+// Recommended ranges:
+MaxSteps = 5-10   // Most problems
+MaxSteps = 10-20  // Complex problems
+MaxSteps = 20-30  // Very complex problems
+
+// Too many: Diminishing returns + cost
+MaxSteps = 50  // Usually unnecessary
+</code></pre>
+<h4 id="explorationdepth-tot-only">ExplorationDepth (ToT only)</h4>
+<pre><code class="lang-csharp">// Shallow: May miss optimal solution
+ExplorationDepth = 2  // Quick but limited
+
+// Recommended:
+ExplorationDepth = 3-4  // Good balance
+ExplorationDepth = 5-7  // Complex problems
+
+// Deep: Exponential cost
+ExplorationDepth = 10  // 3^10 = 59K nodes!
+</code></pre>
+<h4 id="numsamples-self-consistency-only">NumSamples (Self-Consistency only)</h4>
+<pre><code class="lang-csharp">// Minimum: No diversity
+NumSamples = 1  // Just use CoT instead
+
+// Recommended:
+NumSamples = 3-5   // Good variance reduction
+NumSamples = 5-10  // Important decisions
+
+// Diminishing returns:
+NumSamples = 20  // Rarely worth the cost
+</code></pre>
+<h3 id="temperature-tuning">Temperature Tuning</h3>
+<pre><code class="lang-csharp">// Creative/exploratory tasks
+config.Temperature = 0.8  // More diverse outputs
+
+// Factual/deterministic tasks
+config.Temperature = 0.2  // More focused outputs
+
+// Default (balanced)
+config.Temperature = 0.7
+</code></pre>
+<hr>
+<h2 id="performance-optimization">Performance Optimization</h2>
+<h3 id="1-caching-strategies">1. Caching Strategies</h3>
+<pre><code class="lang-csharp">public class CachedReasoner&lt;T&gt;
+{
+    private readonly IReasoningStrategy&lt;T&gt; _strategy;
+    private readonly IMemoryCache _cache;
+
+    public async Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonAsync(string query)
+    {
+        // Check cache first
+        if (_cache.TryGetValue(query, out ReasoningResult&lt;T&gt; cached))
+        {
+            return cached;
+        }
+
+        // Compute and cache
+        var result = await _strategy.ReasonAsync(query);
+        _cache.Set(query, result, TimeSpan.FromHours(1));
+        return result;
+    }
+}
+</code></pre>
+<h3 id="2-parallel-processing">2. Parallel Processing</h3>
+<pre><code class="lang-csharp">// Good: Independent problems
+var problems = LoadProblems();
+var results = await Task.WhenAll(
+    problems.Select(p =&gt; strategy.ReasonAsync(p))
+);
+
+// Bad: Dependencies between problems
+var result1 = await strategy.ReasonAsync(problem1);
+var problem2 = BuildUpon(result1);  // Depends on result1
+var result2 = await strategy.ReasonAsync(problem2);
+</code></pre>
+<h3 id="3-batch-optimization">3. Batch Optimization</h3>
+<pre><code class="lang-csharp">// Inefficient: One at a time
+foreach (var problem in problems)
+{
+    await strategy.ReasonAsync(problem);
+}
+
+// Better: Batched processing
+const int batchSize = 10;
+for (int i = 0; i &lt; problems.Count; i += batchSize)
+{
+    var batch = problems.Skip(i).Take(batchSize);
+    await Task.WhenAll(batch.Select(p =&gt; strategy.ReasonAsync(p)));
+}
+</code></pre>
+<h3 id="4-early-stopping">4. Early Stopping</h3>
+<pre><code class="lang-csharp">public async Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonWithEarlyStopAsync(
+    string problem,
+    double confidenceThreshold = 0.95)
+{
+    var config = ReasoningConfig.Fast;
+
+    while (true)
+    {
+        var result = await strategy.ReasonAsync(problem, config);
+
+        if (result.ConfidenceScore &gt;= confidenceThreshold)
+        {
+            return result;  // Good enough!
+        }
+
+        if (config.MaxSteps &gt;= 20)
+        {
+            return result;  // Stop at max compute
+        }
+
+        // Increase compute
+        config.MaxSteps = Math.Min(config.MaxSteps * 2, 20);
+    }
+}
+</code></pre>
+<hr>
+<h2 id="error-handling">Error Handling</h2>
+<h3 id="robust-error-handling-pattern">Robust Error Handling Pattern</h3>
+<pre><code class="lang-csharp">public async Task&lt;ReasoningResult&lt;T&gt;&gt; SafeReasonAsync(
+    string problem,
+    int maxRetries = 3)
+{
+    for (int attempt = 0; attempt &lt; maxRetries; attempt++)
+    {
+        try
+        {
+            var result = await strategy.ReasonAsync(problem);
+
+            if (result.Success)
+            {
+                return result;
+            }
+
+            // Log failure
+            _logger.LogWarning($&quot;Reasoning failed: {result.ErrorMessage}&quot;);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;  // Don't retry cancellations
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $&quot;Reasoning attempt {attempt + 1} failed&quot;);
+
+            if (attempt == maxRetries - 1)
+            {
+                throw;
+            }
+
+            // Exponential backoff
+            await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)));
+        }
+    }
+
+    throw new Exception(&quot;All reasoning attempts failed&quot;);
+}
+</code></pre>
+<h3 id="timeout-protection">Timeout Protection</h3>
+<pre><code class="lang-csharp">public async Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonWithTimeoutAsync(
+    string problem,
+    TimeSpan timeout)
+{
+    using var cts = new CancellationTokenSource(timeout);
+
+    try
+    {
+        return await strategy.ReasonAsync(problem, cancellationToken: cts.Token);
+    }
+    catch (OperationCanceledException)
+    {
+        _logger.LogWarning($&quot;Reasoning timed out after {timeout}&quot;);
+        return new ReasoningResult&lt;T&gt;
+        {
+            Success = false,
+            ErrorMessage = &quot;Reasoning exceeded time limit&quot;
+        };
+    }
+}
+</code></pre>
+<h3 id="graceful-degradation">Graceful Degradation</h3>
+<pre><code class="lang-csharp">public async Task&lt;string&gt; GetAnswerAsync(string question)
+{
+    // Try sophisticated reasoning first
+    try
+    {
+        var result = await totStrategy.ReasonAsync(question, thorough);
+        if (result.Success) return result.FinalAnswer;
+    }
+    catch (Exception ex)
+    {
+        _logger.LogWarning(ex, &quot;ToT failed, falling back to SC&quot;);
+    }
+
+    // Fall back to Self-Consistency
+    try
+    {
+        var result = await scStrategy.ReasonAsync(question, standard);
+        if (result.Success) return result.FinalAnswer;
+    }
+    catch (Exception ex)
+    {
+        _logger.LogWarning(ex, &quot;SC failed, falling back to CoT&quot;);
+    }
+
+    // Last resort: Simple CoT
+    var finalResult = await cotStrategy.ReasonAsync(question, fast);
+    return finalResult.FinalAnswer ?? &quot;Unable to determine answer&quot;;
+}
+</code></pre>
+<hr>
+<h2 id="testing--validation">Testing &amp; Validation</h2>
+<h3 id="unit-testing-best-practices">Unit Testing Best Practices</h3>
+<pre><code class="lang-csharp">[Fact]
+public async Task Reasoning_WithValidInput_Succeeds()
+{
+    // Arrange
+    var mockModel = new Mock&lt;IChatModel&gt;();
+    mockModel.Setup(m =&gt; m.GenerateResponseAsync(It.IsAny&lt;string&gt;(), It.IsAny&lt;CancellationToken&gt;()))
+             .ReturnsAsync(&quot;Step 1: Calculate\nAnswer: 42&quot;);
+
+    var strategy = new ChainOfThoughtStrategy&lt;double&gt;(mockModel.Object);
+
+    // Act
+    var result = await strategy.ReasonAsync(&quot;What is 6 × 7?&quot;);
+
+    // Assert
+    Assert.True(result.Success);
+    Assert.Contains(&quot;42&quot;, result.FinalAnswer);
+    mockModel.Verify(m =&gt; m.GenerateResponseAsync(
+        It.IsAny&lt;string&gt;(),
+        It.IsAny&lt;CancellationToken&gt;()), Times.Once);
+}
+</code></pre>
+<h3 id="integration-testing">Integration Testing</h3>
+<pre><code class="lang-csharp">[Fact]
+public async Task EndToEnd_MathProblem_WithVerification()
+{
+    // Use real components
+    var chatModel = GetTestChatModel();
+    var reasoner = new MathematicalReasoner&lt;double&gt;(chatModel);
+    var verifier = new CalculatorVerifier&lt;double&gt;();
+
+    // Solve and verify
+    var result = await reasoner.SolveAsync(&quot;What is 15 × 12?&quot;);
+    var verification = await verifier.VerifyAsync(result.Chain);
+
+    // Assert
+    Assert.True(result.Success);
+    Assert.True(verification.IsValid);
+    Assert.Equal(&quot;180&quot;, result.FinalAnswer);
+}
+</code></pre>
+<h3 id="benchmark-testing">Benchmark Testing</h3>
+<pre><code class="lang-csharp">[Theory]
+[InlineData(0.70, &quot;CoT should achieve 70% on GSM8K&quot;)]
+[InlineData(0.80, &quot;With verification should reach 80%&quot;)]
+public async Task BenchmarkAccuracy_MeetsThreshold(
+    double threshold,
+    string reason)
+{
+    var benchmark = new GSM8KBenchmark&lt;double&gt;();
+    var result = await benchmark.EvaluateAsync(SolveAsync, sampleSize: 100);
+
+    Assert.True(
+        Convert.ToDouble(result.Accuracy) &gt;= threshold,
+        $&quot;Failed: {reason}. Got {result.Accuracy:P2}&quot;
+    );
+}
+</code></pre>
+<hr>
+<h2 id="production-deployment">Production Deployment</h2>
+<h3 id="monitoring--logging">Monitoring &amp; Logging</h3>
+<pre><code class="lang-csharp">public class MonitoredReasoner&lt;T&gt;
+{
+    private readonly IReasoningStrategy&lt;T&gt; _strategy;
+    private readonly ILogger _logger;
+    private readonly IMetrics _metrics;
+
+    public async Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonAsync(string problem)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            _logger.LogInformation($&quot;Starting reasoning: {problem.Substring(0, 50)}...&quot;);
+
+            var result = await _strategy.ReasonAsync(problem);
+
+            _metrics.RecordLatency(&quot;reasoning.duration&quot;, stopwatch.ElapsedMilliseconds);
+            _metrics.RecordCounter(&quot;reasoning.success&quot;, result.Success ? 1 : 0);
+            _metrics.RecordGauge(&quot;reasoning.confidence&quot;, result.ConfidenceScore);
+            _metrics.RecordGauge(&quot;reasoning.steps&quot;, result.Chain?.Steps.Count ?? 0);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, &quot;Reasoning failed&quot;);
+            _metrics.RecordCounter(&quot;reasoning.errors&quot;, 1);
+            throw;
+        }
+    }
+}
+</code></pre>
+<h3 id="resource-management">Resource Management</h3>
+<pre><code class="lang-csharp">public class ResourceAwareReasoner&lt;T&gt;
+{
+    private readonly SemaphoreSlim _semaphore;
+    private readonly IReasoningStrategy&lt;T&gt; _strategy;
+
+    public ResourceAwareReasoner(IReasoningStrategy&lt;T&gt; strategy, int maxConcurrent = 5)
+    {
+        _strategy = strategy;
+        _semaphore = new SemaphoreSlim(maxConcurrent);
+    }
+
+    public async Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonAsync(string problem)
+    {
+        await _semaphore.WaitAsync();
+        try
+        {
+            return await _strategy.ReasonAsync(problem);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+}
+</code></pre>
+<h3 id="rate-limiting">Rate Limiting</h3>
+<pre><code class="lang-csharp">public class RateLimitedReasoner&lt;T&gt;
+{
+    private readonly IReasoningStrategy&lt;T&gt; _strategy;
+    private readonly RateLimiter _rateLimiter;
+
+    public async Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonAsync(string problem)
+    {
+        using var lease = await _rateLimiter.AcquireAsync();
+
+        if (!lease.IsAcquired)
+        {
+            throw new RateLimitExceededException(&quot;Too many requests&quot;);
+        }
+
+        return await _strategy.ReasonAsync(problem);
+    }
+}
+</code></pre>
+<hr>
+<h2 id="common-pitfalls">Common Pitfalls</h2>
+<h3 id="-pitfall-1-using-wrong-strategy">❌ Pitfall 1: Using Wrong Strategy</h3>
+<pre><code class="lang-csharp">// BAD: Using ToT for simple arithmetic
+var result = await totStrategy.ReasonAsync(
+    &quot;What is 2 + 2?&quot;,
+    new ReasoningConfig { ExplorationDepth = 5 }
+);
+// Cost: 10x more expensive, same result
+
+// GOOD: Use appropriate strategy
+var result = await cotStrategy.ReasonAsync(&quot;What is 2 + 2?&quot;);
+</code></pre>
+<h3 id="-pitfall-2-not-using-verification">❌ Pitfall 2: Not Using Verification</h3>
+<pre><code class="lang-csharp">// BAD: Trust blindly
+var result = await reasoner.SolveAsync(&quot;Calculate 15 × 24&quot;);
+return result.FinalAnswer;  // Might be wrong!
+
+// GOOD: Verify calculations
+var result = await reasoner.SolveAsync(&quot;Calculate 15 × 24&quot;);
+var verification = await calculator.VerifyAsync(result.Chain);
+
+if (!verification.IsValid)
+{
+    // Retry or refine
+    result = await RefineAsync(result);
+}
+</code></pre>
+<h3 id="-pitfall-3-ignoring-confidence-scores">❌ Pitfall 3: Ignoring Confidence Scores</h3>
+<pre><code class="lang-csharp">// BAD: Ignore confidence
+var result = await strategy.ReasonAsync(problem);
+return result.FinalAnswer;  // Even if confidence is 0.2!
+
+// GOOD: Check confidence
+var result = await strategy.ReasonAsync(problem);
+
+if (result.ConfidenceScore &lt; 0.7)
+{
+    // Try with more compute or ask for clarification
+    return await HandleLowConfidenceAsync(result, problem);
+}
+</code></pre>
+<h3 id="-pitfall-4-no-timeout-protection">❌ Pitfall 4: No Timeout Protection</h3>
+<pre><code class="lang-csharp">// BAD: Can hang indefinitely
+var result = await strategy.ReasonAsync(complexProblem);
+
+// GOOD: Always use timeouts
+using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+var result = await strategy.ReasonAsync(complexProblem, cancellationToken: cts.Token);
+</code></pre>
+<h3 id="-pitfall-5-overusing-self-consistency">❌ Pitfall 5: Overusing Self-Consistency</h3>
+<pre><code class="lang-csharp">// BAD: Excessive sampling
+var config = new ReasoningConfig { NumSamples = 20 };  // Overkill!
+var result = await scStrategy.ReasonAsync(&quot;Simple question&quot;, config);
+
+// GOOD: Appropriate sampling
+var config = new ReasoningConfig { NumSamples = 3-5 };  // Enough
+var result = await scStrategy.ReasonAsync(&quot;Complex question&quot;, config);
+</code></pre>
+<hr>
+<h2 id="performance-checklist">Performance Checklist</h2>
+<p>Before deploying to production:</p>
+<ul>
+<li>✅ Chosen appropriate strategy for problem types</li>
+<li>✅ Tuned configuration parameters</li>
+<li>✅ Added verification for critical tasks</li>
+<li>✅ Implemented error handling and retries</li>
+<li>✅ Set up monitoring and logging</li>
+<li>✅ Added timeout protection</li>
+<li>✅ Implemented caching where appropriate</li>
+<li>✅ Rate limiting in place</li>
+<li>✅ Resource limits configured</li>
+<li>✅ Tested on representative benchmark</li>
+<li>✅ Measured and optimized latency</li>
+<li>✅ Graceful degradation implemented</li>
+</ul>
+<hr>
+<h2 id="summary">Summary</h2>
+<p><strong>Key Takeaways:</strong></p>
+<ol>
+<li><strong>Choose the right tool</strong>: CoT for speed, SC for accuracy, ToT for complexity</li>
+<li><strong>Start simple</strong>: Use presets, scale up only if needed</li>
+<li><strong>Verify important answers</strong>: Don't trust blindly</li>
+<li><strong>Handle errors gracefully</strong>: Timeouts, retries, fallbacks</li>
+<li><strong>Monitor in production</strong>: Latency, success rate, confidence</li>
+<li><strong>Optimize iteratively</strong>: Measure, identify bottlenecks, improve</li>
+</ol>
+<p>For more information:</p>
+<ul>
+<li><a href="GettingStarted.html">Getting Started Guide</a></li>
+<li><a href="Tutorials.html">Tutorials</a></li>
+<li><a href="./ApiReference.md">API Reference</a></li>
+</ul>
+<p>Happy reasoning! 🚀</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/reasoning/BestPractices.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

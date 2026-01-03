@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ReasoningStep&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ReasoningStep&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a single step in a reasoning chain, capturing the thought process and evaluation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Reasoning_Models_ReasoningStep_1.md&amp;value=---%0Auid%3A%20AiDotNet.Reasoning.Models.ReasoningStep%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1">
+
+
+
+  <h1 id="AiDotNet_Reasoning_Models_ReasoningStep_1" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1" class="text-break">
+Class ReasoningStep&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Reasoning.html">Reasoning</a>.<a class="xref" href="AiDotNet.Reasoning.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a single step in a reasoning chain, capturing the thought process and evaluation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ReasoningStep&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for scoring and calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ReasoningStep&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Reasoning_Models_ReasoningStep_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Think of a reasoning step like a single line in showing your work on a math problem.
+When you solve "What is 15% of 240?", your steps might be:
+- Step 1: "Convert 15% to decimal: 15/100 = 0.15"
+- Step 2: "Multiply by 240: 0.15 × 240 = 36"
+- Step 3: "Therefore, the answer is 36"
+<p>Each ReasoningStep captures:</p>
+<ul>
+<li>What you thought (the reasoning text)</li>
+<li>How confident you are (the score)</li>
+<li>Whether this step was verified/checked</li>
+<li>Any feedback or corrections made</li>
+</ul>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">var step1 = new ReasoningStep&lt;double&gt;
+{
+    StepNumber = 1,
+    Content = "Convert 15% to decimal: 15/100 = 0.15",
+    Score = 1.0,  // High confidence - this is a straightforward conversion
+    IsVerified = true
+};
+
+var step2 = new ReasoningStep&lt;double&gt;
+{
+    StepNumber = 2,
+    Content = "Multiply by 240: 0.15 × 240 = 36",
+    Score = 0.95,
+    IsVerified = true,
+    ExternalVerificationResult = "Calculator confirms: 0.15 * 240 = 36"
+};</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1__ctor_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1__ctor" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.#ctor">
+  ReasoningStep()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Reasoning.Models.ReasoningStep-1.html">ReasoningStep&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ReasoningStep()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_Content_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.Content*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_Content" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.Content">
+  Content
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The actual reasoning content or thought for this step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Content { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_Content_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is what you're actually thinking or doing in this step.
+It should be clear and specific, like "Calculate the area by multiplying length × width"
+rather than vague like "Do the math."
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_CreatedAt_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.CreatedAt*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_CreatedAt" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.CreatedAt">
+  CreatedAt
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Timestamp when this step was created.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DateTime CreatedAt { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_CreatedAt_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records when this reasoning step happened. Useful for:
+- Performance analysis (how long did reasoning take?)
+- Debugging (what order did things happen?)
+- Audit trails (when was this decision made?)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_CriticFeedback_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.CriticFeedback*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_CriticFeedback" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.CriticFeedback">
+  CriticFeedback
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Feedback from critic model if verification was performed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? CriticFeedback { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_CriticFeedback_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like comments from a teacher reviewing your work.
+It might say things like:
+- "Good! The logic is sound and well-explained."
+- "This step needs more justification."
+- "Error: 15% should be 0.15, not 1.5"
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_ExternalVerificationResult_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.ExternalVerificationResult*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_ExternalVerificationResult" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.ExternalVerificationResult">
+  ExternalVerificationResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Result from external verification tool if applicable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ExternalVerificationResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_ExternalVerificationResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This stores the output from external verification tools.
+For example, if a calculator was used, this might contain "36" or "Calculation correct: 36".
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_IsVerified_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.IsVerified*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_IsVerified" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.IsVerified">
+  IsVerified
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether this step has been verified by a critic model or external tool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsVerified { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_IsVerified_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like having someone check your work. If true, this step
+has been reviewed and confirmed to be correct. If false, it hasn't been checked yet.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_Metadata_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.Metadata*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_Metadata" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Additional metadata or context specific to this step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metadata { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_Metadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a flexible container for any extra information about this step
+that doesn't fit in the other properties. You can store things like:
+- Which sub-problem this step addresses
+- References to external sources
+- Alternative approaches considered
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_OriginalContent_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.OriginalContent*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_OriginalContent" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.OriginalContent">
+  OriginalContent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Original content before any refinement (if the step was refined).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? OriginalContent { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_OriginalContent_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If you made a mistake and corrected it, this stores your original
+wrong answer so you can see what was changed. It's like keeping track of your eraser marks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_RefinementCount_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.RefinementCount*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_RefinementCount" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.RefinementCount">
+  RefinementCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of times this step was refined/corrected.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RefinementCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_RefinementCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This counts how many times you had to revise this step to get it right.
+It's like counting how many erasers you used on one problem:
+- 0 = Got it right the first time
+- 1 = Had to fix it once
+- 3 = Took three attempts to get it right
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_Score_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.Score*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_Score" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.Score">
+  Score
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Confidence or quality score for this step (typically 0.0 to 1.0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Score { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_Score_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is how confident the AI is that this step is correct.
+Think of it as a percentage:
+- 1.0 = 100% confident (absolutely certain)
+- 0.8 = 80% confident (pretty sure)
+- 0.5 = 50% confident (unsure, might be wrong)
+- 0.0 = 0% confident (probably incorrect)
+<p>Higher scores mean the step is more trustworthy.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_StepNumber_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.StepNumber*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_StepNumber" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.StepNumber">
+  StepNumber
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The sequential number of this step in the reasoning chain (starting from 1).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int StepNumber { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_StepNumber_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like the step number when showing your work:
+Step 1, Step 2, Step 3, etc. It helps keep track of the order of reasoning.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_VerificationMethod_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.VerificationMethod*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_VerificationMethod" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.VerificationMethod">
+  VerificationMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Tool or method used to verify this step externally (e.g., &quot;Calculator&quot;, &quot;CodeExecution&quot;).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? VerificationMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_VerificationMethod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If external tools were used to check this step, this records which tool.
+For example:
+- "Calculator" - Mathematical calculation was verified
+- "PythonInterpreter" - Code execution was tested
+- "WolframAlpha" - Complex math was double-checked
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningStep_1_ToString_" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.ToString*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningStep_1_ToString" data-uid="AiDotNet.Reasoning.Models.ReasoningStep`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string representation of this reasoning step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A formatted string showing the step number and content.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningStep_1_ToString_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a human-readable version of the step,
+useful for logging or debugging.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningStep.cs/#L44" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ProximalGradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ProximalGradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Proximal Gradient Descent optimizer, an advanced optimization algorithm that combines traditional gradient descent with proximal operators to handle regularization effectively.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3" class="text-break">
+Class ProximalGradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Proximal Gradient Descent optimizer, an advanced optimization algorithm
+that combines traditional gradient descent with proximal operators to handle regularization effectively.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ProximalGradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">ProximalGradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Proximal Gradient Descent is an extension of standard gradient descent that is particularly effective
+for solving optimization problems with regularization terms. It alternates between standard gradient steps
+on the smooth part of the objective function and proximal operations on the non-smooth regularization terms.
+This approach is especially valuable for problems involving L1 regularization (which promotes sparsity) or
+other complex regularization schemes that are difficult to optimize with standard gradient methods. The
+proximal approach helps maintain desirable properties of the regularization while ensuring stable convergence.
+It is widely used in machine learning for training models where specific structural properties (like sparsity,
+group structure, or low rank) are desired in the solution.
+</p>
+<p><b>For Beginners:</b> Proximal Gradient Descent is a specialized optimization method that helps train machine learning models with regularization.
+<p>Imagine you're trying to find the lowest point in a hilly landscape while also staying within certain boundaries:</p>
+<ul>
+<li>Regular gradient descent is like always walking directly downhill</li>
+<li>But sometimes this approach can lead you to areas that are too complex or &quot;overfit&quot; to your training data</li>
+<li>Regularization adds &quot;penalty zones&quot; to discourage overly complex solutions</li>
+<li>Proximal gradient descent helps navigate these penalty zones effectively</li>
+</ul>
+<p>What this optimizer does:</p>
+<ol>
+<li>Takes a step in the direction that reduces prediction error (like regular gradient descent)</li>
+<li>Then takes a &quot;proximal step&quot; that handles the regularization penalties separately</li>
+<li>By splitting the process this way, it can find solutions that balance accuracy and simplicity</li>
+</ol>
+<p>Think of it like training a dog:</p>
+<ul>
+<li>The gradient step teaches the dog to complete a task correctly</li>
+<li>The proximal step ensures the dog doesn't develop bad habits along the way</li>
+<li>Together, they produce well-behaved, effective results</li>
+</ul>
+<p>This approach is particularly useful when you want your model to:</p>
+<ul>
+<li>Use only a subset of available features (sparsity)</li>
+<li>Group related features together</li>
+<li>Avoid extreme parameter values</li>
+</ul>
+<p>This class lets you configure how this specialized optimization process works.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for mini-batch gradient descent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 32.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+before making an update to the model. The default of 32 is a good balance for proximal gradient descent.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_InnerIterations_" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.InnerIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_InnerIterations" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.InnerIterations">
+  InnerIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of inner iterations for each main optimization iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int InnerIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of inner iterations, defaulting to 10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_InnerIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter specifies the number of proximal gradient steps to perform within each outer 
+iteration of the optimization algorithm. In proximal methods, it's common to have an inner loop
+that refines the proximal update before proceeding to the next main iteration. More inner iterations
+can lead to more accurate proximal updates at the cost of increased computation time. The appropriate
+value depends on the complexity of the regularization term and the desired accuracy of the proximal
+mapping. For simple regularization schemes like L1 or L2, fewer inner iterations may be sufficient,
+while more complex regularization might benefit from additional inner refinement.
+</p>
+<p><b>For Beginners:</b> This setting controls how many mini-steps the algorithm takes for each main optimization step.
+<p>The default value of 10 means:</p>
+<ul>
+<li>For each main iteration, the algorithm performs 10 smaller refinement steps</li>
+<li>These refinement steps help ensure the regularization is properly applied</li>
+</ul>
+<p>Think of it like polishing a surface:</p>
+<ul>
+<li>The main algorithm makes large changes to get the general shape right</li>
+<li>Then these inner iterations carefully refine and polish the result</li>
+<li>More inner iterations mean more careful polishing</li>
+</ul>
+<p>You might want more inner iterations (like 20 or 50):</p>
+<ul>
+<li>When using complex regularization that requires careful handling</li>
+<li>When high precision is important in your final model</li>
+<li>When you notice the optimization isn't converging well with fewer iterations</li>
+<li>When you have the computational resources to spare</li>
+</ul>
+<p>You might want fewer inner iterations (like 5 or 3):</p>
+<ul>
+<li>When using simple regularization schemes like basic L1 or L2</li>
+<li>When computational efficiency is a priority</li>
+<li>When you're in early experimental phases and need quick results</li>
+<li>When you find that additional inner iterations don't improve results</li>
+</ul>
+<p>More inner iterations typically mean better quality results but longer training times.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_LearningRateDecreaseFactor_" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.LearningRateDecreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_LearningRateDecreaseFactor" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.LearningRateDecreaseFactor">
+  LearningRateDecreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the multiplicative factor for decreasing the learning rate when progress stalls or reverses.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateDecreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate decrease factor, defaulting to 0.95.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_LearningRateDecreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how quickly the learning rate decreases when the optimization encounters
+difficulties or appears to be overshooting. In adaptive optimization schemes, the learning rate is
+typically decreased when an iteration fails to improve the objective function or when other indicators
+suggest the current step size is too large. A factor of 0.95 means the learning rate decreases by 5%
+when conditions warrant a decrease. Lower values (further from 1.0) lead to more aggressive deceleration
+when problems are encountered, which can help stabilize the optimization but may slow convergence.
+The optimal value depends on the optimization landscape and the balance needed between convergence
+speed and stability.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the algorithm slows down when it encounters problems.
+<p>The default value of 0.95 means:</p>
+<ul>
+<li>When the algorithm takes a step that doesn't improve the solution</li>
+<li>It will reduce its step size by 5% to be more careful</li>
+<li>This helps prevent overshooting or bouncing around without progress</li>
+</ul>
+<p>Think of it like navigating a tricky path:</p>
+<ul>
+<li>When you encounter obstacles or start to lose your way, you slow down</li>
+<li>This value determines how much you slow down when things get difficult</li>
+<li>A value of 0.95 represents a moderate slowdown (5% decrease)</li>
+</ul>
+<p>You might want a lower value (like 0.8 or 0.9):</p>
+<ul>
+<li>When you want more drastic slowdowns after bad steps</li>
+<li>When the optimization landscape has sharp valleys or discontinuities</li>
+<li>When stability is much more important than speed</li>
+<li>When you've observed the algorithm overshooting repeatedly</li>
+</ul>
+<p>You might want a higher value (like 0.98 or 0.99):</p>
+<ul>
+<li>When you want only minor slowdowns after bad steps</li>
+<li>When you're concerned about convergence becoming too slow</li>
+<li>When occasional bad steps are expected and shouldn't trigger major adjustments</li>
+<li>When the optimization landscape is relatively smooth</li>
+</ul>
+<p>This parameter works in tandem with LearningRateIncreaseFactor to adaptively adjust the
+optimization speed based on progress.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_LearningRateIncreaseFactor_" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.LearningRateIncreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_LearningRateIncreaseFactor" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.LearningRateIncreaseFactor">
+  LearningRateIncreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the multiplicative factor for increasing the learning rate during adaptive optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateIncreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate increase factor, defaulting to 1.05.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_LearningRateIncreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how aggressively the learning rate increases when the optimization is making
+good progress. In adaptive optimization schemes, the learning rate may be increased when successive
+iterations show consistent improvement. A factor of 1.05 means the learning rate increases by 5% when
+conditions warrant an increase. Higher values lead to more aggressive acceleration when the optimization
+is progressing well, potentially speeding up convergence. However, too large a value can cause instability
+by increasing the learning rate too quickly. The optimal value depends on the optimization landscape and
+the balance needed between convergence speed and stability.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm speeds up when it's making good progress.
+<p>The default value of 1.05 means:</p>
+<ul>
+<li>When the algorithm is successfully reducing the error</li>
+<li>It will increase its step size by 5% to move faster</li>
+<li>This allows it to accelerate when it's on a promising path</li>
+</ul>
+<p>Think of it like adjusting your walking speed:</p>
+<ul>
+<li>When you're confident you're heading in the right direction, you walk a bit faster</li>
+<li>This value determines how much faster you go when things are working well</li>
+<li>A value of 1.05 represents a cautious acceleration (5% increase)</li>
+</ul>
+<p>You might want a higher value (like 1.1 or 1.2):</p>
+<ul>
+<li>When you want more aggressive acceleration</li>
+<li>When the optimization landscape is smooth and well-behaved</li>
+<li>When faster convergence is a priority and some instability is acceptable</li>
+<li>When you've noticed that optimization progress is consistently positive</li>
+</ul>
+<p>You might want a lower value (like 1.02 or 1.01):</p>
+<ul>
+<li>When you've observed instability in the optimization process</li>
+<li>When working with complex, ill-conditioned problems</li>
+<li>When very stable, predictable convergence is more important than speed</li>
+<li>When small parameter changes can dramatically affect model performance</li>
+</ul>
+<p>This parameter works in tandem with LearningRateDecreaseFactor to adaptively adjust the
+optimization speed based on progress.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_MaxIterations_" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_MaxIterations" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines the maximum number of outer iterations the optimization algorithm will perform.
+It serves as a hard limit to prevent excessive computation time in cases where convergence is slow or
+not achieved. Each iteration involves a gradient step on the smooth part of the objective function 
+followed by a proximal operation on the regularization term, potentially with multiple inner iterations.
+The appropriate value depends on the complexity of the optimization problem, the desired precision,
+and the available computational resources. Note that this property hides (shadows) the MaxIterations 
+property inherited from the base GradientBasedOptimizerOptions class, potentially allowing for different
+default values or validation logic specific to proximal gradient descent.
+</p>
+<p><b>For Beginners:</b> This setting controls the maximum number of major steps the algorithm will take before stopping.
+<p>The default value of 1000 means:</p>
+<ul>
+<li>The algorithm will take at most 1000 main optimization steps</li>
+<li>It will stop earlier if it reaches convergence (finds a good solution)</li>
+<li>But it won't continue beyond 1000 steps even if not fully converged</li>
+</ul>
+<p>Think of it like setting a maximum travel time for a journey:</p>
+<ul>
+<li>Ideally, you reach your destination before the time limit</li>
+<li>But if the journey is taking too long, you stop when you hit the limit</li>
+<li>This prevents the algorithm from running indefinitely on difficult problems</li>
+</ul>
+<p>You might want more iterations (like 5000 or 10000):</p>
+<ul>
+<li>For complex problems that need more time to converge</li>
+<li>When you prioritize finding the best possible solution over speed</li>
+<li>When early experiments show that 1000 iterations is insufficient</li>
+<li>When you have the computational resources to spare</li>
+</ul>
+<p>You might want fewer iterations (like 500 or 100):</p>
+<ul>
+<li>When quick approximate solutions are preferred over perfect ones</li>
+<li>For simpler problems that converge quickly</li>
+<li>When running many experimental models where time is limited</li>
+<li>When you find that the model converges well before reaching the limit</li>
+</ul>
+<p>Note: This setting overrides the MaxIterations from the parent class to provide a default
+specifically calibrated for proximal gradient descent.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_ProximalStepSize_" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.ProximalStepSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_ProximalStepSize" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.ProximalStepSize">
+  ProximalStepSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the step size for the proximal operator component of the algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ProximalStepSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The proximal step size, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_ProximalStepSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the size of the step taken during the proximal update phase of the algorithm.
+The proximal step specifically handles the regularization term, separate from the gradient step that
+addresses the smooth part of the objective function. A larger proximal step size makes the algorithm
+more aggressive in enforcing regularization constraints, while a smaller value makes it more conservative.
+The optimal value depends on the regularization type and strength, as well as the overall optimization
+landscape. In many cases, this parameter interacts with the RegularizationStrength and may need to be
+tuned accordingly. Too large a value can cause instability, while too small a value can slow convergence.
+</p>
+<p><b>For Beginners:</b> This setting controls how aggressively the algorithm enforces regularization in each iteration.
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>The algorithm takes moderate-sized steps when applying regularization</li>
+<li>This provides a balance between rapid convergence and stability</li>
+</ul>
+<p>Think of the proximal step as the &quot;correction&quot; after the main step:</p>
+<ul>
+<li>First, the algorithm takes a step to reduce prediction errors</li>
+<li>Then, it takes a proximal step to enforce simplicity (regularization)</li>
+<li>This setting controls the size of that second, corrective step</li>
+</ul>
+<p>You might want a larger value (like 0.3 or 0.5):</p>
+<ul>
+<li>When you want regularization effects to be applied more quickly</li>
+<li>When the regularization term is well-behaved and unlikely to cause instability</li>
+<li>When faster convergence is a priority</li>
+</ul>
+<p>You might want a smaller value (like 0.05 or 0.01):</p>
+<ul>
+<li>When you notice instability in the optimization process</li>
+<li>When using strong regularization that could cause large parameter changes</li>
+<li>When you prefer more gradual, stable convergence</li>
+<li>When working with particularly complex or ill-conditioned problems</li>
+</ul>
+<p>This parameter often needs to be adjusted in coordination with RegularizationStrength
+to achieve optimal results.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_RegularizationStrength_" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.RegularizationStrength*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_RegularizationStrength" data-uid="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions`3.RegularizationStrength">
+  RegularizationStrength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the strength of the regularization term in the objective function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RegularizationStrength { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The regularization strength, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProximalGradientDescentOptimizerOptions_3_RegularizationStrength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the weight of the regularization term relative to the main loss function.
+Higher values increase the influence of regularization, promoting simpler models (e.g., sparser
+weights with L1 regularization or smaller weights with L2 regularization). Lower values reduce
+the regularization effect, allowing the model to focus more on minimizing the loss function.
+The optimal value depends on the specific problem, data characteristics, and the type of regularization
+being used. This parameter is often one of the most important hyperparameters to tune, as it directly
+controls the trade-off between fitting the training data and maintaining model simplicity.
+</p>
+<p><b>For Beginners:</b> This setting controls how strongly the regularization penalties affect your model.
+<p>The default value of 0.01 means:</p>
+<ul>
+<li>The regularization has a moderate influence on the model</li>
+<li>There's a balance between minimizing errors and keeping the model simple</li>
+</ul>
+<p>Think of regularization like a budget constraint:</p>
+<ul>
+<li>Your model wants to &quot;spend&quot; parameter values to fit the data perfectly</li>
+<li>Regularization sets a &quot;budget&quot; that limits this spending</li>
+<li>Higher RegularizationStrength means a tighter budget (simpler model)</li>
+<li>Lower RegularizationStrength means a looser budget (potentially more complex model)</li>
+</ul>
+<p>You might want a higher value (like 0.1 or 1.0):</p>
+<ul>
+<li>When you suspect your model is overfitting</li>
+<li>When you have limited training data</li>
+<li>When you want to encourage sparse solutions (with L1 regularization)</li>
+<li>When you want smaller parameter values overall (with L2 regularization)</li>
+</ul>
+<p>You might want a lower value (like 0.001 or 0.0001):</p>
+<ul>
+<li>When you have abundant training data</li>
+<li>When underfitting is more of a concern than overfitting</li>
+<li>When you want the model to focus more on minimizing training error</li>
+<li>When you have complex patterns that require more expressive models</li>
+</ul>
+<p>Finding the right regularization strength often requires experimentation with different values.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProximalGradientDescentOptimizerOptions.cs/#L44" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

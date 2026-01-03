@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TemporalCrop&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TemporalCrop&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Randomly crops a temporal segment from video.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Augmentation_Video_TemporalCrop_1.md&amp;value=---%0Auid%3A%20AiDotNet.Augmentation.Video.TemporalCrop%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1">
+
+
+
+  <h1 id="AiDotNet_Augmentation_Video_TemporalCrop_1" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1" class="text-break">
+Class TemporalCrop&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Video/TemporalCrop.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Augmentation.html">Augmentation</a>.<a class="xref" href="AiDotNet.Augmentation.Video.html">Video</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Randomly crops a temporal segment from video.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TemporalCrop&lt;T&gt; : TemporalAugmenterBase&lt;T&gt;, IAugmentation&lt;T, ImageTensor&lt;T&gt;[]&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html">AugmentationBase</a>&lt;T, <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;[]&gt;</div>
+      <div><a class="xref" href="AiDotNet.Augmentation.Video.VideoAugmenterBase-1.html">VideoAugmenterBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Augmentation.Video.TemporalAugmenterBase-1.html">TemporalAugmenterBase</a>&lt;T&gt;</div>
+      <div><span class="xref">TemporalCrop&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Augmentation.IAugmentation-2.html">IAugmentation</a>&lt;T, <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;[]&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.Video.VideoAugmenterBase-1.html#AiDotNet_Augmentation_Video_VideoAugmenterBase_1_FrameRate">VideoAugmenterBase&lt;T&gt;.FrameRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.Video.VideoAugmenterBase-1.html#AiDotNet_Augmentation_Video_VideoAugmenterBase_1_GetDuration_AiDotNet_Augmentation_Image_ImageTensor__0____">VideoAugmenterBase&lt;T&gt;.GetDuration(ImageTensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.Video.VideoAugmenterBase-1.html#AiDotNet_Augmentation_Video_VideoAugmenterBase_1_GetFrameCount_AiDotNet_Augmentation_Image_ImageTensor__0____">VideoAugmenterBase&lt;T&gt;.GetFrameCount(ImageTensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.Video.VideoAugmenterBase-1.html#AiDotNet_Augmentation_Video_VideoAugmenterBase_1_ValidateFrameDimensions_AiDotNet_Augmentation_Image_ImageTensor__0____">VideoAugmenterBase&lt;T&gt;.ValidateFrameDimensions(ImageTensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_NumOps">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_OnAugmentationApplied">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.OnAugmentationApplied</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Name">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Probability">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.Probability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_IsTrainingOnly">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.IsTrainingOnly</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_IsEnabled">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.IsEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Apply__1_AiDotNet_Augmentation_AugmentationContext__0__">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.Apply(ImageTensor&lt;T&gt;[], AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_ApplyAugmentation__1_AiDotNet_Augmentation_AugmentationContext__0__">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.ApplyAugmentation(ImageTensor&lt;T&gt;[], AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_GetParameters">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_RaiseAugmentationApplied_AiDotNet_Augmentation_AugmentationContext__0__System_Boolean_">AugmentationBase&lt;T, ImageTensor&lt;T&gt;[]&gt;.RaiseAugmentationApplied(AugmentationContext&lt;T&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Augmentation_Video_TemporalCrop_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Temporal cropping takes a random consecutive portion of the video.
+For example, from a 10-second video, it might extract 8 seconds starting at a random point.
+This helps models learn to recognize actions regardless of when they occur in the video.</p>
+<p><b>When to use:</b>
+<ul><li>Action recognition where action can occur anywhere in the video</li><li>Training with variable-length videos</li><li>Reducing overfitting to specific temporal positions</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Video_TemporalCrop_1__ctor_" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Video_TemporalCrop_1__ctor_System_Double_System_Double_System_Double_System_Double_" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.#ctor(System.Double,System.Double,System.Double,System.Double)">
+  TemporalCrop(double, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Video/TemporalCrop.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new temporal crop augmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TemporalCrop(double minCropRatio = 0.7, double maxCropRatio = 0.9, double probability = 0.5, double frameRate = 30)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>minCropRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum fraction of frames to keep (default: 0.7).</p>
+</dd>
+    <dt><code>maxCropRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Maximum fraction of frames to keep (default: 0.9).</p>
+</dd>
+    <dt><code>probability</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Probability of applying this augmentation (default: 0.5).</p>
+</dd>
+    <dt><code>frameRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Frame rate of the video (default: 30).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Video_TemporalCrop_1_MaxCropRatio_" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.MaxCropRatio*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Video_TemporalCrop_1_MaxCropRatio" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.MaxCropRatio">
+  MaxCropRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Video/TemporalCrop.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum crop ratio (fraction of original length to keep).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxCropRatio { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_Video_TemporalCrop_1_MaxCropRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 0.9 (keep at most 90% of frames)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_Video_TemporalCrop_1_MinCropRatio_" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.MinCropRatio*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Video_TemporalCrop_1_MinCropRatio" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.MinCropRatio">
+  MinCropRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Video/TemporalCrop.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum crop ratio (fraction of original length to keep).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinCropRatio { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_Video_TemporalCrop_1_MinCropRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 0.7 (keep at least 70% of frames)</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Video_TemporalCrop_1_ApplyAugmentation_" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.ApplyAugmentation*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Video_TemporalCrop_1_ApplyAugmentation_AiDotNet_Augmentation_Image_ImageTensor__0____AiDotNet_Augmentation_AugmentationContext__0__" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.ApplyAugmentation(AiDotNet.Augmentation.Image.ImageTensor{`0}[],AiDotNet.Augmentation.AugmentationContext{`0})">
+  ApplyAugmentation(ImageTensor&lt;T&gt;[], AugmentationContext&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Video/TemporalCrop.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Implement this method to perform the actual augmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ImageTensor&lt;T&gt;[] ApplyAugmentation(ImageTensor&lt;T&gt;[] data, AugmentationContext&lt;T&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;[]</dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>context</code> <a class="xref" href="AiDotNet.Augmentation.AugmentationContext-1.html">AugmentationContext</a>&lt;T&gt;</dt>
+    <dd><p>The augmentation context.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;[]</dt>
+    <dd><p>The augmented data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Video_TemporalCrop_1_GetParameters_" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Video_TemporalCrop_1_GetParameters" data-uid="AiDotNet.Augmentation.Video.TemporalCrop`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Video/TemporalCrop.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters of this augmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IDictionary&lt;string, object&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary of parameter names to values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Video/TemporalCrop.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for gradient-based optimization algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_GradientBasedOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.GradientBasedOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3" class="text-break">
+Class GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for gradient-based optimization algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt; : OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Models.Options.ADMMOptimizerOptions-3.html">ADMMOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.AMSGradOptimizerOptions-3.html">AMSGradOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.AdaDeltaOptimizerOptions-3.html">AdaDeltaOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.AdaMaxOptimizerOptions-3.html">AdaMaxOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.AdagradOptimizerOptions-3.html">AdagradOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.AdamOptimizerOptions-3.html">AdamOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.AdamWOptimizerOptions-3.html">AdamWOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.BFGSOptimizerOptions-3.html">BFGSOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ConjugateGradientOptimizerOptions-3.html">ConjugateGradientOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.CoordinateDescentOptimizerOptions-3.html">CoordinateDescentOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DFPOptimizerOptions-3.html">DFPOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.FTRLOptimizerOptions-3.html">FTRLOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientDescentOptimizerOptions-3.html">GradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LAMBOptimizerOptions-3.html">LAMBOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LARSOptimizerOptions-3.html">LARSOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LBFGSOptimizerOptions-3.html">LBFGSOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions-3.html">LevenbergMarquardtOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LionOptimizerOptions-3.html">LionOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MiniBatchGradientDescentOptions-3.html">MiniBatchGradientDescentOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MomentumOptimizerOptions-3.html">MomentumOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NadamOptimizerOptions-3.html">NadamOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NesterovAcceleratedGradientOptimizerOptions-3.html">NesterovAcceleratedGradientOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NewtonMethodOptimizerOptions-3.html">NewtonMethodOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ProximalGradientDescentOptimizerOptions-3.html">ProximalGradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions-3.html">RootMeanSquarePropagationOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions-3.html">StochasticGradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TrustRegionOptimizerOptions-3.html">TrustRegionOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Gradient-based optimizers are algorithms that find the minimum or maximum of a function
+by following the direction of steepest descent or ascent (the gradient).
+</p>
+<p><b>For Beginners:</b> Imagine you're in a hilly landscape and want to find the lowest point.
+Gradient-based optimization is like always walking downhill in the steepest direction until you can't go any lower.
+The "gradient" is simply the direction of the steepest slope at your current position.
+</p>
+<p>
+These algorithms are fundamental to training many machine learning models, including neural networks,
+linear regression, and logistic regression.
+</p>
+<p>
+This class inherits from OptimizationAlgorithmOptions, which means it includes all the
+base configuration options for optimization algorithms plus any additional options specific to
+gradient-based methods.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.DataSampler*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.DataSampler">
+  DataSampler
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optional data sampler for advanced sampling strategies during batch creation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDataSampler? DataSampler { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDataSampler.html">IDataSampler</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A data sampler controls how training examples are selected and ordered during batch creation.
+This enables advanced sampling strategies like:
+- Weighted sampling for class imbalance
+- Stratified sampling to maintain class proportions
+- Curriculum learning to start with easy examples
+- Importance sampling to focus on high-loss examples
+- Active learning to prioritize uncertain examples
+</p>
+<p><b>For Beginners:</b> Think of this as choosing which examples to show the model and in what order.
+If you have more examples of cats than dogs, weighted sampling can help the model see dogs more often.
+Curriculum learning shows easy examples first, like learning to walk before running.
+<p><strong>Example:</strong></p>
+<pre><code class="lang-csharp">// Balanced sampling for imbalanced classes
+options.DataSampler = Samplers.Balanced(labels, numClasses: 2);
+
+// Curriculum learning (easy to hard)
+options.DataSampler = Samplers.Curriculum(difficulties);</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.DropLastBatch*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.DropLastBatch">
+  DropLastBatch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to drop the last incomplete batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool DropLastBatch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the training data size is not evenly divisible by the batch size, the last batch
+will be smaller. Setting this to true discards that incomplete batch.
+</p>
+<p><b>For Beginners:</b> If you have 100 examples and a batch size of 32, you'll have
+3 full batches (96 examples) and 1 partial batch (4 examples). Setting DropLastBatch=true
+discards that partial batch, which can help with training stability.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.EnableGradientClipping*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.EnableGradientClipping">
+  EnableGradientClipping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether gradient clipping is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableGradientClipping { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Gradient clipping helps prevent exploding gradients during training by limiting the magnitude
+of gradients. This is particularly important for deep networks and recurrent neural networks.
+</p>
+<p><b>For Beginners:</b> Sometimes during training, gradients can become extremely large,
+causing the model to take huge steps that destabilize learning. Gradient clipping is like
+putting a speed limit on these updates to keep training stable.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.GradientCache*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.GradientCache">
+  GradientCache
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gradient cache to use for storing and retrieving computed gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientCache&lt;T&gt; GradientCache { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientCache-1.html">IGradientCache</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The gradient cache helps avoid redundant gradient calculations by storing previously computed gradients.
+This can significantly improve performance, especially when the same model is evaluated multiple times.
+</p>
+<p><b>For Beginners:</b> Think of this as a memory that stores calculations you've already done.
+Instead of recalculating the same gradient multiple times, the optimizer can look it up in this cache,
+saving computational resources.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.GradientClippingMethod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.GradientClippingMethod">
+  GradientClippingMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gradient clipping method to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GradientClippingMethod GradientClippingMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.GradientClippingMethod.html">GradientClippingMethod</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Two main methods are available:
+- <a class="xref" href="AiDotNet.Models.Options.GradientClippingMethod.html#AiDotNet_Models_Options_GradientClippingMethod_ByNorm">ByNorm</a>: Scales the entire gradient vector if its norm exceeds a threshold (recommended)
+- <a class="xref" href="AiDotNet.Models.Options.GradientClippingMethod.html#AiDotNet_Models_Options_GradientClippingMethod_ByValue">ByValue</a>: Clips each gradient element independently to a range
+</p>
+<p><b>For Beginners:</b> ClipByNorm is generally preferred because it preserves the direction
+of the gradient while only reducing its magnitude. ClipByValue is simpler but can change the
+gradient direction.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.LearningRateScheduler*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.LearningRateScheduler">
+  LearningRateScheduler
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate scheduler to use during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILearningRateScheduler? LearningRateScheduler { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LearningRateSchedulers.ILearningRateScheduler.html">ILearningRateScheduler</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Learning rate schedulers dynamically adjust the learning rate during training,
+which can significantly improve convergence and final model performance.
+</p>
+<p><b>For Beginners:</b> A learning rate scheduler automatically adjusts how fast
+your model learns during training. Common strategies include:
+- Starting with a higher learning rate and gradually decreasing it
+- Using warmup to slowly increase the learning rate at the start
+- Cycling between high and low learning rates
+<p>Set this to null (default) to use a constant learning rate.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.LossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss function to use for evaluating model performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt; LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The loss function measures how well the model's predictions match the actual target values.
+Different loss functions are appropriate for different types of problems (e.g., regression vs. classification).
+</p>
+<p><b>For Beginners:</b> The loss function is like a scorecard that tells you how well your model is doing.
+A higher loss means worse performance, so the optimizer tries to find model parameters that minimize this loss.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.MaxGradientNorm*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.MaxGradientNorm">
+  MaxGradientNorm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum gradient norm for norm-based clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxGradientNorm { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using <a class="xref" href="AiDotNet.Models.Options.GradientClippingMethod.html#AiDotNet_Models_Options_GradientClippingMethod_ByNorm">ByNorm</a>, gradients are scaled down if their
+L2 norm exceeds this value. A typical value is 1.0, but this may need to be tuned for your model.
+</p>
+<p><b>For Beginners:</b> This is the "speed limit" for the total gradient magnitude.
+If the gradient vector is longer than this value, it gets scaled down proportionally.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.MaxGradientValue*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.MaxGradientValue">
+  MaxGradientValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L204"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum gradient value for value-based clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxGradientValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using <a class="xref" href="AiDotNet.Models.Options.GradientClippingMethod.html#AiDotNet_Models_Options_GradientClippingMethod_ByValue">ByValue</a>, each gradient element is clipped
+to the range [-MaxGradientValue, MaxGradientValue].
+</p>
+<p><b>For Beginners:</b> This is the "speed limit" for each individual gradient component.
+Any gradient value larger than this gets capped at this value.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Setting a seed ensures the same random sequence is generated for shuffling and sampling,
+making experiments reproducible.
+</p>
+<p><b>For Beginners:</b> Like a recipe, a seed lets you recreate the exact same training run.
+This is useful for debugging and comparing different model configurations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.Regularization*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.Regularization">
+  Regularization
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the regularization method to use for preventing overfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IRegularization&lt;T, TInput, TOutput&gt; Regularization { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Regularization adds a penalty for complexity to the loss function, which helps prevent the model
+from overfitting to the training data. Common regularization methods include L1 (Lasso) and L2 (Ridge).
+</p>
+<p><b>For Beginners:</b> Regularization is like adding a rule that says "keep it simple."
+It prevents your model from becoming too complex and fitting the training data too perfectly,
+which can actually hurt performance on new, unseen data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.SchedulerStepMode*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.SchedulerStepMode">
+  SchedulerStepMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets when the learning rate scheduler should be stepped.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SchedulerStepMode SchedulerStepMode { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LearningRateSchedulers.SchedulerStepMode.html">SchedulerStepMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+- <a class="xref" href="AiDotNet.LearningRateSchedulers.SchedulerStepMode.html#AiDotNet_LearningRateSchedulers_SchedulerStepMode_StepPerBatch">StepPerBatch</a>: Update LR after each mini-batch
+- <a class="xref" href="AiDotNet.LearningRateSchedulers.SchedulerStepMode.html#AiDotNet_LearningRateSchedulers_SchedulerStepMode_StepPerEpoch">StepPerEpoch</a>: Update LR after each epoch (default)
+- <a class="xref" href="AiDotNet.LearningRateSchedulers.SchedulerStepMode.html#AiDotNet_LearningRateSchedulers_SchedulerStepMode_WarmupThenEpoch">WarmupThenEpoch</a>: Per-batch during warmup, then per-epoch
+</p>
+<p><b>For Beginners:</b> Most schedulers work best with per-epoch stepping.
+Use per-batch stepping for warmup schedulers or cyclical learning rates.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData_" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.ShuffleData*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData" data-uid="AiDotNet.Models.Options.GradientBasedOptimizerOptions`3.ShuffleData">
+  ShuffleData
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to shuffle data at the beginning of each epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ShuffleData { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Shuffling the training data at each epoch helps prevent the model from learning the order
+of training examples rather than the underlying patterns. This is ignored if a custom
+DataSampler is provided.
+</p>
+<p><b>For Beginners:</b> Like shuffling a deck of cards before each deal,
+this ensures the model sees examples in different orders, which helps it learn better patterns.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBasedOptimizerOptions.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

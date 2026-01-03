@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum VGGVariant | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum VGGVariant | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the available VGG network architecture variants.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_VGGVariant.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.VGGVariant%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.VGGVariant">
+
+
+
+
+  <h1 id="AiDotNet_Enums_VGGVariant" data-uid="AiDotNet.Enums.VGGVariant" class="text-break">
+Enum VGGVariant  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/VGGVariant.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the available VGG network architecture variants.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum VGGVariant</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_VGGVariant_VGG11"><code>VGG11 = 0</code></dt>
+  <dd><p>VGG-11: 11 weight layers (8 conv + 3 FC). The smallest VGG variant.</p>
+<p>
+Architecture: [64] - [128] - [256, 256] - [512, 512] - [512, 512] - FC - FC - FC
+</p>
+<p>
+<b>For Beginners:</b> VGG11 is the lightest VGG variant with approximately 133 million parameters.
+It's a good choice when you have limited computational resources or when training from scratch
+on smaller datasets. The brackets show the number of filters in each convolutional block,
+separated by max pooling layers.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_VGGVariant_VGG11_BN"><code>VGG11_BN = 1</code></dt>
+  <dd><p>VGG-11 with batch normalization after each convolutional layer.</p>
+<p>
+<b>For Beginners:</b> This is VGG11 with batch normalization added. Batch normalization
+normalizes the inputs to each layer, which helps the network train faster and more stably.
+This variant typically achieves better accuracy than the original VGG11.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_VGGVariant_VGG13"><code>VGG13 = 2</code></dt>
+  <dd><p>VGG-13: 13 weight layers (10 conv + 3 FC).</p>
+<p>
+Architecture: [64, 64] - [128, 128] - [256, 256] - [512, 512] - [512, 512] - FC - FC - FC
+</p>
+<p>
+<b>For Beginners:</b> VGG13 adds one more convolutional layer to each of the first two blocks
+compared to VGG11. This gives it more capacity to learn features at different scales.
+It has approximately 133 million parameters (similar to VGG11 due to the small conv layers).
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_VGGVariant_VGG13_BN"><code>VGG13_BN = 3</code></dt>
+  <dd><p>VGG-13 with batch normalization after each convolutional layer.</p>
+<p>
+<b>For Beginners:</b> VGG13 with batch normalization for improved training stability and accuracy.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_VGGVariant_VGG16"><code>VGG16 = 4</code></dt>
+  <dd><p>VGG-16: 16 weight layers (13 conv + 3 FC). The most commonly used VGG variant.</p>
+<p>
+Architecture: [64, 64] - [128, 128] - [256, 256, 256] - [512, 512, 512] - [512, 512, 512] - FC - FC - FC
+</p>
+<p>
+<b>For Beginners:</b> VGG16 is the most popular VGG variant and is often used as a baseline
+for image classification tasks. It has approximately 138 million parameters. The deeper
+architecture allows it to learn more complex features, making it suitable for a wide range
+of image recognition tasks. It's commonly used for transfer learning where you take a
+pre-trained VGG16 and fine-tune it for your specific task.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_VGGVariant_VGG16_BN"><code>VGG16_BN = 5</code></dt>
+  <dd><p>VGG-16 with batch normalization after each convolutional layer.</p>
+<p>
+<b>For Beginners:</b> VGG16 with batch normalization. This is often the recommended VGG variant
+for new projects because it combines the proven architecture of VGG16 with the training benefits
+of batch normalization. It typically achieves 1-2% better accuracy than the original VGG16.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_VGGVariant_VGG19"><code>VGG19 = 6</code></dt>
+  <dd><p>VGG-19: 19 weight layers (16 conv + 3 FC). The deepest VGG variant.</p>
+<p>
+Architecture: [64, 64] - [128, 128] - [256, 256, 256, 256] - [512, 512, 512, 512] - [512, 512, 512, 512] - FC - FC - FC
+</p>
+<p>
+<b>For Beginners:</b> VGG19 is the deepest VGG variant with approximately 144 million parameters.
+It adds one more convolutional layer to each of the last three blocks compared to VGG16.
+While it can learn slightly more complex features, the additional depth provides diminishing
+returns and significantly increases training time and memory requirements. VGG16 is often
+preferred unless you have a specific need for the additional capacity.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_VGGVariant_VGG19_BN"><code>VGG19_BN = 7</code></dt>
+  <dd><p>VGG-19 with batch normalization after each convolutional layer.</p>
+<p>
+<b>For Beginners:</b> VGG19 with batch normalization. Use this when you need maximum model
+capacity and have sufficient computational resources. The batch normalization helps mitigate
+some of the training difficulties associated with very deep networks.
+</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_VGGVariant_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+VGG networks are a family of deep convolutional neural networks developed by the Visual Geometry Group
+at Oxford University. They are characterized by their use of small (3x3) convolution filters stacked
+in increasing depth, which allows them to learn complex features while keeping the number of parameters
+manageable.
+</p>
+<p>
+<b>For Beginners:</b> VGG networks are named after the Visual Geometry Group that created them.
+The number in the name (e.g., VGG16) refers to the total number of weight layers in the network.
+For example, VGG16 has 13 convolutional layers and 3 fully connected layers, totaling 16 weight layers.
+These networks were groundbreaking because they showed that network depth is critical for good performance.
+Despite being older architectures, they remain popular for transfer learning and as baselines.
+</p>
+<p>
+<b>Batch Normalization Variants:</b> The "_BN" suffix indicates variants that include batch normalization
+layers after each convolutional layer. Batch normalization helps stabilize training and often allows
+for faster convergence and better final accuracy.
+</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/VGGVariant.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

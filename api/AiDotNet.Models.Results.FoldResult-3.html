@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FoldResult&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FoldResult&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the results of a single fold in cross-validation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_FoldResult_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.FoldResult%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.FoldResult`3">
+
+
+
+  <h1 id="AiDotNet_Models_Results_FoldResult_3" data-uid="AiDotNet.Models.Results.FoldResult`3" class="text-break">
+Class FoldResult&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the results of a single fold in cross-validation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FoldResult&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FoldResult&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_FoldResult_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> A FoldResult contains all the performance metrics for one "fold"
+in cross-validation. Think of it like a report card for a single test of your model,
+where the model was trained on one subset of your data and tested on another.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3__ctor_" data-uid="AiDotNet.Models.Results.FoldResult`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3__ctor_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Collections_Generic_Dictionary_System_String__0__System_Nullable_System_TimeSpan__System_Nullable_System_TimeSpan__System_Int32_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Results_ClusteringMetrics__0__System_Int32___System_Int32___" data-uid="AiDotNet.Models.Results.FoldResult`3.#ctor(System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Collections.Generic.Dictionary{System.String,`0},System.Nullable{System.TimeSpan},System.Nullable{System.TimeSpan},System.Int32,AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Results.ClusteringMetrics{`0},System.Int32[],System.Int32[])">
+  FoldResult(int, Vector&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;, Dictionary&lt;string, T&gt;?, TimeSpan?, TimeSpan?, int, IFullModel&lt;T, TInput, TOutput&gt;?, ClusteringMetrics&lt;T&gt;?, int[]?, int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the FoldResult class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FoldResult(int foldIndex, Vector&lt;T&gt; trainingActual, Vector&lt;T&gt; trainingPredicted, Vector&lt;T&gt; validationActual, Vector&lt;T&gt; validationPredicted, Dictionary&lt;string, T&gt;? featureImportance = null, TimeSpan? trainingTime = null, TimeSpan? evaluationTime = null, int featureCount = 0, IFullModel&lt;T, TInput, TOutput&gt;? model = null, ClusteringMetrics&lt;T&gt;? clusteringMetrics = null, int[]? trainingIndices = null, int[]? validationIndices = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>foldIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of this fold.</p>
+</dd>
+    <dt><code>trainingActual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual values in the training dataset.</p>
+</dd>
+    <dt><code>trainingPredicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values for the training dataset.</p>
+</dd>
+    <dt><code>validationActual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual values in the validation dataset.</p>
+</dd>
+    <dt><code>validationPredicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values for the validation dataset.</p>
+</dd>
+    <dt><code>featureImportance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Optional dictionary of feature importance scores.</p>
+</dd>
+    <dt><code>trainingTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a>?</dt>
+    <dd><p>Time taken to train the model.</p>
+</dd>
+    <dt><code>evaluationTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a>?</dt>
+    <dd><p>Time taken to evaluate the model.</p>
+</dd>
+    <dt><code>featureCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of features used in the model.</p>
+</dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Optional trained model instance for this fold.</p>
+</dd>
+    <dt><code>clusteringMetrics</code> <a class="xref" href="AiDotNet.Models.Results.ClusteringMetrics-1.html">ClusteringMetrics</a>&lt;T&gt;</dt>
+    <dd><p>Optional clustering quality metrics for this fold.</p>
+</dd>
+    <dt><code>trainingIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Optional array of indices for training samples in this fold.</p>
+</dd>
+    <dt><code>validationIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Optional array of indices for validation samples in this fold.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FoldResult_3__ctor_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Collections_Generic_Dictionary_System_String__0__System_Nullable_System_TimeSpan__System_Nullable_System_TimeSpan__System_Int32_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Results_ClusteringMetrics__0__System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a complete report of how well your model
+performed on one fold of cross-validation. It calculates various error metrics and statistics
+that help you understand your model's strengths and weaknesses. If your model performs clustering,
+you can also include clustering-specific metrics.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_ActualValues_" data-uid="AiDotNet.Models.Results.FoldResult`3.ActualValues*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_ActualValues" data-uid="AiDotNet.Models.Results.FoldResult`3.ActualValues">
+  ActualValues
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the actual values from the validation dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ActualValues { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_ClusteringMetrics_" data-uid="AiDotNet.Models.Results.FoldResult`3.ClusteringMetrics*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_ClusteringMetrics" data-uid="AiDotNet.Models.Results.FoldResult`3.ClusteringMetrics">
+  ClusteringMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the clustering quality metrics for this fold, if applicable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ClusteringMetrics&lt;T&gt;? ClusteringMetrics { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.ClusteringMetrics-1.html">ClusteringMetrics</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FoldResult_3_ClusteringMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This property stores clustering quality metrics when your model produces
+cluster assignments (like K-Means, DBSCAN, or other clustering algorithms). These metrics help you
+understand how well the clustering performed for this specific fold:
+<ul>
+<li><strong>Silhouette Score</strong>: How well each point fits in its cluster</li>
+<li><strong>Calinski-Harabasz Index</strong>: How well-separated and compact clusters are</li>
+<li><strong>Davies-Bouldin Index</strong>: Average similarity between clusters (lower is better)</li>
+<li><strong>Adjusted Rand Index</strong>: Similarity to ground truth labels (if available)</li>
+</ul>
+<p>This property will be null if:</p>
+<ul>
+<li>The model doesn't produce cluster labels (e.g., regression or standard classification)</li>
+<li>Clustering metrics couldn't be calculated for this fold</li>
+</ul>
+<p>When cross-validating clustering algorithms, these metrics are automatically calculated
+for each fold, allowing you to see how consistent your clustering is across different data splits.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_EvaluationTime_" data-uid="AiDotNet.Models.Results.FoldResult`3.EvaluationTime*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_EvaluationTime" data-uid="AiDotNet.Models.Results.FoldResult`3.EvaluationTime">
+  EvaluationTime
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the time taken to evaluate the model for this fold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan EvaluationTime { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_FeatureImportance_" data-uid="AiDotNet.Models.Results.FoldResult`3.FeatureImportance*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_FeatureImportance" data-uid="AiDotNet.Models.Results.FoldResult`3.FeatureImportance">
+  FeatureImportance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores for this fold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; FeatureImportance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_FoldIndex_" data-uid="AiDotNet.Models.Results.FoldResult`3.FoldIndex*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_FoldIndex" data-uid="AiDotNet.Models.Results.FoldResult`3.FoldIndex">
+  FoldIndex
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the index of this fold in the cross-validation process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FoldIndex { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_Model_" data-uid="AiDotNet.Models.Results.FoldResult`3.Model*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_Model" data-uid="AiDotNet.Models.Results.FoldResult`3.Model">
+  Model
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the trained model instance for this fold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? Model { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FoldResult_3_Model_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This property stores the model that was trained specifically on this fold's
+training data. Having access to the individual fold models allows you to:
+- Analyze how different models vary across folds
+- Use ensemble methods by combining predictions from multiple fold models
+- Investigate which features are important in different data subsets
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_PredictedValues_" data-uid="AiDotNet.Models.Results.FoldResult`3.PredictedValues*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_PredictedValues" data-uid="AiDotNet.Models.Results.FoldResult`3.PredictedValues">
+  PredictedValues
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the predicted values for the validation dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PredictedValues { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_TrainingErrors_" data-uid="AiDotNet.Models.Results.FoldResult`3.TrainingErrors*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_TrainingErrors" data-uid="AiDotNet.Models.Results.FoldResult`3.TrainingErrors">
+  TrainingErrors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the error statistics for the training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ErrorStats&lt;T&gt; TrainingErrors { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.ErrorStats-1.html">ErrorStats</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_TrainingIndices_" data-uid="AiDotNet.Models.Results.FoldResult`3.TrainingIndices*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_TrainingIndices" data-uid="AiDotNet.Models.Results.FoldResult`3.TrainingIndices">
+  TrainingIndices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of the training samples in this fold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[]? TrainingIndices { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FoldResult_3_TrainingIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> These are the row indices from the original dataset that were used
+for training the model in this fold. For example, if this contains [0, 1, 5, 6], it means
+rows 0, 1, 5, and 6 from the original data were used for training.
+</p>
+<p>
+This is especially useful for:
+- Nested cross-validation where you need to extract subsets based on indices
+- Debugging to verify correct data splits
+- Advanced techniques like stratified sampling verification
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_TrainingTime_" data-uid="AiDotNet.Models.Results.FoldResult`3.TrainingTime*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_TrainingTime" data-uid="AiDotNet.Models.Results.FoldResult`3.TrainingTime">
+  TrainingTime
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the time taken to train the model for this fold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TrainingTime { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_ValidationErrors_" data-uid="AiDotNet.Models.Results.FoldResult`3.ValidationErrors*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_ValidationErrors" data-uid="AiDotNet.Models.Results.FoldResult`3.ValidationErrors">
+  ValidationErrors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the error statistics for the validation data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ErrorStats&lt;T&gt; ValidationErrors { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.ErrorStats-1.html">ErrorStats</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_ValidationIndices_" data-uid="AiDotNet.Models.Results.FoldResult`3.ValidationIndices*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_ValidationIndices" data-uid="AiDotNet.Models.Results.FoldResult`3.ValidationIndices">
+  ValidationIndices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of the validation samples in this fold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[]? ValidationIndices { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FoldResult_3_ValidationIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> These are the row indices from the original dataset that were held out
+for validation in this fold. For example, if this contains [2, 3, 4], it means rows 2, 3, and 4
+from the original data were used for validation (testing).
+</p>
+<p>
+This ensures you can accurately reconstruct which samples were used for validation, even when
+the target values contain duplicates. This prevents data leakage and ensures correct nested
+cross-validation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FoldResult_3_ValidationPredictionStats_" data-uid="AiDotNet.Models.Results.FoldResult`3.ValidationPredictionStats*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FoldResult_3_ValidationPredictionStats" data-uid="AiDotNet.Models.Results.FoldResult`3.ValidationPredictionStats">
+  ValidationPredictionStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the prediction statistics for the validation data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PredictionStats&lt;T&gt; ValidationPredictionStats { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.PredictionStats-1.html">PredictionStats</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FoldResult.cs/#L16" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

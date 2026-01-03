@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>GPU Performance Optimization Report (Issue #496) | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="GPU Performance Optimization Report (Issue #496) | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_OPTIMIZATION_REPORT.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="gpu-performance-optimization-report-issue-496">GPU Performance Optimization Report (Issue #496)</h1>
+
+<h2 id="scope">Scope</h2>
+<ul>
+<li>Date: 2025-12-28</li>
+<li>Benchmarks: <code>AiDotNetBenchmarkTests/TensorFlowComparisonBenchmarks.cs</code>, <code>AiDotNetBenchmarkTests/TorchSharpComparisonBenchmarks.cs</code></li>
+<li>Environment: AMD Ryzen 7 4800H, Windows 11, .NET 8.0.22</li>
+<li>GPU: gfx902 reported during AiDotNet runs</li>
+<li>TorchSharp device: CPU (torch.cuda.is_available() returned false with TorchSharp-cuda-windows)</li>
+<li>Results: <code>AiDotNetBenchmarkTests/BenchmarkDotNet.Artifacts/results/AiDotNetBenchmarkTests.TorchSharpComparisonBenchmarks-report-github.md</code></li>
+</ul>
+<h2 id="summary-of-findings">Summary of findings</h2>
+<ul>
+<li>AiDotNet GPU is slower than TorchSharp CPU and TensorFlow.NET CPU across all tested micro-ops.</li>
+<li>Largest gaps are on elementwise and reduction ops (10x-235x slower vs TorchSharp CPU). MatMul and Conv2D are still 9x-20x slower.</li>
+<li>Forcing GPU execution on small/medium workloads amplifies launch and transfer overhead, masking any kernel-level speedups.</li>
+<li>GC allocations for AiDotNet ops are high (BDN shows Gen0/Gen1 pressure), indicating significant managed allocation overhead in hot paths.</li>
+</ul>
+<h2 id="changes-applied-in-this-branch">Changes applied in this branch</h2>
+<ul>
+<li>Removed duplicate kernel launches that were executing once before and once inside the <code>_gpuLock</code> in <code>GpuEngine</code>.</li>
+<li>Removed explicit <code>_accelerator.Synchronize()</code> calls; rely on blocking CPU copies to avoid redundant device-wide barriers.</li>
+</ul>
+<h2 id="benchmark-highlights-torchsharp-cpu-vs-aidotnet-gpu-mean-time">Benchmark highlights (TorchSharp CPU vs AiDotNet GPU, mean time)</h2>
+<ul>
+<li>ReLU: 21.174 ms vs 0.090 ms (235x slower)</li>
+<li>Sigmoid: 22.408 ms vs 0.368 ms (61x slower)</li>
+<li>ReduceSum: 11.190 ms vs 0.052 ms (215x slower)</li>
+<li>ReduceMean: 6.272 ms vs 0.058 ms (108x slower)</li>
+<li>MatMul 256: 2.429 ms vs 0.127 ms (19x slower)</li>
+<li>MatMul 512: 10.166 ms vs 1.037 ms (9.8x slower)</li>
+<li>Conv2D: 2.662 ms vs 0.293 ms (9.1x slower)</li>
+<li>Add 1,000,000: 8.260 ms vs 0.661 ms (12.5x slower)</li>
+<li>Multiply 1,000,000: 8.142 ms vs 0.655 ms (12.4x slower)</li>
+</ul>
+<h2 id="post-change-benchmark-observation">Post-change benchmark observation</h2>
+<ul>
+<li>After removing duplicate kernel launches and explicit synchronizations, TorchSharp comparison results were statistically unchanged. Host-device transfers still dominate.</li>
+</ul>
+<h2 id="likely-bottlenecks-code-evidence">Likely bottlenecks (code evidence)</h2>
+<ul>
+<li>Per-op host/device transfers: <code>GpuEngine</code> allocates GPU buffers and copies for each call (<code>Allocate1D</code>, <code>CopyFromCPU</code>, <code>CopyToCPU</code>) in <code>src/AiDotNet.Tensors/Engines/GpuEngine.cs</code>.</li>
+<li>Synchronization and serialization: <code>_gpuLock</code> serializes kernel launches; explicit synchronizations were removed but transfers still block.</li>
+<li>Kernel launch overhead: even with precompilation, many operations still dispatch separate kernels and cannot amortize the cost for smaller ops.</li>
+<li>Naive kernel implementations: Conv2D and MatMul are not using tiling/shared memory or vendor-tuned kernels, leaving bandwidth and occupancy on the table.</li>
+<li>Managed allocations: new <code>Tensor&lt;T&gt;</code> objects and arrays are created per operation, driving GC activity.</li>
+</ul>
+<h2 id="recommended-optimizations-prioritized">Recommended optimizations (prioritized)</h2>
+<h3 id="p0---immediate-biggest-roi">P0 - Immediate (biggest ROI)</h3>
+<ol>
+<li>Reduce host/device roundtrips: introduce GPU-resident tensor paths to keep data on device across chained ops, only copying to CPU at the end.</li>
+<li>Expand memory pooling usage: ensure pooled buffers are used in all hot paths (vector, matrix, tensor ops) and reuse output buffers where safe.</li>
+<li>Avoid per-op synchronization: use async streams and defer <code>Synchronize</code> until data is needed on CPU; shrink or remove <code>_gpuLock</code> contention.</li>
+</ol>
+<h3 id="p1---near-term">P1 - Near term</h3>
+<ol start="4">
+<li>Finish kernel caching coverage: ensure all hot paths use cached kernels and remove <code>LoadAutoGroupedStreamKernel</code> calls from runtime paths.</li>
+<li>Kernel fusion for common sequences (bias + activation, add + activation, normalization + activation) to cut launch count.</li>
+<li>Optimize GEMM/Conv2D kernels with tiling/shared memory and vectorized memory access patterns.</li>
+</ol>
+<h3 id="p2---mid-term">P2 - Mid term</h3>
+<ol start="7">
+<li>Optional vendor library interop: route GEMM/Conv2D to cuBLAS/cuDNN or rocBLAS/MIOpen when available.</li>
+<li>Re-tune adaptive thresholds using benchmark-driven crossover points once the above changes land.</li>
+<li>Add GPU profiling instrumentation (kernel time vs copy time) to validate improvements and catch regressions early.</li>
+</ol>
+<h2 id="validation-plan">Validation plan</h2>
+<ul>
+<li>Add microbenchmarks for copy-only vs kernel-only cost to quantify transfer overhead.</li>
+<li>Re-run TorchSharp/TensorFlow comparisons after each major optimization bucket.</li>
+<li>Add size-sweep benchmarks to re-derive thresholds for CPU vs GPU routing.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_OPTIMIZATION_REPORT.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

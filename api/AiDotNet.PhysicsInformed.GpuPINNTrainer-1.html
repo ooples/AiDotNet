@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GpuPINNTrainer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GpuPINNTrainer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides GPU-accelerated training for Physics-Informed Neural Networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PhysicsInformed_GpuPINNTrainer_1.md&amp;value=---%0Auid%3A%20AiDotNet.PhysicsInformed.GpuPINNTrainer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1">
+
+
+
+  <h1 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1" class="text-break">
+Class GpuPINNTrainer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PhysicsInformed.html">PhysicsInformed</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides GPU-accelerated training for Physics-Informed Neural Networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GpuPINNTrainer&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GpuPINNTrainer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+This trainer provides GPU-accelerated training methods for PINNs.
+It can significantly speed up training by:</p>
+<ol>
+<li>Processing large batches of collocation points in parallel</li>
+<li>Performing matrix operations on the GPU</li>
+<li>Using asynchronous data transfers to overlap computation</li>
+</ol>
+<p>Usage:</p>
+<pre><code class="lang-csharp">var trainer = new GpuPINNTrainer&lt;double&gt;(myPinn);
+var history = trainer.Train(epochs: 10000, options: GpuPINNTrainingOptions.Default);
+</code></pre>
+<p>The trainer automatically falls back to CPU if GPU is not available.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1__ctor_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1__ctor_AiDotNet_PhysicsInformed_PINNs_PhysicsInformedNeuralNetwork__0__AiDotNet_PhysicsInformed_GpuPINNTrainingOptions_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.#ctor(AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork{`0},AiDotNet.PhysicsInformed.GpuPINNTrainingOptions)">
+  GpuPINNTrainer(PhysicsInformedNeuralNetwork&lt;T&gt;, GpuPINNTrainingOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the GPU PINN trainer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuPINNTrainer(PhysicsInformedNeuralNetwork&lt;T&gt; pinn, GpuPINNTrainingOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pinn</code> <a class="xref" href="AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork-1.html">PhysicsInformedNeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The Physics-Informed Neural Network to train.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PhysicsInformed.GpuPINNTrainingOptions.html">GpuPINNTrainingOptions</a></dt>
+    <dd><p>Optional GPU training options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_IsUsingGpu_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.IsUsingGpu*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_IsUsingGpu" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.IsUsingGpu">
+  IsUsingGpu
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether GPU is currently being used for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsUsingGpu { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_Network_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.Network*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_Network" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.Network">
+  Network
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying PINN being trained.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PhysicsInformedNeuralNetwork&lt;T&gt; Network { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork-1.html">PhysicsInformedNeuralNetwork</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_Options_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.Options*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_Options" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current training options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuPINNTrainingOptions Options { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.GpuPINNTrainingOptions.html">GpuPINNTrainingOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_EvaluateLoss_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.EvaluateLoss*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_EvaluateLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.EvaluateLoss(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  EvaluateLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs a forward pass and computes loss (does not update weights).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T EvaluateLoss(Tensor&lt;T&gt; batchInputs, Tensor&lt;T&gt;? batchTargets = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Batch of input points.</p>
+</dd>
+    <dt><code>batchTargets</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Optional target values. If provided, computes MSE loss against outputs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Loss value for this evaluation step.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_EvaluateLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>Note:</b> This method only evaluates loss - it does not perform backpropagation
+or weight updates. Use the Train method for full training with gradient updates.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when batchInputs is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when batchTargets shape doesn't match outputs.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_GetGpuMemoryInfo_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.GetGpuMemoryInfo*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_GetGpuMemoryInfo" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.GetGpuMemoryInfo">
+  GetGpuMemoryInfo()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L334"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets GPU memory usage statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PINNGpuMemoryInfo? GetGpuMemoryInfo()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.PINNGpuMemoryInfo.html">PINNGpuMemoryInfo</a></dt>
+    <dd><p>Memory usage info or null if GPU not in use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_GetGpuMemoryInfo_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>Limitations:</b> DirectGpu backends do not provide a standard API to query current memory usage.
+The returned <a class="xref" href="AiDotNet.PhysicsInformed.PINNGpuMemoryInfo.html#AiDotNet_PhysicsInformed_PINNGpuMemoryInfo_TotalMemoryBytes">TotalMemoryBytes</a> reflects the total GPU memory,
+but <a class="xref" href="AiDotNet.PhysicsInformed.PINNGpuMemoryInfo.html#AiDotNet_PhysicsInformed_PINNGpuMemoryInfo_UsedMemoryBytes">UsedMemoryBytes</a> and <a class="xref" href="AiDotNet.PhysicsInformed.PINNGpuMemoryInfo.html#AiDotNet_PhysicsInformed_PINNGpuMemoryInfo_AvailableMemoryBytes">AvailableMemoryBytes</a>
+cannot be accurately tracked through the DirectGpu backend.
+</p>
+<p>
+For accurate memory profiling, use external tools like NVIDIA's nvidia-smi,
+CUDA's nvml library, or Visual Studio's GPU profiler.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_ReleaseGpuResources_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.ReleaseGpuResources*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_ReleaseGpuResources" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.ReleaseGpuResources">
+  ReleaseGpuResources()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L312"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases GPU resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReleaseGpuResources()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_Train_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.Train*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_Train__0_0__0____0_0__0___System_Int32_System_Double_System_Boolean_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.Train(`0[0:,0:],`0[0:,0:],System.Int32,System.Double,System.Boolean)">
+  Train(T[,]?, T[,]?, int, double, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the PINN with GPU acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuTrainingHistory&lt;T&gt; Train(T[,]? dataInputs = null, T[,]? dataOutputs = null, int epochs = 10000, double learningRate = 0.001, bool verbose = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataInputs</code> T[,]</dt>
+    <dd><p>Optional measured input data.</p>
+</dd>
+    <dt><code>dataOutputs</code> T[,]</dt>
+    <dd><p>Optional measured output data.</p>
+</dd>
+    <dt><code>epochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of training epochs.</p>
+</dd>
+    <dt><code>learningRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Learning rate for optimization.</p>
+</dd>
+    <dt><code>verbose</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to print progress.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.GpuTrainingHistory-1.html">GpuTrainingHistory</a>&lt;T&gt;</dt>
+    <dd><p>Training history with loss values per epoch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_TryInitializeGpu_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.TryInitializeGpu*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_TryInitializeGpu" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.TryInitializeGpu">
+  TryInitializeGpu()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attempts to initialize GPU resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryInitializeGpu()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if GPU initialization was successful.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_UpdateOptions_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.UpdateOptions*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_GpuPINNTrainer_1_UpdateOptions_AiDotNet_PhysicsInformed_GpuPINNTrainingOptions_" data-uid="AiDotNet.PhysicsInformed.GpuPINNTrainer`1.UpdateOptions(AiDotNet.PhysicsInformed.GpuPINNTrainingOptions)">
+  UpdateOptions(GpuPINNTrainingOptions)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates training options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateOptions(GpuPINNTrainingOptions options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PhysicsInformed.GpuPINNTrainingOptions.html">GpuPINNTrainingOptions</a></dt>
+    <dd><p>New options to apply.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/GpuPINNTrainer.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

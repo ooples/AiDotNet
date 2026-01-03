@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MatrixHelper&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MatrixHelper&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides helper methods for matrix operations used in AI and machine learning algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Helpers_MatrixHelper_1.md&amp;value=---%0Auid%3A%20AiDotNet.Helpers.MatrixHelper%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Helpers.MatrixHelper`1">
+
+
+
+  <h1 id="AiDotNet_Helpers_MatrixHelper_1" data-uid="AiDotNet.Helpers.MatrixHelper`1" class="text-break">
+Class MatrixHelper&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Helpers.html">Helpers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides helper methods for matrix operations used in AI and machine learning algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class MatrixHelper&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for matrix elements.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MatrixHelper&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Helpers_MatrixHelper_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> A matrix is a rectangular array of numbers arranged in rows and columns.
+Matrices are fundamental in machine learning for representing data, transformations, and 
+mathematical operations.
+</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_ApplyGivensRotation_" data-uid="AiDotNet.Helpers.MatrixHelper`1.ApplyGivensRotation*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_ApplyGivensRotation_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0__0_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.MatrixHelper`1.ApplyGivensRotation(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},`0,`0,System.Int32,System.Int32,System.Int32,System.Int32)">
+  ApplyGivensRotation(Matrix&lt;T&gt;, T, T, int, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L378"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a Givens rotation to specific rows of a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void ApplyGivensRotation(Matrix&lt;T&gt; H, T c, T s, int i, int j, int kStart, int kEnd)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>H</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to which the rotation will be applied.</p>
+</dd>
+    <dt><code>c</code> <span class="xref">T</span></dt>
+    <dd><p>The cosine component of the Givens rotation.</p>
+</dd>
+    <dt><code>s</code> <span class="xref">T</span></dt>
+    <dd><p>The sine component of the Givens rotation.</p>
+</dd>
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the first row to be rotated.</p>
+</dd>
+    <dt><code>j</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the second row to be rotated.</p>
+</dd>
+    <dt><code>kStart</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting column index for the rotation.</p>
+</dd>
+    <dt><code>kEnd</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The ending column index for the rotation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_ApplyGivensRotation_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0__0_System_Int32_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method applies a rotation to two rows of a matrix. It's like
+mixing two rows together in specific proportions (determined by c and s) to create
+new rows. This is commonly used to zero out specific elements in numerical algorithms.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_ApplyHouseholderTransformation_" data-uid="AiDotNet.Helpers.MatrixHelper`1.ApplyHouseholderTransformation*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_ApplyHouseholderTransformation_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.Helpers.MatrixHelper`1.ApplyHouseholderTransformation(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  ApplyHouseholderTransformation(Matrix&lt;T&gt;, Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a Householder transformation to a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; ApplyHouseholderTransformation(Matrix&lt;T&gt; matrix, Vector&lt;T&gt; vector, int k)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to transform.</p>
+</dd>
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The Householder vector defining the reflection.</p>
+</dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting row and column for the transformation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The transformed matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_ApplyHouseholderTransformation_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Householder transformation is a way to reflect vectors across a plane.
+In matrix operations, it's used to introduce zeros in specific parts of a matrix.
+This is a key step in many algorithms that decompose matrices into simpler forms.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_BandDiagonalMultiply_" data-uid="AiDotNet.Helpers.MatrixHelper`1.BandDiagonalMultiply*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_BandDiagonalMultiply_System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.BandDiagonalMultiply(System.Int32,System.Int32,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  BandDiagonalMultiply(int, int, Matrix&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L757"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies a band diagonal matrix by a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void BandDiagonalMultiply(int leftSide, int rightSide, Matrix&lt;T&gt; matrix, Vector&lt;T&gt; solutionVector, Vector&lt;T&gt; actualVector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>leftSide</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of subdiagonals (bands below the main diagonal).</p>
+</dd>
+    <dt><code>rightSide</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of superdiagonals (bands above the main diagonal).</p>
+</dd>
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The band diagonal matrix stored in compact form.</p>
+</dd>
+    <dt><code>solutionVector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector where the result will be stored.</p>
+</dd>
+    <dt><code>actualVector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to multiply with the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_BandDiagonalMultiply_System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A band diagonal matrix is a matrix where non-zero elements are concentrated
+around the main diagonal within a certain "band". This method efficiently multiplies such
+a matrix with a vector without processing all the zero elements outside the band.
+Band matrices often arise when discretizing differential equations and in image processing
+algorithms used in machine learning.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_CalculateDeterminantRecursive_" data-uid="AiDotNet.Helpers.MatrixHelper`1.CalculateDeterminantRecursive*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_CalculateDeterminantRecursive_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.CalculateDeterminantRecursive(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  CalculateDeterminantRecursive(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the determinant of a matrix using a recursive algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T CalculateDeterminantRecursive(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix whose determinant is to be calculated.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The determinant value of the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_CalculateDeterminantRecursive_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The determinant is a special number calculated from a square matrix.
+It tells us important information about the matrix, such as whether it has an inverse.
+If the determinant is zero, the matrix doesn't have an inverse.
+</p>
+<p>
+This method uses a recursive approach, breaking down the calculation into smaller parts
+by creating submatrices.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the matrix is not square.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_CalculateHatMatrix_" data-uid="AiDotNet.Helpers.MatrixHelper`1.CalculateHatMatrix*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_CalculateHatMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.CalculateHatMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  CalculateHatMatrix(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L793"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Hat Matrix (also known as the projection matrix) used in regression analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CalculateHatMatrix(Matrix&lt;T&gt; features)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The feature matrix (design matrix) containing the independent variables.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The Hat Matrix that projects the dependent variable onto the fitted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_CalculateHatMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The Hat Matrix is an important concept in regression analysis. It "puts a hat" on 
+your data, transforming your actual observed values into predicted values. Mathematically, it's 
+calculated as H = X(X'X)^(-1)X', where X is your feature matrix, X' is its transpose, and ^(-1) 
+means matrix inverse.
+</p>
+<p>
+The Hat Matrix has several important properties:
+- It's used to calculate fitted values in regression: y = Hy
+- The diagonal elements (H_ii) tell you how much influence each data point has on the model
+- These diagonal values are used to identify outliers and high-leverage points
+- In machine learning, understanding the Hat Matrix helps with model diagnostics and improving prediction accuracy
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_ComputeGivensRotation_" data-uid="AiDotNet.Helpers.MatrixHelper`1.ComputeGivensRotation*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_ComputeGivensRotation__0__0_" data-uid="AiDotNet.Helpers.MatrixHelper`1.ComputeGivensRotation(`0,`0)">
+  ComputeGivensRotation(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the cosine and sine components of a Givens rotation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static (T c, T s) ComputeGivensRotation(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first element used to compute the rotation.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second element used to compute the rotation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd><p>A tuple containing the cosine and sine values of the rotation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_ComputeGivensRotation__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Givens rotation is a way to zero out specific elements in a matrix.
+It's like rotating a 2D coordinate system to make one component become zero.
+This is useful in many numerical algorithms to simplify matrices step by step.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_CreateHouseholderVector_" data-uid="AiDotNet.Helpers.MatrixHelper`1.CreateHouseholderVector*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_CreateHouseholderVector_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.CreateHouseholderVector(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CreateHouseholderVector(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L452"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a Householder vector from a given vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; CreateHouseholderVector(Vector&lt;T&gt; xVector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xVector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A Householder vector that can be used for reflection.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_CreateHouseholderVector_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Householder vector defines a reflection plane that, when applied to the
+original vector, zeros out all but the first component. This is useful in many matrix
+decomposition algorithms to systematically simplify matrices.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_ExtractDiagonal_" data-uid="AiDotNet.Helpers.MatrixHelper`1.ExtractDiagonal*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_ExtractDiagonal_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.ExtractDiagonal(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ExtractDiagonal(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts the diagonal elements of a matrix into a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; ExtractDiagonal(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix from which to extract the diagonal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the diagonal elements of the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_ExtractDiagonal_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The diagonal of a matrix consists of the elements where the row index equals 
+the column index (top-left to bottom-right). In many AI algorithms, the diagonal elements 
+have special significance, such as representing variances in covariance matrices.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_Hypotenuse_" data-uid="AiDotNet.Helpers.MatrixHelper`1.Hypotenuse*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_Hypotenuse__0__0_" data-uid="AiDotNet.Helpers.MatrixHelper`1.Hypotenuse(`0,`0)">
+  Hypotenuse(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the hypotenuse of a right triangle given the lengths of the other two sides.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Hypotenuse(T x, T y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The length of one side of the right triangle.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">T</span></dt>
+    <dd><p>The length of the other side of the right triangle.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The length of the hypotenuse.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_Hypotenuse__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The hypotenuse is the longest side of a right triangle, opposite to the right angle.
+This method calculates it using a numerically stable algorithm that avoids overflow or underflow
+issues that can occur with a direct application of the Pythagorean theorem (a² + b² = c²).
+</p>
+<p>
+This function is useful in many AI algorithms, particularly when calculating distances or norms.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_Hypotenuse_" data-uid="AiDotNet.Helpers.MatrixHelper`1.Hypotenuse*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_Hypotenuse__0___" data-uid="AiDotNet.Helpers.MatrixHelper`1.Hypotenuse(`0[])">
+  Hypotenuse(params T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Euclidean norm (magnitude) of a vector of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Hypotenuse(params T[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> T[]</dt>
+    <dd><p>The values to calculate the norm for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The Euclidean norm of the values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_Hypotenuse__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The Euclidean norm is a way to measure the "length" or "magnitude" of a vector.
+It's calculated as the square root of the sum of the squares of all values. In a 2D space,
+this is equivalent to finding the hypotenuse of a right triangle using the Pythagorean theorem.
+</p>
+<p>
+In machine learning, norms are often used to measure the size of vectors, such as weight vectors
+in neural networks or for regularization techniques.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_InvertUsingDecomposition_" data-uid="AiDotNet.Helpers.MatrixHelper`1.InvertUsingDecomposition*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_InvertUsingDecomposition_AiDotNet_Interfaces_IMatrixDecomposition__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.InvertUsingDecomposition(AiDotNet.Interfaces.IMatrixDecomposition{`0})">
+  InvertUsingDecomposition(IMatrixDecomposition&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L665"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Inverts a matrix using a provided matrix decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; InvertUsingDecomposition(IMatrixDecomposition&lt;T&gt; decomposition)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>decomposition</code> <a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</dt>
+    <dd><p>The matrix decomposition to use for inversion.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The inverse of the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_InvertUsingDecomposition_AiDotNet_Interfaces_IMatrixDecomposition__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Matrix inversion is like finding the reciprocal of a number, but for matrices.
+This method uses a decomposition (a way of breaking down a matrix into simpler parts) to
+efficiently compute the inverse. Matrix inversion is used in many machine learning algorithms,
+especially in linear regression and when solving systems of linear equations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_IsInvertible_" data-uid="AiDotNet.Helpers.MatrixHelper`1.IsInvertible*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_IsInvertible_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.IsInvertible(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  IsInvertible(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L637"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if a matrix is invertible (non-singular).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsInvertible(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to check for invertibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the matrix is invertible, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_IsInvertible_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> An invertible matrix is one that has an inverse - another matrix that, when
+multiplied with the original, gives the identity matrix. For a matrix to be invertible, it must
+be square (same number of rows and columns) and have a non-zero determinant. In machine learning,
+invertible matrices are important for solving linear systems and in algorithms like linear regression.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_IsUpperHessenberg_" data-uid="AiDotNet.Helpers.MatrixHelper`1.IsUpperHessenberg*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_IsUpperHessenberg_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0_" data-uid="AiDotNet.Helpers.MatrixHelper`1.IsUpperHessenberg(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},`0)">
+  IsUpperHessenberg(Matrix&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L278"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if a matrix is in upper Hessenberg form within a specified tolerance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsUpperHessenberg(Matrix&lt;T&gt; matrix, T tolerance)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to check.</p>
+</dd>
+    <dt><code>tolerance</code> <span class="xref">T</span></dt>
+    <dd><p>The numerical tolerance for considering a value as zero.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the matrix is in upper Hessenberg form, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_IsUpperHessenberg_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> An upper Hessenberg matrix is almost triangular - it has zeros below the first 
+subdiagonal. This is an intermediate form used in many eigenvalue algorithms, making computations 
+more efficient than working with a full matrix.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_OrthogonalizeColumns_" data-uid="AiDotNet.Helpers.MatrixHelper`1.OrthogonalizeColumns*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_OrthogonalizeColumns_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.OrthogonalizeColumns(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  OrthogonalizeColumns(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Orthogonalizes the columns of a matrix using the Gram-Schmidt process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; OrthogonalizeColumns(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix whose columns will be orthogonalized.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix with orthogonal columns.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_OrthogonalizeColumns_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Orthogonalization means making vectors perpendicular to each other. 
+The Gram-Schmidt process takes a set of vectors and creates a new set where each vector 
+is perpendicular (orthogonal) to all previous vectors. This is important in many machine 
+learning algorithms that need independent features or basis vectors.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_OuterProduct_" data-uid="AiDotNet.Helpers.MatrixHelper`1.OuterProduct*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_OuterProduct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.OuterProduct(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  OuterProduct(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the outer product of two vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; OuterProduct(Vector&lt;T&gt; v1, Vector&lt;T&gt; v2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>v1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first vector.</p>
+</dd>
+    <dt><code>v2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix representing the outer product of the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_OuterProduct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The outer product of two vectors results in a matrix. If you have a vector 
+of size n and another of size m, their outer product is an n×m matrix where each element 
+is the product of the corresponding elements from each vector. This operation is used in 
+various machine learning algorithms, including neural networks for weight updates.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_PowerIteration_" data-uid="AiDotNet.Helpers.MatrixHelper`1.PowerIteration*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_PowerIteration_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32__0_" data-uid="AiDotNet.Helpers.MatrixHelper`1.PowerIteration(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Int32,`0)">
+  PowerIteration(Matrix&lt;T&gt;, int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L526"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Implements the power iteration algorithm to find the dominant eigenvalue and eigenvector of a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static (T, Vector&lt;T&gt;) PowerIteration(Matrix&lt;T&gt; aMatrix, int maxIterations, T tolerance)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>aMatrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input matrix for which to find the dominant eigenvalue and eigenvector.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations to perform.</p>
+</dd>
+    <dt><code>tolerance</code> <span class="xref">T</span></dt>
+    <dd><p>The convergence tolerance.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;)</dt>
+    <dd><p>A tuple containing the dominant eigenvalue and its corresponding eigenvector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_PowerIteration_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> An eigenvalue and eigenvector are special values and vectors associated with a matrix.
+When you multiply a matrix by its eigenvector, you get the same vector scaled by the eigenvalue.
+The power iteration method repeatedly multiplies the matrix by a vector and normalizes it until
+it converges to the eigenvector with the largest eigenvalue (the dominant one). This is useful
+in many AI algorithms like PageRank, PCA, and recommendation systems.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_ReduceToHessenbergFormat_" data-uid="AiDotNet.Helpers.MatrixHelper`1.ReduceToHessenbergFormat*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_ReduceToHessenbergFormat_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.ReduceToHessenbergFormat(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ReduceToHessenbergFormat(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reduces a matrix to Hessenberg form, which is useful for eigenvalue calculations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; ReduceToHessenbergFormat(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to reduce.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix in Hessenberg form.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_ReduceToHessenbergFormat_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Hessenberg matrix is almost triangular - it has zeros below the first 
+subdiagonal. Converting a matrix to Hessenberg form is often a first step in calculating 
+eigenvalues, which are important values that help us understand the behavior of linear 
+transformations in machine learning algorithms.
+</p>
+<p>
+This method uses Householder transformations to efficiently reduce the matrix.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_SpectralNorm_" data-uid="AiDotNet.Helpers.MatrixHelper`1.SpectralNorm*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_SpectralNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.SpectralNorm(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  SpectralNorm(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L598"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the spectral norm of a matrix, which is the largest singular value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T SpectralNorm(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix for which to calculate the spectral norm.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The spectral norm of the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_SpectralNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The spectral norm measures the maximum "stretching" that a matrix can cause
+when applied to a vector. It's the largest singular value of the matrix, which indicates
+how much the matrix can amplify a vector in any direction. In machine learning, this helps
+understand the stability of algorithms and the conditioning of data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_MatrixHelper_1_TridiagonalSolve_" data-uid="AiDotNet.Helpers.MatrixHelper`1.TridiagonalSolve*"></a>
+
+  <h3 id="AiDotNet_Helpers_MatrixHelper_1_TridiagonalSolve_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Helpers.MatrixHelper`1.TridiagonalSolve(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TridiagonalSolve(Vector&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L701"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Solves a tridiagonal system of linear equations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void TridiagonalSolve(Vector&lt;T&gt; vector1, Vector&lt;T&gt; vector2, Vector&lt;T&gt; vector3, Vector&lt;T&gt; solutionVector, Vector&lt;T&gt; actualVector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The subdiagonal elements (below the main diagonal).</p>
+</dd>
+    <dt><code>vector2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The main diagonal elements.</p>
+</dd>
+    <dt><code>vector3</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The superdiagonal elements (above the main diagonal).</p>
+</dd>
+    <dt><code>solutionVector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector where the solution will be stored.</p>
+</dd>
+    <dt><code>actualVector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The right-hand side vector of the system.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_MatrixHelper_1_TridiagonalSolve_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A tridiagonal matrix is a special type of matrix where non-zero elements
+are only on the main diagonal and the diagonals directly above and below it. This method
+efficiently solves equations of the form Ax = b, where A is a tridiagonal matrix.
+Tridiagonal systems appear in many numerical methods for differential equations and
+spline interpolation used in machine learning.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/MatrixHelper.cs/#L14" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ParametricEqualizer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ParametricEqualizer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Multi-band parametric equalizer effect.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Audio_Effects_ParametricEqualizer_1.md&amp;value=---%0Auid%3A%20AiDotNet.Audio.Effects.ParametricEqualizer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1">
+
+
+
+  <h1 id="AiDotNet_Audio_Effects_ParametricEqualizer_1" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1" class="text-break">
+Class ParametricEqualizer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Audio.html">Audio</a>.<a class="xref" href="AiDotNet.Audio.Effects.html">Effects</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Multi-band parametric equalizer effect.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ParametricEqualizer&lt;T&gt; : AudioEffectBase&lt;T&gt;, IAudioEffect&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html">AudioEffectBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ParametricEqualizer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAudioEffect-1.html">IAudioEffect</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_NumOps">AudioEffectBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_SampleRate">AudioEffectBase&lt;T&gt;.SampleRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_Bypass">AudioEffectBase&lt;T&gt;.Bypass</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_Mix">AudioEffectBase&lt;T&gt;.Mix</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_LatencySamples">AudioEffectBase&lt;T&gt;.LatencySamples</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_TailSamples">AudioEffectBase&lt;T&gt;.TailSamples</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_Parameters">AudioEffectBase&lt;T&gt;.Parameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1__parameters">AudioEffectBase&lt;T&gt;._parameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_Process_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">AudioEffectBase&lt;T&gt;.Process(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_ProcessSample__0_">AudioEffectBase&lt;T&gt;.ProcessSample(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_ProcessInPlace_System_Span__0__">AudioEffectBase&lt;T&gt;.ProcessInPlace(Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_SetParameter_System_String__0_">AudioEffectBase&lt;T&gt;.SetParameter(string, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_GetParameter_System_String_">AudioEffectBase&lt;T&gt;.GetParameter(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_OnParameterChanged_System_String__0_">AudioEffectBase&lt;T&gt;.OnParameterChanged(string, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_AddParameter_System_String_System_String__0__0__0_System_String_System_String_">AudioEffectBase&lt;T&gt;.AddParameter(string, string, T, T, T, string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_DbToLinear_System_Double_">AudioEffectBase&lt;T&gt;.DbToLinear(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Effects.AudioEffectBase-1.html#AiDotNet_Audio_Effects_AudioEffectBase_1_LinearToDb_System_Double_">AudioEffectBase&lt;T&gt;.LinearToDb(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Audio_Effects_ParametricEqualizer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A parametric EQ allows precise control over frequency response with
+adjustable frequency, gain, and bandwidth (Q) for each band.
+</p>
+<p><b>For Beginners:</b> An equalizer adjusts the volume of different frequencies!
+<p>Think of it like a graphic equalizer on a stereo:</p>
+<ul>
+<li>Bass slider controls low frequencies (20-200 Hz)</li>
+<li>Mid slider controls middle frequencies (200-4000 Hz)</li>
+<li>Treble slider controls high frequencies (4000-20000 Hz)</li>
+</ul>
+<p>A PARAMETRIC EQ is more flexible:</p>
+<ul>
+<li>Frequency: Which frequency to adjust (e.g., 1000 Hz)</li>
+<li>Gain: How much to boost/cut (e.g., +6 dB)</li>
+<li>Q (bandwidth): How wide the adjustment is (narrow = surgical, wide = gentle)</li>
+</ul>
+<p>Filter types:</p>
+<ul>
+<li>Low Shelf: Boosts/cuts all frequencies below a point</li>
+<li>High Shelf: Boosts/cuts all frequencies above a point</li>
+<li>Peak (Bell): Boosts/cuts around a specific frequency</li>
+<li>Low Pass: Removes frequencies above a point</li>
+<li>High Pass: Removes frequencies below a point</li>
+</ul>
+<p>Common EQ moves:</p>
+<ul>
+<li>Cut 200-400 Hz: Reduce muddiness</li>
+<li>Boost 3-5 kHz: Add presence to vocals</li>
+<li>Cut 2-4 kHz: Reduce harshness</li>
+<li>Boost 10+ kHz: Add &quot;air&quot; and sparkle</li>
+<li>High pass at 80 Hz: Remove rumble from vocals</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Audio_Effects_ParametricEqualizer_1__ctor_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Audio_Effects_ParametricEqualizer_1__ctor_System_Int32_System_Double_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.#ctor(System.Int32,System.Double)">
+  ParametricEqualizer(int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a parametric EQ with a default 5-band configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ParametricEqualizer(int sampleRate = 44100, double mix = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Audio sample rate (default: 44100).</p>
+</dd>
+    <dt><code>mix</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Dry/wet mix (default: 1.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Audio_Effects_ParametricEqualizer_1_Bands_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.Bands*"></a>
+
+  <h3 id="AiDotNet_Audio_Effects_ParametricEqualizer_1_Bands" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.Bands">
+  Bands
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the EQ bands.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;EqBand&lt;T&gt;&gt; Bands { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Audio.Effects.EqBand-1.html">EqBand</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Effects_ParametricEqualizer_1_Name_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.Name*"></a>
+
+  <h3 id="AiDotNet_Audio_Effects_ParametricEqualizer_1_Name" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this effect.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Audio_Effects_ParametricEqualizer_1_AddBand_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.AddBand*"></a>
+
+  <h3 id="AiDotNet_Audio_Effects_ParametricEqualizer_1_AddBand_System_Double_System_Double_System_Double_AiDotNet_Audio_Effects_EqFilterType_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.AddBand(System.Double,System.Double,System.Double,AiDotNet.Audio.Effects.EqFilterType)">
+  AddBand(double, double, double, EqFilterType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an EQ band.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddBand(double frequency, double gainDb, double q, EqFilterType filterType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frequency</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Center/corner frequency in Hz.</p>
+</dd>
+    <dt><code>gainDb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Gain in dB (-24 to +24).</p>
+</dd>
+    <dt><code>q</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Q factor (bandwidth, 0.1 to 10).</p>
+</dd>
+    <dt><code>filterType</code> <a class="xref" href="AiDotNet.Audio.Effects.EqFilterType.html">EqFilterType</a></dt>
+    <dd><p>Type of filter.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Effects_ParametricEqualizer_1_ProcessSampleInternal_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.ProcessSampleInternal*"></a>
+
+  <h3 id="AiDotNet_Audio_Effects_ParametricEqualizer_1_ProcessSampleInternal__0_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.ProcessSampleInternal(`0)">
+  ProcessSampleInternal(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Processes a single sample through the effect.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T ProcessSampleInternal(T input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">T</span></dt>
+    <dd><p>Input sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Processed sample (wet signal only).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Effects_ParametricEqualizer_1_RemoveBand_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.RemoveBand*"></a>
+
+  <h3 id="AiDotNet_Audio_Effects_ParametricEqualizer_1_RemoveBand_System_Int32_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.RemoveBand(System.Int32)">
+  RemoveBand(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes an EQ band by index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void RemoveBand(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Band index.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Effects_ParametricEqualizer_1_Reset_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.Reset*"></a>
+
+  <h3 id="AiDotNet_Audio_Effects_ParametricEqualizer_1_Reset" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the effect's internal state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Audio_Effects_ParametricEqualizer_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Call this when starting a new audio stream to prevent artifacts
+from previous audio bleeding through.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Audio_Effects_ParametricEqualizer_1_SetBand_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.SetBand*"></a>
+
+  <h3 id="AiDotNet_Audio_Effects_ParametricEqualizer_1_SetBand_System_Int32_System_Double_System_Double_System_Double_" data-uid="AiDotNet.Audio.Effects.ParametricEqualizer`1.SetBand(System.Int32,System.Double,System.Double,System.Double)">
+  SetBand(int, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets band parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetBand(int bandIndex, double frequency, double gainDb, double q)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>bandIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Band index.</p>
+</dd>
+    <dt><code>frequency</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Center frequency in Hz.</p>
+</dd>
+    <dt><code>gainDb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Gain in dB.</p>
+</dd>
+    <dt><code>q</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Q factor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Effects/ParametricEqualizer.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

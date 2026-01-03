@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ConditionalInferenceTreeRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ConditionalInferenceTreeRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a conditional inference tree regression model that builds decision trees based on statistical tests.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_ConditionalInferenceTreeRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.ConditionalInferenceTreeRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1" class="text-break">
+Class ConditionalInferenceTreeRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a conditional inference tree regression model that builds decision trees based on statistical tests.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ConditionalInferenceTreeRegression&lt;T&gt; : AsyncDecisionTreeRegressionBase&lt;T&gt;, IAsyncTreeBasedModel&lt;T&gt;, ITreeBasedRegression&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html">AsyncDecisionTreeRegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ConditionalInferenceTreeRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAsyncTreeBasedModel-1.html">IAsyncTreeBasedModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITreeBasedRegression-1.html">ITreeBasedRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_NumOps">AsyncDecisionTreeRegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Engine">AsyncDecisionTreeRegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Root">AsyncDecisionTreeRegressionBase&lt;T&gt;.Root</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Options">AsyncDecisionTreeRegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Regularization">AsyncDecisionTreeRegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_MaxDepth">AsyncDecisionTreeRegressionBase&lt;T&gt;.MaxDepth</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureImportances">AsyncDecisionTreeRegressionBase&lt;T&gt;.FeatureImportances</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_NumberOfTrees">AsyncDecisionTreeRegressionBase&lt;T&gt;.NumberOfTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Random">AsyncDecisionTreeRegressionBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureNames">AsyncDecisionTreeRegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.Predict(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetParameters">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetActiveFeatureIndices">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_IsFeatureUsed_System_Int32_">AsyncDecisionTreeRegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">AsyncDecisionTreeRegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetFeatureImportance">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DeepCopy">AsyncDecisionTreeRegressionBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Clone">AsyncDecisionTreeRegressionBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveModel_System_String_">AsyncDecisionTreeRegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadModel_System_String_">AsyncDecisionTreeRegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ParameterCount">AsyncDecisionTreeRegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DefaultLossFunction">AsyncDecisionTreeRegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">AsyncDecisionTreeRegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveState_System_IO_Stream_">AsyncDecisionTreeRegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadState_System_IO_Stream_">AsyncDecisionTreeRegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree">AsyncDecisionTreeRegressionBase&lt;T&gt;.UseSoftTree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SoftTreeTemperature">AsyncDecisionTreeRegressionBase&lt;T&gt;.SoftTreeTemperature</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SupportsJitCompilation">AsyncDecisionTreeRegressionBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">AsyncDecisionTreeRegressionBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A conditional inference tree is a type of decision tree that uses statistical tests to determine optimal
+splits in the data. Unlike traditional decision trees that use measures like Gini impurity or information gain,
+conditional inference trees use statistical significance testing to create unbiased trees that don't favor
+features with many possible split points.
+</p>
+<p><b>For Beginners:</b> This class creates a special type of decision tree for predicting numerical values.
+<p>Think of a decision tree like a flowchart of yes/no questions that helps you make predictions:</p>
+<ul>
+<li>The tree starts with a question (like &quot;Is temperature &gt; 70°F?&quot;)</li>
+<li>Based on the answer, it follows different branches</li>
+<li>It continues asking questions until it reaches a final prediction</li>
+</ul>
+<p>What makes this tree special is how it chooses the questions:</p>
+<ul>
+<li>It uses statistical tests to find the most meaningful questions to ask</li>
+<li>It avoids favoring certain types of data unfairly</li>
+<li>It provides a measurement of confidence (p-value) for each split</li>
+</ul>
+<p>This approach tends to create more reliable and fair prediction models.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1__ctor_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1__ctor_AiDotNet_Models_Options_ConditionalInferenceTreeOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.#ctor(AiDotNet.Models.Options.ConditionalInferenceTreeOptions,AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  ConditionalInferenceTreeRegression(ConditionalInferenceTreeOptions, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Regression.ConditionalInferenceTreeRegression-1.html">ConditionalInferenceTreeRegression&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ConditionalInferenceTreeRegression(ConditionalInferenceTreeOptions options, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.ConditionalInferenceTreeOptions.html">ConditionalInferenceTreeOptions</a></dt>
+    <dd><p>The options that control the tree building process.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization to apply to input data to prevent overfitting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1__ctor_AiDotNet_Models_Options_ConditionalInferenceTreeOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes a new conditional inference tree regression model with the specified options
+and optional regularization. The options control various aspects of tree building, such as the maximum
+depth, minimum number of samples required to split a node, and the significance level for statistical tests.
+</p>
+<p><b>For Beginners:</b> This creates a new prediction model with your chosen settings.
+<p>The options parameter controls things like:</p>
+<ul>
+<li>How deep (complex) the tree can grow</li>
+<li>How many data points are needed before making a split</li>
+<li>How confident the model must be before creating a split</li>
+</ul>
+<p>The regularization parameter is optional and helps prevent &quot;overfitting&quot; - a problem where
+the model learns the training data too perfectly and performs poorly on new data.
+Think of it like teaching a student the principles rather than just memorizing specific examples.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_CalculateFeatureImportancesAsync_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.CalculateFeatureImportancesAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_CalculateFeatureImportancesAsync_System_Int32_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.CalculateFeatureImportancesAsync(System.Int32)">
+  CalculateFeatureImportancesAsync(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L457"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously calculates the importance of each feature in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task CalculateFeatureImportancesAsync(int featureCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of features.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task representing the asynchronous operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_CalculateFeatureImportancesAsync_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This protected method asynchronously calculates the importance of each feature in the model by traversing
+the decision tree. Feature importance is based on the statistical significance of splits using that feature,
+where features used in splits with lower p-values (higher significance) receive higher importance scores.
+</p>
+<p><b>For Beginners:</b> This method figures out which features are most important for predictions.
+<p>Feature importance:</p>
+<ul>
+<li>Tells you which inputs have the biggest impact on the predictions</li>
+<li>Is calculated by looking at all the splits in the tree that use each feature</li>
+<li>Gives higher scores to features used in more statistically significant splits</li>
+<li>Helps you understand what factors most influence the outcome you're predicting</li>
+</ul>
+<p>For example, if &quot;temperature&quot; has a high importance score, it means that knowing the
+temperature gives you a lot of information about what the prediction will be.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_CreateNewInstance_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_CreateNewInstance" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L774"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the conditional inference tree regression model with the same configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of <a class="xref" href="AiDotNet.Regression.ConditionalInferenceTreeRegression-1.html">ConditionalInferenceTreeRegression&lt;T&gt;</a> with the same configuration as the current instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_CreateNewInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new conditional inference tree regression model that has the same configuration 
+as the current instance. It's used for model persistence, cloning, and transferring the model's 
+configuration to new instances.
+</p>
+<p><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+<p>It's like creating a blueprint copy of your model that can be used to:</p>
+<ul>
+<li>Save your model's settings</li>
+<li>Create a new identical model</li>
+<li>Transfer your model's configuration to another system</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Create multiple similar models</li>
+<li>Save a model's configuration for later use</li>
+<li>Reset a model while keeping its settings</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_Deserialize_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L629"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs the model from a serialized byte array. It reads the options,
+tree structure, and feature importances from the byte array and rebuilds the model.
+</p>
+<p><b>For Beginners:</b> This method loads a previously saved model from binary data.
+<p>Deserialization converts the binary data back into a working model:</p>
+<ul>
+<li>It loads all the model's settings</li>
+<li>It reconstructs the entire decision tree</li>
+<li>It restores the feature importance scores</li>
+</ul>
+<p>This allows you to:</p>
+<ul>
+<li>Use a model that was trained earlier</li>
+<li>Share models between different applications</li>
+<li>Deploy models to production environments</li>
+</ul>
+<p>It's like restoring the model from a snapshot so you can use it again without retraining.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_GetModelMetadata_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_GetModelMetadata" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L533"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData&lt;T&gt; object containing model information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the regression model, including its type, hyperparameters,
+and feature importances. This information can be useful for model comparison, logging, and
+generating reports about model performance.
+</p>
+<p><b>For Beginners:</b> This method provides a summary of the model's settings and characteristics.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (Conditional Inference Tree)</li>
+<li>The maximum depth of the tree</li>
+<li>The minimum number of samples required to create a split</li>
+<li>The significance level used for statistical tests</li>
+<li>The importance scores for each feature</li>
+</ul>
+<p>This information is useful for:</p>
+<ul>
+<li>Comparing different models</li>
+<li>Documenting what settings were used</li>
+<li>Understanding the model's behavior</li>
+<li>Generating reports about the model's performance</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_PredictAsync_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.PredictAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_PredictAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.PredictAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PredictAsync(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously predicts target values for new input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;Vector&lt;T&gt;&gt; PredictAsync(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix for prediction.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A task representing the asynchronous operation, returning a vector of predicted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_PredictAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method asynchronously predicts target values for new input data by traversing the decision tree
+for each input sample. It first applies regularization to the input data if specified, then uses
+parallel processing to make predictions for multiple samples simultaneously.
+</p>
+<p><b>For Beginners:</b> This method uses the trained model to make predictions on new data.
+<p>When making predictions:</p>
+<ul>
+<li>The new data is first prepared using the same process as during training</li>
+<li>For each data point, the model follows the decision tree from top to bottom</li>
+<li>At each node, it answers a yes/no question and follows the appropriate branch</li>
+<li>When it reaches a leaf node, it returns the prediction stored there</li>
+</ul>
+<p>The method can process multiple data points at the same time to make predictions faster.
+The result is a set of predicted values, one for each input row.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_Serialize_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_Serialize" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L581"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes the model to a byte array for storage or transmission.
+It includes all necessary information to reconstruct the model, including options,
+the tree structure, and feature importances.
+</p>
+<p><b>For Beginners:</b> This method saves the model to binary data that can be stored or shared.
+<p>Serialization converts the model into a compact format that:</p>
+<ul>
+<li>Can be saved to a file</li>
+<li>Can be sent over a network</li>
+<li>Can be stored in a database</li>
+<li>Can be loaded later to make predictions without retraining</li>
+</ul>
+<p>The saved data includes:</p>
+<ul>
+<li>All the model's settings (like max depth)</li>
+<li>The entire structure of the decision tree</li>
+<li>The feature importance scores</li>
+</ul>
+<p>This is like taking a snapshot of the model for future use.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_TrainAsync_" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.TrainAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_TrainAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.ConditionalInferenceTreeRegression`1.TrainAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainAsync(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously trains the regression model on the provided training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task TrainAsync(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix where rows represent samples and columns represent features.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector corresponding to each sample in the input matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task representing the asynchronous training operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ConditionalInferenceTreeRegression_1_TrainAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method trains the conditional inference tree regression model using the provided input features and
+target values. Unlike traditional regression models, tree-based methods do not apply data regularization
+transformations. Instead, they control model complexity through structural parameters such as MaxDepth,
+MinSamplesSplit, and MinSamplesLeaf. This method builds the tree recursively starting from the root node
+and calculates feature importances to identify which features have the most impact on predictions.
+</p>
+<p><b>For Beginners:</b> This method teaches the model to make predictions based on your data.
+<p>During training:</p>
+<ul>
+<li>A decision tree is built by finding the best questions to ask at each step</li>
+<li>The model looks for patterns that connect your input features to the values you want to predict</li>
+<li>The importance of each feature is calculated, showing which inputs matter most for predictions</li>
+</ul>
+<p>Note: Unlike linear regression models, tree-based methods control overfitting through tree structure
+parameters (like max depth) rather than through data regularization.</p>
+<p>The &quot;Async&quot; in the method name means it can run in the background while your program does other things,
+which is helpful for large datasets.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ConditionalInferenceTreeRegression.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

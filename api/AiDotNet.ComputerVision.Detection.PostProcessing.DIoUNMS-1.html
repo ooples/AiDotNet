@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DIoUNMS&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DIoUNMS&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Distance-IoU based Non-Maximum Suppression for improved localization.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1" class="text-break">
+Class DIoUNMS&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/DIoUNMS.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.html">Detection</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.PostProcessing.html">PostProcessing</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Distance-IoU based Non-Maximum Suppression for improved localization.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DIoUNMS&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DIoUNMS&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> DIoU-NMS is an improved version of standard NMS that considers
+the distance between box centers, not just their overlap. This helps preserve nearby
+objects that might be suppressed by standard NMS.</p>
+<p>Reference: Zheng et al., "Distance-IoU Loss: Faster and Better Learning for Bounding Box Regression", AAAI 2020</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1__ctor_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1__ctor" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.#ctor">
+  DIoUNMS()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/DIoUNMS.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new DIoU-NMS instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DIoUNMS()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_Apply_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.Apply*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_Apply_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.Apply(System.Collections.Generic.List{AiDotNet.ComputerVision.Detection.ObjectDetection.Detection{`0}},System.Double)">
+  Apply(List&lt;Detection&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/DIoUNMS.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies DIoU-NMS to a list of detections.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Detection&lt;T&gt;&gt; Apply(List&lt;Detection&lt;T&gt;&gt; detections, double diouThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>detections</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of detections to filter.</p>
+</dd>
+    <dt><code>diouThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>DIoU threshold for suppression (typically higher than IoU threshold).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Filtered list of detections.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_Apply_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> DIoU-NMS uses the distance between box centers as an additional
+criterion. Two boxes might have high IoU but if their centers are far apart, they might
+represent different objects and should both be kept.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_ApplyAdaptive_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.ApplyAdaptive*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_ApplyAdaptive_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double_System_Double_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.ApplyAdaptive(System.Collections.Generic.List{AiDotNet.ComputerVision.Detection.ObjectDetection.Detection{`0}},System.Double,System.Double)">
+  ApplyAdaptive(List&lt;Detection&lt;T&gt;&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/DIoUNMS.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies DIoU-NMS with adaptive threshold based on box density.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Detection&lt;T&gt;&gt; ApplyAdaptive(List&lt;Detection&lt;T&gt;&gt; detections, double baseDiouThreshold, double densityFactor = 0.5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>detections</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of detections to filter.</p>
+</dd>
+    <dt><code>baseDiouThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Base DIoU threshold.</p>
+</dd>
+    <dt><code>densityFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>How much to adjust threshold based on density (0.0 to 1.0).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Filtered list of detections.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_ApplyAdaptive_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> In crowded scenes with many overlapping objects, using a fixed
+threshold might suppress too many valid detections. Adaptive DIoU-NMS adjusts the threshold
+based on the local density of detections.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_ApplyBatched_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.ApplyBatched*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_ApplyBatched_System_Collections_Generic_List_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0____System_Double_System_Boolean_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.ApplyBatched(System.Collections.Generic.List{System.Collections.Generic.List{AiDotNet.ComputerVision.Detection.ObjectDetection.Detection{`0}}},System.Double,System.Boolean)">
+  ApplyBatched(List&lt;List&lt;Detection&lt;T&gt;&gt;&gt;, double, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/DIoUNMS.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies batched DIoU-NMS for multiple images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;List&lt;Detection&lt;T&gt;&gt;&gt; ApplyBatched(List&lt;List&lt;Detection&lt;T&gt;&gt;&gt; batchDetections, double diouThreshold, bool classAware = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchDetections</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>Detections for each image in the batch.</p>
+</dd>
+    <dt><code>diouThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>DIoU threshold for suppression.</p>
+</dd>
+    <dt><code>classAware</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to apply class-aware NMS.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>Filtered detections for each image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_ApplyClassAware_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.ApplyClassAware*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_DIoUNMS_1_ApplyClassAware_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.DIoUNMS`1.ApplyClassAware(System.Collections.Generic.List{AiDotNet.ComputerVision.Detection.ObjectDetection.Detection{`0}},System.Double)">
+  ApplyClassAware(List&lt;Detection&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/DIoUNMS.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies class-aware DIoU-NMS.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Detection&lt;T&gt;&gt; ApplyClassAware(List&lt;Detection&lt;T&gt;&gt; detections, double diouThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>detections</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of detections to filter.</p>
+</dd>
+    <dt><code>diouThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>DIoU threshold for suppression.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Filtered list of detections with per-class DIoU-NMS applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/DIoUNMS.cs/#L16" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

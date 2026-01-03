@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PersonalizedFederatedLearning&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PersonalizedFederatedLearning&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements personalized federated learning where each client maintains some client-specific parameters.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1.md&amp;value=---%0Auid%3A%20AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1">
+
+
+
+  <h1 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1" class="text-break">
+Class PersonalizedFederatedLearning&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FederatedLearning.html">FederatedLearning</a>.<a class="xref" href="AiDotNet.FederatedLearning.Personalization.html">Personalization</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements personalized federated learning where each client maintains some client-specific parameters.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PersonalizedFederatedLearning&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for model parameters (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PersonalizedFederatedLearning&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Personalized Federated Learning (PFL) addresses the challenge of heterogeneous data distributions
+across clients by allowing each client to maintain personalized model components while still
+benefiting from collaborative learning.</p>
+<p><b>For Beginners:</b> Personalized FL is like having a shared textbook but personal notes.
+Everyone learns from the same core material (global model) but adapts it to their specific
+needs (personalized layers).</p>
+<p>Key concept:</p>
+<ul>
+<li>Global layers: Shared across all clients, learn common patterns</li>
+<li>Personalized layers: Client-specific, adapt to local data distribution</li>
+<li>Clients train both but only global layers are aggregated</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>Model is split into global and personalized parts</li>
+<li>During local training, both parts are updated</li>
+<li>Only global parts are sent to server for aggregation</li>
+<li>Personalized parts stay on the client</li>
+<li>Client receives updated global parts and keeps personalized parts</li>
+</ol>
+<p>For example, in healthcare:</p>
+<ul>
+<li>Hospital A: Urban population, young average age</li>
+<li>Hospital B: Rural population, old average age</li>
+<li>Hospital C: Suburban population, mixed age</li>
+</ul>
+<p>Model structure:</p>
+<ul>
+<li>Global layers (shared): General disease detection features</li>
+<li>Personalized layers: Adapt to local demographics</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>Better performance on non-IID data</li>
+<li>Each client gets a model optimized for their data</li>
+<li>Preserves privacy (personalized parts never leave client)</li>
+<li>Relatively simple to implement</li>
+</ul>
+<p>Common approaches:</p>
+<ol>
+<li>Layer-wise personalization: Last few layers personalized</li>
+<li>Feature-wise personalization: Some features personalized</li>
+<li>Meta-learning: Learn how to adapt quickly to local data</li>
+<li>Multi-task learning: Treat each client as a separate task</li>
+</ol>
+<p>When to use PFL:</p>
+<ul>
+<li>Clients have significantly different data distributions</li>
+<li>Standard FedAvg performance is poor</li>
+<li>Can afford client-side storage for personalized parameters</li>
+<li>Want better local performance even at cost of global performance</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Requires more storage on client (for personalized params)</li>
+<li>May sacrifice some global model quality</li>
+<li>Need to choose which layers to personalize</li>
+<li>Risk of overfitting to local data</li>
+</ul>
+<p>Reference:</p>
+<ul>
+<li>Wang, K., et al. (2019). &quot;Federated Evaluation of On-device Personalization.&quot; arXiv preprint.</li>
+<li>Fallah, A., et al. (2020). &quot;Personalized Federated Learning with Theoretical Guarantees: A Model-Agnostic Meta-Learning Approach.&quot; NeurIPS 2020.</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1__ctor_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1__ctor_System_Double_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.#ctor(System.Double)">
+  PersonalizedFederatedLearning(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning-1.html">PersonalizedFederatedLearning&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PersonalizedFederatedLearning(double personalizationFraction = 0.2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>personalizationFraction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The fraction of model layers to keep personalized (0.0 to 1.0).
+Typically 0.2 for last 20% of layers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1__ctor_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Sets up personalized federated learning with a specified
+fraction of the model kept personalized.</p>
+<p>The personalization fraction determines the split:</p>
+<ul>
+<li>0.0: No personalization (standard federated learning)</li>
+<li>0.2: Last 20% of layers personalized (common choice)</li>
+<li>0.5: Half personalized, half global</li>
+<li>1.0: Fully personalized (no collaboration)</li>
+</ul>
+<p>Typical strategy:</p>
+<ul>
+<li>Keep early layers (feature extractors) global</li>
+<li>Keep late layers (task-specific) personalized</li>
+</ul>
+<p>For example, in a CNN:</p>
+<ul>
+<li>Conv layers 1-3: Global (learn general visual features)</li>
+<li>Conv layers 4-5: Personalized (adapt to local image characteristics)</li>
+<li>FC layers: Personalized (task-specific classification)</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_CombineModels_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.CombineModels*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_CombineModels_System_Collections_Generic_Dictionary_System_String__0____System_Collections_Generic_Dictionary_System_String__0____" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.CombineModels(System.Collections.Generic.Dictionary{System.String,`0[]},System.Collections.Generic.Dictionary{System.String,`0[]})">
+  CombineModels(Dictionary&lt;string, T[]&gt;, Dictionary&lt;string, T[]&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Combines global model update with client's personalized layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T[]&gt; CombineModels(Dictionary&lt;string, T[]&gt; globalUpdate, Dictionary&lt;string, T[]&gt; personalizedLayers)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>globalUpdate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>The updated global layers from server.</p>
+</dd>
+    <dt><code>personalizedLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>The client's personalized layers.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>The complete model combining both parts.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_CombineModels_System_Collections_Generic_Dictionary_System_String__0____System_Collections_Generic_Dictionary_System_String__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> After the server aggregates global layers, each client
+combines the updated global layers with their own personalized layers to form
+the complete model for the next round.</p>
+<p>Process:</p>
+<ol>
+<li>Receive updated global layers from server</li>
+<li>Retrieve client's personalized layers from local storage</li>
+<li>Merge them into one complete model</li>
+<li>Ready for next round of local training</li>
+</ol>
+<p>For example:
+Server sends global update: {layer1: [...], layer2: [...]}
+Client has personalized: {layer3: [...], layer4: [...]}
+Combined model: {layer1: [...], layer2: [...], layer3: [...], layer4: [...]}</p>
+<p>This ensures:</p>
+<ul>
+<li>Global knowledge is incorporated (layers 1-2 updated)</li>
+<li>Local adaptation is preserved (layers 3-4 unchanged)</li>
+<li>Model structure remains consistent</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_GetModelSplitStatistics_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.GetModelSplitStatistics*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_GetModelSplitStatistics_System_Collections_Generic_Dictionary_System_String__0____" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.GetModelSplitStatistics(System.Collections.Generic.Dictionary{System.String,`0[]})">
+  GetModelSplitStatistics(Dictionary&lt;string, T[]&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L336"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates statistics about the model split.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, double&gt; GetModelSplitStatistics(Dictionary&lt;string, T[]&gt; fullModel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fullModel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>The complete model.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>A dictionary with statistics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_GetModelSplitStatistics_System_Collections_Generic_Dictionary_System_String__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Provides useful information about how the model is divided:</p>
+<ul>
+<li>How many parameters are global vs. personalized</li>
+<li>What percentage of the model is personalized</li>
+<li>Communication savings from personalization</li>
+</ul>
+<p>This helps understand the trade-offs:</p>
+<ul>
+<li>More personalized → Less communication, more storage per client</li>
+<li>More global → More communication, less storage per client</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_GetPersonalizationFraction_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.GetPersonalizationFraction*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_GetPersonalizationFraction" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.GetPersonalizationFraction">
+  GetPersonalizationFraction()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the personalization fraction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GetPersonalizationFraction()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The fraction of layers that are personalized.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_GetPersonalizedLayers_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.GetPersonalizedLayers*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_GetPersonalizedLayers" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.GetPersonalizedLayers">
+  GetPersonalizedLayers()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the set of all personalized layer names.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyCollection&lt;string&gt; GetPersonalizedLayers()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlycollection-1">IReadOnlyCollection</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A read-only set of personalized layer names.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_GetPersonalizedLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Returns the list of which layers are personalized.
+Useful for logging, debugging, and understanding the model split.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_IdentifyPersonalizedLayers_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.IdentifyPersonalizedLayers*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_IdentifyPersonalizedLayers_System_Collections_Generic_Dictionary_System_String__0____System_String_System_Collections_Generic_HashSet_System_String__" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.IdentifyPersonalizedLayers(System.Collections.Generic.Dictionary{System.String,`0[]},System.String,System.Collections.Generic.HashSet{System.String})">
+  IdentifyPersonalizedLayers(Dictionary&lt;string, T[]&gt;, string, HashSet&lt;string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Identifies which layers should be personalized based on the model structure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void IdentifyPersonalizedLayers(Dictionary&lt;string, T[]&gt; modelStructure, string strategy = &quot;last_n&quot;, HashSet&lt;string&gt;? customPatterns = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelStructure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>The model structure with layer names.</p>
+</dd>
+    <dt><code>strategy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The strategy for selecting personalized layers (&quot;last_n&quot;, &quot;by_pattern&quot;).</p>
+</dd>
+    <dt><code>customPatterns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.hashset-1">HashSet</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional patterns for &quot;by_pattern&quot; strategy.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_IdentifyPersonalizedLayers_System_Collections_Generic_Dictionary_System_String__0____System_String_System_Collections_Generic_HashSet_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This decides which parts of the model will be personalized
+vs. shared globally.</p>
+<p>Common strategies:</p>
+<ol>
+<li>Last-N layers: Personalize the final layers (default)</li>
+<li>By name: Personalize layers matching specific patterns</li>
+<li>By type: Personalize certain layer types (e.g., batch norm)</li>
+</ol>
+<p>For example, with 10 layers and 20% personalization:</p>
+<ul>
+<li>Layers 0-7: Global (shared)</li>
+<li>Layers 8-9: Personalized (last 2 layers = 20%)</li>
+</ul>
+<p>The intuition:</p>
+<ul>
+<li>Early layers learn low-level features (edges, textures) → should be shared</li>
+<li>Late layers learn high-level, task-specific features → can be personalized</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_IsLayerPersonalized_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.IsLayerPersonalized*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_IsLayerPersonalized_System_String_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.IsLayerPersonalized(System.String)">
+  IsLayerPersonalized(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific layer is personalized.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsLayerPersonalized(string layerName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>layerName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the layer to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the layer is personalized, false if global.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_IsLayerPersonalized_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Returns whether a given layer should be kept local
+(personalized) or sent to the server (global).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_SeparateModel_" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.SeparateModel*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_SeparateModel_System_Collections_Generic_Dictionary_System_String__0____System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_String__0_____" data-uid="AiDotNet.FederatedLearning.Personalization.PersonalizedFederatedLearning`1.SeparateModel(System.Collections.Generic.Dictionary{System.String,`0[]},System.Collections.Generic.Dictionary{System.String,`0[]}@,System.Collections.Generic.Dictionary{System.String,`0[]}@)">
+  SeparateModel(Dictionary&lt;string, T[]&gt;, out Dictionary&lt;string, T[]&gt;, out Dictionary&lt;string, T[]&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Separates a model into global and personalized components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SeparateModel(Dictionary&lt;string, T[]&gt; fullModel, out Dictionary&lt;string, T[]&gt; globalPart, out Dictionary&lt;string, T[]&gt; personalizedPart)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fullModel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>The complete model with all layers.</p>
+</dd>
+    <dt><code>globalPart</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>Output: The global layers to be aggregated.</p>
+</dd>
+    <dt><code>personalizedPart</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>Output: The personalized layers to keep local.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Personalization_PersonalizedFederatedLearning_1_SeparateModel_System_Collections_Generic_Dictionary_System_String__0____System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_String__0______remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Splits the model into two parts:</p>
+<ul>
+<li>Global part: Will be sent to server and aggregated</li>
+<li>Personalized part: Stays on client</li>
+</ul>
+<p>For example:
+Original model: {layer1: [...], layer2: [...], layer3: [...], layer4: [...]}
+If layers 3-4 are personalized:</p>
+<ul>
+<li>Global: {layer1: [...], layer2: [...]}</li>
+<li>Personalized: {layer3: [...], layer4: [...]}</li>
+</ul>
+<p>This separation enables:</p>
+<ul>
+<li>Efficient communication (only send global parts)</li>
+<li>Privacy (personalized parts never leave client)</li>
+<li>Flexibility (different personalization per client)</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Personalization/PersonalizedFederatedLearning.cs/#L69" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

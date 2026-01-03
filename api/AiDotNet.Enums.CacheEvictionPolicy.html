@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum CacheEvictionPolicy | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum CacheEvictionPolicy | AiDotNet Documentation ">
+      
+      <meta name="description" content="Cache eviction policies for managing limited cache memory.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_CacheEvictionPolicy.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.CacheEvictionPolicy%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.CacheEvictionPolicy">
+
+
+
+
+  <h1 id="AiDotNet_Enums_CacheEvictionPolicy" data-uid="AiDotNet.Enums.CacheEvictionPolicy" class="text-break">
+Enum CacheEvictionPolicy  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/CacheEvictionPolicy.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Cache eviction policies for managing limited cache memory.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum CacheEvictionPolicy</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_CacheEvictionPolicy_FIFO"><code>FIFO = 2</code></dt>
+  
+  <dd><p>First In First Out - removes the oldest items first, regardless of usage.
+Simple but may remove frequently-used items.</p>
+</dd>
+    <dt id="AiDotNet_Enums_CacheEvictionPolicy_LFU"><code>LFU = 1</code></dt>
+  
+  <dd><p>Least Frequently Used - removes items that have been accessed the fewest times.
+Best when some items are accessed much more frequently than others.</p>
+</dd>
+    <dt id="AiDotNet_Enums_CacheEvictionPolicy_LRU"><code>LRU = 0</code></dt>
+  
+  <dd><p>Least Recently Used - removes items that haven't been accessed in the longest time.
+Best for most general-purpose caching scenarios.</p>
+</dd>
+    <dt id="AiDotNet_Enums_CacheEvictionPolicy_Random"><code>Random = 3</code></dt>
+  
+  <dd><p>Random eviction - removes items randomly when cache is full.
+Simplest implementation but least predictable performance.</p>
+</dd>
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_CacheEvictionPolicy_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> When running AI models, caching helps avoid loading the same model
+multiple times, which speeds things up. However, caches have limited space. An eviction
+policy determines which items to remove when the cache becomes full. Think of it like
+deciding which apps to close on your phone when memory runs low.</p>
+<ul>
+<li><strong>LRU (Least Recently Used)</strong>: Removes items that haven't been used in the longest time</li>
+<li><strong>LFU (Least Frequently Used)</strong>: Removes items that are used the least often</li>
+<li><strong>FIFO (First In First Out)</strong>: Removes the oldest items first, like a queue</li>
+<li><strong>Random</strong>: Removes items randomly (simplest but least efficient)</li>
+</ul>
+<p>Most applications use LRU as it provides a good balance between performance and simplicity.</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/CacheEvictionPolicy.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

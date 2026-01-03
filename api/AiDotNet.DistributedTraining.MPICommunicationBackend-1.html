@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MPICommunicationBackend&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MPICommunicationBackend&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="MPI.NET-based communication backend for production distributed training.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DistributedTraining_MPICommunicationBackend_1.md&amp;value=---%0Auid%3A%20AiDotNet.DistributedTraining.MPICommunicationBackend%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1">
+
+
+
+  <h1 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1" class="text-break">
+Class MPICommunicationBackend&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DistributedTraining.html">DistributedTraining</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>MPI.NET-based communication backend for production distributed training.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MPICommunicationBackend&lt;T&gt; : CommunicationBackendBase&lt;T&gt;, ICommunicationBackend&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for operations</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html">CommunicationBackendBase</a>&lt;T&gt;</div>
+      <div><span class="xref">MPICommunicationBackend&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.ICommunicationBackend-1.html">ICommunicationBackend</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_NumOps">CommunicationBackendBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_IsInitialized">CommunicationBackendBase&lt;T&gt;.IsInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_Initialize">CommunicationBackendBase&lt;T&gt;.Initialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_Shutdown">CommunicationBackendBase&lt;T&gt;.Shutdown()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_EnsureInitialized">CommunicationBackendBase&lt;T&gt;.EnsureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_ValidateRoot_System_Int32_">CommunicationBackendBase&lt;T&gt;.ValidateRoot(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_ValidateRank_System_Int32_System_String_">CommunicationBackendBase&lt;T&gt;.ValidateRank(int, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_ValidateData_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_String_">CommunicationBackendBase&lt;T&gt;.ValidateData(Vector&lt;T&gt;, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.CommunicationBackendBase-1.html#AiDotNet_DistributedTraining_CommunicationBackendBase_1_ApplyReductionOperation__0__0_AiDotNet_DistributedTraining_ReductionOperation_">CommunicationBackendBase&lt;T&gt;.ApplyReductionOperation(T, T, ReductionOperation)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Overview:</b>
+MPI (Message Passing Interface) is the industry-standard communication framework for
+high-performance computing. MPI.NET provides .NET bindings for MPI, enabling production-grade
+distributed training on HPC clusters and supercomputers.
+</p>
+<p><b>Features:</b>
+- Optimized collective operations (AllReduce, AllGather, etc.)
+- Support for InfiniBand and other high-speed interconnects
+- Battle-tested in HPC for decades
+- Excellent performance and scalability
+</p>
+<p><b>Use Cases:</b>
+- HPC cluster deployment
+- Large-scale training (100s-1000s of nodes)
+- InfiniBand or high-speed network infrastructure
+- Production distributed training pipelines
+</p>
+<p><b>Requirements:</b>
+- MPI.NET NuGet package
+- MPI implementation (OpenMPI, MPICH, Intel MPI, etc.)
+- MPI runtime environment
+</p>
+<p><b>Graceful Degradation:</b>
+If MPI.NET is not available, this backend falls back to single-process mode
+where all operations work correctly but without actual inter-process communication.
+A warning is logged when fallback mode is active.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1__ctor_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1__ctor_System_Int32_System_Int32_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.#ctor(System.Int32,System.Int32)">
+  MPICommunicationBackend(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new MPI communication backend.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MPICommunicationBackend(int rank = 0, int worldSize = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>This process's rank (will be obtained from MPI if available)</p>
+</dd>
+    <dt><code>worldSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of processes (will be obtained from MPI if available)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Rank_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Rank*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Rank" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Rank">
+  Rank
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the rank (ID) of the current process in the distributed group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int Rank { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Rank_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Rank 0 is typically the "master" or "coordinator" process.
+</p>
+<p><b>For Beginners:</b>
+Think of rank as your process's unique ID number. If you have 4 GPUs,
+ranks will be 0, 1, 2, and 3. Rank 0 is usually the "boss" that coordinates everything.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_WorldSize_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.WorldSize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_WorldSize" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.WorldSize">
+  WorldSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of processes in the distributed group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int WorldSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_WorldSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is how many processes (or GPUs) are working together.
+If WorldSize is 4, you have 4 processes sharing the work.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_AllGather_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.AllGather*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_AllGather_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.AllGather(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  AllGather(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>AllGather operation - gathers data from all processes and concatenates it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; AllGather(Vector&lt;T&gt; sendData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sendData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The local data to contribute</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gathered data from all processes concatenated together</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_AllGather_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Each process receives the complete concatenated result.
+</p>
+<p><b>For Beginners:</b>
+If GPU 0 has [1,2], GPU 1 has [3,4], GPU 2 has [5,6], GPU 3 has [7,8],
+then AllGather gives everyone [1,2,3,4,5,6,7,8].
+This is used to reconstruct the full model parameters from sharded pieces.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_AllReduce_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.AllReduce*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_AllReduce_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_DistributedTraining_ReductionOperation_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.AllReduce(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.DistributedTraining.ReductionOperation)">
+  AllReduce(Vector&lt;T&gt;, ReductionOperation)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>AllReduce operation - combines data from all processes using the specified operation
+and distributes the result back to all processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void AllReduce(Vector&lt;T&gt; data, ReductionOperation operation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to reduce. Will be replaced with the reduced result.</p>
+</dd>
+    <dt><code>operation</code> <a class="xref" href="AiDotNet.DistributedTraining.ReductionOperation.html">ReductionOperation</a></dt>
+    <dd><p>The reduction operation (Sum, Max, Min, etc.)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_AllReduce_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_DistributedTraining_ReductionOperation__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Imagine 4 GPUs each calculated a gradient vector. AllReduce takes all 4 vectors,
+adds them together (if operation is Sum), and gives the result to all 4 GPUs.
+This is crucial for averaging gradients across GPUs during training.
+</p>
+<p>
+Common operations:
+- Sum: Add all values together (used for gradient averaging)
+- Max: Take the maximum value across all processes
+- Min: Take the minimum value across all processes
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Barrier_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Barrier*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Barrier" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Barrier">
+  Barrier()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronization barrier - blocks until all processes reach this point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Barrier()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Barrier_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is like a meeting checkpoint. All processes must arrive at this point
+before any of them can continue. It ensures everyone is synchronized.
+Example: Before starting training, you want all GPUs to be ready.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Broadcast_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Broadcast*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Broadcast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Broadcast(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  Broadcast(Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Broadcast operation - sends data from one process (root) to all other processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Broadcast(Vector&lt;T&gt; data, int root = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to broadcast (only meaningful on root process)</p>
+</dd>
+    <dt><code>root</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank of the process that is broadcasting</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The broadcast data (received from root on non-root processes)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Broadcast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is like an announcement from the boss (root process). The root sends
+data to everyone else. Useful for distributing initial parameters or configurations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_OnInitialize_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.OnInitialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_OnInitialize" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.OnInitialize">
+  OnInitialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called during initialization to perform backend-specific setup.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OnInitialize()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_OnInitialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes override this method to implement their specific initialization logic,
+such as connecting to MPI or setting up shared memory structures.
+</p>
+<p><b>For Beginners:</b> This is where each specific backend does its setup work.
+<p>For example:</p>
+<ul>
+<li>An MPI backend would connect to the MPI environment</li>
+<li>An in-memory backend would create shared data structures</li>
+<li>An NCCL backend would initialize GPU communication channels</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_OnShutdown_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.OnShutdown*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_OnShutdown" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.OnShutdown">
+  OnShutdown()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called during shutdown to perform backend-specific cleanup.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OnShutdown()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_OnShutdown_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes override this method to implement their specific cleanup logic,
+such as disconnecting from MPI or releasing shared memory.
+</p>
+<p><b>For Beginners:</b> This is where each backend cleans up its resources.
+<p>It's like turning off equipment when you're done - releasing memory,
+closing connections, and ensuring everything shuts down cleanly.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Receive_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Receive*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Receive_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Receive(System.Int32,System.Int32,System.Int32)">
+  Receive(int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L462"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Receive operation - receives data from a specific source process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Receive(int sourceRank, int count, int tag = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceRank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank of the process to receive from</p>
+</dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The expected number of elements to receive</p>
+</dd>
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Optional message tag to match with Send (default=0)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The received data</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Receive_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is a point-to-point communication operation that blocks until data arrives.
+</p>
+<p><b>For Beginners:</b>
+This is like waiting for a private message from a specific GPU. The process
+will wait (block) until the message arrives.
+<p>Use cases:</p>
+<ul>
+<li>Pipeline parallelism: receiving activations from previous stage</li>
+<li>Ring-based algorithms: receiving data from neighbor</li>
+<li>Custom communication patterns</li>
+</ul>
+
+<p><b>Important:</b>
+Receive must be matched with a corresponding Send from the source process.
+If the sender never sends, this will deadlock (hang forever). If the sizes
+don't match, data corruption or errors can occur.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_ReduceScatter_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.ReduceScatter*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_ReduceScatter_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_DistributedTraining_ReductionOperation_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.ReduceScatter(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.DistributedTraining.ReductionOperation)">
+  ReduceScatter(Vector&lt;T&gt;, ReductionOperation)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>ReduceScatter operation - reduces data and scatters the result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; ReduceScatter(Vector&lt;T&gt; data, ReductionOperation operation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to reduce and scatter</p>
+</dd>
+    <dt><code>operation</code> <a class="xref" href="AiDotNet.DistributedTraining.ReductionOperation.html">ReductionOperation</a></dt>
+    <dd><p>The reduction operation</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The reduced chunk for this process</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_ReduceScatter_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_DistributedTraining_ReductionOperation__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Combines AllReduce and Scatter in one operation for efficiency.
+</p>
+<p><b>For Beginners:</b>
+This is an optimization that combines reduction and scattering.
+Instead of doing AllReduce (everyone gets everything) then Scatter (split it up),
+we directly compute and distribute only the needed chunks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Scatter_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Scatter*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Scatter_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Scatter(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  Scatter(Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L312"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scatter operation - distributes different chunks of data from root to each process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Scatter(Vector&lt;T&gt; sendData, int root = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sendData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to scatter (only used on root process)</p>
+</dd>
+    <dt><code>root</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank of the process that is scattering</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The chunk of data received by this process</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Scatter_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+The root has a big array and wants to give each GPU a different piece.
+If root has [1,2,3,4,5,6,7,8] and WorldSize=4, it gives:
+GPU 0 gets [1,2], GPU 1 gets [3,4], GPU 2 gets [5,6], GPU 3 gets [7,8]
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Send_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Send*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Send_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_System_Int32_" data-uid="AiDotNet.DistributedTraining.MPICommunicationBackend`1.Send(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,System.Int32)">
+  Send(Vector&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Send operation - sends data from this process to a specific destination process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Send(Vector&lt;T&gt; data, int destinationRank, int tag = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to send</p>
+</dd>
+    <dt><code>destinationRank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank of the process to send to</p>
+</dd>
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Optional message tag to distinguish different messages (default=0)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_MPICommunicationBackend_1_Send_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is a point-to-point communication operation. Unlike collective operations
+(AllReduce, Broadcast, etc.), only two processes are involved: sender and receiver.
+</p>
+<p><b>For Beginners:</b>
+This is like sending a private message to one specific GPU. Unlike Broadcast
+(which sends to everyone), Send only sends to one receiver.
+<p>Use cases:</p>
+<ul>
+<li>Pipeline parallelism: sending activations from one stage to the next</li>
+<li>Ring-based algorithms: sending data to neighbor in a ring</li>
+<li>Custom communication patterns</li>
+</ul>
+
+<p><b>Important:</b>
+Send must be matched with a corresponding Receive on the destination process.
+The sender and receiver must agree on the message size, otherwise deadlock
+or incorrect data transfer can occur.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/MPICommunicationBackend.cs/#L41" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

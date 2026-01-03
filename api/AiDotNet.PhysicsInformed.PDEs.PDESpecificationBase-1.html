@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PDESpecificationBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PDESpecificationBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for all Partial Differential Equation (PDE) specifications. Provides common functionality for PDE implementations used with Physics-Informed Neural Networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1">
+
+
+
+  <h1 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1" class="text-break">
+Class PDESpecificationBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PhysicsInformed.html">PhysicsInformed</a>.<a class="xref" href="AiDotNet.PhysicsInformed.PDEs.html">PDEs</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for all Partial Differential Equation (PDE) specifications.
+Provides common functionality for PDE implementations used with Physics-Informed Neural Networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class PDESpecificationBase&lt;T&gt; : IPDESpecification&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PDESpecificationBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html">IPDESpecification</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.AdvectionDiffusionEquation-1.html">AdvectionDiffusionEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.AllenCahnEquation-1.html">AllenCahnEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.BlackScholesEquation-1.html">BlackScholesEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.BurgersEquation-1.html">BurgersEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.HeatEquation-1.html">HeatEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.KortewegDeVriesEquation-1.html">KortewegDeVriesEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation-1.html">LinearElasticityEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.MaxwellEquations-1.html">MaxwellEquations&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.NavierStokesEquation-1.html">NavierStokesEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PoissonEquation-1.html">PoissonEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.SchrodingerEquation-1.html">SchrodingerEquation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.WaveEquation-1.html">WaveEquation&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> A Partial Differential Equation (PDE) describes how a quantity changes
+with respect to multiple variables (like space and time). This base class provides the
+foundation for implementing any PDE that can be solved using Physics-Informed Neural Networks.
+</p>
+<p>
+All PDE implementations should inherit from this class rather than implementing
+<a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html">IPDESpecification&lt;T&gt;</a> directly. This ensures consistent behavior and
+provides access to common helper methods.
+</p>
+<p>
+To create a new PDE, override the abstract members:
+<ul><li><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ComputeResidual__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__">ComputeResidual(T[], T[], PDEDerivatives&lt;T&gt;)</a> - Calculate how much the PDE is violated</li><li><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_InputDimension">InputDimension</a> - Number of independent variables (space + time)</li><li><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_OutputDimension">OutputDimension</a> - Number of dependent variables (solution components)</li><li><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_Name">Name</a> - Human-readable name of the PDE</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1__ctor_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1__ctor" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.#ctor">
+  PDESpecificationBase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html">PDESpecificationBase&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected PDESpecificationBase()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_NumOps" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides mathematical operations for the numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_NumOps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This object knows how to do math operations (add, multiply, etc.)
+for whatever numeric type T is (float, double, etc.). Use it for all calculations.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_InputDimension_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.InputDimension*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_InputDimension" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.InputDimension">
+  InputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimension of the input space (e.g., 2 for 2D spatial problems, 3 for 2D space + time).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int InputDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_Name_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.Name*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_Name" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name or description of the PDE (e.g., &quot;Heat Equation&quot;, &quot;Navier-Stokes&quot;).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_OutputDimension_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.OutputDimension*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_OutputDimension" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.OutputDimension">
+  OutputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimension of the output space (e.g., 1 for scalar fields like temperature, 3 for vector fields like velocity).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int OutputDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ComputeResidual_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ComputeResidual*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ComputeResidual__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ComputeResidual(`0[],`0[],AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0})">
+  ComputeResidual(T[], T[], PDEDerivatives&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the PDE residual at the given point.
+The residual is how much the PDE equation is violated at that point.
+For a true solution, the residual should be zero everywhere.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract T ComputeResidual(T[] inputs, T[] outputs, PDEDerivatives&lt;T&gt; derivatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> T[]</dt>
+    <dd><p>The spatial and temporal coordinates where to evaluate the PDE.</p>
+</dd>
+    <dt><code>outputs</code> T[]</dt>
+    <dd><p>The predicted solution values at those coordinates.</p>
+</dd>
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>The derivatives of the solution (gradient, Hessian, etc.).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The PDE residual value (should be zero for a perfect solution).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_CreateGradient_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.CreateGradient*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_CreateGradient" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.CreateGradient">
+  CreateGradient()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new PDEResidualGradient with the appropriate dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected PDEResidualGradient&lt;T&gt; CreateGradient()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEResidualGradient-1.html">PDEResidualGradient</a>&lt;T&gt;</dt>
+    <dd><p>A new gradient object initialized with zeros.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateFirstDerivatives_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidateFirstDerivatives*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateFirstDerivatives_AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidateFirstDerivatives(AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0})">
+  ValidateFirstDerivatives(PDEDerivatives&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that first-order derivatives are available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateFirstDerivatives(PDEDerivatives&lt;T&gt; derivatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>The derivatives to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when first derivatives are null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateNonNegative_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidateNonNegative*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateNonNegative__0_System_String_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidateNonNegative(`0,System.String)">
+  ValidateNonNegative(T, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that a parameter is non-negative (greater than or equal to zero).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateNonNegative(T value, string parameterName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to validate.</p>
+</dd>
+    <dt><code>parameterName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the parameter for error messages.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the value is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidatePositive_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidatePositive*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidatePositive__0_System_String_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidatePositive(`0,System.String)">
+  ValidatePositive(T, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that a parameter is positive (greater than zero).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidatePositive(T value, string parameterName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to validate.</p>
+</dd>
+    <dt><code>parameterName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the parameter for error messages.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the value is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateSecondDerivatives_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidateSecondDerivatives*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateSecondDerivatives_AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidateSecondDerivatives(AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0})">
+  ValidateSecondDerivatives(PDEDerivatives&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that both first and second-order derivatives are available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateSecondDerivatives(PDEDerivatives&lt;T&gt; derivatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>The derivatives to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when required derivatives are null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateThirdDerivatives_" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidateThirdDerivatives*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateThirdDerivatives_AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__" data-uid="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase`1.ValidateThirdDerivatives(AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0})">
+  ValidateThirdDerivatives(PDEDerivatives&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that first, second, and third-order derivatives are available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateThirdDerivatives(PDEDerivatives&lt;T&gt; derivatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>The derivatives to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when required derivatives are null.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/PDESpecificationBase.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

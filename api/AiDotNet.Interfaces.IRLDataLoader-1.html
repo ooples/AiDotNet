@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IRLDataLoader&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IRLDataLoader&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for data loaders that provide experience data for reinforcement learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IRLDataLoader_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IRLDataLoader%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IRLDataLoader`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IRLDataLoader_1" data-uid="AiDotNet.Interfaces.IRLDataLoader`1" class="text-break">
+Interface IRLDataLoader&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for data loaders that provide experience data for reinforcement learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IRLDataLoader&lt;T&gt; : IDataLoader&lt;T&gt;, IResettable, ICountable, IBatchIterable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html#AiDotNet_Interfaces_IDataLoader_1_Name">IDataLoader&lt;T&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html#AiDotNet_Interfaces_IDataLoader_1_Description">IDataLoader&lt;T&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html#AiDotNet_Interfaces_IDataLoader_1_IsLoaded">IDataLoader&lt;T&gt;.IsLoaded</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html#AiDotNet_Interfaces_IDataLoader_1_LoadAsync_System_Threading_CancellationToken_">IDataLoader&lt;T&gt;.LoadAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html#AiDotNet_Interfaces_IDataLoader_1_Unload">IDataLoader&lt;T&gt;.Unload()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IResettable.html#AiDotNet_Interfaces_IResettable_Reset">IResettable.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICountable.html#AiDotNet_Interfaces_ICountable_TotalCount">ICountable.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICountable.html#AiDotNet_Interfaces_ICountable_CurrentIndex">ICountable.CurrentIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICountable.html#AiDotNet_Interfaces_ICountable_BatchCount">ICountable.BatchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICountable.html#AiDotNet_Interfaces_ICountable_CurrentBatchIndex">ICountable.CurrentBatchIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICountable.html#AiDotNet_Interfaces_ICountable_Progress">ICountable.Progress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html#AiDotNet_Interfaces_IBatchIterable_1_BatchSize">IBatchIterable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html#AiDotNet_Interfaces_IBatchIterable_1_HasNext">IBatchIterable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;.HasNext</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html#AiDotNet_Interfaces_IBatchIterable_1_GetNextBatch">IBatchIterable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;.GetNextBatch()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html#AiDotNet_Interfaces_IBatchIterable_1_TryGetNextBatch__0__">IBatchIterable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;.TryGetNextBatch(out Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html#AiDotNet_Interfaces_IBatchIterable_1_GetBatches_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__">IBatchIterable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;.GetBatches(int?, bool, bool, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html#AiDotNet_Interfaces_IBatchIterable_1_GetBatchesAsync_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Int32_System_Threading_CancellationToken_">IBatchIterable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;.GetBatchesAsync(int?, bool, bool, int?, int, CancellationToken)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.ParallelBatchLoaderExtensions.html#AiDotNet_Data_Loaders_ParallelBatchLoaderExtensions_WithParallelLoading__1_AiDotNet_Interfaces_IBatchIterable___0__System_Func_System_Int32_____0__System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__">ParallelBatchLoaderExtensions.WithParallelLoading&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, Func&lt;int[], TBatch&gt;, int, int?, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_AiDotNet_Interfaces_IBatchIterable___0__">DataPipelineExtensions.ToPipeline&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatchesAsync__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__System_Int32_">DataLoaderExtensions.CreateBatchesAsync&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatches__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__">DataLoaderExtensions.CreateBatches&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Interfaces_IRLDataLoader_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This interface is for reinforcement learning scenarios where an agent interacts with an
+environment to collect experience data. The loader manages:
+- Environment interactions (stepping through episodes)
+- Experience collection and storage
+- Replay buffer management for batch sampling
+</p>
+<p><b>For Beginners:</b> Reinforcement learning is learning through trial and error.
+<p><strong>How it works:</strong></p>
+<ul>
+<li>An agent takes actions in an environment</li>
+<li>The environment returns rewards and new states</li>
+<li>The agent learns to maximize total rewards</li>
+</ul>
+<p><strong>Example: Game Playing</strong></p>
+<ul>
+<li>Environment: The game (e.g., CartPole, Atari, Chess)</li>
+<li>State: What the agent sees (game screen, piece positions)</li>
+<li>Action: What the agent does (move left, jump, place piece)</li>
+<li>Reward: Score or outcome (+1 for winning, -1 for losing)</li>
+</ul>
+<p><strong>This data loader:</strong></p>
+<ul>
+<li>Runs episodes in the environment</li>
+<li>Collects experience tuples (state, action, reward, next_state, done)</li>
+<li>Stores them in a replay buffer for training</li>
+<li>Provides batches of experiences for learning</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_CurrentEpisode_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.CurrentEpisode*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_CurrentEpisode" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.CurrentEpisode">
+  CurrentEpisode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current episode number (0-indexed).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int CurrentEpisode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_Environment_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.Environment*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_Environment" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.Environment">
+  Environment
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the environment that the agent interacts with.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnvironment&lt;T&gt; Environment { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IEnvironment-1.html">IEnvironment</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_Episodes_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.Episodes*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_Episodes" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.Episodes">
+  Episodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of episodes to run during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int Episodes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_MaxStepsPerEpisode_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.MaxStepsPerEpisode*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_MaxStepsPerEpisode" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.MaxStepsPerEpisode">
+  MaxStepsPerEpisode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of steps per episode (prevents infinite episodes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxStepsPerEpisode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_MinExperiencesBeforeTraining_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.MinExperiencesBeforeTraining*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_MinExperiencesBeforeTraining" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.MinExperiencesBeforeTraining">
+  MinExperiencesBeforeTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum number of experiences required before training can begin.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MinExperiencesBeforeTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRLDataLoader_1_MinExperiencesBeforeTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> We need some experiences before we can learn from random samples.
+This ensures the replay buffer has enough diverse experiences for effective learning.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_ReplayBuffer_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.ReplayBuffer*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_ReplayBuffer" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.ReplayBuffer">
+  ReplayBuffer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the replay buffer used for storing and sampling experiences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReplayBuffer&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt; ReplayBuffer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer-3.html">IReplayBuffer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_TotalSteps_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.TotalSteps*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_TotalSteps" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.TotalSteps">
+  TotalSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of steps taken across all episodes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int TotalSteps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_Verbose_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.Verbose*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_Verbose" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.Verbose">
+  Verbose
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to print training progress to console.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool Verbose { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_AddExperience_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.AddExperience*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_AddExperience_AiDotNet_ReinforcementLearning_ReplayBuffers_Experience__0_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.AddExperience(AiDotNet.ReinforcementLearning.ReplayBuffers.Experience{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  AddExperience(Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an experience to the replay buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void AddExperience(Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt; experience)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>experience</code> <a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The experience to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_CanTrain_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.CanTrain*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_CanTrain_System_Int32_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.CanTrain(System.Int32)">
+  CanTrain(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if there are enough experiences to begin training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool CanTrain(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The desired batch size for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if training can proceed, false if more experiences are needed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_ResetTraining_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.ResetTraining*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_ResetTraining" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.ResetTraining">
+  ResetTraining()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the data loader state (clears buffer, resets counters).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ResetTraining()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_RunEpisode_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.RunEpisode*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_RunEpisode_AiDotNet_Interfaces_IRLAgent__0__" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.RunEpisode(AiDotNet.Interfaces.IRLAgent{`0})">
+  RunEpisode(IRLAgent&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs a single episode and collects experiences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">EpisodeResult&lt;T&gt; RunEpisode(IRLAgent&lt;T&gt;? agent = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>agent</code> <a class="xref" href="AiDotNet.Interfaces.IRLAgent-1.html">IRLAgent</a>&lt;T&gt;</dt>
+    <dd><p>Optional agent to use for action selection. If null, uses random actions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.EpisodeResult-1.html">EpisodeResult</a>&lt;T&gt;</dt>
+    <dd><p>Episode result containing total reward, steps, and whether it was successful.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_RunEpisodes_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.RunEpisodes*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_RunEpisodes_System_Int32_AiDotNet_Interfaces_IRLAgent__0__" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.RunEpisodes(System.Int32,AiDotNet.Interfaces.IRLAgent{`0})">
+  RunEpisodes(int, IRLAgent&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs multiple episodes and collects experiences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;EpisodeResult&lt;T&gt;&gt; RunEpisodes(int numEpisodes, IRLAgent&lt;T&gt;? agent = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numEpisodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of episodes to run.</p>
+</dd>
+    <dt><code>agent</code> <a class="xref" href="AiDotNet.Interfaces.IRLAgent-1.html">IRLAgent</a>&lt;T&gt;</dt>
+    <dd><p>Optional agent to use for action selection.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.EpisodeResult-1.html">EpisodeResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of episode results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_SampleBatch_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.SampleBatch*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_SampleBatch_System_Int32_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.SampleBatch(System.Int32)">
+  SampleBatch(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Samples a batch of experiences from the replay buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt; SampleBatch(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of experiences to sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>List of sampled experiences for training.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRLDataLoader_1_SampleBatch_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Instead of learning from experiences in order (which can cause issues),
+we randomly sample from past experiences. This makes learning more stable.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRLDataLoader_1_SetSeed_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.SetSeed*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRLDataLoader_1_SetSeed_System_Int32_" data-uid="AiDotNet.Interfaces.IRLDataLoader`1.SetSeed(System.Int32)">
+  SetSeed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the random seed for reproducible training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetSeed(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Random seed value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRLDataLoader.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

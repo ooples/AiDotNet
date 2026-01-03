@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CompressionMetrics&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CompressionMetrics&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides metrics and statistics for model compression operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ModelCompression_CompressionMetrics_1.md&amp;value=---%0Auid%3A%20AiDotNet.ModelCompression.CompressionMetrics%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ModelCompression.CompressionMetrics`1">
+
+
+
+  <h1 id="AiDotNet_ModelCompression_CompressionMetrics_1" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1" class="text-break">
+Class CompressionMetrics&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ModelCompression.html">ModelCompression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides metrics and statistics for model compression operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CompressionMetrics&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CompressionMetrics&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ModelCompression_CompressionMetrics_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CompressionMetrics tracks important statistics about the compression process, including
+compression ratio, model size reduction, inference speed impact, and accuracy preservation.
+These metrics help evaluate the effectiveness of different compression strategies.
+</p>
+<p><b>For Beginners:</b> CompressionMetrics helps you measure how well compression worked.
+<p>When you compress a model, you want to know:</p>
+<ul>
+<li>How much smaller did it get? (compression ratio)</li>
+<li>How much memory did we save? (size reduction)</li>
+<li>Did it get faster? (inference speed)</li>
+<li>Is it still accurate? (accuracy preservation)</li>
+</ul>
+<p>This class tracks all these important measurements so you can:</p>
+<ul>
+<li>Compare different compression techniques</li>
+<li>Decide if the compression is worth it</li>
+<li>Find the best balance between size and accuracy</li>
+</ul>
+<p>Example:</p>
+<ul>
+<li>Original model: 100 MB, 95% accuracy, 10ms inference</li>
+<li>Compressed model: 10 MB, 94% accuracy, 5ms inference</li>
+<li>Metrics show: 10x compression, 1% accuracy loss, 2x speedup</li>
+<li>Conclusion: Great compression! The small accuracy loss is worth the huge size reduction.</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_AccuracyLoss_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.AccuracyLoss*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_AccuracyLoss" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.AccuracyLoss">
+  AccuracyLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the accuracy loss percentage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AccuracyLoss { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_AccuracyLoss_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This shows how much accuracy was lost due to compression.
+<p>Formula: original accuracy - compressed accuracy</p>
+<p>Examples:</p>
+<ul>
+<li>0% = no accuracy loss (perfect!)</li>
+<li>1% = slight loss (usually acceptable)</li>
+<li>5% = significant loss (might be too much)</li>
+</ul>
+<p>The goal is to keep this under 2% for most applications. If you lose more than that,
+you might need to use less aggressive compression or a different technique.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_BitsPerWeight_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.BitsPerWeight*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_BitsPerWeight" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.BitsPerWeight">
+  BitsPerWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of bits per weight after quantization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T BitsPerWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_BitsPerWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Shows how many bits are used to represent each weight.
+<p>Examples:</p>
+<ul>
+<li>32 bits = full precision (float)</li>
+<li>16 bits = half precision</li>
+<li>8 bits = int8 quantization</li>
+<li>5 bits = aggressive quantization (32 clusters)</li>
+</ul>
+<p>Lower bits = more compression but potentially less accuracy.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressedAccuracy_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressedAccuracy*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressedAccuracy" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressedAccuracy">
+  CompressedAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the compressed model accuracy (after compression).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CompressedAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressedInferenceTimeMs_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressedInferenceTimeMs*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressedInferenceTimeMs" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressedInferenceTimeMs">
+  CompressedInferenceTimeMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the compressed model inference time in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CompressedInferenceTimeMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressedSize_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressedSize*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressedSize" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressedSize">
+  CompressedSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the compressed model size in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long CompressedSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressionRatio_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressionRatio*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressionRatio" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressionRatio">
+  CompressionRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the compression ratio (original size / compressed size).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CompressionRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressionRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The compression ratio shows how much smaller the model became.
+<p>Examples:</p>
+<ul>
+<li>Ratio of 2.0 = model is half the size (50% reduction)</li>
+<li>Ratio of 10.0 = model is 1/10th the size (90% reduction)</li>
+<li>Ratio of 50.0 = model is 1/50th the size (98% reduction)</li>
+</ul>
+<p>Higher is better! A ratio of 20 means you reduced the model to 5% of its original size.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressionTechnique_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressionTechnique*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressionTechnique" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressionTechnique">
+  CompressionTechnique
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the compression technique used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string CompressionTechnique { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressionTimeMs_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressionTimeMs*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_CompressionTimeMs" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CompressionTimeMs">
+  CompressionTimeMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the time taken to perform compression in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CompressionTimeMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_DecompressionTimeMs_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.DecompressionTimeMs*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_DecompressionTimeMs" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.DecompressionTimeMs">
+  DecompressionTimeMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the time taken to decompress in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DecompressionTimeMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_EffectiveParameterCount_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.EffectiveParameterCount*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_EffectiveParameterCount" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.EffectiveParameterCount">
+  EffectiveParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the effective number of unique parameters after compression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long EffectiveParameterCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_InferenceSpeedup_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.InferenceSpeedup*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_InferenceSpeedup" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.InferenceSpeedup">
+  InferenceSpeedup
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the inference speedup factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T InferenceSpeedup { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_InferenceSpeedup_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This shows how much faster (or slower) the compressed model is.
+<p>Formula: original time / compressed time</p>
+<p>Examples:</p>
+<ul>
+<li>1.0 = same speed</li>
+<li>2.0 = twice as fast</li>
+<li>0.5 = half as fast (slower due to decompression overhead)</li>
+</ul>
+<p>Compression usually makes models faster because there's less data to move around,
+but sometimes decompression adds overhead.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_MemoryBandwidthSavings_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.MemoryBandwidthSavings*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_MemoryBandwidthSavings" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.MemoryBandwidthSavings">
+  MemoryBandwidthSavings
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the memory bandwidth savings ratio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MemoryBandwidthSavings { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_MemoryBandwidthSavings_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Shows how much memory bandwidth is saved during inference.
+<p>Memory bandwidth is often the bottleneck for neural network inference.
+Smaller models need less data moved from memory, making inference faster.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_OriginalAccuracy_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.OriginalAccuracy*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_OriginalAccuracy" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.OriginalAccuracy">
+  OriginalAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the original model accuracy (before compression).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T OriginalAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_OriginalInferenceTimeMs_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.OriginalInferenceTimeMs*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_OriginalInferenceTimeMs" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.OriginalInferenceTimeMs">
+  OriginalInferenceTimeMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the original inference time in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T OriginalInferenceTimeMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_OriginalParameterCount_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.OriginalParameterCount*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_OriginalParameterCount" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.OriginalParameterCount">
+  OriginalParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of parameters in the original model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long OriginalParameterCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_OriginalSize_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.OriginalSize*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_OriginalSize" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.OriginalSize">
+  OriginalSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the original model size in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long OriginalSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_ReconstructionError_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.ReconstructionError*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_ReconstructionError" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.ReconstructionError">
+  ReconstructionError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the reconstruction error (for lossy compression).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ReconstructionError { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_ReconstructionError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Shows the average error when decompressing weights.
+<p>For lossy compression techniques (like quantization), the decompressed weights
+are approximations of the original. This metric measures that approximation error.
+Lower is better.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_SizeReductionPercentage_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.SizeReductionPercentage*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_SizeReductionPercentage" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.SizeReductionPercentage">
+  SizeReductionPercentage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the percentage of size reduction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SizeReductionPercentage { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_SizeReductionPercentage_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This shows the size reduction as a percentage.
+<p>Formula: (1 - compressed size / original size) × 100%</p>
+<p>Examples:</p>
+<ul>
+<li>50% = model is half the original size</li>
+<li>90% = model is 1/10th the original size</li>
+<li>98% = model is 1/50th the original size</li>
+</ul>
+<p>This is just another way to express the compression ratio, often easier to understand.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_Sparsity_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.Sparsity*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_Sparsity" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.Sparsity">
+  Sparsity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sparsity level achieved (fraction of zero weights).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Sparsity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_Sparsity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Sparsity shows what fraction of weights are zero after pruning.
+<p>Examples:</p>
+<ul>
+<li>0.0 = no zeros (dense model)</li>
+<li>0.9 = 90% zeros (very sparse)</li>
+<li>0.99 = 99% zeros (extremely sparse)</li>
+</ul>
+<p>Higher sparsity means better compression potential but may affect accuracy.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_CalculateCompositeFitness_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CalculateCompositeFitness*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_CalculateCompositeFitness_System_Double_System_Double_System_Double_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CalculateCompositeFitness(System.Double,System.Double,System.Double)">
+  CalculateCompositeFitness(double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L422"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates a composite fitness score for multi-objective optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CalculateCompositeFitness(double accuracyWeight = 0.5, double compressionWeight = 0.3, double speedWeight = 0.2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>accuracyWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for accuracy preservation (default: 0.5).</p>
+</dd>
+    <dt><code>compressionWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for compression ratio (default: 0.3).</p>
+</dd>
+    <dt><code>speedWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for inference speedup (default: 0.2).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A composite fitness score where higher is better.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_CalculateCompositeFitness_System_Double_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates a single score that balances multiple objectives.
+<p>When optimizing compression, we care about multiple things:</p>
+<ul>
+<li>High accuracy preservation (less accuracy loss = good)</li>
+<li>High compression ratio (smaller model = good)</li>
+<li>Fast inference (more speedup = good)</li>
+</ul>
+<p>The weights control how much each factor matters. Default weights prioritize:</p>
+<ul>
+<li>50% accuracy preservation</li>
+<li>30% compression ratio</li>
+<li>20% inference speed</li>
+</ul>
+<p>This is useful for AutoML and genetic algorithms that need a single fitness value.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_CalculateDerivedMetrics_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CalculateDerivedMetrics*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_CalculateDerivedMetrics" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.CalculateDerivedMetrics">
+  CalculateDerivedMetrics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates all derived metrics from the base measurements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CalculateDerivedMetrics()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_CalculateDerivedMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method calculates all the ratios and percentages automatically.
+<p>Call this after setting the base values:</p>
+<ul>
+<li>OriginalSize and CompressedSize</li>
+<li>OriginalInferenceTimeMs and CompressedInferenceTimeMs</li>
+<li>OriginalAccuracy and CompressedAccuracy</li>
+</ul>
+<p>It will then calculate:</p>
+<ul>
+<li>CompressionRatio</li>
+<li>SizeReductionPercentage</li>
+<li>InferenceSpeedup</li>
+<li>AccuracyLoss</li>
+<li>MemoryBandwidthSavings</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_FromDeepCompressionStats_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.FromDeepCompressionStats*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_FromDeepCompressionStats_AiDotNet_ModelCompression_DeepCompressionStats_System_String_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.FromDeepCompressionStats(AiDotNet.ModelCompression.DeepCompressionStats,System.String)">
+  FromDeepCompressionStats(DeepCompressionStats, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a CompressionMetrics instance from a DeepCompressionStats object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CompressionMetrics&lt;T&gt; FromDeepCompressionStats(DeepCompressionStats stats, string technique = &quot;Deep Compression&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stats</code> <a class="xref" href="AiDotNet.ModelCompression.DeepCompressionStats.html">DeepCompressionStats</a></dt>
+    <dd><p>The DeepCompressionStats containing compression statistics.</p>
+</dd>
+    <dt><code>technique</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the compression technique used.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ModelCompression.CompressionMetrics-1.html">CompressionMetrics</a>&lt;T&gt;</dt>
+    <dd><p>A populated CompressionMetrics instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_IsBetterThan_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.IsBetterThan*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_IsBetterThan_AiDotNet_ModelCompression_CompressionMetrics__0__System_Double_System_Double_System_Double_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.IsBetterThan(AiDotNet.ModelCompression.CompressionMetrics{`0},System.Double,System.Double,System.Double)">
+  IsBetterThan(CompressionMetrics&lt;T&gt;, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L458"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares this compression result to another and determines which is better.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsBetterThan(CompressionMetrics&lt;T&gt; other, double accuracyWeight = 0.5, double compressionWeight = 0.3, double speedWeight = 0.2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.ModelCompression.CompressionMetrics-1.html">CompressionMetrics</a>&lt;T&gt;</dt>
+    <dd><p>The other compression metrics to compare against.</p>
+</dd>
+    <dt><code>accuracyWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for accuracy preservation.</p>
+</dd>
+    <dt><code>compressionWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for compression ratio.</p>
+</dd>
+    <dt><code>speedWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for inference speedup.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if this compression is better than the other.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_MeetsQualityThreshold_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.MeetsQualityThreshold*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_MeetsQualityThreshold_System_Double_System_Double_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.MeetsQualityThreshold(System.Double,System.Double)">
+  MeetsQualityThreshold(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if the compression meets the specified quality threshold using default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool MeetsQualityThreshold(double maxAccuracyLossPercentage = 2, double minCompressionRatio = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxAccuracyLossPercentage</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Maximum acceptable accuracy loss percentage (default: 2.0).</p>
+</dd>
+    <dt><code>minCompressionRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum acceptable compression ratio (default: 2.0).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if compression meets the quality criteria, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_MeetsQualityThreshold_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.MeetsQualityThreshold*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_MeetsQualityThreshold__0__0_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.MeetsQualityThreshold(`0,`0)">
+  MeetsQualityThreshold(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L376"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if the compression meets the specified quality threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool MeetsQualityThreshold(T maxAccuracyLossPercentage, T minCompressionRatio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxAccuracyLossPercentage</code> <span class="xref">T</span></dt>
+    <dd><p>Maximum acceptable accuracy loss (default: 2%).</p>
+</dd>
+    <dt><code>minCompressionRatio</code> <span class="xref">T</span></dt>
+    <dd><p>Minimum acceptable compression ratio (default: 2x).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if compression meets the quality criteria, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelCompression_CompressionMetrics_1_MeetsQualityThreshold__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method checks if the compression is "good enough".
+<p>It verifies two things:</p>
+<ol>
+<li>Accuracy loss is acceptable (not too much)</li>
+<li>Compression is significant enough (worthwhile)</li>
+</ol>
+<p>Example thresholds:</p>
+<ul>
+<li>maxAccuracyLossPercentage = 2% means we accept up to 2% accuracy loss</li>
+<li>minCompressionRatio = 2x means we want at least 50% size reduction</li>
+</ul>
+<p>If both conditions are met, the compression is considered successful.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelCompression_CompressionMetrics_1_ToString_" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.ToString*"></a>
+
+  <h3 id="AiDotNet_ModelCompression_CompressionMetrics_1_ToString" data-uid="AiDotNet.ModelCompression.CompressionMetrics`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a human-readable summary of the compression metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A formatted string containing all metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ModelCompression/CompressionMetrics.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

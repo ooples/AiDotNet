@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MultilayerPerceptronOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MultilayerPerceptronOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Multilayer Perceptron (MLP), a type of feedforward artificial neural network that consists of multiple layers of neurons.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_MultilayerPerceptronOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.MultilayerPerceptronOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3" class="text-break">
+Class MultilayerPerceptronOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Multilayer Perceptron (MLP), a type of feedforward artificial neural
+network that consists of multiple layers of neurons.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MultilayerPerceptronOptions&lt;T, TInput, TOutput&gt; : NonLinearRegressionOptions</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html">NonLinearRegressionOptions</a></div>
+      <div><span class="xref">MultilayerPerceptronOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations">NonLinearRegressionOptions.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance">NonLinearRegressionOptions.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType">NonLinearRegressionOptions.KernelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma">NonLinearRegressionOptions.Gamma</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0">NonLinearRegressionOptions.Coef0</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree">NonLinearRegressionOptions.PolynomialDegree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Multilayer Perceptron is a versatile neural network architecture capable of learning complex
+non-linear relationships between inputs and outputs. It consists of an input layer, one or more hidden
+layers, and an output layer. Each neuron in a layer is connected to all neurons in the next layer,
+forming a fully connected network. The MLP learns through a process called backpropagation, where the
+network parameters are adjusted to minimize a loss function using gradient-based optimization techniques.
+This class provides comprehensive configuration options for the network architecture, training process,
+activation functions, and optimization strategy.
+</p>
+<p><b>For Beginners:</b> A Multilayer Perceptron (MLP) is a basic type of neural network that
+can learn to recognize patterns and make predictions from data.
+<p>Think of an MLP like a system of interconnected filters that work together:</p>
+<ul>
+<li>The input layer receives your data (like the temperature, humidity, and pressure for weather prediction)</li>
+<li>The hidden layers process this information through a series of transformations</li>
+<li>The output layer provides the prediction (like &quot;chance of rain: 70%&quot;)</li>
+</ul>
+<p>As the network trains, it gradually adjusts thousands of internal settings (weights) to get better
+at making accurate predictions. This process is similar to how a child learns to recognize animals:
+at first they make many mistakes, but with each example, they get better at identifying the patterns
+that distinguish a cat from a dog.</p>
+<p>This class lets you configure every aspect of your neural network: how many layers it has, how it learns,
+how quickly it adapts, and much more. The default settings provide a good starting point, but you may
+need to adjust them based on your specific problem.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of training examples used in each parameter update step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The batch size, defaulting to 32.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The batch size determines how many training examples are processed before the model parameters
+are updated. When set to 1, this becomes stochastic gradient descent (updating after each example).
+When set to the size of the training set, this becomes batch gradient descent (updating after
+seeing all examples). Mini-batch training (values between these extremes) is often the most efficient
+approach, balancing the stability of batch updates with the speed of stochastic updates. The optimal
+batch size depends on the specific problem, hardware constraints, and the size of the training dataset.
+</p>
+<p><b>For Beginners:</b> This setting controls how many examples the network looks at before
+making each adjustment to its internal settings.
+<p>Imagine learning to cook a new dish:</p>
+<ul>
+<li>BatchSize = 1: You taste and adjust seasoning after each ingredient (frequent but potentially erratic adjustments)</li>
+<li>BatchSize = 32: You add 32 ingredients, then taste and adjust (more stable but less frequent adjustments)</li>
+<li>BatchSize = [entire recipe]: You only taste and adjust after completing the whole recipe (very stable but only one chance to adjust)</li>
+</ul>
+<p>The default value of 32 works well for many problems because:</p>
+<ul>
+<li>It's large enough to provide somewhat stable gradient estimates</li>
+<li>It's small enough to allow for frequent updates</li>
+<li>It often fits well in memory for parallel processing</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Training seems unstable (weights jumping around too much)</li>
+<li>You have plenty of memory and computational resources</li>
+<li>Your dataset is very noisy</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>You have limited memory available</li>
+<li>Training seems to be progressing too slowly</li>
+<li>You want the model to adapt more quickly</li>
+</ul>
+<p>Common batch sizes are powers of 2 (16, 32, 64, 128, 256) because they often optimize
+performance on modern hardware.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_HiddenActivation_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.HiddenActivation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_HiddenActivation" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.HiddenActivation">
+  HiddenActivation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L271"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the activation function used in the hidden layers of the network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IActivationFunction&lt;T&gt;? HiddenActivation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The hidden layer activation function, defaulting to ReLU.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_HiddenActivation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Activation functions introduce non-linearity into the neural network, allowing it to learn complex
+patterns. This parameter sets the activation function used for all neurons in the hidden layers.
+The Rectified Linear Unit (ReLU) function is a popular choice for hidden layers as it helps mitigate
+the vanishing gradient problem and generally allows for faster training. Other common choices include
+sigmoid, tanh, and leaky ReLU, each with different properties that may be more suitable for specific
+types of problems.
+</p>
+<p><b>For Beginners:</b> This setting determines the mathematical function that each
+"neuron" in the hidden layers uses to process its input.
+<p>Activation functions are like decision rules for neurons:</p>
+<ul>
+<li>They determine how a neuron responds to different input values</li>
+<li>They introduce non-linearity, which allows the network to learn complex patterns</li>
+</ul>
+<p>The default ReLU (Rectified Linear Unit) function:</p>
+<ul>
+<li>Outputs 0 for negative inputs</li>
+<li>Outputs the input value unchanged for positive inputs</li>
+<li>Is computationally efficient and helps networks learn faster</li>
+</ul>
+<p>You might want to change this to:</p>
+<ul>
+<li>Sigmoid: If outputs need to be between 0 and 1</li>
+<li>Tanh: If outputs need to be between -1 and 1</li>
+<li>Leaky ReLU: If you're experiencing &quot;dead neurons&quot; (neurons that stop learning)</li>
+</ul>
+<p>For most problems, ReLU works well and is a good default choice.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_HiddenVectorActivation_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.HiddenVectorActivation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_HiddenVectorActivation" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.HiddenVectorActivation">
+  HiddenVectorActivation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L296"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the vector-based activation function used in the hidden layers of the network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IVectorActivationFunction&lt;T&gt;? HiddenVectorActivation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The hidden layer vector activation function, defaulting to ReLU.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_HiddenVectorActivation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides a vector-optimized implementation of the activation function for hidden layers.
+When set, it will be used instead of the scalar <a class="xref" href="AiDotNet.Models.Options.MultilayerPerceptronOptions-3.html#AiDotNet_Models_Options_MultilayerPerceptronOptions_3_HiddenActivation">HiddenActivation</a> property for more
+efficient computation on entire vectors of data. The default implementation uses ReLU activation,
+which is well-suited for most neural network hidden layers.
+</p>
+<p><b>For Beginners:</b> This is a more efficient version of the hidden layer activation
+function that works on entire groups of neurons at once.
+<p>It serves the same purpose as the regular hidden activation function, but:</p>
+<ul>
+<li>It can process multiple neurons simultaneously</li>
+<li>It's optimized for performance on modern hardware</li>
+<li>It's particularly helpful for large networks</li>
+</ul>
+<p>You typically don't need to change this unless you're implementing custom activation
+functions or optimizing for specific hardware.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LayerSizes_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.LayerSizes*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LayerSizes" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.LayerSizes">
+  LayerSizes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sizes of each layer in the neural network, including input, hidden, and output layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; LayerSizes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A list of integers representing the number of neurons in each layer, defaulting to [1, 10, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LayerSizes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter defines the architecture of the neural network by specifying how many neurons are in each layer.
+The first element represents the input layer size (number of features), the last element represents the
+output layer size (number of target variables), and all elements in between represent the sizes of
+hidden layers. The default value creates a network with 1 input feature, 1 hidden layer with 10 neurons,
+and 1 output variable. The depth and width of the network should be chosen based on the complexity of
+the problem and the amount of available training data.
+</p>
+<p><b>For Beginners:</b> This setting determines the structure of your neural network -
+how many "neurons" are in each layer and how many layers you have.
+<p>Imagine building a factory assembly line:</p>
+<ul>
+<li>The first number is how many inputs your data has (like 4 if you have height, weight, age, and blood pressure)</li>
+<li>The middle numbers represent your &quot;hidden layers&quot; (the internal processing stages)</li>
+<li>The last number is how many outputs you want (like 1 for a yes/no prediction, or 3 for classifying into three categories)</li>
+</ul>
+<p>The default value [1, 10, 1] means:</p>
+<ul>
+<li>1 input feature (very simple data)</li>
+<li>1 hidden layer with 10 neurons (moderate processing capacity)</li>
+<li>1 output value (single prediction or measurement)</li>
+</ul>
+<p>You should change this based on your specific data:</p>
+<ul>
+<li>The first number should match the number of features in your input data</li>
+<li>The last number should match how many values you're trying to predict</li>
+<li>The middle numbers control the network's learning capacity:
+<ul>
+<li>More/larger hidden layers = more learning capacity but requires more data and time</li>
+<li>Fewer/smaller hidden layers = learns faster but might miss complex patterns</li>
+</ul>
+</li>
+</ul>
+<p>For complex problems, you might use something like [50, 100, 50, 10, 3], which has 50 inputs,
+3 hidden layers (with 100, 50, and 10 neurons), and 3 outputs.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LearningRate_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LearningRate" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate that controls the step size in each update of the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate is a critical hyperparameter that determines how large of a step to take in the
+direction of the negative gradient during optimization. A higher learning rate allows for faster
+learning but risks overshooting the optimal solution or causing instability. A lower learning rate
+provides more stable updates but may require more iterations to converge and risks getting stuck
+in local minima. Note that the actual learning rate used in training may be further modified by
+the chosen optimizer, which may implement adaptive learning rate strategies.
+</p>
+<p><b>For Beginners:</b> This setting controls how big of an adjustment the network makes
+to its internal settings during each update.
+<p>Think of it like turning a dial to tune a radio:</p>
+<ul>
+<li>A high learning rate (like 0.1) means making big turns of the dial</li>
+<li>A low learning rate (like 0.0001) means making tiny, precise turns</li>
+</ul>
+<p>The default value of 0.001 is relatively conservative, which helps prevent:</p>
+<ul>
+<li>Overshooting the optimal settings</li>
+<li>Unstable behavior during training</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Training is progressing very slowly</li>
+<li>You have a tight compute budget and need faster results</li>
+<li>You're in early exploration phases</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Training is unstable (loss is fluctuating wildly)</li>
+<li>You're fine-tuning an already well-trained model</li>
+<li>You want more precise final results</li>
+</ul>
+<p>Note that this setting interacts with your choice of optimizer. Some optimizers (like Adam)
+adaptively adjust the effective learning rate, making the training less sensitive to this
+initial value.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LossFunction_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.LossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LossFunction" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L394"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss function used to calculate the error between predictions and targets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function, defaulting to Mean Squared Error.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_LossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The loss function quantifies how far the network's predictions are from the true values, providing
+the optimization target during training. Mean Squared Error (MSE) is commonly used for regression
+problems, calculating the average of the squared differences between predictions and targets. For
+classification problems, cross-entropy loss would be more appropriate. The choice of loss function
+should align with the problem type and the output activation function.
+</p>
+<p><b>For Beginners:</b> This setting defines how the network measures its prediction errors
+during training.
+<p>Think of the loss function as a scorekeeper:</p>
+<ul>
+<li>It calculates how far off the network's predictions are from the correct answers</li>
+<li>The network tries to minimize this score during training</li>
+<li>Different types of problems need different ways of keeping score</li>
+</ul>
+<p>The default Mean Squared Error (MSE):</p>
+<ul>
+<li>Calculates the average of the squared differences between predictions and actual values</li>
+<li>Works well for regression problems (predicting continuous values)</li>
+<li>Heavily penalizes large errors</li>
+</ul>
+<p>You might want to change this to:</p>
+<ul>
+<li>Mean Absolute Error: If you want to treat all errors equally, regardless of direction</li>
+<li>Binary Cross-Entropy: For binary classification problems</li>
+<li>Categorical Cross-Entropy: For multi-class classification problems</li>
+</ul>
+<p>The loss function should match your problem type and output activation function. For example:</p>
+<ul>
+<li>Regression ? MSE + Linear output activation</li>
+<li>Binary classification ? Binary Cross-Entropy + Sigmoid output activation</li>
+<li>Multi-class classification ? Categorical Cross-Entropy + Softmax output activation</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_MaxEpochs_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.MaxEpochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_MaxEpochs" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.MaxEpochs">
+  MaxEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of complete passes through the training dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxEpochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of epochs, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_MaxEpochs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+An epoch represents one complete pass through the entire training dataset. This parameter sets the
+maximum number of epochs the training process will perform. The actual training might terminate
+earlier if other stopping criteria are met, such as reaching a target error threshold or detecting
+overfitting through validation. More epochs allow the model more opportunities to learn from the
+training data but increase the risk of overfitting and computational cost.
+</p>
+<p><b>For Beginners:</b> This setting determines how many times the neural network will
+process your entire dataset during training.
+<p>Think of it like practicing for a music recital:</p>
+<ul>
+<li>Each &quot;epoch&quot; is like practicing the entire piece from start to finish</li>
+<li>More practice sessions generally lead to better performance</li>
+<li>But too much practice might lead to memorization rather than understanding</li>
+</ul>
+<p>The default value of 1000 means the algorithm will go through your entire dataset up to 1000 times.</p>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Your network is complex and learning slowly</li>
+<li>You have a large dataset with lots of variation</li>
+<li>You're using techniques to prevent overfitting</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Your network seems to be memorizing the training data</li>
+<li>Training is taking too long</li>
+<li>You're doing initial experimentation</li>
+</ul>
+<p>In practice, neural networks are often trained with early stopping mechanisms that monitor
+performance on validation data and stop training when improvement plateaus, regardless of
+whether this maximum has been reached.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_Optimizer_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.Optimizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_Optimizer" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.Optimizer">
+  Optimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L435"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IOptimizer&lt;T, TInput, TOutput&gt; Optimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_OutputActivation_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.OutputActivation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_OutputActivation" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.OutputActivation">
+  OutputActivation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the activation function used in the output layer of the network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IActivationFunction&lt;T&gt;? OutputActivation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The output layer activation function, defaulting to Linear (Identity).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_OutputActivation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The output activation function determines the range and type of values that the neural network
+can produce. The linear activation function (also called identity) is appropriate for regression
+problems where the output can be any real number. For classification problems, other functions like
+sigmoid (for binary classification) or softmax (for multi-class classification) would be more appropriate.
+The choice of output activation should match the nature of the target variable and the loss function.
+</p>
+<p><b>For Beginners:</b> This setting determines the mathematical function that the
+final layer uses to produce the network's output.
+<p>The output activation function shapes your predictions:</p>
+<ul>
+<li>Linear (the default): Can output any number, positive or negative</li>
+<li>Sigmoid: Outputs values between 0 and 1, good for probabilities</li>
+<li>Softmax: Outputs probabilities that sum to 1, good for multi-class problems</li>
+</ul>
+<p>The default Linear function is appropriate for:</p>
+<ul>
+<li>Regression problems (predicting continuous values like price, temperature, etc.)</li>
+<li>Cases where you need unbounded outputs</li>
+</ul>
+<p>You should change this to:</p>
+<ul>
+<li>Sigmoid: For binary classification (yes/no, spam/not spam)</li>
+<li>Softmax: For multi-class classification (cat/dog/bird)</li>
+<li>TanH: For outputs that should be between -1 and 1</li>
+</ul>
+<p>Choosing the right output activation is important - it should match both the type of
+problem you're solving and the loss function you're using.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_OutputVectorActivation_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.OutputVectorActivation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_OutputVectorActivation" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.OutputVectorActivation">
+  OutputVectorActivation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L356"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the vector-based activation function used in the output layer of the network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IVectorActivationFunction&lt;T&gt;? OutputVectorActivation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The output layer vector activation function, defaulting to Linear (Identity).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_OutputVectorActivation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides a vector-optimized implementation of the activation function for the output layer.
+When set, it will be used instead of the scalar <a class="xref" href="AiDotNet.Models.Options.MultilayerPerceptronOptions-3.html#AiDotNet_Models_Options_MultilayerPerceptronOptions_3_OutputActivation">OutputActivation</a> property for more
+efficient computation on entire vectors of data. The default implementation uses the identity (linear)
+activation, which is appropriate for regression problems.
+</p>
+<p><b>For Beginners:</b> This is a more efficient version of the output layer activation
+function that works on entire groups of neurons at once.
+<p>It serves the same purpose as the regular output activation function, but:</p>
+<ul>
+<li>It can process multiple output neurons simultaneously</li>
+<li>It's optimized for performance on modern hardware</li>
+<li>It's particularly helpful for networks with multiple outputs</li>
+</ul>
+<p>For regression problems, the default linear activation is usually appropriate.
+For classification, you might want to use sigmoid or softmax vector activations.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_Verbose_" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.Verbose*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_Verbose" data-uid="AiDotNet.Models.Options.MultilayerPerceptronOptions`3.Verbose">
+  Verbose
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to display detailed progress information during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Verbose { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Flag indicating whether to display progress, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MultilayerPerceptronOptions_3_Verbose_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When set to true, the training process will output detailed information about its progress,
+such as the current epoch, loss value, and potentially other metrics. This can be useful for
+monitoring the training process and diagnosing issues, but may slow down training slightly and
+generate a large amount of output for long training runs or large datasets. By default, this
+verbose output is disabled.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the training process will show
+you detailed progress updates as it runs.
+<p>Think of it like tracking a package:</p>
+<ul>
+<li>When Verbose = false: You only know when the package is delivered</li>
+<li>When Verbose = true: You get updates at each step of the delivery process</li>
+</ul>
+<p>The default value of false means training will run silently without progress updates.</p>
+<p>You might want to set this to true if:</p>
+<ul>
+<li>You want to monitor how quickly the model is learning</li>
+<li>You're debugging training issues</li>
+<li>You want to know when to stop training early</li>
+</ul>
+<p>You might want to keep it false if:</p>
+<ul>
+<li>You're running many experiments and don't need the extra output</li>
+<li>You're running training in a production environment</li>
+<li>You're using other methods to monitor progress (like logging metrics to a file)</li>
+</ul>
+<p>Enabling verbose output is especially helpful when you're new to neural networks or
+when you're trying to debug an underperforming model.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MultilayerPerceptronRegressionOptions.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

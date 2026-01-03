@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IRegularization&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IRegularization&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IRegularization_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IRegularization%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IRegularization`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IRegularization_3" data-uid="AiDotNet.Interfaces.IRegularization`3" class="text-break">
+Interface IRegularization&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRegularization.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IRegularization&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IRegularization_3_GetOptions_" data-uid="AiDotNet.Interfaces.IRegularization`3.GetOptions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRegularization_3_GetOptions" data-uid="AiDotNet.Interfaces.IRegularization`3.GetOptions">
+  GetOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRegularization.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the current regularization options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">RegularizationOptions GetOptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.RegularizationOptions.html">RegularizationOptions</a></dt>
+    <dd><p>The regularization options currently in use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRegularization_3_GetOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method returns the configuration settings for the regularization technique.</p>
+<p><b>For Beginners:</b> This method lets you check what regularization settings are being used.
+The options typically include:</p>
+<ul>
+<li>The type of regularization (L1, L2, Elastic Net, etc.)</li>
+<li>The strength of regularization (how much to penalize complex models)</li>
+<li>Other specific settings for the chosen regularization method</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRegularization_3_Regularize_" data-uid="AiDotNet.Interfaces.IRegularization`3.Regularize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRegularization_3_Regularize_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Interfaces.IRegularization`3.Regularize(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Regularize(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRegularization.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies regularization to a matrix of input features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; Regularize(Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input matrix to regularize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The regularized matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRegularization_3_Regularize_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method applies regularization to a matrix of input features.</p>
+<p><b>For Beginners:</b> This method helps prevent overfitting by modifying
+your input data according to the regularization strategy. It can reduce
+the influence of extreme values or unnecessary features.</p>
+<p>This is typically used when preparing data for model training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRegularization_3_Regularize_" data-uid="AiDotNet.Interfaces.IRegularization`3.Regularize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRegularization_3_Regularize_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IRegularization`3.Regularize(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Regularize(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRegularization.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies regularization to output data or model coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; Regularize(Vector&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The output data or coefficients to regularize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The regularized data or coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRegularization_3_Regularize_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method applies regularization to output data or model coefficients.</p>
+<p><b>For Beginners:</b> Model coefficients are the &quot;importance weights&quot; your model assigns to different features.
+This method helps keep these weights from getting too large, which can cause overfitting.</p>
+<p>For example:</p>
+<ul>
+<li>With L1 regularization, some coefficients might be reduced to exactly zero</li>
+<li>With L2 regularization, all coefficients are typically reduced but remain non-zero</li>
+</ul>
+<p>Think of it as encouraging your model to use simpler explanations by penalizing complex solutions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRegularization_3_Regularize_" data-uid="AiDotNet.Interfaces.IRegularization`3.Regularize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRegularization_3_Regularize__2__2_" data-uid="AiDotNet.Interfaces.IRegularization`3.Regularize(`2,`2)">
+  Regularize(TOutput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRegularization.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies regularization to the gradient during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TOutput Regularize(TOutput gradient, TOutput coefficients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradient</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The original gradient vector from the optimization algorithm.</p>
+</dd>
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The current coefficient values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>The regularized gradient vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRegularization_3_Regularize__2__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method modifies the gradient used in optimization algorithms to account for regularization.</p>
+<p><b>For Beginners:</b> When a model is learning (training), it follows a &quot;gradient&quot; that tells it
+which direction to adjust its parameters to improve. This method modifies that gradient
+to include the regularization constraints.</p>
+<p>It's like adding a gentle force that pulls the model toward simpler solutions during training.
+This helps prevent the model from becoming too complex and overfitting the training data.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRegularization.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

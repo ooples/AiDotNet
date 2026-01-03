@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TensorBoardWriter | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TensorBoardWriter | AiDotNet Documentation ">
+      
+      <meta name="description" content="Low-level TensorBoard event file writer.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Logging_TensorBoardWriter.md&amp;value=---%0Auid%3A%20AiDotNet.Logging.TensorBoardWriter%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Logging.TensorBoardWriter">
+
+
+
+  <h1 id="AiDotNet_Logging_TensorBoardWriter" data-uid="AiDotNet.Logging.TensorBoardWriter" class="text-break">
+Class TensorBoardWriter  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Logging.html">Logging</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Low-level TensorBoard event file writer.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TensorBoardWriter : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TensorBoardWriter</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Logging_TensorBoardWriter_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+TensorBoard event files use a specific binary format consisting of records.
+Each record contains: length (8 bytes), masked CRC of length (4 bytes),
+data (variable), and masked CRC of data (4 bytes).
+</p>
+<p><b>For Beginners:</b> TensorBoard is a visualization tool from TensorFlow.
+<p>This writer creates event files that TensorBoard can read and display.
+It's like writing a diary in a specific format that TensorBoard knows
+how to read and show as beautiful charts and graphs.</p>
+<p>Event files contain:</p>
+<ul>
+<li>Scalar values (loss, accuracy over time)</li>
+<li>Histograms (weight distributions)</li>
+<li>Images (sample outputs, feature maps)</li>
+<li>Text (descriptions, annotations)</li>
+<li>Graphs (model architecture)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter__ctor_" data-uid="AiDotNet.Logging.TensorBoardWriter.#ctor*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter__ctor_System_String_System_String_" data-uid="AiDotNet.Logging.TensorBoardWriter.#ctor(System.String,System.String)">
+  TensorBoardWriter(string, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new TensorBoard event file writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorBoardWriter(string logDir, string? filename = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>logDir</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Directory to write event files.</p>
+</dd>
+    <dt><code>filename</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional filename prefix. Uses default format if not specified.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_FilePath_" data-uid="AiDotNet.Logging.TensorBoardWriter.FilePath*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_FilePath" data-uid="AiDotNet.Logging.TensorBoardWriter.FilePath">
+  FilePath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the event file path.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string FilePath { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_LogDir_" data-uid="AiDotNet.Logging.TensorBoardWriter.LogDir*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_LogDir" data-uid="AiDotNet.Logging.TensorBoardWriter.LogDir">
+  LogDir
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the log directory path.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string LogDir { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_Dispose_" data-uid="AiDotNet.Logging.TensorBoardWriter.Dispose*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_Dispose" data-uid="AiDotNet.Logging.TensorBoardWriter.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_Flush_" data-uid="AiDotNet.Logging.TensorBoardWriter.Flush*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_Flush" data-uid="AiDotNet.Logging.TensorBoardWriter.Flush">
+  Flush()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Flushes pending writes to disk.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Flush()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_WriteEmbedding_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteEmbedding*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_WriteEmbedding_System_String_System_Single_0__0___System_String___System_Int64_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteEmbedding(System.String,System.Single[0:,0:],System.String[],System.Int64)">
+  WriteEmbedding(string, float[,], string[]?, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes an embedding with optional metadata and sprite.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteEmbedding(string tag, float[,] embeddings, string[]? metadata, long step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tag name for this embedding.</p>
+</dd>
+    <dt><code>embeddings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[,]</dt>
+    <dd><p>2D array of embeddings (samples x dimensions).</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Optional metadata labels for each sample.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The global step number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_WriteHistogram_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteHistogram*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_WriteHistogram_System_String_System_ReadOnlySpan_System_Single__System_Int64_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteHistogram(System.String,System.ReadOnlySpan{System.Single},System.Int64)">
+  WriteHistogram(string, ReadOnlySpan&lt;float&gt;, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a histogram summary from a tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteHistogram(string tag, ReadOnlySpan&lt;float&gt; values, long step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tag name for this histogram.</p>
+</dd>
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Span of values to create histogram from.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The global step number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_WriteHistogram_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteHistogram*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_WriteHistogram_System_String_System_Single___System_Int64_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteHistogram(System.String,System.Single[],System.Int64)">
+  WriteHistogram(string, float[], long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a histogram summary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteHistogram(string tag, float[] values, long step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tag name for this histogram.</p>
+</dd>
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Array of values to create histogram from.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The global step number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_WriteImage_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteImage*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_WriteImage_System_String_System_Byte___System_Int32_System_Int32_System_Int64_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteImage(System.String,System.Byte[],System.Int32,System.Int32,System.Int64)">
+  WriteImage(string, byte[], int, int, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes an image summary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteImage(string tag, byte[] imageData, int height, int width, long step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tag name for this image.</p>
+</dd>
+    <dt><code>imageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>PNG-encoded image data.</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image height in pixels.</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image width in pixels.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The global step number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_WriteImageRaw_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteImageRaw*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_WriteImageRaw_System_String_System_Byte___System_Int32_System_Int32_System_Int32_System_Int64_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteImageRaw(System.String,System.Byte[],System.Int32,System.Int32,System.Int32,System.Int64)">
+  WriteImageRaw(string, byte[], int, int, int, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes raw image data (HWC format, values 0-255).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteImageRaw(string tag, byte[] pixels, int height, int width, int channels, long step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tag name for this image.</p>
+</dd>
+    <dt><code>pixels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>Raw pixel data in HWC format (height x width x channels).</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image height.</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image width.</p>
+</dd>
+    <dt><code>channels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of channels (1=grayscale, 3=RGB, 4=RGBA).</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The global step number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_WriteScalar_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteScalar*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_WriteScalar_System_String_System_Single_System_Int64_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteScalar(System.String,System.Single,System.Int64)">
+  WriteScalar(string, float, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a scalar summary to the event file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteScalar(string tag, float value, long step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tag name for this scalar (e.g., &quot;loss/train&quot;).</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The scalar value.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The global step number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_WriteScalars_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteScalars*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_WriteScalars_System_String_System_Collections_Generic_Dictionary_System_String_System_Single__System_Int64_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteScalars(System.String,System.Collections.Generic.Dictionary{System.String,System.Single},System.Int64)">
+  WriteScalars(string, Dictionary&lt;string, float&gt;, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes multiple scalars as a group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteScalars(string mainTag, Dictionary&lt;string, float&gt; tagValuePairs, long step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mainTag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Main tag prefix.</p>
+</dd>
+    <dt><code>tagValuePairs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Dictionary of tag suffixes to values.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The global step number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_TensorBoardWriter_WriteText_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteText*"></a>
+
+  <h3 id="AiDotNet_Logging_TensorBoardWriter_WriteText_System_String_System_String_System_Int64_" data-uid="AiDotNet.Logging.TensorBoardWriter.WriteText(System.String,System.String,System.Int64)">
+  WriteText(string, string, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes text summary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteText(string tag, string text, long step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tag name for this text.</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text content.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The global step number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/TensorBoardWriter.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

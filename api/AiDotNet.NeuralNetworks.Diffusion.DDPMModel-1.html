@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DDPMModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DDPMModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="DDPM (Denoising Diffusion Probabilistic Models) implementation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Diffusion.DDPMModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1" class="text-break">
+Class DDPMModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.html">Diffusion</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>DDPM (Denoising Diffusion Probabilistic Models) implementation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DDPMModel&lt;T&gt; : DiffusionModelBase&lt;T&gt;, IDiffusionModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html">DiffusionModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">DDPMModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_NumOps">DiffusionModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_RandomGenerator">DiffusionModelBase&lt;T&gt;.RandomGenerator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LossFunction">DiffusionModelBase&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LearningRate">DiffusionModelBase&lt;T&gt;.LearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Scheduler">DiffusionModelBase&lt;T&gt;.Scheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_DefaultLossFunction">DiffusionModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SupportsJitCompilation">DiffusionModelBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Generate_System_Int32___System_Int32_System_Nullable_System_Int32__">DiffusionModelBase&lt;T&gt;.Generate(int[], int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">DiffusionModelBase&lt;T&gt;.ComputeLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">DiffusionModelBase&lt;T&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">DiffusionModelBase&lt;T&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetModelMetadata">DiffusionModelBase&lt;T&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">DiffusionModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Serialize">DiffusionModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Deserialize_System_Byte___">DiffusionModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SaveModel_System_String_">DiffusionModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LoadModel_System_String_">DiffusionModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SaveState_System_IO_Stream_">DiffusionModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LoadState_System_IO_Stream_">DiffusionModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetActiveFeatureIndices">DiffusionModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">DiffusionModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_IsFeatureUsed_System_Int32_">DiffusionModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetFeatureImportance">DiffusionModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__">DiffusionModelBase&lt;T&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">DiffusionModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">DiffusionModelBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SampleNoise_System_Int32_System_Random_">DiffusionModelBase&lt;T&gt;.SampleNoise(int, Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+DDPM is the foundational diffusion model architecture that introduced the modern
+approach to diffusion-based generation. It learns to reverse a gradual noising
+process to generate data from pure noise.
+</p>
+<p>
+<b>For Beginners:</b> DDPM is like learning to restore a damaged photograph.
+<p>Training process:</p>
+<ol>
+<li>Take a clear photo</li>
+<li>Add a specific amount of noise (determined by timestep)</li>
+<li>Train a neural network to predict what noise was added</li>
+<li>Repeat with different photos and noise levels</li>
+</ol>
+<p>Generation process:</p>
+<ol>
+<li>Start with pure random noise</li>
+<li>Ask the trained model &quot;what noise is in this?&quot;</li>
+<li>Remove the predicted noise to get a slightly clearer image</li>
+<li>Repeat 1000 times (or use DDIM for faster generation)</li>
+<li>End up with a new, never-before-seen image</li>
+</ol>
+<p>This implementation provides a minimal but functional DDPM that serves as:</p>
+<ul>
+<li>A reference implementation for understanding diffusion</li>
+<li>A base for more sophisticated diffusion models</li>
+<li>A demonstration of scheduler integration</li>
+</ul>
+
+<p>
+<b>Reference:</b> "Denoising Diffusion Probabilistic Models" by Ho et al., 2020
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_AiDotNet_Interfaces_INoiseScheduler__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.#ctor(AiDotNet.Interfaces.INoiseScheduler{`0},System.Func{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  DDPMModel(INoiseScheduler&lt;T&gt;, Func&lt;Tensor&lt;T&gt;, int, Tensor&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DDPM model with a scheduler only.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DDPMModel(INoiseScheduler&lt;T&gt; scheduler, Func&lt;Tensor&lt;T&gt;, int, Tensor&lt;T&gt;&gt;? noisePredictor = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scheduler</code> <a class="xref" href="AiDotNet.Interfaces.INoiseScheduler-1.html">INoiseScheduler</a>&lt;T&gt;</dt>
+    <dd><p>The step scheduler to use for the diffusion process.</p>
+</dd>
+    <dt><code>noisePredictor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional custom noise prediction function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_AiDotNet_Interfaces_INoiseScheduler__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Convenience constructor for creating a model with a specific scheduler.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_AiDotNet_Models_Options_DiffusionModelOptions__0__AiDotNet_Interfaces_INoiseScheduler__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.#ctor(AiDotNet.Models.Options.DiffusionModelOptions{`0},AiDotNet.Interfaces.INoiseScheduler{`0},System.Func{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  DDPMModel(DiffusionModelOptions&lt;T&gt;?, INoiseScheduler&lt;T&gt;?, Func&lt;Tensor&lt;T&gt;, int, Tensor&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DDPM model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DDPMModel(DiffusionModelOptions&lt;T&gt;? options = null, INoiseScheduler&lt;T&gt;? scheduler = null, Func&lt;Tensor&lt;T&gt;, int, Tensor&lt;T&gt;&gt;? noisePredictor = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DiffusionModelOptions-1.html">DiffusionModelOptions</a>&lt;T&gt;</dt>
+    <dd><p>Configuration options for the diffusion model. If null, uses default options.</p>
+</dd>
+    <dt><code>scheduler</code> <a class="xref" href="AiDotNet.Interfaces.INoiseScheduler-1.html">INoiseScheduler</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom scheduler. If null, creates one from options.</p>
+</dd>
+    <dt><code>noisePredictor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional custom noise prediction function. If null, uses a placeholder that returns zeros.
+In production, this would be a neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_AiDotNet_Models_Options_DiffusionModelOptions__0__AiDotNet_Interfaces_INoiseScheduler__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Create a DDPM model by providing:
+<ul><li>Options to configure learning rate, timesteps, and noise schedule</li><li>Optionally, a custom scheduler (otherwise one is created from options)</li><li>Optionally, a noise predictor (the neural network that learns patterns)</li></ul>
+Without a noise predictor, this is a "skeleton" model useful for:
+<ul><li>Testing the scheduler integration</li><li>Understanding the diffusion pipeline</li><li>Serving as a template for custom implementations</li></ul>
+<example>
+<pre><code class="lang-csharp">// Create a minimal DDPM for testing with defaults
+var model = new DDPMModel&lt;double&gt;();
+
+// Or with custom options
+var options = new DiffusionModelOptions&lt;double&gt;
+{
+    LearningRate = 0.0001,
+    TrainTimesteps = 1000,
+    DefaultInferenceSteps = 50
+};
+var model = new DDPMModel&lt;double&gt;(options);
+
+// Generate samples (note: without a trained noise predictor, results are random)
+var samples = model.Generate(new[] { 1, 3, 64, 64 }, numInferenceSteps: 50);</code></pre>
+</example>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.#ctor(System.Int32)">
+  DDPMModel(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DDPM model with a seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DDPMModel(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The random seed for reproducible generation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1__ctor_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Convenience constructor for creating a model with a specific seed.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_ParameterCount_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_ParameterCount" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_Clone_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.Clone*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_Clone" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IDiffusionModel&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel</a>&lt;T&gt;</dt>
+    <dd><p>A new instance with the same parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_Create_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.Create*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_Create_AiDotNet_NeuralNetworks_Diffusion_Schedulers_SchedulerConfig__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.Create(AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig{`0},System.Func{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  Create(SchedulerConfig&lt;T&gt;, Func&lt;Tensor&lt;T&gt;, int, Tensor&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a DDPM model with a custom scheduler configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DDPMModel&lt;T&gt; Create(SchedulerConfig&lt;T&gt; config, Func&lt;Tensor&lt;T&gt;, int, Tensor&lt;T&gt;&gt;? noisePredictor = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig-1.html">SchedulerConfig</a>&lt;T&gt;</dt>
+    <dd><p>The scheduler configuration.</p>
+</dd>
+    <dt><code>noisePredictor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional custom noise prediction function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DDPMModel-1.html">DDPMModel</a>&lt;T&gt;</dt>
+    <dd><p>A new DDPM model instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_Create_AiDotNet_NeuralNetworks_Diffusion_Schedulers_SchedulerConfig__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Factory method for creating DDPM models with custom configurations.
+</p>
+<example>
+<pre><code class="lang-csharp">// Create with Stable Diffusion-style config
+var model = DDPMModel&lt;double&gt;.Create(
+    SchedulerConfig&lt;double&gt;.CreateStableDiffusion(),
+    myNeuralNetworkPredictor);</code></pre>
+</example>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_DeepCopy_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_DeepCopy" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_GetParameters_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_GetParameters" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters that can be optimized.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_PredictNoise_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.PredictNoise*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_PredictNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.PredictNoise(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  PredictNoise(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts the noise in a noisy sample at a given timestep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; PredictNoise(Tensor&lt;T&gt; noisySample, int timestep)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>noisySample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The noisy input sample.</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current timestep in the diffusion process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The predicted noise tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_PredictNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the core prediction that the model learns. Given a noisy sample at
+timestep t, predict what noise was added to create it.
+</p>
+<p>
+<b>For Beginners:</b> The model looks at a noisy image and guesses
+"what noise was added to make it look like this?" This prediction is then
+used to remove that noise and get a cleaner image.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_SetParameters_" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.Diffusion.DDPMModel`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_DDPMModel_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method allows direct modification of the model's internal parameters.
+This is useful for optimization algorithms that need to update parameters iteratively.
+If the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>,
+an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a> should be thrown.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/DDPMModel.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

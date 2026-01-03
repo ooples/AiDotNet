@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IDomainAdapter&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IDomainAdapter&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the interface for adapting models to reduce distribution shift between source and target domains.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1.md&amp;value=---%0Auid%3A%20AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1">
+
+
+
+  <h1 id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1" class="text-break">
+Interface IDomainAdapter&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TransferLearning/DomainAdaptation/IDomainAdapter.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TransferLearning.html">TransferLearning</a>.<a class="xref" href="AiDotNet.TransferLearning.DomainAdaptation.html">DomainAdaptation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the interface for adapting models to reduce distribution shift between source and target domains.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IDomainAdapter&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Domain adaptation is like helping someone adjust to a new environment.
+Even when features are mapped correctly, the source and target domains might have different
+statistical properties (like different averages or variability). A domain adapter helps
+reduce these differences so a model trained on source data works better on target data.
+</p>
+<p>
+Think of it like adjusting your eyes when moving from a bright room to a dim room - the
+objects are the same, but your perception needs to adapt to the new lighting conditions.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_AdaptationMethod_" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.AdaptationMethod*"></a>
+
+  <h3 id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_AdaptationMethod" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.AdaptationMethod">
+  AdaptationMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TransferLearning/DomainAdaptation/IDomainAdapter.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the adaptation method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string AdaptationMethod { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_RequiresTraining_" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.RequiresTraining*"></a>
+
+  <h3 id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_RequiresTraining" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.RequiresTraining">
+  RequiresTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TransferLearning/DomainAdaptation/IDomainAdapter.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if the adapter requires training before use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool RequiresTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_AdaptSource_" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.AdaptSource*"></a>
+
+  <h3 id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_AdaptSource_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.AdaptSource(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  AdaptSource(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TransferLearning/DomainAdaptation/IDomainAdapter.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adapts source domain data to better match the target domain distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; AdaptSource(Matrix&lt;T&gt; sourceData, Matrix&lt;T&gt; targetData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Data from the source domain.</p>
+</dd>
+    <dt><code>targetData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Data from the target domain (used to learn the target distribution).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The adapted source data that better matches the target distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_AdaptSource_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method adjusts source data so it looks more like target data
+statistically. It's like color-correcting photos from different cameras to make them
+look consistent.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_AdaptTarget_" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.AdaptTarget*"></a>
+
+  <h3 id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_AdaptTarget_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.AdaptTarget(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  AdaptTarget(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TransferLearning/DomainAdaptation/IDomainAdapter.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adapts target domain data to better match the source domain distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; AdaptTarget(Matrix&lt;T&gt; targetData, Matrix&lt;T&gt; sourceData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>targetData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Data from the target domain.</p>
+</dd>
+    <dt><code>sourceData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Data from the source domain (used to learn the source distribution).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The adapted target data that better matches the source distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_AdaptTarget_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the reverse operation - adjusting target data to look more
+like source data. Sometimes this is useful when you want to evaluate how well transfer
+learning might work.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_ComputeDomainDiscrepancy_" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.ComputeDomainDiscrepancy*"></a>
+
+  <h3 id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_ComputeDomainDiscrepancy_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.ComputeDomainDiscrepancy(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputeDomainDiscrepancy(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TransferLearning/DomainAdaptation/IDomainAdapter.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the domain discrepancy (how different the domains are).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeDomainDiscrepancy(Matrix&lt;T&gt; sourceData, Matrix&lt;T&gt; targetData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Data from the source domain.</p>
+</dd>
+    <dt><code>targetData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Data from the target domain.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A non-negative value where higher values indicate greater domain shift.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_ComputeDomainDiscrepancy_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This measures how different the two domains are. A small value means
+the domains are similar (transfer learning should work well). A large value means the
+domains are very different (transfer learning might be challenging).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_Train_" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.Train*"></a>
+
+  <h3 id="AiDotNet_TransferLearning_DomainAdaptation_IDomainAdapter_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TransferLearning.DomainAdaptation.IDomainAdapter`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Train(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TransferLearning/DomainAdaptation/IDomainAdapter.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the domain adapter if required.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Train(Matrix&lt;T&gt; sourceData, Matrix&lt;T&gt; targetData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Training data from the source domain.</p>
+</dd>
+    <dt><code>targetData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Training data from the target domain.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TransferLearning/DomainAdaptation/IDomainAdapter.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class WaveletKernel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class WaveletKernel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Wavelet kernel for measuring similarity between data points using wavelet functions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Kernels_WaveletKernel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Kernels.WaveletKernel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Kernels.WaveletKernel`1">
+
+
+
+  <h1 id="AiDotNet_Kernels_WaveletKernel_1" data-uid="AiDotNet.Kernels.WaveletKernel`1" class="text-break">
+Class WaveletKernel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Kernels/WaveletKernel.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Kernels.html">Kernels</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Wavelet kernel for measuring similarity between data points using wavelet functions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class WaveletKernel&lt;T&gt; : IKernelFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">WaveletKernel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IKernelFunction-1.html">IKernelFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Kernels_WaveletKernel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Wavelet kernel uses wavelet functions to measure similarity between data points. Wavelets are
+wave-like oscillations that start at zero, increase, and then decrease back to zero. They are
+particularly useful for analyzing signals at different scales.
+</p>
+<p>
+<b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
+The Wavelet kernel is special because it uses wavelet functions, which are like little waves that can
+detect patterns at different scales or resolutions in your data.
+</p>
+<p>
+Think of it like this: If you're looking at a beach from far away, you might see big waves, but as you
+zoom in, you'll see smaller ripples too. Wavelets can help analyze both the big waves and small ripples
+in your data. The Wavelet kernel uses this property to measure similarity between data points.
+</p>
+<p>
+The formula for the Wavelet kernel is:
+k(x, y) = ? h((x_i - y_i)/a) * vc
+where:
+- h is the wavelet function (like the Mexican Hat wavelet)
+- a is a dilation parameter that controls the width of the wavelet
+- c is a scaling parameter
+- ? means multiply all the results together for each dimension i
+</p>
+<p>
+Common uses include:
+- Signal processing and time series analysis
+- Image processing and computer vision
+- Data with multi-scale patterns
+- Feature extraction at different resolutions
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Kernels_WaveletKernel_1__ctor_" data-uid="AiDotNet.Kernels.WaveletKernel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Kernels_WaveletKernel_1__ctor_AiDotNet_Interfaces_IWaveletFunction__0___0__0_" data-uid="AiDotNet.Kernels.WaveletKernel`1.#ctor(AiDotNet.Interfaces.IWaveletFunction{`0},`0,`0)">
+  WaveletKernel(IWaveletFunction&lt;T&gt;?, T?, T?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Kernels/WaveletKernel.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Wavelet kernel with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public WaveletKernel(IWaveletFunction&lt;T&gt;? waveletFunction = null, T? a = default, T? c = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>waveletFunction</code> <a class="xref" href="AiDotNet.Interfaces.IWaveletFunction-1.html">IWaveletFunction</a>&lt;T&gt;</dt>
+    <dd><p>The wavelet function to use. If not specified, defaults to the Mexican Hat wavelet.</p>
+</dd>
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The dilation parameter that controls the width of the wavelet. If not specified, defaults to 1.0.</p>
+</dd>
+    <dt><code>c</code> <span class="xref">T</span></dt>
+    <dd><p>The scaling parameter that affects the overall magnitude. If not specified, defaults to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Kernels_WaveletKernel_1__ctor_AiDotNet_Interfaces_IWaveletFunction__0___0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor sets up the Wavelet kernel for use. You can optionally
+provide a specific wavelet function and values for the parameters a and c.
+</p>
+<p>
+If you don't specify these values, the kernel will use:
+- The Mexican Hat wavelet (which looks like a small wave with a peak in the middle)
+- a = 1.0 (standard width)
+- c = 1.0 (standard scaling)
+</p>
+<p>
+When might you want to adjust these parameters?
+- Change the wavelet function when you want to detect different types of patterns
+- Use a smaller 'a' value when you want to detect finer details in your data
+- Use a larger 'a' value when you want to detect broader patterns
+- Adjust 'c' to control the overall magnitude of the similarity values
+</p>
+<p>
+The Wavelet kernel is particularly useful for:
+- Data with patterns at different scales (like images or signals)
+- Time series data with both short-term and long-term patterns
+- Feature extraction at multiple resolutions
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Kernels_WaveletKernel_1_Calculate_" data-uid="AiDotNet.Kernels.WaveletKernel`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_Kernels_WaveletKernel_1_Calculate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Kernels.WaveletKernel`1.Calculate(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Calculate(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Kernels/WaveletKernel.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Wavelet kernel value between two vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Calculate(Vector&lt;T&gt; x1, Vector&lt;T&gt; x2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first vector.</p>
+</dd>
+    <dt><code>x2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The kernel value representing the similarity between the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Kernels_WaveletKernel_1_Calculate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
+how similar they are to each other using the Wavelet kernel formula.
+</p>
+<p>
+The calculation works by:
+1. For each dimension (feature) in the vectors:
+   a. Finding the difference between the corresponding values
+   b. Scaling this difference by dividing by parameter 'a'
+   c. Applying the wavelet function to this scaled difference
+   d. Multiplying by the square root of parameter 'c'
+2. Multiplying all these individual results together
+</p>
+<p>
+The result is a similarity measure that captures patterns at the scale determined by
+parameter 'a'. The closer the value is to 1, the more similar the vectors are.
+</p>
+<p>
+What makes this kernel special is its ability to detect patterns at different scales,
+which is particularly useful for data with multi-scale features like images, signals,
+or time series.
+</p>
+<p>
+For example, if you're analyzing stock market data, the Wavelet kernel could help
+identify both short-term fluctuations and long-term trends by using different values
+of parameter 'a'.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Kernels/WaveletKernel.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

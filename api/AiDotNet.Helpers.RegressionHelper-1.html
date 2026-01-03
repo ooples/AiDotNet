@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RegressionHelper&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RegressionHelper&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Helper class that provides common operations for regression analysis.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Helpers_RegressionHelper_1.md&amp;value=---%0Auid%3A%20AiDotNet.Helpers.RegressionHelper%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Helpers.RegressionHelper`1">
+
+
+
+  <h1 id="AiDotNet_Helpers_RegressionHelper_1" data-uid="AiDotNet.Helpers.RegressionHelper`1" class="text-break">
+Class RegressionHelper&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/RegressionHelper.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Helpers.html">Helpers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Helper class that provides common operations for regression analysis.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class RegressionHelper&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">RegressionHelper&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Helpers_RegressionHelper_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Regression is a technique used in AI to find relationships between variables.
+For example, predicting house prices based on features like size, location, and age.
+This helper class provides tools to make regression work better with your data.</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Helpers_RegressionHelper_1_CenterAndScale_" data-uid="AiDotNet.Helpers.RegressionHelper`1.CenterAndScale*"></a>
+
+  <h3 id="AiDotNet_Helpers_RegressionHelper_1_CenterAndScale_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Helpers.RegressionHelper`1.CenterAndScale(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CenterAndScale(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/RegressionHelper.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Standardizes the input features and target values by centering them around zero
+and scaling them to have unit variance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static (Matrix&lt;T&gt; xScaled, Vector&lt;T&gt; yScaled, Vector&lt;T&gt; xMean, Vector&lt;T&gt; xStd, T yMean, T yStd) CenterAndScale(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input feature matrix where rows are samples and columns are features.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,-0,-0-.xscaled">xScaled</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,-0,-0-.yscaled">yScaled</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,-0,-0-.xmean">xMean</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,-0,-0-.xstd">xStd</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,-0,-0-.ymean">yMean</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0-,-0,-0-.ystd">yStd</a>)</dt>
+    <dd><p>A tuple containing:</p>
+<ul>
+<li>xScaled: The standardized feature matrix</li>
+<li>yScaled: The standardized target values</li>
+<li>xMean: The mean of each feature column</li>
+<li>xStd: The standard deviation of each feature column</li>
+<li>yMean: The mean of the target values</li>
+<li>yStd: The standard deviation of the target values</li>
+</ul>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_RegressionHelper_1_CenterAndScale_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method prepares your data for machine learning by making all features
+comparable to each other. Think of it like converting different measurements (inches, pounds, etc.)
+to a common scale.</p>
+<p>For example, if one feature ranges from 0-1000 and another from 0-1, the larger one might
+dominate the model. Standardization solves this by:</p>
+<ol>
+<li>Subtracting the average (centering around zero)</li>
+<li>Dividing by the standard deviation (scaling to similar ranges)</li>
+</ol>
+<p>The method returns both the transformed data and the values used for transformation,
+which you'll need later to transform new data or interpret results.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/RegressionHelper.cs/#L12" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

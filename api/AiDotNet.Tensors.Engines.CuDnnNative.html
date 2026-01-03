@@ -1,0 +1,3860 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CuDnnNative | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CuDnnNative | AiDotNet Documentation ">
+      
+      <meta name="description" content="cuDNN P/Invoke bindings for high-performance deep learning primitives. Target: Match PyTorch/TensorFlow performance for convolutions, pooling, batch norm, attention.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_CuDnnNative.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.CuDnnNative%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.CuDnnNative">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_CuDnnNative" data-uid="AiDotNet.Tensors.Engines.CuDnnNative" class="text-break">
+Class CuDnnNative  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuDnnNative.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>cuDNN P/Invoke bindings for high-performance deep learning primitives.
+Target: Match PyTorch/TensorFlow performance for convolutions, pooling, batch norm, attention.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class CuDnnNative</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CuDnnNative</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_CuDnnNative_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Performance Targets:</b></p>
+<ul><li>Convolution: ~15,000 GFLOPS (cuDNN optimized algorithms)</li><li>BatchNorm: Near memory-bandwidth limited</li><li>Pooling: Near memory-bandwidth limited</li><li>Attention: Tensor core accelerated (Volta+)</li></ul>
+<p><b>cuDNN Frontend Reference:</b> https://github.com/NVIDIA/cudnn-frontend</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnActivationBackward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnActivationBackward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnActivationBackward_System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnActivationBackward(System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnActivationBackward(nint, nint, ref float, nint, nint, nint, nint, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes activation backward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnActivationBackward(nint handle, nint activationDesc, ref float alpha, nint yDesc, nint y, nint dyDesc, nint dy, nint xDesc, nint x, ref float beta, nint dxDesc, nint dx)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>activationDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>dxDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnActivationForward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnActivationForward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnActivationForward_System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnActivationForward(System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnActivationForward(nint, nint, ref float, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes activation forward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnActivationForward(nint handle, nint activationDesc, ref float alpha, nint xDesc, nint x, ref float beta, nint yDesc, nint y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>activationDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnAddTensor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnAddTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnAddTensor_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnAddTensor(System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnAddTensor(nint, ref float, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a tensor to another tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnAddTensor(nint handle, ref float alpha, nint aDesc, nint A, ref float beta, nint cDesc, nint C)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>aDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>cDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnBatchNormalizationBackward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnBatchNormalizationBackward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnBatchNormalizationBackward_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnBatchNormMode_System_Single__System_Single__System_Single__System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_Double_System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnBatchNormalizationBackward(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnBatchNormMode,System.Single@,System.Single@,System.Single@,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.Double,System.IntPtr,System.IntPtr)">
+  cudnnBatchNormalizationBackward(nint, CudnnBatchNormMode, ref float, ref float, ref float, ref float, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, double, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes batch normalization backward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnBatchNormalizationBackward(nint handle, CuDnnNative.CudnnBatchNormMode mode, ref float alphaDataDiff, ref float betaDataDiff, ref float alphaParamDiff, ref float betaParamDiff, nint xDesc, nint x, nint dyDesc, nint dy, nint dxDesc, nint dx, nint bnScaleBiasDiffDesc, nint bnScale, nint resultBnScaleDiff, nint resultBnBiasDiff, double epsilon, nint savedMean, nint savedInvVariance)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnBatchNormMode.html">CudnnBatchNormMode</a></dt>
+    <dd></dd>
+    <dt><code>alphaDataDiff</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>betaDataDiff</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>alphaParamDiff</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>betaParamDiff</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dxDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>bnScaleBiasDiffDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>bnScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>resultBnScaleDiff</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>resultBnBiasDiff</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>savedMean</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>savedInvVariance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnBatchNormalizationForwardInference_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnBatchNormalizationForwardInference*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnBatchNormalizationForwardInference_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnBatchNormMode_System_Single__System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_Double_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnBatchNormalizationForwardInference(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnBatchNormMode,System.Single@,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.Double)">
+  cudnnBatchNormalizationForwardInference(nint, CudnnBatchNormMode, ref float, ref float, nint, nint, nint, nint, nint, nint, nint, nint, nint, double)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes batch normalization forward during inference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnBatchNormalizationForwardInference(nint handle, CuDnnNative.CudnnBatchNormMode mode, ref float alpha, ref float beta, nint xDesc, nint x, nint yDesc, nint y, nint bnScaleBiasMeanVarDesc, nint bnScale, nint bnBias, nint estimatedMean, nint estimatedVariance, double epsilon)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnBatchNormMode.html">CudnnBatchNormMode</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>bnScaleBiasMeanVarDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>bnScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>bnBias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>estimatedMean</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>estimatedVariance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnBatchNormalizationForwardTraining_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnBatchNormalizationForwardTraining*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnBatchNormalizationForwardTraining_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnBatchNormMode_System_Single__System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_Double_System_IntPtr_System_IntPtr_System_Double_System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnBatchNormalizationForwardTraining(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnBatchNormMode,System.Single@,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.Double,System.IntPtr,System.IntPtr,System.Double,System.IntPtr,System.IntPtr)">
+  cudnnBatchNormalizationForwardTraining(nint, CudnnBatchNormMode, ref float, ref float, nint, nint, nint, nint, nint, nint, nint, double, nint, nint, double, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes batch normalization forward during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnBatchNormalizationForwardTraining(nint handle, CuDnnNative.CudnnBatchNormMode mode, ref float alpha, ref float beta, nint xDesc, nint x, nint yDesc, nint y, nint bnScaleBiasMeanVarDesc, nint bnScale, nint bnBias, double exponentialAverageFactor, nint resultRunningMean, nint resultRunningVariance, double epsilon, nint resultSaveMean, nint resultSaveInvVariance)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnBatchNormMode.html">CudnnBatchNormMode</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>bnScaleBiasMeanVarDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>bnScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>bnBias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>exponentialAverageFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>resultRunningMean</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>resultRunningVariance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>resultSaveMean</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>resultSaveInvVariance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionBackwardBias_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionBackwardBias*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionBackwardBias_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionBackwardBias(System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnConvolutionBackwardBias(nint, ref float, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes bias gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnConvolutionBackwardBias(nint handle, ref float alpha, nint dyDesc, nint dy, ref float beta, nint dbDesc, nint db)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>dbDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>db</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionBackwardData_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionBackwardData*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionBackwardData_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionBwdDataAlgo_System_IntPtr_System_UInt64_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionBackwardData(System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionBwdDataAlgo,System.IntPtr,System.UInt64,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnConvolutionBackwardData(nint, ref float, nint, nint, nint, nint, nint, CudnnConvolutionBwdDataAlgo, nint, ulong, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes backward data convolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnConvolutionBackwardData(nint handle, ref float alpha, nint wDesc, nint w, nint dyDesc, nint dy, nint convDesc, CuDnnNative.CudnnConvolutionBwdDataAlgo algo, nint workSpace, ulong workSpaceSizeInBytes, ref float beta, nint dxDesc, nint dx)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>wDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>w</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionBwdDataAlgo.html">CudnnConvolutionBwdDataAlgo</a></dt>
+    <dd></dd>
+    <dt><code>workSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>workSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>dxDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionBackwardFilter_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionBackwardFilter*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionBackwardFilter_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionBwdFilterAlgo_System_IntPtr_System_UInt64_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionBackwardFilter(System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionBwdFilterAlgo,System.IntPtr,System.UInt64,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnConvolutionBackwardFilter(nint, ref float, nint, nint, nint, nint, nint, CudnnConvolutionBwdFilterAlgo, nint, ulong, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes backward filter convolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnConvolutionBackwardFilter(nint handle, ref float alpha, nint xDesc, nint x, nint dyDesc, nint dy, nint convDesc, CuDnnNative.CudnnConvolutionBwdFilterAlgo algo, nint workSpace, ulong workSpaceSizeInBytes, ref float beta, nint dwDesc, nint dw)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionBwdFilterAlgo.html">CudnnConvolutionBwdFilterAlgo</a></dt>
+    <dd></dd>
+    <dt><code>workSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>workSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>dwDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dw</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionForward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionForward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionForward_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionFwdAlgo_System_IntPtr_System_UInt64_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionForward(System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionFwdAlgo,System.IntPtr,System.UInt64,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnConvolutionForward(nint, ref float, nint, nint, nint, nint, nint, CudnnConvolutionFwdAlgo, nint, ulong, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes the convolution forward operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnConvolutionForward(nint handle, ref float alpha, nint xDesc, nint x, nint wDesc, nint w, nint convDesc, CuDnnNative.CudnnConvolutionFwdAlgo algo, nint workSpace, ulong workSpaceSizeInBytes, ref float beta, nint yDesc, nint y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>wDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>w</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionFwdAlgo.html">CudnnConvolutionFwdAlgo</a></dt>
+    <dd></dd>
+    <dt><code>workSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>workSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionForwardDouble_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionForwardDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnConvolutionForwardDouble_System_IntPtr_System_Double__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionFwdAlgo_System_IntPtr_System_UInt64_System_Double__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnConvolutionForwardDouble(System.IntPtr,System.Double@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionFwdAlgo,System.IntPtr,System.UInt64,System.Double@,System.IntPtr,System.IntPtr)">
+  cudnnConvolutionForwardDouble(nint, ref double, nint, nint, nint, nint, nint, CudnnConvolutionFwdAlgo, nint, ulong, ref double, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes convolution forward with double precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnConvolutionForwardDouble(nint handle, ref double alpha, nint xDesc, nint x, nint wDesc, nint w, nint convDesc, CuDnnNative.CudnnConvolutionFwdAlgo algo, nint workSpace, ulong workSpaceSizeInBytes, ref double beta, nint yDesc, nint y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>wDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>w</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionFwdAlgo.html">CudnnConvolutionFwdAlgo</a></dt>
+    <dd></dd>
+    <dt><code>workSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>workSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreate_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreate*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreate_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreate(System.IntPtr@)">
+  cudnnCreate(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a cuDNN handle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreate(out nint handle)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateActivationDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateActivationDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateActivationDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateActivationDescriptor(System.IntPtr@)">
+  cudnnCreateActivationDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an activation descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateActivationDescriptor(out nint activationDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>activationDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateAttnDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateAttnDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateAttnDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateAttnDescriptor(System.IntPtr@)">
+  cudnnCreateAttnDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an attention descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateAttnDescriptor(out nint attnDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>attnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateConvolutionDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateConvolutionDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateConvolutionDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateConvolutionDescriptor(System.IntPtr@)">
+  cudnnCreateConvolutionDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a convolution descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateConvolutionDescriptor(out nint convDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateDropoutDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateDropoutDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateDropoutDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateDropoutDescriptor(System.IntPtr@)">
+  cudnnCreateDropoutDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a dropout descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateDropoutDescriptor(out nint dropoutDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dropoutDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateFilterDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateFilterDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateFilterDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateFilterDescriptor(System.IntPtr@)">
+  cudnnCreateFilterDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a filter descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateFilterDescriptor(out nint filterDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filterDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateOpTensorDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateOpTensorDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateOpTensorDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateOpTensorDescriptor(System.IntPtr@)">
+  cudnnCreateOpTensorDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an op tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateOpTensorDescriptor(out nint opTensorDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>opTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreatePoolingDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreatePoolingDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreatePoolingDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreatePoolingDescriptor(System.IntPtr@)">
+  cudnnCreatePoolingDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a pooling descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreatePoolingDescriptor(out nint poolingDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>poolingDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateRNNDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateRNNDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateRNNDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateRNNDescriptor(System.IntPtr@)">
+  cudnnCreateRNNDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an RNN descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateRNNDescriptor(out nint rnnDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rnnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateReduceTensorDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateReduceTensorDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateReduceTensorDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateReduceTensorDescriptor(System.IntPtr@)">
+  cudnnCreateReduceTensorDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a reduce tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateReduceTensorDescriptor(out nint reduceTensorDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reduceTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateTensorDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateTensorDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnCreateTensorDescriptor_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnCreateTensorDescriptor(System.IntPtr@)">
+  cudnnCreateTensorDescriptor(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnCreateTensorDescriptor(out nint tensorDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDeriveBNTensorDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDeriveBNTensorDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDeriveBNTensorDescriptor_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnBatchNormMode_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDeriveBNTensorDescriptor(System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnBatchNormMode)">
+  cudnnDeriveBNTensorDescriptor(nint, nint, CudnnBatchNormMode)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Derives batch normalization parameters tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDeriveBNTensorDescriptor(nint derivedBnDesc, nint xDesc, CuDnnNative.CudnnBatchNormMode mode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>derivedBnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnBatchNormMode.html">CudnnBatchNormMode</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroy_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroy*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroy_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroy(System.IntPtr)">
+  cudnnDestroy(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a cuDNN handle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroy(nint handle)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyActivationDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyActivationDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyActivationDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyActivationDescriptor(System.IntPtr)">
+  cudnnDestroyActivationDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys an activation descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyActivationDescriptor(nint activationDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>activationDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyAttnDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyAttnDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyAttnDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyAttnDescriptor(System.IntPtr)">
+  cudnnDestroyAttnDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys an attention descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyAttnDescriptor(nint attnDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>attnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyConvolutionDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyConvolutionDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyConvolutionDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyConvolutionDescriptor(System.IntPtr)">
+  cudnnDestroyConvolutionDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a convolution descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyConvolutionDescriptor(nint convDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyDropoutDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyDropoutDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyDropoutDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyDropoutDescriptor(System.IntPtr)">
+  cudnnDestroyDropoutDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a dropout descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyDropoutDescriptor(nint dropoutDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dropoutDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyFilterDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyFilterDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyFilterDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyFilterDescriptor(System.IntPtr)">
+  cudnnDestroyFilterDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a filter descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyFilterDescriptor(nint filterDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filterDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyOpTensorDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyOpTensorDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyOpTensorDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyOpTensorDescriptor(System.IntPtr)">
+  cudnnDestroyOpTensorDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys an op tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyOpTensorDescriptor(nint opTensorDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>opTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyPoolingDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyPoolingDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyPoolingDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyPoolingDescriptor(System.IntPtr)">
+  cudnnDestroyPoolingDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a pooling descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyPoolingDescriptor(nint poolingDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>poolingDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyRNNDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyRNNDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyRNNDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyRNNDescriptor(System.IntPtr)">
+  cudnnDestroyRNNDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys an RNN descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyRNNDescriptor(nint rnnDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rnnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyReduceTensorDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyReduceTensorDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyReduceTensorDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyReduceTensorDescriptor(System.IntPtr)">
+  cudnnDestroyReduceTensorDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a reduce tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyReduceTensorDescriptor(nint reduceTensorDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reduceTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyTensorDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyTensorDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDestroyTensorDescriptor_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDestroyTensorDescriptor(System.IntPtr)">
+  cudnnDestroyTensorDescriptor(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDestroyTensorDescriptor(nint tensorDesc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDropoutBackward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDropoutBackward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDropoutBackward_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_UInt64_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDropoutBackward(System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.UInt64)">
+  cudnnDropoutBackward(nint, nint, nint, nint, nint, nint, nint, ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes dropout backward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDropoutBackward(nint handle, nint dropoutDesc, nint dyDesc, nint dy, nint dxDesc, nint dx, nint reserveSpace, ulong reserveSpaceSizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dropoutDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dxDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>reserveSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>reserveSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDropoutForward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDropoutForward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDropoutForward_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_UInt64_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDropoutForward(System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.UInt64)">
+  cudnnDropoutForward(nint, nint, nint, nint, nint, nint, nint, ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes dropout forward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDropoutForward(nint handle, nint dropoutDesc, nint xDesc, nint x, nint yDesc, nint y, nint reserveSpace, ulong reserveSpaceSizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dropoutDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>reserveSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>reserveSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDropoutGetReserveSpaceSize_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDropoutGetReserveSpaceSize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDropoutGetReserveSpaceSize_System_IntPtr_System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDropoutGetReserveSpaceSize(System.IntPtr,System.UInt64@)">
+  cudnnDropoutGetReserveSpaceSize(nint, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the size of dropout reserve space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDropoutGetReserveSpaceSize(nint xDesc, out ulong sizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>sizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDropoutGetStatesSize_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDropoutGetStatesSize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnDropoutGetStatesSize_System_IntPtr_System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnDropoutGetStatesSize(System.IntPtr,System.UInt64@)">
+  cudnnDropoutGetStatesSize(nint, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the size of dropout state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnDropoutGetStatesSize(nint handle, out ulong sizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>sizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolution2dForwardOutputDim_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolution2dForwardOutputDim*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolution2dForwardOutputDim_System_IntPtr_System_IntPtr_System_IntPtr_System_Int32__System_Int32__System_Int32__System_Int32__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolution2dForwardOutputDim(System.IntPtr,System.IntPtr,System.IntPtr,System.Int32@,System.Int32@,System.Int32@,System.Int32@)">
+  cudnnGetConvolution2dForwardOutputDim(nint, nint, nint, out int, out int, out int, out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the output dimensions for a convolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetConvolution2dForwardOutputDim(nint convDesc, nint inputTensorDesc, nint filterDesc, out int n, out int c, out int h, out int w)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>inputTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>filterDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>c</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>h</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>w</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolutionBackwardDataWorkspaceSize_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolutionBackwardDataWorkspaceSize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolutionBackwardDataWorkspaceSize_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionBwdDataAlgo_System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolutionBackwardDataWorkspaceSize(System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionBwdDataAlgo,System.UInt64@)">
+  cudnnGetConvolutionBackwardDataWorkspaceSize(nint, nint, nint, nint, nint, CudnnConvolutionBwdDataAlgo, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets workspace size for backward data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetConvolutionBackwardDataWorkspaceSize(nint handle, nint wDesc, nint dyDesc, nint convDesc, nint dxDesc, CuDnnNative.CudnnConvolutionBwdDataAlgo algo, out ulong sizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>wDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dxDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionBwdDataAlgo.html">CudnnConvolutionBwdDataAlgo</a></dt>
+    <dd></dd>
+    <dt><code>sizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolutionBackwardFilterWorkspaceSize_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolutionBackwardFilterWorkspaceSize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolutionBackwardFilterWorkspaceSize_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionBwdFilterAlgo_System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolutionBackwardFilterWorkspaceSize(System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionBwdFilterAlgo,System.UInt64@)">
+  cudnnGetConvolutionBackwardFilterWorkspaceSize(nint, nint, nint, nint, nint, CudnnConvolutionBwdFilterAlgo, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets workspace size for backward filter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetConvolutionBackwardFilterWorkspaceSize(nint handle, nint xDesc, nint dyDesc, nint convDesc, nint dwDesc, CuDnnNative.CudnnConvolutionBwdFilterAlgo algo, out ulong sizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dwDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionBwdFilterAlgo.html">CudnnConvolutionBwdFilterAlgo</a></dt>
+    <dd></dd>
+    <dt><code>sizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolutionForwardAlgorithm_v7_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolutionForwardAlgorithm_v7*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolutionForwardAlgorithm_v7_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_Int32_System_Int32__System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolutionForwardAlgorithm_v7(System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.Int32,System.Int32@,System.IntPtr)">
+  cudnnGetConvolutionForwardAlgorithm_v7(nint, nint, nint, nint, nint, int, out int, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the best convolution forward algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetConvolutionForwardAlgorithm_v7(nint handle, nint xDesc, nint wDesc, nint convDesc, nint yDesc, int requestedAlgoCount, out int returnedAlgoCount, nint perfResults)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>wDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>requestedAlgoCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>returnedAlgoCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>perfResults</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolutionForwardWorkspaceSize_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolutionForwardWorkspaceSize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetConvolutionForwardWorkspaceSize_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionFwdAlgo_System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetConvolutionForwardWorkspaceSize(System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionFwdAlgo,System.UInt64@)">
+  cudnnGetConvolutionForwardWorkspaceSize(nint, nint, nint, nint, nint, CudnnConvolutionFwdAlgo, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets workspace size for convolution forward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetConvolutionForwardWorkspaceSize(nint handle, nint xDesc, nint wDesc, nint convDesc, nint yDesc, CuDnnNative.CudnnConvolutionFwdAlgo algo, out ulong sizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>wDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionFwdAlgo.html">CudnnConvolutionFwdAlgo</a></dt>
+    <dd></dd>
+    <dt><code>sizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetErrorString_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetErrorString*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetErrorString_AiDotNet_Tensors_Engines_CuDnnNative_CudnnStatus_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetErrorString(AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus)">
+  cudnnGetErrorString(CudnnStatus)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets error string for status code.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint cudnnGetErrorString(CuDnnNative.CudnnStatus status)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>status</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetMultiHeadAttnBuffers_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetMultiHeadAttnBuffers*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetMultiHeadAttnBuffers_System_IntPtr_System_IntPtr_System_UInt64__System_UInt64__System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetMultiHeadAttnBuffers(System.IntPtr,System.IntPtr,System.UInt64@,System.UInt64@,System.UInt64@)">
+  cudnnGetMultiHeadAttnBuffers(nint, nint, out ulong, out ulong, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets attention buffer sizes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetMultiHeadAttnBuffers(nint handle, nint attnDesc, out ulong weightSizeInBytes, out ulong workSpaceSizeInBytes, out ulong reserveSpaceSizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>attnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>weightSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>workSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>reserveSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetMultiHeadAttnWeights_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetMultiHeadAttnWeights*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetMultiHeadAttnWeights_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnMultiHeadAttnWeightKind_System_UInt64_System_IntPtr_System_IntPtr_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetMultiHeadAttnWeights(System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnMultiHeadAttnWeightKind,System.UInt64,System.IntPtr,System.IntPtr,System.IntPtr@)">
+  cudnnGetMultiHeadAttnWeights(nint, nint, CudnnMultiHeadAttnWeightKind, ulong, nint, nint, out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets attention weight pointers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetMultiHeadAttnWeights(nint handle, nint attnDesc, CuDnnNative.CudnnMultiHeadAttnWeightKind wKind, ulong weightSizeInBytes, nint weights, nint wDesc, out nint wAddr)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>attnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>wKind</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnMultiHeadAttnWeightKind.html">CudnnMultiHeadAttnWeightKind</a></dt>
+    <dd></dd>
+    <dt><code>weightSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>weights</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>wDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>wAddr</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetPooling2dForwardOutputDim_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetPooling2dForwardOutputDim*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetPooling2dForwardOutputDim_System_IntPtr_System_IntPtr_System_Int32__System_Int32__System_Int32__System_Int32__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetPooling2dForwardOutputDim(System.IntPtr,System.IntPtr,System.Int32@,System.Int32@,System.Int32@,System.Int32@)">
+  cudnnGetPooling2dForwardOutputDim(nint, nint, out int, out int, out int, out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the output dimensions for pooling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetPooling2dForwardOutputDim(nint poolingDesc, nint inputTensorDesc, out int n, out int c, out int h, out int w)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>poolingDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>inputTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>c</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>h</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>w</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetRNNTempSpaceSizes_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetRNNTempSpaceSizes*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetRNNTempSpaceSizes_System_IntPtr_System_IntPtr_System_Int32_System_IntPtr_System_UInt64__System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetRNNTempSpaceSizes(System.IntPtr,System.IntPtr,System.Int32,System.IntPtr,System.UInt64@,System.UInt64@)">
+  cudnnGetRNNTempSpaceSizes(nint, nint, int, nint, out ulong, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets RNN workspace and reserve space sizes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetRNNTempSpaceSizes(nint handle, nint rnnDesc, int fMode, nint xDesc, out ulong workSpaceSize, out ulong reserveSpaceSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>rnnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>fMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>workSpaceSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>reserveSpaceSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetRNNWeightSpaceSize_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetRNNWeightSpaceSize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetRNNWeightSpaceSize_System_IntPtr_System_IntPtr_System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetRNNWeightSpaceSize(System.IntPtr,System.IntPtr,System.UInt64@)">
+  cudnnGetRNNWeightSpaceSize(nint, nint, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets RNN weight space size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetRNNWeightSpaceSize(nint handle, nint rnnDesc, out ulong weightSpaceSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>rnnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>weightSpaceSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetReductionWorkspaceSize_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetReductionWorkspaceSize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetReductionWorkspaceSize_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_UInt64__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetReductionWorkspaceSize(System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.UInt64@)">
+  cudnnGetReductionWorkspaceSize(nint, nint, nint, nint, out ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the workspace size for reduce tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnGetReductionWorkspaceSize(nint handle, nint reduceTensorDesc, nint aDesc, nint cDesc, out ulong sizeInBytes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>reduceTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>aDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>cDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>sizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetVersion_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetVersion*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnGetVersion" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnGetVersion">
+  cudnnGetVersion()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the cuDNN version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern ulong cudnnGetVersion()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnMultiHeadAttnForward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnMultiHeadAttnForward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnMultiHeadAttnForward_System_IntPtr_System_IntPtr_System_Int32_System_Int32___System_Int32___System_Int32___System_Int32___System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_UInt64_System_IntPtr_System_UInt64_System_IntPtr_System_UInt64_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnMultiHeadAttnForward(System.IntPtr,System.IntPtr,System.Int32,System.Int32[],System.Int32[],System.Int32[],System.Int32[],System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.UInt64,System.IntPtr,System.UInt64,System.IntPtr,System.UInt64,System.IntPtr)">
+  cudnnMultiHeadAttnForward(nint, nint, int, int[], int[], int[], int[], nint, nint, nint, nint, nint, nint, nint, nint, nint, ulong, nint, ulong, nint, ulong, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes multi-head attention forward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnMultiHeadAttnForward(nint handle, nint attnDesc, int currIdx, int[] loWinIdx, int[] hiWinIdx, int[] devSeqLengthsQO, int[] devSeqLengthsKV, nint qDesc, nint queries, nint residuals, nint kDesc, nint keys, nint vDesc, nint values, nint oDesc, nint output, ulong weightSizeInBytes, nint weights, ulong workSpaceSizeInBytes, nint workSpace, ulong reserveSpaceSizeInBytes, nint reserveSpace)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>attnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>currIdx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>loWinIdx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>hiWinIdx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>devSeqLengthsQO</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>devSeqLengthsKV</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>qDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>queries</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>residuals</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>kDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>keys</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>vDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>oDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>weightSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>weights</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>workSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>workSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>reserveSpaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>reserveSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnOpTensor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnOpTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnOpTensor_System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnOpTensor(System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnOpTensor(nint, nint, ref float, nint, nint, ref float, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes element-wise tensor operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnOpTensor(nint handle, nint opTensorDesc, ref float alpha1, nint aDesc, nint A, ref float alpha2, nint bDesc, nint B, ref float beta, nint cDesc, nint C)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>opTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>aDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>bDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>cDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnPoolingBackward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnPoolingBackward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnPoolingBackward_System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnPoolingBackward(System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnPoolingBackward(nint, nint, ref float, nint, nint, nint, nint, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes pooling backward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnPoolingBackward(nint handle, nint poolingDesc, ref float alpha, nint yDesc, nint y, nint dyDesc, nint dy, nint xDesc, nint x, ref float beta, nint dxDesc, nint dx)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>poolingDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>dxDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnPoolingForward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnPoolingForward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnPoolingForward_System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnPoolingForward(System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnPoolingForward(nint, nint, ref float, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes pooling forward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnPoolingForward(nint handle, nint poolingDesc, ref float alpha, nint xDesc, nint x, ref float beta, nint yDesc, nint y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>poolingDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnReduceTensor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnReduceTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnReduceTensor_System_IntPtr_System_IntPtr_System_IntPtr_System_UInt64_System_IntPtr_System_UInt64_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnReduceTensor(System.IntPtr,System.IntPtr,System.IntPtr,System.UInt64,System.IntPtr,System.UInt64,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnReduceTensor(nint, nint, nint, ulong, nint, ulong, ref float, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes reduce tensor operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnReduceTensor(nint handle, nint reduceTensorDesc, nint indices, ulong indicesSizeInBytes, nint workspace, ulong workspaceSizeInBytes, ref float alpha, nint aDesc, nint A, ref float beta, nint cDesc, nint C)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>reduceTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>indicesSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>workspace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>workspaceSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>aDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>cDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnScaleTensor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnScaleTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnScaleTensor_System_IntPtr_System_IntPtr_System_IntPtr_System_Single__" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnScaleTensor(System.IntPtr,System.IntPtr,System.IntPtr,System.Single@)">
+  cudnnScaleTensor(nint, nint, nint, ref float)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scales a tensor by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnScaleTensor(nint handle, nint yDesc, nint y, ref float alpha)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetActivationDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetActivationDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetActivationDescriptor_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnActivationMode_AiDotNet_Tensors_Engines_CuDnnNative_CudnnNanPropagation_System_Double_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetActivationDescriptor(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnActivationMode,AiDotNet.Tensors.Engines.CuDnnNative.CudnnNanPropagation,System.Double)">
+  cudnnSetActivationDescriptor(nint, CudnnActivationMode, CudnnNanPropagation, double)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets an activation descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetActivationDescriptor(nint activationDesc, CuDnnNative.CudnnActivationMode mode, CuDnnNative.CudnnNanPropagation reluNanOpt, double coef)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>activationDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnActivationMode.html">CudnnActivationMode</a></dt>
+    <dd></dd>
+    <dt><code>reluNanOpt</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnNanPropagation.html">CudnnNanPropagation</a></dt>
+    <dd></dd>
+    <dt><code>coef</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetAttnDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetAttnDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetAttnDescriptor_System_IntPtr_System_UInt32_System_Int32_System_Double_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_AiDotNet_Tensors_Engines_CuDnnNative_CudnnMathType_System_IntPtr_System_IntPtr_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetAttnDescriptor(System.IntPtr,System.UInt32,System.Int32,System.Double,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,AiDotNet.Tensors.Engines.CuDnnNative.CudnnMathType,System.IntPtr,System.IntPtr,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+  cudnnSetAttnDescriptor(nint, uint, int, double, CudnnDataType, CudnnDataType, CudnnMathType, nint, nint, int, int, int, int, int, int, int, int, int, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets an attention descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetAttnDescriptor(nint attnDesc, uint attnMode, int nHeads, double smScaler, CuDnnNative.CudnnDataType dataType, CuDnnNative.CudnnDataType computePrec, CuDnnNative.CudnnMathType mathType, nint attnDropoutDesc, nint postDropoutDesc, int qSize, int kSize, int vSize, int qProjSize, int kProjSize, int vProjSize, int oProjSize, int qoMaxSeqLength, int kvMaxSeqLength, int maxBatchSize, int maxBeamSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>attnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>attnMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>nHeads</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>smScaler</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>dataType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>computePrec</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>mathType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnMathType.html">CudnnMathType</a></dt>
+    <dd></dd>
+    <dt><code>attnDropoutDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>postDropoutDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>qSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>kSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>vSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>qProjSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>kProjSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>vProjSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>oProjSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>qoMaxSeqLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>kvMaxSeqLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>maxBatchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>maxBeamSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetConvolution2dDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetConvolution2dDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetConvolution2dDescriptor_System_IntPtr_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionMode_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetConvolution2dDescriptor(System.IntPtr,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionMode,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType)">
+  cudnnSetConvolution2dDescriptor(nint, int, int, int, int, int, int, CudnnConvolutionMode, CudnnDataType)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a 2D convolution descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetConvolution2dDescriptor(nint convDesc, int padH, int padW, int strideH, int strideW, int dilationH, int dilationW, CuDnnNative.CudnnConvolutionMode mode, CuDnnNative.CudnnDataType computeType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>padH</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>padW</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>strideH</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>strideW</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dilationH</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dilationW</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionMode.html">CudnnConvolutionMode</a></dt>
+    <dd></dd>
+    <dt><code>computeType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetConvolutionGroupCount_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetConvolutionGroupCount*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetConvolutionGroupCount_System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetConvolutionGroupCount(System.IntPtr,System.Int32)">
+  cudnnSetConvolutionGroupCount(nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the group count for grouped convolutions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetConvolutionGroupCount(nint convDesc, int groupCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>groupCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetConvolutionMathType_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetConvolutionMathType*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetConvolutionMathType_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnMathType_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetConvolutionMathType(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnMathType)">
+  cudnnSetConvolutionMathType(nint, CudnnMathType)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the math type for convolution operations (enables tensor cores).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetConvolutionMathType(nint convDesc, CuDnnNative.CudnnMathType mathType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mathType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnMathType.html">CudnnMathType</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetConvolutionNdDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetConvolutionNdDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetConvolutionNdDescriptor_System_IntPtr_System_Int32_System_Int32___System_Int32___System_Int32___AiDotNet_Tensors_Engines_CuDnnNative_CudnnConvolutionMode_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetConvolutionNdDescriptor(System.IntPtr,System.Int32,System.Int32[],System.Int32[],System.Int32[],AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionMode,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType)">
+  cudnnSetConvolutionNdDescriptor(nint, int, int[], int[], int[], CudnnConvolutionMode, CudnnDataType)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets an N-dimensional convolution descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetConvolutionNdDescriptor(nint convDesc, int arrayLength, int[] padA, int[] strideA, int[] dilationA, CuDnnNative.CudnnConvolutionMode mode, CuDnnNative.CudnnDataType computeType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>convDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>arrayLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>padA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>strideA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>dilationA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnConvolutionMode.html">CudnnConvolutionMode</a></dt>
+    <dd></dd>
+    <dt><code>computeType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetDropoutDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetDropoutDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetDropoutDescriptor_System_IntPtr_System_IntPtr_System_Single_System_IntPtr_System_UInt64_System_UInt64_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetDropoutDescriptor(System.IntPtr,System.IntPtr,System.Single,System.IntPtr,System.UInt64,System.UInt64)">
+  cudnnSetDropoutDescriptor(nint, nint, float, nint, ulong, ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the dropout descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetDropoutDescriptor(nint dropoutDesc, nint handle, float dropout, nint states, ulong stateSizeInBytes, ulong seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dropoutDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dropout</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>states</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>stateSizeInBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetFilter4dDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetFilter4dDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetFilter4dDescriptor_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_AiDotNet_Tensors_Engines_CuDnnNative_CudnnTensorFormat_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetFilter4dDescriptor(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,AiDotNet.Tensors.Engines.CuDnnNative.CudnnTensorFormat,System.Int32,System.Int32,System.Int32,System.Int32)">
+  cudnnSetFilter4dDescriptor(nint, CudnnDataType, CudnnTensorFormat, int, int, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a 4D filter descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetFilter4dDescriptor(nint filterDesc, CuDnnNative.CudnnDataType dataType, CuDnnNative.CudnnTensorFormat format, int k, int c, int h, int w)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filterDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dataType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>format</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnTensorFormat.html">CudnnTensorFormat</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>c</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>h</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>w</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetFilterNdDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetFilterNdDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetFilterNdDescriptor_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_AiDotNet_Tensors_Engines_CuDnnNative_CudnnTensorFormat_System_Int32_System_Int32___" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetFilterNdDescriptor(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,AiDotNet.Tensors.Engines.CuDnnNative.CudnnTensorFormat,System.Int32,System.Int32[])">
+  cudnnSetFilterNdDescriptor(nint, CudnnDataType, CudnnTensorFormat, int, int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets an N-dimensional filter descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetFilterNdDescriptor(nint filterDesc, CuDnnNative.CudnnDataType dataType, CuDnnNative.CudnnTensorFormat format, int nbDims, int[] filterDimA)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filterDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dataType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>format</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnTensorFormat.html">CudnnTensorFormat</a></dt>
+    <dd></dd>
+    <dt><code>nbDims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>filterDimA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetPooling2dDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetPooling2dDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetPooling2dDescriptor_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnPoolingMode_AiDotNet_Tensors_Engines_CuDnnNative_CudnnNanPropagation_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetPooling2dDescriptor(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnPoolingMode,AiDotNet.Tensors.Engines.CuDnnNative.CudnnNanPropagation,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+  cudnnSetPooling2dDescriptor(nint, CudnnPoolingMode, CudnnNanPropagation, int, int, int, int, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a 2D pooling descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetPooling2dDescriptor(nint poolingDesc, CuDnnNative.CudnnPoolingMode mode, CuDnnNative.CudnnNanPropagation maxPoolNanOpt, int windowHeight, int windowWidth, int verticalPadding, int horizontalPadding, int verticalStride, int horizontalStride)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>poolingDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnPoolingMode.html">CudnnPoolingMode</a></dt>
+    <dd></dd>
+    <dt><code>maxPoolNanOpt</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnNanPropagation.html">CudnnNanPropagation</a></dt>
+    <dd></dd>
+    <dt><code>windowHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>windowWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>verticalPadding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>horizontalPadding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>verticalStride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>horizontalStride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetPoolingNdDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetPoolingNdDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetPoolingNdDescriptor_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnPoolingMode_AiDotNet_Tensors_Engines_CuDnnNative_CudnnNanPropagation_System_Int32_System_Int32___System_Int32___System_Int32___" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetPoolingNdDescriptor(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnPoolingMode,AiDotNet.Tensors.Engines.CuDnnNative.CudnnNanPropagation,System.Int32,System.Int32[],System.Int32[],System.Int32[])">
+  cudnnSetPoolingNdDescriptor(nint, CudnnPoolingMode, CudnnNanPropagation, int, int[], int[], int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets an N-dimensional pooling descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetPoolingNdDescriptor(nint poolingDesc, CuDnnNative.CudnnPoolingMode mode, CuDnnNative.CudnnNanPropagation maxPoolNanOpt, int nbDims, int[] windowDimA, int[] paddingA, int[] strideA)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>poolingDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnPoolingMode.html">CudnnPoolingMode</a></dt>
+    <dd></dd>
+    <dt><code>maxPoolNanOpt</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnNanPropagation.html">CudnnNanPropagation</a></dt>
+    <dd></dd>
+    <dt><code>nbDims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>windowDimA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>paddingA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>strideA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetRNNDescriptor_v8_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetRNNDescriptor_v8*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetRNNDescriptor_v8_System_IntPtr_System_Int32_AiDotNet_Tensors_Engines_CuDnnNative_CudnnRnnMode_System_Int32_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDirectionMode_AiDotNet_Tensors_Engines_CuDnnNative_CudnnRnnInputMode_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_AiDotNet_Tensors_Engines_CuDnnNative_CudnnMathType_System_Int32_System_Int32_System_Int32_System_Int32_System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetRNNDescriptor_v8(System.IntPtr,System.Int32,AiDotNet.Tensors.Engines.CuDnnNative.CudnnRnnMode,System.Int32,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDirectionMode,AiDotNet.Tensors.Engines.CuDnnNative.CudnnRnnInputMode,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,AiDotNet.Tensors.Engines.CuDnnNative.CudnnMathType,System.Int32,System.Int32,System.Int32,System.Int32,System.IntPtr,System.Int32)">
+  cudnnSetRNNDescriptor_v8(nint, int, CudnnRnnMode, int, CudnnDirectionMode, CudnnRnnInputMode, CudnnDataType, CudnnDataType, CudnnMathType, int, int, int, int, nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets RNN descriptor (v8 API).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetRNNDescriptor_v8(nint rnnDesc, int algo, CuDnnNative.CudnnRnnMode cellMode, int biasMode, CuDnnNative.CudnnDirectionMode dirMode, CuDnnNative.CudnnRnnInputMode inputMode, CuDnnNative.CudnnDataType dataType, CuDnnNative.CudnnDataType mathPrec, CuDnnNative.CudnnMathType mathType, int inputSize, int hiddenSize, int projSize, int numLayers, nint dropoutDesc, int auxFlags)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rnnDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>cellMode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnRnnMode.html">CudnnRnnMode</a></dt>
+    <dd></dd>
+    <dt><code>biasMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dirMode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDirectionMode.html">CudnnDirectionMode</a></dt>
+    <dd></dd>
+    <dt><code>inputMode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnRnnInputMode.html">CudnnRnnInputMode</a></dt>
+    <dd></dd>
+    <dt><code>dataType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>mathPrec</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>mathType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnMathType.html">CudnnMathType</a></dt>
+    <dd></dd>
+    <dt><code>inputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>hiddenSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>projSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>numLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dropoutDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>auxFlags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetReduceTensorDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetReduceTensorDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetReduceTensorDescriptor_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnReduceTensorOp_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_AiDotNet_Tensors_Engines_CuDnnNative_CudnnNanPropagation_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetReduceTensorDescriptor(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnReduceTensorOp,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,AiDotNet.Tensors.Engines.CuDnnNative.CudnnNanPropagation,System.Int32,System.Int32)">
+  cudnnSetReduceTensorDescriptor(nint, CudnnReduceTensorOp, CudnnDataType, CudnnNanPropagation, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a reduce tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetReduceTensorDescriptor(nint reduceTensorDesc, CuDnnNative.CudnnReduceTensorOp reduceTensorOp, CuDnnNative.CudnnDataType reduceTensorCompType, CuDnnNative.CudnnNanPropagation reduceTensorNanOpt, int reduceTensorIndices, int reduceTensorIndicesType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reduceTensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>reduceTensorOp</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnReduceTensorOp.html">CudnnReduceTensorOp</a></dt>
+    <dd></dd>
+    <dt><code>reduceTensorCompType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>reduceTensorNanOpt</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnNanPropagation.html">CudnnNanPropagation</a></dt>
+    <dd></dd>
+    <dt><code>reduceTensorIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>reduceTensorIndicesType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetStream_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetStream_System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetStream(System.IntPtr,System.IntPtr)">
+  cudnnSetStream(nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the CUDA stream for cuDNN operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetStream(nint handle, nint stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetTensor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetTensor_System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetTensor(System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr)">
+  cudnnSetTensor(nint, nint, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets all elements of a tensor to a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetTensor(nint handle, nint yDesc, nint y, nint valuePtr)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>valuePtr</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetTensor4dDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetTensor4dDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetTensor4dDescriptor_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnTensorFormat_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetTensor4dDescriptor(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnTensorFormat,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,System.Int32,System.Int32,System.Int32,System.Int32)">
+  cudnnSetTensor4dDescriptor(nint, CudnnTensorFormat, CudnnDataType, int, int, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a 4D tensor descriptor (NCHW).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetTensor4dDescriptor(nint tensorDesc, CuDnnNative.CudnnTensorFormat format, CuDnnNative.CudnnDataType dataType, int n, int c, int h, int w)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>format</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnTensorFormat.html">CudnnTensorFormat</a></dt>
+    <dd></dd>
+    <dt><code>dataType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>c</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>h</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>w</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetTensor4dDescriptorEx_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetTensor4dDescriptorEx*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetTensor4dDescriptorEx_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetTensor4dDescriptorEx(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+  cudnnSetTensor4dDescriptorEx(nint, CudnnDataType, int, int, int, int, int, int, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a 4D tensor descriptor with explicit strides.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetTensor4dDescriptorEx(nint tensorDesc, CuDnnNative.CudnnDataType dataType, int n, int c, int h, int w, int nStride, int cStride, int hStride, int wStride)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dataType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>c</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>h</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>w</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>nStride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>cStride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>hStride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>wStride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetTensorNdDescriptor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetTensorNdDescriptor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSetTensorNdDescriptor_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnDataType_System_Int32_System_Int32___System_Int32___" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSetTensorNdDescriptor(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType,System.Int32,System.Int32[],System.Int32[])">
+  cudnnSetTensorNdDescriptor(nint, CudnnDataType, int, int[], int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets an N-dimensional tensor descriptor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSetTensorNdDescriptor(nint tensorDesc, CuDnnNative.CudnnDataType dataType, int nbDims, int[] dimA, int[] strideA)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensorDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dataType</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnDataType.html">CudnnDataType</a></dt>
+    <dd></dd>
+    <dt><code>nbDims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dimA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>strideA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSoftmaxBackward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSoftmaxBackward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSoftmaxBackward_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnSoftmaxAlgorithm_AiDotNet_Tensors_Engines_CuDnnNative_CudnnSoftmaxMode_System_Single__System_IntPtr_System_IntPtr_System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSoftmaxBackward(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnSoftmaxAlgorithm,AiDotNet.Tensors.Engines.CuDnnNative.CudnnSoftmaxMode,System.Single@,System.IntPtr,System.IntPtr,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnSoftmaxBackward(nint, CudnnSoftmaxAlgorithm, CudnnSoftmaxMode, ref float, nint, nint, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes softmax backward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSoftmaxBackward(nint handle, CuDnnNative.CudnnSoftmaxAlgorithm algo, CuDnnNative.CudnnSoftmaxMode mode, ref float alpha, nint yDesc, nint y, nint dyDesc, nint dy, ref float beta, nint dxDesc, nint dx)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnSoftmaxAlgorithm.html">CudnnSoftmaxAlgorithm</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnSoftmaxMode.html">CudnnSoftmaxMode</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dyDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>dxDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSoftmaxForward_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSoftmaxForward*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnSoftmaxForward_System_IntPtr_AiDotNet_Tensors_Engines_CuDnnNative_CudnnSoftmaxAlgorithm_AiDotNet_Tensors_Engines_CuDnnNative_CudnnSoftmaxMode_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnSoftmaxForward(System.IntPtr,AiDotNet.Tensors.Engines.CuDnnNative.CudnnSoftmaxAlgorithm,AiDotNet.Tensors.Engines.CuDnnNative.CudnnSoftmaxMode,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnSoftmaxForward(nint, CudnnSoftmaxAlgorithm, CudnnSoftmaxMode, ref float, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes softmax forward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnSoftmaxForward(nint handle, CuDnnNative.CudnnSoftmaxAlgorithm algo, CuDnnNative.CudnnSoftmaxMode mode, ref float alpha, nint xDesc, nint x, ref float beta, nint yDesc, nint y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnSoftmaxAlgorithm.html">CudnnSoftmaxAlgorithm</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnSoftmaxMode.html">CudnnSoftmaxMode</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnTransformTensor_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnTransformTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuDnnNative_cudnnTransformTensor_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_System_Single__System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuDnnNative.cudnnTransformTensor(System.IntPtr,System.Single@,System.IntPtr,System.IntPtr,System.Single@,System.IntPtr,System.IntPtr)">
+  cudnnTransformTensor(nint, ref float, nint, nint, ref float, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms tensor format (e.g., NCHW to NHWC).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CuDnnNative.CudnnStatus cudnnTransformTensor(nint handle, ref float alpha, nint xDesc, nint x, ref float beta, nint yDesc, nint y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>xDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>yDesc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.html">CuDnnNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.CuDnnNative.CudnnStatus.html">CudnnStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuDnnNative.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

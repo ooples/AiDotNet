@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Knowledge Distillation Checkpointing Guide | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Knowledge Distillation Checkpointing Guide | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/CHECKPOINTING_GUIDE.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="knowledge-distillation-checkpointing-guide">Knowledge Distillation Checkpointing Guide</h1>
+
+<h2 id="overview">Overview</h2>
+<p>This guide explains how to use checkpointing during knowledge distillation training, including saving/loading student models, managing curriculum progress, and supporting multi-stage distillation.</p>
+<p><strong>Good News!</strong> Checkpointing is now automatic for all models that implement <code>IFullModel</code> (which includes all neural networks, AutoML models, time series models, etc.). You don't need to implement any special interfaces or write checkpoint logic - it just works!</p>
+<h2 id="why-checkpointing-matters-for-distillation">Why Checkpointing Matters for Distillation</h2>
+<h3 id="1-training-resumption">1. Training Resumption</h3>
+<p>Distillation training can take hours or days. Checkpointing allows you to:</p>
+<ul>
+<li>Resume after interruptions (power loss, system crashes)</li>
+<li>Pause training and continue later</li>
+<li>Save compute resources by not restarting from scratch</li>
+</ul>
+<h3 id="2-best-model-selection">2. Best Model Selection</h3>
+<p>Training doesn't always improve monotonically. Checkpointing helps:</p>
+<ul>
+<li>Save the student model with best validation performance</li>
+<li>Roll back if student starts overfitting</li>
+<li>Compare performance at different training stages</li>
+</ul>
+<h3 id="3-multi-stage-distillation">3. Multi-Stage Distillation</h3>
+<p>Progressive compression requires checkpointing:</p>
+<ul>
+<li>Stage 1: Large teacher → Medium student</li>
+<li>Stage 2: Medium student (becomes teacher) → Small student</li>
+<li>Stage 3: Small student → Tiny student</li>
+</ul>
+<h3 id="4-curriculum-learning-state">4. Curriculum Learning State</h3>
+<p>Resume curriculum learning from correct stage:</p>
+<ul>
+<li>Save curriculum progress with checkpoint</li>
+<li>Don't restart from &quot;easy samples&quot; after interruption</li>
+<li>Maintain temperature progression</li>
+</ul>
+<h3 id="5-experiment-tracking">5. Experiment Tracking</h3>
+<p>Compare different approaches:</p>
+<ul>
+<li>Save checkpoints for different strategies</li>
+<li>Track performance metrics over time</li>
+<li>Debug training dynamics</li>
+</ul>
+<h2 id="architecture">Architecture</h2>
+<h3 id="interfaces">Interfaces</h3>
+<p>All models implementing <code>IFullModel</code> automatically support checkpointing through two serialization mechanisms:</p>
+<pre><code>IFullModel (includes both ICheckpointableModel and IModelSerializer)
+├─ ICheckpointableModel (stream-based, flexible)
+│  ├─ SaveState(Stream stream)
+│  └─ LoadState(Stream stream)
+└─ IModelSerializer (file-based, convenience)
+   ├─ SaveModel(string filePath)
+   └─ LoadModel(string filePath)
+</code></pre>
+<p>This means <strong>all</strong> neural networks, AutoML models, time series models, expression trees, SuperNets, and custom models automatically support checkpointing without any additional code!</p>
+<h3 id="checkpoint-manager">Checkpoint Manager</h3>
+<pre><code>DistillationCheckpointManager&lt;T&gt;
+├─ DistillationCheckpointConfig (configuration)
+├─ SaveCheckpointIfNeeded() (automatic saving)
+├─ LoadBestCheckpoint() (load by metric)
+└─ GetBestCheckpoint() (query metadata)
+</code></pre>
+<h2 id="quick-start-automatic-checkpointing-recommended">Quick Start: Automatic Checkpointing (Recommended)</h2>
+<p>The easiest way to enable checkpointing is through automatic checkpointing built into the trainer. Simply pass the checkpoint configuration to the trainer constructor and the student model to the Train method.</p>
+<h3 id="automatic-checkpointing-example">Automatic Checkpointing Example</h3>
+<pre><code class="lang-csharp">using AiDotNet.KnowledgeDistillation;
+
+// Create checkpoint configuration
+var checkpointConfig = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./checkpoints&quot;,
+    SaveEveryEpochs = 5,          // Auto-save every 5 epochs
+    KeepBestN = 3,                // Keep only 3 best checkpoints
+    SaveStudent = true,
+    BestMetric = &quot;validation_loss&quot;,
+    LowerIsBetter = true
+};
+
+// Create trainer with checkpoint config
+var teacher = LoadPretrainedTeacher();
+var strategy = new ConfidenceBasedAdaptiveStrategy&lt;double&gt;();
+
+var trainer = new KnowledgeDistillationTrainer&lt;double&gt;(
+    teacher,
+    strategy,
+    checkpointConfig: checkpointConfig  // Pass config to constructor
+);
+
+// Create student model (any IFullModel works - checkpointing is automatic!)
+var student = CreateStudentModel(); // NeuralNetworkModel, VectorModel, etc.
+
+// Train - pass student to Train method for automatic checkpointing!
+trainer.Train(
+    studentForward: student.Predict,
+    studentBackward: student.ApplyGradient,
+    trainInputs: trainingData,
+    trainLabels: trainingLabels,
+    epochs: 100,
+    batchSize: 32,
+    validationInputs: validationData,
+    validationLabels: validationLabels,
+    student: student  // Just pass the student - checkpointing is automatic!
+);
+
+// After training completes, the best checkpoint is automatically loaded!
+Console.WriteLine(&quot;Training complete. Best checkpoint automatically restored.&quot;);
+</code></pre>
+<p><strong>What happens automatically:</strong></p>
+<ol>
+<li><strong>OnTrainingStart</strong>: Checkpoint manager is initialized</li>
+<li><strong>OnEpochEnd</strong>: Checkpoints are saved based on your configuration</li>
+<li><strong>OnValidationComplete</strong>: Validation metrics are tracked for best checkpoint selection</li>
+<li><strong>OnTrainingEnd</strong>: Best checkpoint is automatically loaded</li>
+</ol>
+<p><strong>Benefits:</strong></p>
+<ul>
+<li>✅ Zero manual checkpoint management code</li>
+<li>✅ Automatic best model selection</li>
+<li>✅ Automatic checkpoint pruning (keeps only best N)</li>
+<li>✅ Curriculum state preservation (if using curriculum strategies)</li>
+<li>✅ Clean, simple API following facade pattern</li>
+</ul>
+<h3 id="disabling-automatic-checkpointing">Disabling Automatic Checkpointing</h3>
+<pre><code class="lang-csharp">// Default: no checkpointing (don't pass checkpointConfig)
+var trainer = new KnowledgeDistillationTrainer&lt;double&gt;(teacher, strategy);
+
+// Training proceeds without checkpointing
+trainer.Train(...);
+</code></pre>
+<h2 id="manual-checkpointing-advanced">Manual Checkpointing (Advanced)</h2>
+<p>For advanced use cases where you need fine-grained control over checkpoint timing and logic, you can use the <code>DistillationCheckpointManager</code> directly.</p>
+<h3 id="example-1-simple-student-checkpointing-manual">Example 1: Simple Student Checkpointing (Manual)</h3>
+<pre><code class="lang-csharp">using AiDotNet.KnowledgeDistillation;
+using AiDotNet.Interfaces;
+
+// Configure checkpointing
+var checkpointConfig = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./checkpoints&quot;,
+    SaveEveryEpochs = 5,          // Save every 5 epochs
+    KeepBestN = 3,                // Keep only 3 best checkpoints
+    SaveStudent = true,
+    SaveTeacher = false,          // Don't save teacher (already trained)
+    BestMetric = &quot;validation_loss&quot;,
+    LowerIsBetter = true          // Lower loss is better
+};
+
+var checkpointManager = new DistillationCheckpointManager&lt;double&gt;(checkpointConfig);
+
+// Training loop
+var teacher = LoadPretrainedTeacher();
+var student = CreateStudentModel();
+var strategy = new ConfidenceBasedAdaptiveStrategy&lt;double&gt;();
+
+for (int epoch = 0; epoch &lt; 100; epoch++)
+{
+    // Train student for one epoch
+    for (int batch = 0; batch &lt; numBatches; batch++)
+    {
+        var teacherLogits = teacher.GetLogits(samples[batch]);
+        var studentLogits = student.Predict(samples[batch]);
+
+        var loss = strategy.ComputeLoss(studentLogits, teacherLogits, labels[batch]);
+        var gradient = strategy.ComputeGradient(studentLogits, teacherLogits, labels[batch]);
+
+        student.ApplyGradient(gradient);
+    }
+
+    // Evaluate on validation set
+    double validationLoss = EvaluateOnValidationSet(student);
+    Console.WriteLine($&quot;Epoch {epoch}: Validation Loss = {validationLoss}&quot;);
+
+    // Save checkpoint if needed
+    var metrics = new Dictionary&lt;string, double&gt;
+    {
+        { &quot;validation_loss&quot;, validationLoss },
+        { &quot;training_loss&quot;, trainingLoss }
+    };
+
+    bool saved = checkpointManager.SaveCheckpointIfNeeded(
+        epoch: epoch,
+        student: student,  // Any IFullModel works automatically!
+        metrics: metrics
+    );
+
+    if (saved)
+    {
+        Console.WriteLine($&quot;Checkpoint saved at epoch {epoch}&quot;);
+    }
+}
+
+// After training, load the best checkpoint
+Console.WriteLine(&quot;Loading best checkpoint...&quot;);
+var bestCheckpoint = checkpointManager.LoadBestCheckpoint(student);
+if (bestCheckpoint != null)
+{
+    Console.WriteLine($&quot;Best checkpoint from epoch {bestCheckpoint.Epoch}&quot;);
+    Console.WriteLine($&quot;Validation loss: {bestCheckpoint.Metrics[&quot;validation_loss&quot;]}&quot;);
+}
+</code></pre>
+<h3 id="example-2-curriculum-learning-with-checkpointing">Example 2: Curriculum Learning with Checkpointing</h3>
+<pre><code class="lang-csharp">// Configure checkpointing for curriculum learning
+var checkpointConfig = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./curriculum_checkpoints&quot;,
+    SaveEveryEpochs = 10,
+    KeepBestN = 5,
+    SaveStudent = true,
+    SaveCurriculumState = true,     // Save curriculum progress!
+    BestMetric = &quot;validation_accuracy&quot;,
+    LowerIsBetter = false            // Higher accuracy is better
+};
+
+var checkpointManager = new DistillationCheckpointManager&lt;double&gt;(checkpointConfig);
+
+// Set up curriculum strategy
+var difficulties = ComputeSampleDifficulties(trainingSamples);
+var curriculumStrategy = new EasyToHardCurriculumStrategy&lt;double&gt;(
+    minTemperature: 2.0,
+    maxTemperature: 5.0,
+    totalSteps: 100,
+    sampleDifficulties: difficulties
+);
+
+// Training loop with curriculum
+for (int epoch = 0; epoch &lt; 100; epoch++)
+{
+    // Update curriculum progress
+    curriculumStrategy.UpdateProgress(epoch);
+    Console.WriteLine($&quot;Curriculum progress: {curriculumStrategy.CurriculumProgress:P0}&quot;);
+
+    // Train on samples appropriate for current curriculum stage
+    foreach (var (sample, index) in trainingSamples.WithIndex())
+    {
+        // Filter by curriculum
+        if (!curriculumStrategy.ShouldIncludeSample(index))
+            continue;
+
+        var teacherLogits = teacher.GetLogits(sample);
+        var studentLogits = student.Predict(sample);
+
+        var loss = curriculumStrategy.ComputeLoss(studentLogits, teacherLogits, labels[index]);
+        student.ApplyGradient(curriculumStrategy.ComputeGradient(studentLogits, teacherLogits, labels[index]));
+    }
+
+    // Evaluate and checkpoint
+    double accuracy = EvaluateAccuracy(student);
+    checkpointManager.SaveCheckpointIfNeeded(
+        epoch: epoch,
+        student: student as ICheckpointableModel,
+        strategy: curriculumStrategy,  // Save curriculum state!
+        metrics: new Dictionary&lt;string, double&gt; { { &quot;validation_accuracy&quot;, accuracy } }
+    );
+}
+</code></pre>
+<h3 id="example-3-multi-stage-distillation">Example 3: Multi-Stage Distillation</h3>
+<pre><code class="lang-csharp">// Stage 1: Large teacher → Medium student
+Console.WriteLine(&quot;Stage 1: Large → Medium&quot;);
+
+var largeTeacher = LoadPretrainedLargeModel();
+var mediumStudent = CreateMediumModel();
+
+var stage1Config = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./stage1_checkpoints&quot;,
+    SaveEveryEpochs = 10,
+    KeepBestN = 1,  // Keep only best
+    SaveStudent = true,
+    SaveTeacher = false
+};
+
+var stage1Manager = new DistillationCheckpointManager&lt;double&gt;(stage1Config);
+var stage1Strategy = new ConfidenceBasedAdaptiveStrategy&lt;double&gt;();
+
+// Train medium student
+for (int epoch = 0; epoch &lt; 50; epoch++)
+{
+    TrainForOneEpoch(mediumStudent, largeTeacher, stage1Strategy);
+
+    double loss = EvaluateOnValidationSet(mediumStudent);
+    stage1Manager.SaveCheckpointIfNeeded(
+        epoch: epoch,
+        student: mediumStudent as ICheckpointableModel,
+        metrics: new Dictionary&lt;string, double&gt; { { &quot;validation_loss&quot;, loss } }
+    );
+}
+
+// Load best medium model
+stage1Manager.LoadBestCheckpoint(mediumStudent as ICheckpointableModel);
+
+// Stage 2: Medium student (now teacher) → Small student
+Console.WriteLine(&quot;Stage 2: Medium → Small&quot;);
+
+// Medium student becomes teacher for next stage!
+var mediumTeacher = new TeacherModelWrapper&lt;double&gt;(mediumStudent);
+var smallStudent = CreateSmallModel();
+
+var stage2Config = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./stage2_checkpoints&quot;,
+    SaveEveryEpochs = 10,
+    KeepBestN = 1,
+    SaveStudent = true,
+    SaveTeacher = true  // Save medium teacher in case we need it
+};
+
+var stage2Manager = new DistillationCheckpointManager&lt;double&gt;(stage2Config);
+var stage2Strategy = new ConfidenceBasedAdaptiveStrategy&lt;double&gt;();
+
+// Train small student
+for (int epoch = 0; epoch &lt; 50; epoch++)
+{
+    TrainForOneEpoch(smallStudent, mediumTeacher, stage2Strategy);
+
+    double loss = EvaluateOnValidationSet(smallStudent);
+    stage2Manager.SaveCheckpointIfNeeded(
+        epoch: epoch,
+        student: smallStudent as ICheckpointableModel,
+        teacher: mediumTeacher as ICheckpointableModel,
+        metrics: new Dictionary&lt;string, double&gt; { { &quot;validation_loss&quot;, loss } }
+    );
+}
+
+// Load best small model
+stage2Manager.LoadBestCheckpoint(smallStudent as ICheckpointableModel);
+
+Console.WriteLine(&quot;Multi-stage distillation complete!&quot;);
+Console.WriteLine($&quot;Final model size: {smallStudent.ParameterCount} parameters&quot;);
+</code></pre>
+<h3 id="example-4-resuming-interrupted-training">Example 4: Resuming Interrupted Training</h3>
+<pre><code class="lang-csharp">// Try to resume from existing checkpoint, or start fresh
+var checkpointConfig = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./checkpoints&quot;,
+    SaveEveryEpochs = 5,
+    KeepBestN = 3
+};
+
+var checkpointManager = new DistillationCheckpointManager&lt;double&gt;(checkpointConfig);
+
+var student = CreateStudentModel();
+int startEpoch = 0;
+
+// Try to load most recent checkpoint (facade method)
+var recentCheckpoint = checkpointManager.GetMostRecentCheckpoint();
+
+if (recentCheckpoint != null)
+{
+    Console.WriteLine($&quot;Resuming from epoch {recentCheckpoint.Epoch}&quot;);
+    checkpointManager.LoadCheckpoint(recentCheckpoint, student as ICheckpointableModel);
+    startEpoch = recentCheckpoint.Epoch + 1;
+}
+else
+{
+    Console.WriteLine(&quot;Starting training from scratch&quot;);
+}
+
+// Continue training
+for (int epoch = startEpoch; epoch &lt; 100; epoch++)
+{
+    // ... training code ...
+
+    checkpointManager.SaveCheckpointIfNeeded(
+        epoch: epoch,
+        student: student as ICheckpointableModel,
+        metrics: new Dictionary&lt;string, double&gt; { { &quot;validation_loss&quot;, validationLoss } }
+    );
+}
+</code></pre>
+<h3 id="example-5-batch-level-checkpointing-long-epochs">Example 5: Batch-Level Checkpointing (Long Epochs)</h3>
+<pre><code class="lang-csharp">var checkpointConfig = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./batch_checkpoints&quot;,
+    SaveEveryEpochs = 0,       // Disable epoch-based
+    SaveEveryBatches = 1000,   // Save every 1000 batches
+    KeepBestN = 5
+};
+
+var checkpointManager = new DistillationCheckpointManager&lt;double&gt;(checkpointConfig);
+
+for (int epoch = 0; epoch &lt; 10; epoch++)
+{
+    for (int batch = 0; batch &lt; 10000; batch++)  // Very long epoch
+    {
+        // Training step
+        var teacherLogits = teacher.GetLogits(samples[batch]);
+        var studentLogits = student.Predict(samples[batch]);
+
+        var loss = strategy.ComputeLoss(studentLogits, teacherLogits);
+        student.ApplyGradient(strategy.ComputeGradient(studentLogits, teacherLogits));
+
+        // Validate and checkpoint every 100 batches
+        if ((batch + 1) % 100 == 0)
+        {
+            double validationLoss = QuickValidation(student);
+
+            checkpointManager.SaveCheckpointIfNeeded(
+                epoch: epoch,
+                batch: batch,
+                student: student as ICheckpointableModel,
+                metrics: new Dictionary&lt;string, double&gt; { { &quot;validation_loss&quot;, validationLoss } }
+            );
+        }
+    }
+}
+</code></pre>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="1-choose-appropriate-save-frequency">1. Choose Appropriate Save Frequency</h3>
+<p><strong>Too Frequent:</strong></p>
+<ul>
+<li>Wastes disk space</li>
+<li>Slows down training</li>
+<li>Makes it hard to find good checkpoints</li>
+</ul>
+<p><strong>Too Infrequent:</strong></p>
+<ul>
+<li>Risk losing significant progress</li>
+<li>Miss best model if it overfits quickly</li>
+</ul>
+<p><strong>Recommended:</strong></p>
+<ul>
+<li>Short training (&lt;50 epochs): Save every 5-10 epochs</li>
+<li>Long training (&gt;100 epochs): Save every 10-20 epochs</li>
+<li>Very long epochs: Use batch-level checkpointing</li>
+</ul>
+<h3 id="2-monitor-multiple-metrics">2. Monitor Multiple Metrics</h3>
+<pre><code class="lang-csharp">var metrics = new Dictionary&lt;string, double&gt;
+{
+    { &quot;validation_loss&quot;, validationLoss },
+    { &quot;validation_accuracy&quot;, validationAccuracy },
+    { &quot;training_loss&quot;, trainingLoss },
+    { &quot;distillation_temperature&quot;, strategy.ComputeAdaptiveTemperature(...) }
+};
+</code></pre>
+<h3 id="3-keep-best-checkpoints-only">3. Keep Best Checkpoints Only</h3>
+<pre><code class="lang-csharp">var checkpointConfig = new DistillationCheckpointConfig
+{
+    KeepBestN = 3,  // Keep top 3 checkpoints only
+    BestMetric = &quot;validation_loss&quot;,
+    LowerIsBetter = true
+};
+</code></pre>
+<p>This prevents disk space issues while ensuring you have the best models.</p>
+<h3 id="4-save-teacher-for-multi-stage-distillation">4. Save Teacher for Multi-Stage Distillation</h3>
+<pre><code class="lang-csharp">var checkpointConfig = new DistillationCheckpointConfig
+{
+    SaveStudent = true,
+    SaveTeacher = true,  // If student will become teacher later
+    SaveCurriculumState = true  // If using curriculum learning
+};
+</code></pre>
+<h3 id="5-use-descriptive-checkpoint-directories">5. Use Descriptive Checkpoint Directories</h3>
+<pre><code class="lang-csharp">var config1 = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./experiments/distillation_confidence_lr0.001&quot;
+};
+
+var config2 = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = &quot;./experiments/distillation_entropy_lr0.01&quot;
+};
+</code></pre>
+<h2 id="implementing-icheckpointablemodel">Implementing ICheckpointableModel</h2>
+<p>If your model doesn't implement <code>ICheckpointableModel</code>, add it:</p>
+<pre><code class="lang-csharp">public class MyStudentModel : ICheckpointableModel
+{
+    private double[] _weights;
+    private double[] _biases;
+
+    public void SaveState(Stream stream)
+    {
+        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+
+        // Write weights
+        writer.Write(_weights.Length);
+        foreach (var weight in _weights)
+        {
+            writer.Write(weight);
+        }
+
+        // Write biases
+        writer.Write(_biases.Length);
+        foreach (var bias in _biases)
+        {
+            writer.Write(bias);
+        }
+    }
+
+    public void LoadState(Stream stream)
+    {
+        using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+
+        // Read weights
+        int weightCount = reader.ReadInt32();
+        _weights = new double[weightCount];
+        for (int i = 0; i &lt; weightCount; i++)
+        {
+            _weights[i] = reader.ReadDouble();
+        }
+
+        // Read biases
+        int biasCount = reader.ReadInt32();
+        _biases = new double[biasCount];
+        for (int i = 0; i &lt; biasCount; i++)
+        {
+            _biases[i] = reader.ReadDouble();
+        }
+    }
+}
+</code></pre>
+<h2 id="common-patterns">Common Patterns</h2>
+<h3 id="pattern-1-early-stopping-with-patience">Pattern 1: Early Stopping with Patience</h3>
+<pre><code class="lang-csharp">int patience = 10;
+int epochsWithoutImprovement = 0;
+double bestLoss = double.MaxValue;
+
+for (int epoch = 0; epoch &lt; maxEpochs; epoch++)
+{
+    // Training...
+
+    double validationLoss = EvaluateOnValidationSet(student);
+
+    if (validationLoss &lt; bestLoss)
+    {
+        bestLoss = validationLoss;
+        epochsWithoutImprovement = 0;
+
+        // Force save when we find new best
+        checkpointManager.SaveCheckpointIfNeeded(
+            epoch: epoch,
+            student: student as ICheckpointableModel,
+            metrics: new Dictionary&lt;string, double&gt; { { &quot;validation_loss&quot;, validationLoss } },
+            force: true  // Force save
+        );
+    }
+    else
+    {
+        epochsWithoutImprovement++;
+
+        if (epochsWithoutImprovement &gt;= patience)
+        {
+            Console.WriteLine($&quot;Early stopping at epoch {epoch}&quot;);
+            break;
+        }
+    }
+}
+
+// Load best model
+checkpointManager.LoadBestCheckpoint(student as ICheckpointableModel);
+</code></pre>
+<h3 id="pattern-2-comparing-multiple-strategies">Pattern 2: Comparing Multiple Strategies</h3>
+<pre><code class="lang-csharp">var strategies = new[]
+{
+    (&quot;confidence&quot;, new ConfidenceBasedAdaptiveStrategy&lt;double&gt;()),
+    (&quot;accuracy&quot;, new AccuracyBasedAdaptiveStrategy&lt;double&gt;()),
+    (&quot;entropy&quot;, new EntropyBasedAdaptiveStrategy&lt;double&gt;())
+};
+
+foreach (var (name, strategy) in strategies)
+{
+    var student = CreateStudentModel();
+
+    var config = new DistillationCheckpointConfig
+    {
+        CheckpointDirectory = $&quot;./experiments/{name}&quot;,
+        CheckpointPrefix = name,
+        SaveEveryEpochs = 10,
+        KeepBestN = 1
+    };
+
+    var manager = new DistillationCheckpointManager&lt;double&gt;(config);
+
+    // Train with this strategy
+    TrainWithStrategy(student, teacher, strategy, manager);
+
+    // Load best and evaluate
+    manager.LoadBestCheckpoint(student as ICheckpointableModel);
+    double finalAccuracy = EvaluateFinalAccuracy(student);
+
+    Console.WriteLine($&quot;{name}: Final accuracy = {finalAccuracy:P2}&quot;);
+}
+</code></pre>
+<h2 id="summary">Summary</h2>
+<p>Checkpointing in knowledge distillation:</p>
+<ul>
+<li>✅ Use <code>DistillationCheckpointManager&lt;T&gt;</code> for automatic checkpoint management</li>
+<li>✅ Models must implement <code>ICheckpointableModel</code> for checkpointing</li>
+<li>✅ Save curriculum state for curriculum learning strategies</li>
+<li>✅ Use multi-stage distillation for progressive compression</li>
+<li>✅ Monitor multiple metrics and keep best checkpoints only</li>
+<li>✅ Resume training after interruptions</li>
+<li>✅ Compare different strategies through checkpointing</li>
+</ul>
+<p><strong>Key Takeaway</strong>: Checkpointing is essential for production knowledge distillation pipelines!</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/CHECKPOINTING_GUIDE.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ReasoningStrategyBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ReasoningStrategyBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Abstract base class for reasoning strategies that solve problems through structured thinking. Provides common functionality for all reasoning approaches.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Reasoning_ReasoningStrategyBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Reasoning.ReasoningStrategyBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1">
+
+
+
+  <h1 id="AiDotNet_Reasoning_ReasoningStrategyBase_1" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1" class="text-break">
+Class ReasoningStrategyBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Reasoning.html">Reasoning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Abstract base class for reasoning strategies that solve problems through structured thinking.
+Provides common functionality for all reasoning approaches.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class ReasoningStrategyBase&lt;T&gt; : IReasoningStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations and scoring (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ReasoningStrategyBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IReasoningStrategy-1.html">IReasoningStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Reasoning.Strategies.ChainOfThoughtStrategy-1.html">ChainOfThoughtStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy-1.html">SelfConsistencyStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy-1.html">TreeOfThoughtsStrategy&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This base class is like a template for creating different types of reasoning strategies.
+Just like AgentBase provides common functionality for all agents, ReasoningStrategyBase provides the shared
+foundation that all reasoning strategies need:
+- Managing the language model (the "brain")
+- Tracking tools that can be used
+- Recording the reasoning process
+- Handling configuration and timing
+<p>Specific reasoning strategies (Chain-of-Thought, Tree-of-Thoughts, etc.) inherit from this class
+and implement their unique reasoning logic while getting all the common features for free.</p>
+<p>This follows the Template Method design pattern, where the base class defines the structure
+and derived classes fill in the specific details.</p>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">// Inherit from this base class to create a custom strategy
+public class MyCustomStrategy&lt;T&gt; : ReasoningStrategyBase&lt;T&gt;
+{
+    public MyCustomStrategy(IChatModel&lt;T&gt; chatModel) : base(chatModel) { }
+
+    protected override async Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonCoreAsync(
+        string query, ReasoningConfig config, CancellationToken cancellationToken)
+    {
+        // Implement your custom reasoning logic here
+        AppendTrace("Starting my custom reasoning approach...");
+        // ... your implementation ...
+        return result;
+    }
+}</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1__ctor_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1__ctor_AiDotNet_Interfaces_IChatModel__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_ITool__" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.#ctor(AiDotNet.Interfaces.IChatModel{`0},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ITool})">
+  ReasoningStrategyBase(IChatModel&lt;T&gt;, IEnumerable&lt;ITool&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html">ReasoningStrategyBase&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ReasoningStrategyBase(IChatModel&lt;T&gt; chatModel, IEnumerable&lt;ITool&gt;? tools = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chatModel</code> <a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</dt>
+    <dd><p>The chat model used for reasoning and generating thoughts.</p>
+</dd>
+    <dt><code>tools</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ITool.html">ITool</a>&gt;</dt>
+    <dd><p>Optional tools that can be used during reasoning (calculators, search, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1__ctor_AiDotNet_Interfaces_IChatModel__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_ITool___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This constructor sets up the basic infrastructure every reasoning
+strategy needs:
+- A language model (the AI that does the thinking)
+- Optional tools (like calculators, code interpreters, search engines)
+- A trace/log to record the reasoning process
+<p>Think of it like setting up a workstation: you need a brain (the model), some tools
+(calculator, reference books), and a notebook (the trace) to write down your thinking.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when <code class="paramref">chatModel</code> is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ChatModel_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ChatModel*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ChatModel" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ChatModel">
+  ChatModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the chat model used for reasoning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IChatModel&lt;T&gt; ChatModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ChatModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the AI language model that generates thoughts and reasoning steps.
+It's protected so derived classes can use it, but not publicly accessible from outside.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_Description_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.Description*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_Description" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a description of what this reasoning strategy does and when to use it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_Description_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This provides information about what makes this strategy unique
+and what types of problems it's best suited for. For example, Chain-of-Thought might describe
+itself as "Best for problems requiring step-by-step logical deduction."
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasoningTrace_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ReasoningTrace*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasoningTrace" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ReasoningTrace">
+  ReasoningTrace
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current reasoning trace.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string ReasoningTrace { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasoningTrace_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a running log of the reasoning process - like a notebook
+where all thoughts, actions, and observations are recorded. Useful for debugging and understanding
+how the strategy arrived at its answer.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_StrategyName_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.StrategyName*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_StrategyName" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.StrategyName">
+  StrategyName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this reasoning strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string StrategyName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_StrategyName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a human-readable name that identifies the strategy,
+like "Chain-of-Thought" or "Tree-of-Thoughts". It's useful for logging, debugging,
+or displaying to users which reasoning approach was used.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_Tools_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.Tools*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_Tools" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.Tools">
+  Tools
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the read-only list of tools available to this strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IReadOnlyList&lt;ITool&gt; Tools { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ITool.html">ITool</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_Tools_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These are external tools (like calculators, search engines, code interpreters)
+that the reasoning strategy can use to help solve problems. Protected so derived classes can access them.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_AppendTrace_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.AppendTrace*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_AppendTrace_System_String_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.AppendTrace(System.String)">
+  AppendTrace(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Appends a message to the reasoning trace.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void AppendTrace(string message)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>message</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The message to append.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_AppendTrace_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like writing in your reasoning notebook. Call this method
+whenever you want to record what's happening during reasoning. For example:
+- "Generating reasoning steps..."
+- "Evaluating thought quality: 0.85"
+- "Verification passed for step 3"
+<p>All these traces get included in the final result for transparency and debugging.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ClearTrace_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ClearTrace*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ClearTrace" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ClearTrace">
+  ClearTrace()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears the reasoning trace, starting fresh.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ClearTrace()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ClearTrace_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This erases the reasoning notebook, starting with a clean page.
+Called at the start of each new reasoning task to avoid mixing up traces from different problems.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ExecuteTool_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ExecuteTool*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ExecuteTool_System_String_System_String_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ExecuteTool(System.String,System.String)">
+  ExecuteTool(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L304"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes a tool with the given input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string ExecuteTool(string toolName, string input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>toolName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name of the tool to execute.</p>
+</dd>
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Input for the tool.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tool's output, or an error message if execution failed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ExecuteTool_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This runs a tool and returns its result. For example:
+- ExecuteTool("Calculator", "15 * 240") → "3600"
+- ExecuteTool("WebSearch", "capital of France") → "Paris"
+<p>If the tool doesn't exist or fails to execute, returns an error message instead of throwing.
+This keeps the reasoning process running even if one tool fails.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_FindTool_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.FindTool*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_FindTool_System_String_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.FindTool(System.String)">
+  FindTool(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds a tool by its name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ITool? FindTool(string toolName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>toolName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the tool to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ITool.html">ITool</a></dt>
+    <dd><p>The tool with the specified name, or null if not found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_FindTool_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This searches through the available tools for one with a specific name.
+The search is case-insensitive, so "Calculator", "calculator", and "CALCULATOR" all match.
+<p>Returns null if the tool doesn't exist, so always check before using!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_GetToolDescriptions_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.GetToolDescriptions*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_GetToolDescriptions" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.GetToolDescriptions">
+  GetToolDescriptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a formatted description of all available tools.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string GetToolDescriptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string describing all tools and their capabilities.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_GetToolDescriptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Creates a text description of all available tools that can be
+included in prompts to the language model. This tells the AI what tools it can use.
+<p>Example output:
+&quot;Available tools:</p>
+<ul>
+<li>Calculator: Performs mathematical calculations</li>
+<li>WebSearch: Searches the internet for information&quot;</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasonAsync_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ReasonAsync*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasonAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ReasonAsync(System.String,AiDotNet.Reasoning.Models.ReasoningConfig,System.Threading.CancellationToken)">
+  ReasonAsync(string, ReasoningConfig?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the reasoning strategy to solve a problem or answer a query.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonAsync(string query, ReasoningConfig? config = null, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The problem or question to reason about.</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Reasoning.Models.ReasoningConfig.html">ReasoningConfig</a></dt>
+    <dd><p>Configuration options for the reasoning process (optional).</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation (optional).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Models.ReasoningResult-1.html">ReasoningResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A reasoning result containing the answer, reasoning chain, and metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasonAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method is where the actual "thinking" happens. You provide a question
+or problem, and the strategy applies its specific reasoning approach to solve it.
+<p>The config parameter lets you customize how the strategy works (like setting how many steps to take,
+or how deep to explore). The cancellationToken allows you to stop the reasoning if it's taking too long.</p>
+<p>The result includes not just the final answer, but also the complete reasoning process, so you can
+see how the AI arrived at its conclusion.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasonCoreAsync_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ReasonCoreAsync*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasonCoreAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ReasonCoreAsync(System.String,AiDotNet.Reasoning.Models.ReasoningConfig,System.Threading.CancellationToken)">
+  ReasonCoreAsync(string, ReasoningConfig, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core reasoning logic to be implemented by derived strategies.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonCoreAsync(string query, ReasoningConfig config, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The problem or question to reason about.</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Reasoning.Models.ReasoningConfig.html">ReasoningConfig</a></dt>
+    <dd><p>Configuration options for the reasoning process.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Models.ReasoningResult-1.html">ReasoningResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A reasoning result containing the answer and reasoning process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasonCoreAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is where the actual reasoning happens - and it's different
+for each strategy. Derived classes must implement this method with their specific approach:
+- ChainOfThoughtStrategy: Linear step-by-step reasoning
+- TreeOfThoughtsStrategy: Explores multiple paths in a tree
+- SelfConsistencyStrategy: Multiple attempts with voting
+<p>The base class handles setup, timing, and error handling; derived classes focus on
+implementing their unique reasoning algorithm.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ValidateConfig_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ValidateConfig*"></a>
+
+  <h3 id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ValidateConfig_AiDotNet_Reasoning_Models_ReasoningConfig_" data-uid="AiDotNet.Reasoning.ReasoningStrategyBase`1.ValidateConfig(AiDotNet.Reasoning.Models.ReasoningConfig)">
+  ValidateConfig(ReasoningConfig)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L345"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that a reasoning configuration is valid.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidateConfig(ReasoningConfig config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Reasoning.Models.ReasoningConfig.html">ReasoningConfig</a></dt>
+    <dd><p>The configuration to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_ReasoningStrategyBase_1_ValidateConfig_AiDotNet_Reasoning_Models_ReasoningConfig__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This checks that all configuration settings make sense.
+For example:
+- MaxSteps must be positive
+- Scores must be between 0 and 1
+- Beam width must be positive
+<p>Call this in derived classes to validate config before using it.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when configuration is invalid.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/ReasoningStrategyBase.cs/#L46" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

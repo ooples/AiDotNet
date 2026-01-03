@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ICurriculumLearnerConfig&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ICurriculumLearnerConfig&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration interface for curriculum learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1.md&amp;value=---%0Auid%3A%20AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1">
+
+
+
+  <h1 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1" class="text-break">
+Interface ICurriculumLearnerConfig&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.CurriculumLearning.html">CurriculumLearning</a>.<a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration interface for curriculum learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ICurriculumLearnerConfig&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This configuration controls how curriculum learning
+behaves. You can set things like how many epochs to train, how to schedule
+the introduction of harder samples, and when to stop training.</p>
+<p><b>Key Configuration Areas:</b></p>
+<ul><li><b>Training Duration:</b> Total epochs, epochs per phase</li><li><b>Curriculum Pacing:</b> Starting fraction, schedule type</li><li><b>Early Stopping:</b> Patience, improvement threshold</li><li><b>Difficulty Settings:</b> Recalculation frequency, normalization</li></ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_BatchSize_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.BatchSize*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_BatchSize" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the batch size for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int BatchSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_DifficultyRecalculationFrequency_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.DifficultyRecalculationFrequency*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_DifficultyRecalculationFrequency" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.DifficultyRecalculationFrequency">
+  DifficultyRecalculationFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets how often to recalculate difficulties (in epochs).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int DifficultyRecalculationFrequency { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_EarlyStoppingMinDelta_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.EarlyStoppingMinDelta*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_EarlyStoppingMinDelta" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.EarlyStoppingMinDelta">
+  EarlyStoppingMinDelta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum improvement required to reset patience.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T EarlyStoppingMinDelta { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_EarlyStoppingPatience_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.EarlyStoppingPatience*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_EarlyStoppingPatience" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.EarlyStoppingPatience">
+  EarlyStoppingPatience
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the patience for early stopping (epochs without improvement).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int EarlyStoppingPatience { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_EpochsPerPhase_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.EpochsPerPhase*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_EpochsPerPhase" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.EpochsPerPhase">
+  EpochsPerPhase
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of epochs per curriculum phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int EpochsPerPhase { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_FinalDataFraction_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.FinalDataFraction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_FinalDataFraction" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.FinalDataFraction">
+  FinalDataFraction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the final data fraction (at final phase).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T FinalDataFraction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_FinalDataFraction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Usually 1.0 to include all samples by the end of training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_InitialDataFraction_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.InitialDataFraction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_InitialDataFraction" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.InitialDataFraction">
+  InitialDataFraction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the initial data fraction (at phase 0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T InitialDataFraction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_InitialDataFraction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typically starts between 0.1 and 0.4 to include only
+the easiest samples initially.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_LearningRate_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_LearningRate" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T LearningRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_LogAction_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.LogAction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_LogAction" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.LogAction">
+  LogAction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the custom logging action.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Action&lt;string&gt;? LogAction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_LogAction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If null, logs to Console.WriteLine by default.
+Provide a custom action to integrate with your logging framework
+(e.g., Serilog, NLog, Microsoft.Extensions.Logging).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_NormalizeDifficulties_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.NormalizeDifficulties*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_NormalizeDifficulties" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.NormalizeDifficulties">
+  NormalizeDifficulties
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to normalize difficulty scores to [0, 1].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool NormalizeDifficulties { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_NumPhases_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.NumPhases*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_NumPhases" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.NumPhases">
+  NumPhases
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of curriculum phases.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int NumPhases { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_RandomSeed_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_RandomSeed" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int? RandomSeed { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_RecalculateDifficulties_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.RecalculateDifficulties*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_RecalculateDifficulties" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.RecalculateDifficulties">
+  RecalculateDifficulties
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to recalculate difficulty scores during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool RecalculateDifficulties { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_RecalculateDifficulties_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If true, difficulties are updated as the model learns.
+This can be more accurate but also more expensive.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_ScheduleType_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.ScheduleType*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_ScheduleType" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.ScheduleType">
+  ScheduleType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the type of curriculum schedule to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CurriculumScheduleType ScheduleType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.CurriculumScheduleType.html">CurriculumScheduleType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_ShuffleWithinPhase_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.ShuffleWithinPhase*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_ShuffleWithinPhase" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.ShuffleWithinPhase">
+  ShuffleWithinPhase
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to shuffle within curriculum phases.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool ShuffleWithinPhase { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_TotalEpochs_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.TotalEpochs*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_TotalEpochs" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.TotalEpochs">
+  TotalEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of training epochs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int TotalEpochs { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_UseDifficultyWeighting_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.UseDifficultyWeighting*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_UseDifficultyWeighting" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.UseDifficultyWeighting">
+  UseDifficultyWeighting
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to apply sample weighting based on difficulty.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool UseDifficultyWeighting { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_UseEarlyStopping_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.UseEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_UseEarlyStopping" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.UseEarlyStopping">
+  UseEarlyStopping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to use early stopping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool UseEarlyStopping { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_Verbosity_" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.Verbosity*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Interfaces_ICurriculumLearnerConfig_1_Verbosity" data-uid="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig`1.Verbosity">
+  Verbosity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the verbosity level for logging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CurriculumVerbosity Verbosity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.CurriculumVerbosity.html">CurriculumVerbosity</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Interfaces/ICurriculumLearnerConfig.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

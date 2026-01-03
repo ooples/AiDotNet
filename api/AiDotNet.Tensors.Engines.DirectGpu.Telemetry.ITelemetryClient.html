@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ITelemetryClient | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ITelemetryClient | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for GPU telemetry submission and profile retrieval.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient" class="text-break">
+Interface ITelemetryClient  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Telemetry/ITelemetryClient.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.html">DirectGpu</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.html">Telemetry</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for GPU telemetry submission and profile retrieval.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ITelemetryClient : IDisposable</code></pre>
+  </div>
+
+
+
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable.dispose">IDisposable.Dispose()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_IsEnabled_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.IsEnabled*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_IsEnabled" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.IsEnabled">
+  IsEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Telemetry/ITelemetryClient.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether telemetry is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsEnabled { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_GetProfileAsync_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.GetProfileAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_GetProfileAsync_AiDotNet_Tensors_Engines_DirectGpu_Telemetry_GpuInfoData_System_Int32_System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.GetProfileAsync(AiDotNet.Tensors.Engines.DirectGpu.Telemetry.GpuInfoData,System.Int32,System.Int32,System.Threading.CancellationToken)">
+  GetProfileAsync(GpuInfoData, int, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Telemetry/ITelemetryClient.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the optimal GPU profile for the specified GPU and matrix size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;GpuProfileData?&gt; GetProfileAsync(GpuInfoData gpuInfo, int minDimension, int maxDimension, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gpuInfo</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.GpuInfoData.html">GpuInfoData</a></dt>
+    <dd><p>GPU information.</p>
+</dd>
+    <dt><code>minDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum matrix dimension.</p>
+</dd>
+    <dt><code>maxDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum matrix dimension.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.GpuProfileData.html">GpuProfileData</a>&gt;</dt>
+    <dd><p>The optimal config, or null if not found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_IsOptedOutAsync_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.IsOptedOutAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_IsOptedOutAsync_System_Threading_CancellationToken_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.IsOptedOutAsync(System.Threading.CancellationToken)">
+  IsOptedOutAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Telemetry/ITelemetryClient.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this client has opted out of telemetry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;bool&gt; IsOptedOutAsync(CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_OptOutAsync_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.OptOutAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_OptOutAsync_System_Threading_CancellationToken_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.OptOutAsync(System.Threading.CancellationToken)">
+  OptOutAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Telemetry/ITelemetryClient.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opts out of telemetry for this client.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task OptOutAsync(CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_SubmitExceptionAsync_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.SubmitExceptionAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_SubmitExceptionAsync_AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ExceptionData_System_Threading_CancellationToken_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.SubmitExceptionAsync(AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ExceptionData,System.Threading.CancellationToken)">
+  SubmitExceptionAsync(ExceptionData, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Telemetry/ITelemetryClient.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Submits an exception to the telemetry service.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task SubmitExceptionAsync(ExceptionData exception, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>exception</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ExceptionData.html">ExceptionData</a></dt>
+    <dd><p>The exception data to submit.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_SubmitTuningResultAsync_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.SubmitTuningResultAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Telemetry_ITelemetryClient_SubmitTuningResultAsync_AiDotNet_Tensors_Engines_DirectGpu_Telemetry_TuningResultData_AiDotNet_Tensors_Engines_DirectGpu_Telemetry_GpuInfoData_System_Threading_CancellationToken_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.ITelemetryClient.SubmitTuningResultAsync(AiDotNet.Tensors.Engines.DirectGpu.Telemetry.TuningResultData,AiDotNet.Tensors.Engines.DirectGpu.Telemetry.GpuInfoData,System.Threading.CancellationToken)">
+  SubmitTuningResultAsync(TuningResultData, GpuInfoData, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Telemetry/ITelemetryClient.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Submits GPU A/B test results to the telemetry service.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task SubmitTuningResultAsync(TuningResultData result, GpuInfoData gpuInfo, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>result</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.TuningResultData.html">TuningResultData</a></dt>
+    <dd><p>The tuning result to submit.</p>
+</dd>
+    <dt><code>gpuInfo</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Telemetry.GpuInfoData.html">GpuInfoData</a></dt>
+    <dd><p>GPU information.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Telemetry/ITelemetryClient.cs/#L12" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

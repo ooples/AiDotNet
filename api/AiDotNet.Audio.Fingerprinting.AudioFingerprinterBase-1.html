@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AudioFingerprinterBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AudioFingerprinterBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for audio fingerprinting algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1">
+
+
+
+  <h1 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1" class="text-break">
+Class AudioFingerprinterBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Audio.html">Audio</a>.<a class="xref" href="AiDotNet.Audio.Fingerprinting.html">Fingerprinting</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for audio fingerprinting algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class AudioFingerprinterBase&lt;T&gt; : IAudioFingerprinter&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AudioFingerprinterBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAudioFingerprinter-1.html">IAudioFingerprinter</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Audio.Fingerprinting.ChromaprintFingerprinter-1.html">ChromaprintFingerprinter&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Audio.Fingerprinting.SpectrogramFingerprinter-1.html">SpectrogramFingerprinter&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Audio fingerprinting creates compact identifiers that can recognize audio content
+even after degradation (compression, noise, speed changes). Unlike neural network
+approaches, fingerprinting typically uses signal processing techniques.
+</p>
+<p>
+<b>For Beginners:</b> Audio fingerprinting is like Shazam - it can identify a song
+from a short audio clip, even if the audio is noisy or compressed.
+<p>How it works:</p>
+<ol>
+<li>Audio is converted to a spectrogram</li>
+<li>Key features (peaks, patterns) are extracted</li>
+<li>Features are hashed into a compact fingerprint</li>
+<li>Fingerprints can be matched against a database</li>
+</ol>
+<p>This base class provides:</p>
+<ul>
+<li>Hash computation utilities</li>
+<li>Hamming distance for comparison</li>
+<li>Time alignment for matching</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1__ctor_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1__ctor" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.#ctor">
+  AudioFingerprinterBase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the AudioFingerprinterBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected AudioFingerprinterBase()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_NumOps" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Operations for the numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FingerprintLength_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FingerprintLength*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FingerprintLength" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FingerprintLength">
+  FingerprintLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the fingerprint length in bits or elements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FingerprintLength { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FrameDuration_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FrameDuration*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FrameDuration" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FrameDuration">
+  FrameDuration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the duration of each fingerprint frame in seconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FrameDuration { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_Name_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.Name*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_Name" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the fingerprinting algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_SampleRate_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_SampleRate" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the expected sample rate for input audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SampleRate { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeAlignedSimilarity_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeAlignedSimilarity*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeAlignedSimilarity_System_UInt32___System_UInt32___System_Int32_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeAlignedSimilarity(System.UInt32[],System.UInt32[],System.Int32)">
+  ComputeAlignedSimilarity(uint[], uint[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes similarity at a specific alignment offset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected double ComputeAlignedSimilarity(uint[] queryHashes, uint[] referenceHashes, int offset)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>queryHashes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>[]</dt>
+    <dd><p>Query fingerprint hashes.</p>
+</dd>
+    <dt><code>referenceHashes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>[]</dt>
+    <dd><p>Reference fingerprint hashes.</p>
+</dd>
+    <dt><code>offset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Alignment offset.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Similarity score (0.0 to 1.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeAverageHammingDistance_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeAverageHammingDistance*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeAverageHammingDistance_System_UInt32___System_UInt32___" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeAverageHammingDistance(System.UInt32[],System.UInt32[])">
+  ComputeAverageHammingDistance(uint[], uint[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes average Hamming distance between fingerprint hash sequences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected double ComputeAverageHammingDistance(uint[] hashes1, uint[] hashes2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>hashes1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>[]</dt>
+    <dd><p>First fingerprint hash sequence.</p>
+</dd>
+    <dt><code>hashes2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>[]</dt>
+    <dd><p>Second fingerprint hash sequence.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Average Hamming distance (0.0 to 1.0 normalized).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeHammingDistance_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeHammingDistance*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeHammingDistance_System_UInt32_System_UInt32_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeHammingDistance(System.UInt32,System.UInt32)">
+  ComputeHammingDistance(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Hamming distance between two fingerprint hashes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int ComputeHammingDistance(uint fp1, uint fp2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fp1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>First fingerprint hash.</p>
+</dd>
+    <dt><code>fp2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>Second fingerprint hash.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of differing bits.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeHammingDistance_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Hamming distance counts how many bits are different
+between two fingerprints. Lower distance = more similar audio.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeHashes_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeHashes*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeHashes__0_0__0____0_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeHashes(`0[0:,0:],`0)">
+  ComputeHashes(T[,], T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a feature matrix to hash values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected uint[] ComputeHashes(T[,] features, T threshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> T[,]</dt>
+    <dd><p>Feature matrix [rows, cols].</p>
+</dd>
+    <dt><code>threshold</code> <span class="xref">T</span></dt>
+    <dd><p>Threshold for binarization.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>[]</dt>
+    <dd><p>Array of hash values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeSimilarity_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeSimilarity*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_ComputeSimilarity_AiDotNet_Interfaces_AudioFingerprint__0__AiDotNet_Interfaces_AudioFingerprint__0__" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.ComputeSimilarity(AiDotNet.Interfaces.AudioFingerprint{`0},AiDotNet.Interfaces.AudioFingerprint{`0})">
+  ComputeSimilarity(AudioFingerprint&lt;T&gt;, AudioFingerprint&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the similarity between two fingerprints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract double ComputeSimilarity(AudioFingerprint&lt;T&gt; fp1, AudioFingerprint&lt;T&gt; fp2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fp1</code> <a class="xref" href="AiDotNet.Interfaces.AudioFingerprint-1.html">AudioFingerprint</a>&lt;T&gt;</dt>
+    <dd><p>First fingerprint.</p>
+</dd>
+    <dt><code>fp2</code> <a class="xref" href="AiDotNet.Interfaces.AudioFingerprint-1.html">AudioFingerprint</a>&lt;T&gt;</dt>
+    <dd><p>Second fingerprint.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Similarity score (0-1, higher is more similar).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FindBestAlignment_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FindBestAlignment*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FindBestAlignment_System_UInt32___System_UInt32___System_Int32_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FindBestAlignment(System.UInt32[],System.UInt32[],System.Int32)">
+  FindBestAlignment(uint[], uint[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the best alignment offset between two fingerprint hash sequences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected (int Offset, double Similarity) FindBestAlignment(uint[] queryHashes, uint[] referenceHashes, int maxOffset = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>queryHashes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>[]</dt>
+    <dd><p>Query fingerprint hashes.</p>
+</dd>
+    <dt><code>referenceHashes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>[]</dt>
+    <dd><p>Reference fingerprint hashes.</p>
+</dd>
+    <dt><code>maxOffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum offset to search.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.double-.offset">Offset</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.double-.similarity">Similarity</a>)</dt>
+    <dd><p>Best offset and corresponding similarity score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FindMatches_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FindMatches*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FindMatches_AiDotNet_Interfaces_AudioFingerprint__0__AiDotNet_Interfaces_AudioFingerprint__0__System_Int32_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FindMatches(AiDotNet.Interfaces.AudioFingerprint{`0},AiDotNet.Interfaces.AudioFingerprint{`0},System.Int32)">
+  FindMatches(AudioFingerprint&lt;T&gt;, AudioFingerprint&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds matching segments between two fingerprints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract IReadOnlyList&lt;FingerprintMatch&gt; FindMatches(AudioFingerprint&lt;T&gt; query, AudioFingerprint&lt;T&gt; reference, int minMatchLength = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="AiDotNet.Interfaces.AudioFingerprint-1.html">AudioFingerprint</a>&lt;T&gt;</dt>
+    <dd><p>The query fingerprint.</p>
+</dd>
+    <dt><code>reference</code> <a class="xref" href="AiDotNet.Interfaces.AudioFingerprint-1.html">AudioFingerprint</a>&lt;T&gt;</dt>
+    <dd><p>The reference fingerprint to search in.</p>
+</dd>
+    <dt><code>minMatchLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum length of matching segment.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.FingerprintMatch.html">FingerprintMatch</a>&gt;</dt>
+    <dd><p>List of matching segments with time offsets.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_Fingerprint_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.Fingerprint*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_Fingerprint_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.Fingerprint(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Fingerprint(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a fingerprint from audio data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract AudioFingerprint&lt;T&gt; Fingerprint(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio samples as a tensor (mono audio).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.AudioFingerprint-1.html">AudioFingerprint</a>&lt;T&gt;</dt>
+    <dd><p>The audio fingerprint.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_Fingerprint_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.Fingerprint*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_Fingerprint_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.Fingerprint(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Fingerprint(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a fingerprint from audio data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual AudioFingerprint&lt;T&gt; Fingerprint(Vector&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Audio samples as a vector (mono audio).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.AudioFingerprint-1.html">AudioFingerprint</a>&lt;T&gt;</dt>
+    <dd><p>The audio fingerprint.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FrameToTime_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FrameToTime*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_FrameToTime_System_Int32_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.FrameToTime(System.Int32)">
+  FrameToTime(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L250"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts frame index to time in seconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected double FrameToTime(int frameIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frameIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Frame index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Time in seconds.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_TimeToFrame_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.TimeToFrame*"></a>
+
+  <h3 id="AiDotNet_Audio_Fingerprinting_AudioFingerprinterBase_1_TimeToFrame_System_Double_" data-uid="AiDotNet.Audio.Fingerprinting.AudioFingerprinterBase`1.TimeToFrame(System.Double)">
+  TimeToFrame(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L260"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts time in seconds to frame index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int TimeToFrame(double time)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>time</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Time in seconds.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Frame index.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Fingerprinting/AudioFingerprinterBase.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

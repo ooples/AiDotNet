@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class EigenDecomposition&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class EigenDecomposition&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Performs eigenvalue decomposition of a matrix, breaking it down into its eigenvalues and eigenvectors.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1.md&amp;value=---%0Auid%3A%20AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1">
+
+
+
+  <h1 id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1" class="text-break">
+Class EigenDecomposition&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/EigenDecomposition.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DecompositionMethods.html">DecompositionMethods</a>.<a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.html">MatrixDecomposition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Performs eigenvalue decomposition of a matrix, breaking it down into its eigenvalues and eigenvectors.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class EigenDecomposition&lt;T&gt; : MatrixDecompositionBase&lt;T&gt;, IMatrixDecomposition&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used in calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html">MatrixDecompositionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">EigenDecomposition&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_NumOps">MatrixDecompositionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Engine">MatrixDecompositionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A">MatrixDecompositionBase&lt;T&gt;.A</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Boolean_System_Boolean_System_Boolean_">MatrixDecompositionBase&lt;T&gt;.ValidateMatrix(Matrix&lt;T&gt;, bool, bool, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">MatrixDecompositionBase&lt;T&gt;.FrobeniusNorm(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual__0__0__0_">MatrixDecompositionBase&lt;T&gt;.ApproximatelyEqual(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixDecompositionExtensions.html#AiDotNet_Extensions_MatrixDecompositionExtensions_ToComplexDecomposition__1_AiDotNet_Interfaces_IMatrixDecomposition___0__">MatrixDecompositionExtensions.ToComplexDecomposition&lt;T&gt;(IMatrixDecomposition&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Eigenvalue decomposition is a way to factorize a square matrix into a set of eigenvectors and eigenvalues.
+This is useful in many applications including principal component analysis, vibration analysis,
+and solving systems of differential equations.
+</p>
+<p>
+<b>For Beginners:</b> Eigenvalue decomposition finds special directions (eigenvectors) in which a matrix
+acts like simple scaling. When you multiply the matrix by an eigenvector, you get the same vector back
+but scaled by a number (the eigenvalue). Think of it like finding the "natural directions" of a transformation.
+</p>
+<p>
+Real-world applications:
+- Principal Component Analysis (PCA) for data dimensionality reduction
+- Vibration analysis in mechanical engineering
+- Google's PageRank algorithm
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1__ctor_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Enums_AlgorithmTypes_EigenAlgorithmType_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Enums.AlgorithmTypes.EigenAlgorithmType)">
+  EigenDecomposition(Matrix&lt;T&gt;, EigenAlgorithmType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/EigenDecomposition.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new eigenvalue decomposition for the specified matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public EigenDecomposition(Matrix&lt;T&gt; matrix, EigenAlgorithmType algorithm = EigenAlgorithmType.QR)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to decompose.</p>
+</dd>
+    <dt><code>algorithm</code> <a class="xref" href="AiDotNet.Enums.AlgorithmTypes.EigenAlgorithmType.html">EigenAlgorithmType</a></dt>
+    <dd><p>The algorithm to use for eigenvalue decomposition. Defaults to QR algorithm.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Enums_AlgorithmTypes_EigenAlgorithmType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Different algorithms have different trade-offs in terms of speed, accuracy, and applicability:</p>
+<ul>
+<li>QR: Generally robust and accurate for most matrices.</li>
+<li>PowerIteration: Simpler but may be slower for finding all eigenvalues.</li>
+<li>Jacobi: Works well for symmetric matrices.</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_EigenValues_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.EigenValues*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_EigenValues" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.EigenValues">
+  EigenValues
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/EigenDecomposition.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the eigenvalues of the decomposed matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; EigenValues { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_EigenValues_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Eigenvalues are special scalars that, when the original matrix multiplies its corresponding eigenvector,
+the result is the same as scaling the eigenvector by this value.
+Each eigenvalue corresponds to an eigenvector in the EigenVectors property.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_EigenVectors_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.EigenVectors*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_EigenVectors" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.EigenVectors">
+  EigenVectors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/EigenDecomposition.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the eigenvectors of the decomposed matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; EigenVectors { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_EigenVectors_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Eigenvectors are special vectors that, when multiplied by the original matrix,
+result in a vector that points in the same direction but may be scaled.
+Each eigenvector corresponds to an eigenvalue in the EigenValues property.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_Decompose" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.Decompose">
+  Decompose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/EigenDecomposition.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the eigenvalue decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void Decompose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_Invert_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.Invert*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_Invert" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.Invert">
+  Invert()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/EigenDecomposition.cs/#L419"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the inverse of the original matrix using the eigenvalue decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; Invert()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The inverse of the original matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_Invert_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method uses the eigenvalue decomposition to compute the inverse of the matrix.
+The inverse is calculated as: A⁻¹ = V * D⁻¹ * V^T
+where V is the matrix of eigenvectors, D is a diagonal matrix of eigenvalues,
+and V^T is the transpose of V.</p>
+<p>This approach can be more numerically stable than directly inverting the matrix,
+especially for matrices that are nearly singular (close to having no inverse).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_Solve_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.Solve*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition`1.Solve(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Solve(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/EigenDecomposition.cs/#L400"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Solves a system of linear equations Ax = b using the eigenvalue decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Solve(Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The right-hand side vector of the equation Ax = b.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The solution vector x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_EigenDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method uses the eigenvalue decomposition to solve the system of equations.
+It works by transforming the problem into the eigenvector basis, where the system
+becomes diagonal and easy to solve, then transforming back to the original basis.</p>
+<p>The solution is computed as: x = V * D⁻¹ * V^T * b
+where V is the matrix of eigenvectors, D is a diagonal matrix of eigenvalues,
+and V^T is the transpose of V.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/EigenDecomposition.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

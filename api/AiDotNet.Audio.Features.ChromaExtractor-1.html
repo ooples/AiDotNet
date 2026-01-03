@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ChromaExtractor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ChromaExtractor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Extracts chromagram (pitch class profile) features from audio signals.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Audio_Features_ChromaExtractor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Audio.Features.ChromaExtractor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Audio.Features.ChromaExtractor`1">
+
+
+
+  <h1 id="AiDotNet_Audio_Features_ChromaExtractor_1" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1" class="text-break">
+Class ChromaExtractor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ChromaExtractor.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Audio.html">Audio</a>.<a class="xref" href="AiDotNet.Audio.Features.html">Features</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Extracts chromagram (pitch class profile) features from audio signals.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ChromaExtractor&lt;T&gt; : AudioFeatureExtractorBase&lt;T&gt;, IAudioFeatureExtractor&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html">AudioFeatureExtractorBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ChromaExtractor&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAudioFeatureExtractor-1.html">IAudioFeatureExtractor</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_NumOps">AudioFeatureExtractorBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_Options">AudioFeatureExtractorBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_SampleRate">AudioFeatureExtractorBase&lt;T&gt;.SampleRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_FftSize">AudioFeatureExtractorBase&lt;T&gt;.FftSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_HopLength">AudioFeatureExtractorBase&lt;T&gt;.HopLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_WindowLength">AudioFeatureExtractorBase&lt;T&gt;.WindowLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_Extract_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AudioFeatureExtractorBase&lt;T&gt;.Extract(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_ExtractAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Threading_CancellationToken_">AudioFeatureExtractorBase&lt;T&gt;.ExtractAsync(Tensor&lt;T&gt;, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_ComputeNumFrames_System_Int32_">AudioFeatureExtractorBase&lt;T&gt;.ComputeNumFrames(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_CreateHannWindow_System_Int32_">AudioFeatureExtractorBase&lt;T&gt;.CreateHannWindow(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_CreateHammingWindow_System_Int32_">AudioFeatureExtractorBase&lt;T&gt;.CreateHammingWindow(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_ExtractFrame__0___System_Int32__0___">AudioFeatureExtractorBase&lt;T&gt;.ExtractFrame(T[], int, T[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_PadAudioCenter__0___">AudioFeatureExtractorBase&lt;T&gt;.PadAudioCenter(T[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_HzToMel_System_Double_">AudioFeatureExtractorBase&lt;T&gt;.HzToMel(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_MelToHz_System_Double_">AudioFeatureExtractorBase&lt;T&gt;.MelToHz(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_CreateMelFilterbank_System_Int32_System_Int32_System_Int32_System_Double_System_Nullable_System_Double__">AudioFeatureExtractorBase&lt;T&gt;.CreateMelFilterbank(int, int, int, double, double?)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Audio_Features_ChromaExtractor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A chromagram represents the energy of the 12 pitch classes (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+regardless of octave. It's particularly useful for music analysis tasks.
+</p>
+<p><b>For Beginners:</b> In Western music, there are 12 notes that repeat in each octave.
+A C note at 262 Hz and a C note at 524 Hz are both "C" - they're the same pitch class.
+<p>A chromagram collapses all octaves together, showing how much energy is in each of the 12 notes:</p>
+<ul>
+<li>Index 0: C (do)</li>
+<li>Index 1: C#/Db</li>
+<li>Index 2: D (re)</li>
+<li>...and so on through B</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Chord recognition (chords have characteristic chroma patterns)</li>
+<li>Key detection (which notes are emphasized in the music)</li>
+<li>Music similarity (songs in the same key have similar chromagrams)</li>
+<li>Cover song detection</li>
+</ul>
+<p>Usage:</p>
+<pre><code class="lang-csharp">var chroma = new ChromaExtractor&lt;float&gt;();
+var features = chroma.Extract(audioTensor);
+// features.Shape = [numFrames, 12]</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_ChromaExtractor_1__ctor_" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ChromaExtractor_1__ctor_AiDotNet_Audio_Features_ChromaOptions_" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.#ctor(AiDotNet.Audio.Features.ChromaOptions)">
+  ChromaExtractor(ChromaOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ChromaExtractor.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new chroma feature extractor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ChromaExtractor(ChromaOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Audio.Features.ChromaOptions.html">ChromaOptions</a></dt>
+    <dd><p>Chroma extraction options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_ChromaExtractor_1_FeatureDimension_" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.FeatureDimension*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ChromaExtractor_1_FeatureDimension" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.FeatureDimension">
+  FeatureDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ChromaExtractor.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of features produced per frame.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int FeatureDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ChromaExtractor_1_Name_" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.Name*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ChromaExtractor_1_Name" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ChromaExtractor.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this feature extractor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_ChromaExtractor_1_Extract_" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.Extract*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ChromaExtractor_1_Extract_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.Extract(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Extract(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ChromaExtractor.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts features from an audio waveform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Extract(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The audio waveform as a 1D tensor [samples].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Features as a 2D tensor [frames, features].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ChromaExtractor_1_GetDominantPitchClass_" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.GetDominantPitchClass*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ChromaExtractor_1_GetDominantPitchClass__0___" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.GetDominantPitchClass(`0[])">
+  GetDominantPitchClass(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ChromaExtractor.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dominant pitch class for a chroma vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetDominantPitchClass(T[] chromaFrame)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chromaFrame</code> T[]</dt>
+    <dd><p>A chroma vector of length 12.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the dominant pitch class (0-11).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ChromaExtractor_1_GetPitchClassName_" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.GetPitchClassName*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ChromaExtractor_1_GetPitchClassName_System_Int32_" data-uid="AiDotNet.Audio.Features.ChromaExtractor`1.GetPitchClassName(System.Int32)">
+  GetPitchClassName(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ChromaExtractor.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the pitch class name for an index (0-11).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string GetPitchClassName(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The pitch class index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The pitch class name (C, C#, D, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ChromaExtractor.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

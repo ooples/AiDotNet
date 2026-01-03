@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DistributionFitResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DistributionFitResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the result of fitting a statistical distribution to a dataset, including the distribution type, goodness of fit measure, and estimated parameters.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_DistributionFitResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.DistributionFitResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.DistributionFitResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_DistributionFitResult_1" data-uid="AiDotNet.Models.Results.DistributionFitResult`1" class="text-break">
+Class DistributionFitResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/DistributionFitResult.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the result of fitting a statistical distribution to a dataset, including the distribution type,
+goodness of fit measure, and estimated parameters.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DistributionFitResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for statistical values, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DistributionFitResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_DistributionFitResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+When analyzing data, it's often useful to determine which statistical distribution best describes the data. 
+This class stores the results of such distribution fitting, including the type of distribution that best fits 
+the data, a measure of how well the distribution fits (goodness of fit), and the estimated parameters of the 
+distribution. The goodness of fit measure allows for comparing different distribution types to determine which 
+one provides the best representation of the data. The class uses generic type parameter T to support different 
+numeric types for the statistical values, such as float, double, or decimal.
+</p>
+<p><b>For Beginners:</b> This class stores information about how well a statistical distribution matches your data.
+<p>When analyzing data, you often want to know:</p>
+<ul>
+<li>Which standard statistical distribution (like Normal, Exponential, etc.) best describes your data</li>
+<li>How well that distribution fits your data</li>
+<li>What the specific parameters of that distribution are</li>
+</ul>
+<p>This class stores all that information after a distribution fitting process, making it easy to:</p>
+<ul>
+<li>Identify the best distribution for your data</li>
+<li>Compare how well different distributions fit</li>
+<li>Access the parameters needed to use the distribution for further analysis</li>
+</ul>
+<p>For example, if your data follows a normal distribution, this class would tell you that,
+provide a measure of how well it fits, and give you the mean and standard deviation parameters.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_DistributionFitResult_1__ctor_" data-uid="AiDotNet.Models.Results.DistributionFitResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_DistributionFitResult_1__ctor_AiDotNet_Tensors_Interfaces_INumericOperations__0__" data-uid="AiDotNet.Models.Results.DistributionFitResult`1.#ctor(AiDotNet.Tensors.Interfaces.INumericOperations{`0})">
+  DistributionFitResult(INumericOperations&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/DistributionFitResult.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DistributionFitResult class with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DistributionFitResult(INumericOperations&lt;T&gt;? ops = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ops</code> <a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd><p>Optional numeric operations provider for type T. If null, default operations will be used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_DistributionFitResult_1__ctor_AiDotNet_Tensors_Interfaces_INumericOperations__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new DistributionFitResult instance and initializes the GoodnessOfFit property to zero 
+and the Parameters property to an empty dictionary. It takes an optional INumericOperations&lt;T&gt; parameter 
+that provides numeric operations for the generic type T. If this parameter is null, the constructor uses 
+MathHelper.GetNumericOperations&lt;T&gt;() to obtain the default numeric operations for type T. This allows the 
+class to work with different numeric types such as float, double, or decimal. The constructor provides a clean 
+starting point for storing distribution fitting results.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with default values.
+<p>When a new DistributionFitResult is created:</p>
+<ul>
+<li>The goodness of fit is initialized to zero</li>
+<li>The parameters dictionary is created as empty</li>
+<li>Numeric operations appropriate for type T are set up</li>
+</ul>
+<p>The ops parameter:</p>
+<ul>
+<li>Provides mathematical operations for the numeric type T</li>
+<li>Can be null, in which case default operations are used</li>
+<li>Allows the class to work with different numeric types (float, double, etc.)</li>
+</ul>
+<p>This initialization is important because:</p>
+<ul>
+<li>It ensures consistent behavior regardless of how the object is created</li>
+<li>It prevents potential issues with uninitialized values</li>
+<li>It makes the code more robust across different numeric types</li>
+</ul>
+<p>You typically won't need to call this constructor directly, as it will be
+used internally by the distribution fitting process.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_DistributionFitResult_1_DistributionType_" data-uid="AiDotNet.Models.Results.DistributionFitResult`1.DistributionType*"></a>
+
+  <h3 id="AiDotNet_Models_Results_DistributionFitResult_1_DistributionType" data-uid="AiDotNet.Models.Results.DistributionFitResult`1.DistributionType">
+  DistributionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/DistributionFitResult.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of distribution that best fits the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DistributionType DistributionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.DistributionType.html">DistributionType</a></dt>
+    <dd><p>A value from the DistributionType enumeration indicating the distribution type.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_DistributionFitResult_1_DistributionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the type of statistical distribution that was fitted to the data. Common distribution 
+types include Normal (Gaussian), Exponential, Weibull, Gamma, Beta, and others. Each distribution type has 
+different characteristics and is suitable for modeling different kinds of data. For example, the Normal 
+distribution is often used for data that clusters around a mean value, while the Exponential distribution 
+is suitable for modeling time between events in a Poisson process. The distribution type is typically 
+determined by comparing the goodness of fit measures for different distributions and selecting the one with 
+the best fit.
+</p>
+<p><b>For Beginners:</b> This property tells you which statistical distribution best matches your data.
+<p>The distribution type:</p>
+<ul>
+<li>Identifies which standard probability distribution was found to fit your data</li>
+<li>Each distribution has different characteristics and is suitable for different types of data</li>
+</ul>
+<p>Common distribution types include:</p>
+<ul>
+<li>Normal (Gaussian): The classic bell curve, good for many natural phenomena</li>
+<li>Exponential: Good for modeling time between random events</li>
+<li>Uniform: Equal probability across a range</li>
+<li>Poisson: Good for counting rare events in fixed time/space</li>
+<li>Weibull: Often used for reliability and lifetime data</li>
+</ul>
+<p>Knowing the distribution type helps you:</p>
+<ul>
+<li>Understand the underlying patterns in your data</li>
+<li>Make predictions about future observations</li>
+<li>Apply appropriate statistical methods for further analysis</li>
+</ul>
+<p>For example, if this property is set to DistributionType.Normal, it means your
+data approximately follows a bell curve pattern.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_DistributionFitResult_1_GoodnessOfFit_" data-uid="AiDotNet.Models.Results.DistributionFitResult`1.GoodnessOfFit*"></a>
+
+  <h3 id="AiDotNet_Models_Results_DistributionFitResult_1_GoodnessOfFit" data-uid="AiDotNet.Models.Results.DistributionFitResult`1.GoodnessOfFit">
+  GoodnessOfFit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/DistributionFitResult.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the goodness of fit measure. Lower values indicate better fit.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GoodnessOfFit { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A numeric value representing the goodness of fit, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_DistributionFitResult_1_GoodnessOfFit_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents a measure of how well the selected distribution fits the data. Common goodness of fit 
+measures include the Kolmogorov-Smirnov statistic, Anderson-Darling statistic, or negative log-likelihood. 
+Lower values typically indicate a better fit, meaning the distribution more closely matches the observed data. 
+This measure can be used to compare different distribution types to determine which one provides the best 
+representation of the data. The specific interpretation of the goodness of fit value depends on the measure 
+used, but it generally allows for relative comparisons between different distribution fits.
+</p>
+<p><b>For Beginners:</b> This value tells you how well the distribution matches your data.
+<p>The goodness of fit measure:</p>
+<ul>
+<li>Quantifies how closely the distribution matches your actual data</li>
+<li>Lower values indicate a better fit (less discrepancy between the model and data)</li>
+<li>Allows you to compare different distributions to find the best one</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It helps you determine if the distribution is a good model for your data</li>
+<li>It allows you to compare multiple distribution types objectively</li>
+<li>It can indicate when no standard distribution fits your data well</li>
+</ul>
+<p>Common goodness of fit measures include:</p>
+<ul>
+<li>Kolmogorov-Smirnov statistic: Based on the maximum difference between empirical and theoretical CDFs</li>
+<li>Anderson-Darling statistic: Similar but gives more weight to the tails of the distribution</li>
+<li>Negative log-likelihood: Based on the probability of observing your data given the distribution</li>
+</ul>
+<p>For example, if you fit both Normal and Exponential distributions to your data,
+the one with the lower goodness of fit value would be considered the better match.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_DistributionFitResult_1_Parameters_" data-uid="AiDotNet.Models.Results.DistributionFitResult`1.Parameters*"></a>
+
+  <h3 id="AiDotNet_Models_Results_DistributionFitResult_1_Parameters" data-uid="AiDotNet.Models.Results.DistributionFitResult`1.Parameters">
+  Parameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/DistributionFitResult.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the parameters of the fitted distribution.
+The keys are parameter names, and the values are the corresponding parameter values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; Parameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary mapping parameter names to their values, initialized as an empty dictionary.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_DistributionFitResult_1_Parameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the estimated parameters of the fitted distribution as a dictionary, where the keys are 
+the parameter names and the values are the corresponding parameter values. The specific parameters depend on 
+the distribution type. For example, a Normal distribution has "mean" and "standardDeviation" parameters, an 
+Exponential distribution has a "rate" parameter, and a Weibull distribution has "shape" and "scale" parameters. 
+These parameters fully define the distribution and can be used for further statistical analysis, such as 
+calculating probabilities, generating random samples, or making predictions. The parameter values are estimated 
+from the data during the distribution fitting process, typically using methods such as maximum likelihood 
+estimation or method of moments.
+</p>
+<p><b>For Beginners:</b> This dictionary contains the specific values that define the distribution.
+<p>The distribution parameters:</p>
+<ul>
+<li>Are the specific values that define the shape and characteristics of the distribution</li>
+<li>Vary depending on which distribution type was selected</li>
+<li>Are estimated from your data during the fitting process</li>
+</ul>
+<p>Common parameters for different distributions:</p>
+<ul>
+<li>Normal distribution: &quot;mean&quot; and &quot;standardDeviation&quot;</li>
+<li>Exponential distribution: &quot;rate&quot; or &quot;lambda&quot;</li>
+<li>Uniform distribution: &quot;minimum&quot; and &quot;maximum&quot;</li>
+<li>Weibull distribution: &quot;shape&quot; and &quot;scale&quot;</li>
+</ul>
+<p>These parameters are important because:</p>
+<ul>
+<li>They completely define the distribution</li>
+<li>They allow you to calculate probabilities and statistics</li>
+<li>They can be used to generate random samples from the distribution</li>
+<li>They often have meaningful interpretations in your domain</li>
+</ul>
+<p>For example, if fitting a Normal distribution to height data, the &quot;mean&quot; parameter
+would represent the average height, and &quot;standardDeviation&quot; would represent how
+spread out the heights are around that average.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/DistributionFitResult.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

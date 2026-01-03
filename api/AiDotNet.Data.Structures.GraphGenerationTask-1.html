@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GraphGenerationTask&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GraphGenerationTask&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a graph generation task where the goal is to generate new valid graphs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Structures_GraphGenerationTask_1.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Structures.GraphGenerationTask%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1">
+
+
+
+  <h1 id="AiDotNet_Data_Structures_GraphGenerationTask_1" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1" class="text-break">
+Class GraphGenerationTask&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Structures.html">Structures</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a graph generation task where the goal is to generate new valid graphs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GraphGenerationTask&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GraphGenerationTask&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Data_Structures_GraphGenerationTask_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Graph generation creates new graph structures that follow learned patterns from training data.
+This is useful for generating novel molecules, designing new materials, creating synthetic
+networks, and other generative tasks.
+</p>
+<p><b>For Beginners:</b> Graph generation is like creating new objects that look realistic.
+<p><strong>Real-world examples:</strong></p>
+<p><strong>Drug Discovery:</strong></p>
+<ul>
+<li>Task: Generate novel drug-like molecules</li>
+<li>Input: Training set of known drugs</li>
+<li>Output: New molecular structures with desired properties</li>
+<li>Goal: Discover new drug candidates automatically</li>
+<li>Example: Generate molecules that bind to a specific protein target</li>
+</ul>
+<p><strong>Material Design:</strong></p>
+<ul>
+<li>Task: Generate new material structures</li>
+<li>Input: Database of materials with known properties</li>
+<li>Output: Novel material configurations</li>
+<li>Goal: Design materials with specific properties (strength, conductivity, etc.)</li>
+</ul>
+<p><strong>Synthetic Data Generation:</strong></p>
+<ul>
+<li>Task: Create realistic social network graphs</li>
+<li>Input: Real social network data</li>
+<li>Output: Synthetic networks preserving statistical properties</li>
+<li>Goal: Generate data for testing while preserving privacy</li>
+</ul>
+<p><strong>Molecular Optimization:</strong></p>
+<ul>
+<li>Task: Modify molecules to improve properties</li>
+<li>Input: Starting molecule</li>
+<li>Output: Similar molecules with better properties</li>
+<li>Example: Improve drug efficacy while maintaining safety</li>
+</ul>
+<p><strong>Approaches:</strong></p>
+<ul>
+<li><strong>Autoregressive</strong>: Generate nodes/edges one at a time</li>
+<li><strong>VAE</strong>: Learn latent space of graphs, sample new ones</li>
+<li><strong>GAN</strong>: Generator creates graphs, discriminator evaluates them</li>
+<li><strong>Flow-based</strong>: Learn invertible transformations of graph distributions</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_EdgeTypes_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.EdgeTypes*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_EdgeTypes" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.EdgeTypes">
+  EdgeTypes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Possible edge types/labels (for categorical edge features).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; EdgeTypes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphGenerationTask_1_EdgeTypes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>In molecule generation, this could be bond types: single, double, triple, aromatic.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_GenerationBatchSize_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.GenerationBatchSize*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_GenerationBatchSize" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.GenerationBatchSize">
+  GenerationBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of graphs to generate per batch during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GenerationBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_GenerationMetrics_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.GenerationMetrics*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_GenerationMetrics" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.GenerationMetrics">
+  GenerationMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Metrics to track during generation (e.g., validity rate, uniqueness, novelty).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, double&gt; GenerationMetrics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphGenerationTask_1_GenerationMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Common metrics for graph generation:
+- **Validity**: Percentage of generated graphs that satisfy constraints
+- **Uniqueness**: Percentage of unique graphs (not duplicates)
+- **Novelty**: Percentage not in training set (not memorized)
+- **Property matching**: Do generated graphs have desired properties?
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_IsDirected_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.IsDirected*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_IsDirected" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.IsDirected">
+  IsDirected
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to generate directed graphs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsDirected { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_MaxNumEdges_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.MaxNumEdges*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_MaxNumEdges" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.MaxNumEdges">
+  MaxNumEdges
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum number of edges allowed in generated graphs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxNumEdges { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_MaxNumNodes_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.MaxNumNodes*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_MaxNumNodes" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.MaxNumNodes">
+  MaxNumNodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum number of nodes allowed in generated graphs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxNumNodes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphGenerationTask_1_MaxNumNodes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constraint helps control computational cost and memory usage during generation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_NodeTypes_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.NodeTypes*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_NodeTypes" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.NodeTypes">
+  NodeTypes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Possible node types/labels (for categorical node features).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; NodeTypes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphGenerationTask_1_NodeTypes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In molecule generation, this could be atom types: C, N, O, F, etc.
+</p>
+<p><b>For Beginners:</b> When generating molecules:
+- NodeTypes might be: ["C", "N", "O", "F", "S", "Cl"]
+- Each generated node must be one of these atom types
+- This ensures generated molecules use valid atoms
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_NumEdgeFeatures_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.NumEdgeFeatures*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_NumEdgeFeatures" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.NumEdgeFeatures">
+  NumEdgeFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of edge feature dimensions (0 if no edge features).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumEdgeFeatures { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_NumNodeFeatures_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.NumNodeFeatures*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_NumNodeFeatures" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.NumNodeFeatures">
+  NumNodeFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of node feature dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumNodeFeatures { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_TrainingGraphs_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.TrainingGraphs*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_TrainingGraphs" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.TrainingGraphs">
+  TrainingGraphs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Training graphs used to learn the distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;GraphData&lt;T&gt;&gt; TrainingGraphs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphGenerationTask_1_TrainingGraphs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The generative model learns patterns from these graphs and generates similar ones.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_ValidationGraphs_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.ValidationGraphs*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_ValidationGraphs" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.ValidationGraphs">
+  ValidationGraphs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validation graphs for monitoring generation quality.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;GraphData&lt;T&gt;&gt; ValidationGraphs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphGenerationTask_1_ValidityChecker_" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.ValidityChecker*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphGenerationTask_1_ValidityChecker" data-uid="AiDotNet.Data.Structures.GraphGenerationTask`1.ValidityChecker">
+  ValidityChecker
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validity constraints for generated graphs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;GraphData&lt;T&gt;, bool&gt;? ValidityChecker { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphGenerationTask_1_ValidityChecker_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Custom validation function to check if a generated graph is valid.
+For molecules, this might check chemical valency rules.
+</p>
+<p><b>For Beginners:</b> Generated graphs must be valid/realistic:
+<p><strong>Molecular constraints:</strong></p>
+<ul>
+<li>Carbon can have max 4 bonds</li>
+<li>Oxygen typically has 2 bonds</li>
+<li>No impossible bond types</li>
+<li>Valid ring structures</li>
+</ul>
+<p><strong>Social network constraints:</strong></p>
+<ul>
+<li>No self-loops (people can't be friends with themselves)</li>
+<li>Degree distribution matches real networks</li>
+<li>Community structure makes sense</li>
+</ul>
+<p>Validity constraints help ensure generated graphs are meaningful.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphGenerationTask.cs/#L51" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

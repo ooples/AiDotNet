@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ISpeakerDiarizer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ISpeakerDiarizer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for speaker diarization models that segment audio by speaker (&amp;quot;who spoke when&amp;quot;).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ISpeakerDiarizer_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ISpeakerDiarizer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ISpeakerDiarizer_1" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1" class="text-break">
+Interface ISpeakerDiarizer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for speaker diarization models that segment audio by speaker (&quot;who spoke when&quot;).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ISpeakerDiarizer&lt;T&gt; : IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html#AiDotNet_Interfaces_IFullModel_3_DefaultLossFunction">IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Train__0__1_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Predict__0_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_GetModelMetadata">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_">ICheckpointableModel.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_">ICheckpointableModel.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_GetParameters">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_GetActiveFeatureIndices">IFeatureAware.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">IFeatureAware.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_IsFeatureUsed_System_Int32_">IFeatureAware.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html#AiDotNet_Interfaces_IFeatureImportance_1_GetFeatureImportance">IFeatureImportance&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_DeepCopy">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_Clone">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Speaker diarization partitions an audio stream into segments based on speaker identity.
+It answers the question "Who spoke when?" without necessarily knowing who the speakers
+are (unlike speaker identification which requires enrolled speakers).
+</p>
+<p>
+<b>For Beginners:</b> Diarization is like labeling a transcript with "Speaker A said..."
+"Speaker B said..." without knowing their names.
+<p>How it works:</p>
+<ol>
+<li>Audio is segmented into small chunks</li>
+<li>Speaker embeddings are extracted for each chunk</li>
+<li>Clustering groups similar embeddings together</li>
+<li>Each cluster represents a unique speaker</li>
+<li>Output: Timeline showing when each speaker talks</li>
+</ol>
+<p>Common use cases:</p>
+<ul>
+<li>Meeting transcription (separating participants)</li>
+<li>Podcast/interview processing</li>
+<li>Call center analytics</li>
+<li>Medical dictation</li>
+</ul>
+<p>Challenges:</p>
+<ul>
+<li>Overlapping speech (multiple people talking at once)</li>
+<li>Short turns (quick back-and-forth conversation)</li>
+<li>Similar voices (e.g., siblings)</li>
+<li>Background noise and music</li>
+</ul>
+
+<p>
+This interface extends <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel&lt;T, TInput, TOutput&gt;</a> for Tensor-based audio processing.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_IsOnnxMode_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.IsOnnxMode*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_IsOnnxMode" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.IsOnnxMode">
+  IsOnnxMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model is running in ONNX inference mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsOnnxMode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_MinSegmentDuration_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.MinSegmentDuration*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_MinSegmentDuration" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.MinSegmentDuration">
+  MinSegmentDuration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum segment duration in seconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double MinSegmentDuration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISpeakerDiarizer_1_MinSegmentDuration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Segments shorter than this may not contain enough speech for reliable
+speaker assignment.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_SampleRate_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_SampleRate" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the expected sample rate for input audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_SupportsOverlapDetection_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.SupportsOverlapDetection*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_SupportsOverlapDetection" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.SupportsOverlapDetection">
+  SupportsOverlapDetection
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model can detect overlapping speech.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsOverlapDetection { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISpeakerDiarizer_1_SupportsOverlapDetection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Overlapping speech is when two or more people
+talk at the same time. Not all diarization systems can handle this.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_Diarize_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.Diarize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_Diarize_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__System_Int32_System_Int32_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.Diarize(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Nullable{System.Int32},System.Int32,System.Int32)">
+  Diarize(Tensor&lt;T&gt;, int?, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs speaker diarization on audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">DiarizationResult&lt;T&gt; Diarize(Tensor&lt;T&gt; audio, int? numSpeakers = null, int minSpeakers = 1, int maxSpeakers = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [samples].</p>
+</dd>
+    <dt><code>numSpeakers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Expected number of speakers. Auto-detected if null.</p>
+</dd>
+    <dt><code>minSpeakers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum number of speakers (for auto-detection).</p>
+</dd>
+    <dt><code>maxSpeakers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of speakers (for auto-detection).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.DiarizationResult-1.html">DiarizationResult</a>&lt;T&gt;</dt>
+    <dd><p>Diarization result with speaker segments.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISpeakerDiarizer_1_Diarize_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the main method for finding who spoke when.
+- Pass in audio of a conversation
+- Get back a timeline of speaker turns
+- Speakers are labeled as "Speaker_0", "Speaker_1", etc.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_DiarizeAsync_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.DiarizeAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_DiarizeAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__System_Int32_System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.DiarizeAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Nullable{System.Int32},System.Int32,System.Int32,System.Threading.CancellationToken)">
+  DiarizeAsync(Tensor&lt;T&gt;, int?, int, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs speaker diarization asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;DiarizationResult&lt;T&gt;&gt; DiarizeAsync(Tensor&lt;T&gt; audio, int? numSpeakers = null, int minSpeakers = 1, int maxSpeakers = 10, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [samples].</p>
+</dd>
+    <dt><code>numSpeakers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Expected number of speakers. Auto-detected if null.</p>
+</dd>
+    <dt><code>minSpeakers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum number of speakers (for auto-detection).</p>
+</dd>
+    <dt><code>maxSpeakers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of speakers (for auto-detection).</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token for async operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.DiarizationResult-1.html">DiarizationResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Diarization result with speaker segments.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_DiarizeWithKnownSpeakers_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.DiarizeWithKnownSpeakers*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_DiarizeWithKnownSpeakers_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IReadOnlyList_AiDotNet_Interfaces_SpeakerProfile__0___System_Boolean_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.DiarizeWithKnownSpeakers(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Interfaces.SpeakerProfile{`0}},System.Boolean)">
+  DiarizeWithKnownSpeakers(Tensor&lt;T&gt;, IReadOnlyList&lt;SpeakerProfile&lt;T&gt;&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs diarization with known speaker profiles.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">DiarizationResult&lt;T&gt; DiarizeWithKnownSpeakers(Tensor&lt;T&gt; audio, IReadOnlyList&lt;SpeakerProfile&lt;T&gt;&gt; knownSpeakers, bool allowUnknownSpeakers = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [samples].</p>
+</dd>
+    <dt><code>knownSpeakers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.SpeakerProfile-1.html">SpeakerProfile</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Known speaker profiles to match against.</p>
+</dd>
+    <dt><code>allowUnknownSpeakers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to create new labels for unknown speakers.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.DiarizationResult-1.html">DiarizationResult</a>&lt;T&gt;</dt>
+    <dd><p>Diarization result with identified speaker segments.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISpeakerDiarizer_1_DiarizeWithKnownSpeakers_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IReadOnlyList_AiDotNet_Interfaces_SpeakerProfile__0___System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> If you know who might be speaking, you can provide
+their voice profiles and the system will label segments with actual names
+instead of generic "Speaker_0" labels.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_ExtractSpeakerEmbeddings_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.ExtractSpeakerEmbeddings*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_ExtractSpeakerEmbeddings_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_DiarizationResult__0__" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.ExtractSpeakerEmbeddings(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.DiarizationResult{`0})">
+  ExtractSpeakerEmbeddings(Tensor&lt;T&gt;, DiarizationResult&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets speaker embeddings for each detected speaker.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyDictionary&lt;string, Tensor&lt;T&gt;&gt; ExtractSpeakerEmbeddings(Tensor&lt;T&gt; audio, DiarizationResult&lt;T&gt; diarizationResult)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [samples].</p>
+</dd>
+    <dt><code>diarizationResult</code> <a class="xref" href="AiDotNet.Interfaces.DiarizationResult-1.html">DiarizationResult</a>&lt;T&gt;</dt>
+    <dd><p>Previous diarization result.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Dictionary mapping speaker labels to their embeddings.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISpeakerDiarizer_1_RefineDiarization_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.RefineDiarization*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISpeakerDiarizer_1_RefineDiarization_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_DiarizationResult__0___0_" data-uid="AiDotNet.Interfaces.ISpeakerDiarizer`1.RefineDiarization(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.DiarizationResult{`0},`0)">
+  RefineDiarization(Tensor&lt;T&gt;, DiarizationResult&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Refines diarization result by re-segmenting with different parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">DiarizationResult&lt;T&gt; RefineDiarization(Tensor&lt;T&gt; audio, DiarizationResult&lt;T&gt; previousResult, T mergeThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [samples].</p>
+</dd>
+    <dt><code>previousResult</code> <a class="xref" href="AiDotNet.Interfaces.DiarizationResult-1.html">DiarizationResult</a>&lt;T&gt;</dt>
+    <dd><p>Previous diarization result to refine.</p>
+</dd>
+    <dt><code>mergeThreshold</code> <span class="xref">T</span></dt>
+    <dd><p>Threshold for merging similar speakers.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.DiarizationResult-1.html">DiarizationResult</a>&lt;T&gt;</dt>
+    <dd><p>Refined diarization result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISpeakerDiarizer.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

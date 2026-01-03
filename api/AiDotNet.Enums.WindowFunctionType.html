@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum WindowFunctionType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum WindowFunctionType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines different window functions used in signal processing and data analysis.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_WindowFunctionType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.WindowFunctionType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.WindowFunctionType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_WindowFunctionType" data-uid="AiDotNet.Enums.WindowFunctionType" class="text-break">
+Enum WindowFunctionType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/WindowFunctionType.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines different window functions used in signal processing and data analysis.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum WindowFunctionType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_WindowFunctionType_Bartlett"><code>Bartlett = 9</code></dt>
+  <dd><p>A triangular window that reaches zero at the edges, used in signal processing applications.</p>
+<p><b>For Beginners:</b> The Bartlett window is essentially a triangular window that
+reaches exactly zero at both edges.</p>
+<p>Advantages:</p>
+<ul>
+<li>Simple to understand and implement</li>
+<li>Better frequency resolution than Rectangular</li>
+<li>Reaches zero at the edges</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Less sidelobe suppression than more advanced windows</li>
+<li>Not optimal for high-precision spectral analysis</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>As a simple improvement over Rectangular</li>
+<li>In applications where computational simplicity is important</li>
+<li>When a basic window with zero values at edges is needed</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_BartlettHann"><code>BartlettHann = 10</code></dt>
+  <dd><p>A combination of Bartlett and Hann windows, offering a balance of their characteristics.</p>
+<p><b>For Beginners:</b> The Bartlett-Hann window combines features of both the Bartlett (triangular)
+and Hann windows to create a hybrid with balanced properties.</p>
+<p>Advantages:</p>
+<ul>
+<li>Better sidelobe performance than Bartlett</li>
+<li>Good balance of properties from both parent windows</li>
+<li>Reaches zero at the edges</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>More complex than either Bartlett or Hann alone</li>
+<li>Not as widely used as other windows</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>When you want characteristics between Bartlett and Hann</li>
+<li>For applications where the specific sidelobe pattern is beneficial</li>
+<li>As an alternative when common windows don't provide optimal results</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Blackman"><code>Blackman = 4</code></dt>
+  <dd><p>A window function with better sidelobe suppression than Hamming or Hanning.</p>
+<p><b>For Beginners:</b> The Blackman window provides an even smoother transition to zero
+at the edges than Hanning, further reducing certain types of analysis errors.</p>
+<p>Advantages:</p>
+<ul>
+<li>Excellent sidelobe suppression (reduces interference between frequencies)</li>
+<li>Very good for identifying weak signals near strong ones</li>
+<li>Reaches zero at the edges</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Wider main lobe (less frequency precision)</li>
+<li>Reduced time resolution</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>When you need to detect weak signals near strong ones</li>
+<li>For high-quality spectral analysis where precision is important</li>
+<li>When sidelobe interference is a significant concern</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_BlackmanHarris"><code>BlackmanHarris = 5</code></dt>
+  <dd><p>An improved version of the Blackman window with even better sidelobe suppression.</p>
+<p><b>For Beginners:</b> The Blackman-Harris window is an enhanced version of the Blackman window
+that further reduces interference between different frequencies.</p>
+<p>Advantages:</p>
+<ul>
+<li>Superior sidelobe suppression compared to Blackman</li>
+<li>Excellent for detecting very weak signals</li>
+<li>Minimal spectral leakage</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Even wider main lobe (further reduced frequency precision)</li>
+<li>Poor time resolution</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For high-precision frequency analysis</li>
+<li>When you need to detect very weak signals near strong ones</li>
+<li>In applications where frequency separation is critical</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_BlackmanNuttall"><code>BlackmanNuttall = 12</code></dt>
+  <dd><p>A modified Blackman window with improved sidelobe characteristics.</p>
+<p><b>For Beginners:</b> The Blackman-Nuttall window is a variation of the Blackman window
+that provides even better reduction of interference between different frequencies.</p>
+<p>Advantages:</p>
+<ul>
+<li>Very low sidelobe levels (less interference between frequencies)</li>
+<li>Excellent for detecting weak signals near strong ones</li>
+<li>Better than standard Blackman for many applications</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Wide main lobe (reduced frequency precision)</li>
+<li>More complex mathematically</li>
+<li>Reduced time resolution</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For high-quality spectral analysis</li>
+<li>When you need to detect weak signals near strong ones</li>
+<li>When standard Blackman window isn't providing enough sidelobe suppression</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Bohman"><code>Bohman = 18</code></dt>
+  <dd><p>A window function with a specialized shape that provides good sidelobe characteristics.</p>
+<p><b>For Beginners:</b> The Bohman window is a specialized window function that provides
+excellent sidelobe suppression with a unique shape.</p>
+<p>It's similar to the Parzen window but with even better properties for
+reducing interference between frequencies.</p>
+<p>Advantages:</p>
+<ul>
+<li>Excellent sidelobe suppression</li>
+<li>Smooth transitions with continuous first derivative</li>
+<li>Reaches zero at the edges</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Wide main lobe (reduced frequency precision)</li>
+<li>Less commonly used than other windows</li>
+<li>More complex mathematically</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For high-quality spectral analysis</li>
+<li>When detecting weak signals near strong ones</li>
+<li>In applications requiring minimal spectral leakage</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Cosine"><code>Cosine = 13</code></dt>
+  <dd><p>A simple window function based on the cosine function.</p>
+<p><b>For Beginners:</b> The Cosine window is a simple window that uses the familiar cosine
+wave shape to create a smooth transition from the center to the edges.</p>
+<p>Advantages:</p>
+<ul>
+<li>Simple mathematical form</li>
+<li>Smooth shape with no discontinuities</li>
+<li>Reaches zero at the edges</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Not as effective at sidelobe suppression as more advanced windows</li>
+<li>Not optimal for high-precision spectral analysis</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>When a simple, smooth window is needed</li>
+<li>In applications where computational simplicity is important</li>
+<li>As an alternative to Hanning when different spectral characteristics are desired</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_FlatTop"><code>FlatTop = 6</code></dt>
+  <dd><p>A window designed for very accurate amplitude measurements in the frequency domain.</p>
+<p><b>For Beginners:</b> The FlatTop window is specially designed to measure the exact amplitude
+(strength) of frequencies very accurately.</p>
+<p>Advantages:</p>
+<ul>
+<li>Extremely accurate amplitude measurements</li>
+<li>Minimal amplitude distortion</li>
+<li>Excellent for calibration and measurement</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Very wide main lobe (poor frequency resolution)</li>
+<li>Poor time resolution</li>
+<li>Not suitable for general spectral analysis</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>When measuring the exact amplitude of frequency components</li>
+<li>For calibration purposes</li>
+<li>In testing and measurement applications</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Gaussian"><code>Gaussian = 7</code></dt>
+  <dd><p>A window function based on the Gaussian distribution, offering a good balance of properties.</p>
+<p><b>For Beginners:</b> The Gaussian window has a bell-shaped curve (like the famous bell curve
+in statistics) and provides a smooth transition to near-zero at the edges.</p>
+<p>Advantages:</p>
+<ul>
+<li>Mathematically elegant with useful theoretical properties</li>
+<li>Adjustable width parameter to balance time and frequency resolution</li>
+<li>Minimizes the time-bandwidth product (a measure of overall resolution)</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Never reaches exactly zero at the edges</li>
+<li>Requires a parameter to define its width</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>In applications where the mathematical properties of Gaussian functions are beneficial</li>
+<li>When you need to adjust the balance between time and frequency resolution</li>
+<li>For specialized signal processing applications</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Hamming"><code>Hamming = 2</code></dt>
+  <dd><p>A raised cosine window with coefficients that minimize the maximum sidelobe amplitude.</p>
+<p><b>For Beginners:</b> The Hamming window is like looking through a window with rounded edges
+that fade out gradually but never quite reach zero at the edges.</p>
+<p>Advantages:</p>
+<ul>
+<li>Good balance between time and frequency resolution</li>
+<li>Significantly reduces spectral leakage compared to simpler windows</li>
+<li>Widely used in many applications</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Doesn't reach zero at the edges (which can be an issue in some applications)</li>
+<li>Not optimal for all types of signals</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For general-purpose spectral analysis</li>
+<li>When analyzing speech or audio signals</li>
+<li>When you need a good all-around window function</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Hanning"><code>Hanning = 3</code></dt>
+  <dd><p>A raised cosine window that reaches zero at the edges, providing good frequency resolution.</p>
+<p><b>For Beginners:</b> The Hanning window (also called Hann) is similar to Hamming but
+fades completely to zero at the edges.</p>
+<p>Advantages:</p>
+<ul>
+<li>Better reduction of spectral leakage than Hamming</li>
+<li>Reaches zero at the edges (good for connecting multiple windows)</li>
+<li>Excellent for continuous signals</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Slightly wider main lobe (slightly less frequency precision) than Hamming</li>
+<li>Less time resolution than simpler windows</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For analyzing continuous signals</li>
+<li>When connecting multiple windows together (in overlap-add methods)</li>
+<li>For general spectral analysis where leakage reduction is important</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Kaiser"><code>Kaiser = 16</code></dt>
+  <dd><p>A flexible window function with an adjustable shape parameter.</p>
+<p><b>For Beginners:</b> The Kaiser window is a versatile window with a parameter that lets you
+adjust the trade-off between frequency resolution and spectral leakage.</p>
+<p>Think of it like having a dial that you can turn to optimize the window for your specific needs:
+turn one way for better frequency precision, turn the other way for less interference.</p>
+<p>Advantages:</p>
+<ul>
+<li>Adjustable parameter to optimize for specific applications</li>
+<li>Can approximate many other window functions</li>
+<li>Excellent flexibility for different signal types</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>More complex mathematically</li>
+<li>Requires understanding how to set the parameter</li>
+<li>Not as intuitive as simpler windows</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>When you need to fine-tune the window properties</li>
+<li>For applications requiring optimal trade-offs between resolution and leakage</li>
+<li>When a single window type needs to serve multiple purposes</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Lanczos"><code>Lanczos = 14</code></dt>
+  <dd><p>A window function that uses the sinc function, often used in signal interpolation.</p>
+<p><b>For Beginners:</b> The Lanczos window uses a mathematical function called &quot;sinc&quot;
+to create a window that's particularly good for resampling and interpolating signals.</p>
+<p>Advantages:</p>
+<ul>
+<li>Excellent for signal interpolation and resampling</li>
+<li>Preserves high-frequency content better than many windows</li>
+<li>Good balance between smoothing and preserving details</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>More complex to understand and implement</li>
+<li>Not typically used for standard spectral analysis</li>
+<li>Has specific use cases rather than being general-purpose</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For image or signal resampling</li>
+<li>When interpolating data points</li>
+<li>In applications requiring high-quality data reconstruction</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Nuttall"><code>Nuttall = 11</code></dt>
+  <dd><p>A high-performance window function with excellent sidelobe characteristics.</p>
+<p><b>For Beginners:</b> The Nuttall window is an advanced window function that provides
+excellent reduction of spectral leakage and interference between frequencies.</p>
+<p>Advantages:</p>
+<ul>
+<li>Very low sidelobe levels</li>
+<li>Excellent spectral leakage properties</li>
+<li>Good for detecting weak signals</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Wide main lobe (reduced frequency resolution)</li>
+<li>More complex mathematically</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For high-quality spectral analysis</li>
+<li>When detecting weak signals near strong ones</li>
+<li>In applications requiring minimal spectral leakage</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Parzen"><code>Parzen = 17</code></dt>
+  <dd><p>A window function with a piecewise cubic shape that provides good frequency resolution.</p>
+<p><b>For Beginners:</b> The Parzen window (also called the de la Vallée-Poussin window)
+uses a smooth cubic curve shape that provides excellent sidelobe suppression.</p>
+<p>Imagine a window shape that's even smoother than triangular, with a rounded peak
+and very gentle transitions to zero at the edges.</p>
+<p>Advantages:</p>
+<ul>
+<li>Very good sidelobe suppression</li>
+<li>Smooth shape with continuous derivatives</li>
+<li>Reaches exactly zero at the edges</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Wide main lobe (reduced frequency precision)</li>
+<li>More complex mathematically than simpler windows</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For applications requiring minimal spectral leakage</li>
+<li>When sidelobe suppression is more important than frequency resolution</li>
+<li>For probability density estimation and kernel smoothing</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Poisson"><code>Poisson = 19</code></dt>
+  <dd><p>A window function that decays exponentially from the center.</p>
+<p><b>For Beginners:</b> The Poisson window decreases exponentially (very rapidly) from
+the center to the edges, like a bell curve with a sharp peak.</p>
+<p>Imagine a window that strongly emphasizes the center of your data and
+rapidly fades out as you move toward the edges.</p>
+<p>Advantages:</p>
+<ul>
+<li>Simple mathematical form</li>
+<li>Adjustable decay rate</li>
+<li>Good for certain types of spectral estimation</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Never reaches exactly zero at the edges</li>
+<li>Not as effective at sidelobe suppression as some other windows</li>
+<li>Less commonly used in general signal processing</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>For specialized applications in spectral estimation</li>
+<li>When an exponential decay characteristic is beneficial</li>
+<li>In certain types of statistical signal processing</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Rectangular"><code>Rectangular = 0</code></dt>
+  <dd><p>The simplest window function that gives equal weight to all samples within the window.</p>
+<p><b>For Beginners:</b> The Rectangular window is like looking through a standard window -
+you see everything inside the frame with equal clarity, and nothing outside.</p>
+<p>Advantages:</p>
+<ul>
+<li>Simplest window function</li>
+<li>Preserves the original amplitude of the signal</li>
+<li>Good time resolution (ability to pinpoint when events happen)</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Poor frequency resolution (creates &quot;spectral leakage&quot; - difficulty distinguishing similar frequencies)</li>
+<li>The abrupt edges cause artifacts in frequency analysis</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>When analyzing transient signals (short, one-time events)</li>
+<li>When time localization is more important than frequency precision</li>
+<li>As a baseline for comparison with other window functions</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Triangular"><code>Triangular = 1</code></dt>
+  <dd><p>A window function that increases linearly from zero to the middle point, then decreases linearly back to zero.</p>
+<p><b>For Beginners:</b> The Triangular window is like looking through a window where clarity
+gradually increases as you move toward the center, then gradually decreases again.</p>
+<p>Advantages:</p>
+<ul>
+<li>Simple to understand and implement</li>
+<li>Better frequency resolution than Rectangular</li>
+<li>Reduces some spectral leakage</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Still has significant spectral leakage compared to more advanced windows</li>
+<li>Less time resolution than Rectangular</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>When you need a simple improvement over Rectangular</li>
+<li>For basic signal analysis where extreme precision isn't required</li>
+<li>In applications where computational simplicity is important</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Tukey"><code>Tukey = 15</code></dt>
+  <dd><p>A window function that is flat in the middle and tapered at the edges, with adjustable taper width.</p>
+<p><b>For Beginners:</b> The Tukey window (also called the cosine-tapered window) is like a
+rectangular window in the middle with smooth edges that taper down to zero.</p>
+<p>Imagine a window that keeps the original signal intact in the center portion,
+but gradually fades out at both ends to reduce edge effects.</p>
+<p>Advantages:</p>
+<ul>
+<li>Adjustable parameter controls how much of the window is tapered</li>
+<li>Preserves signal amplitude in the flat section</li>
+<li>Reduces spectral leakage compared to rectangular window</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Requires setting a parameter for optimal use</li>
+<li>Not as effective at sidelobe suppression as some other windows</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>When you want to preserve the original signal for part of the window</li>
+<li>For analyzing transient signals that need both time and frequency precision</li>
+<li>When you need to balance between rectangular and fully tapered windows</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WindowFunctionType_Welch"><code>Welch = 8</code></dt>
+  <dd><p>A parabolic window function that emphasizes the center of the data.</p>
+<p><b>For Beginners:</b> The Welch window has a parabolic (curved) shape that emphasizes
+data in the center and smoothly reduces to zero at the edges.</p>
+<p>Advantages:</p>
+<ul>
+<li>Good spectral leakage properties</li>
+<li>Simple mathematical form</li>
+<li>Reaches zero at the edges</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Less commonly used than other windows</li>
+<li>Not optimal for all applications</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>In Welch's method of power spectrum estimation</li>
+<li>When a simple window with good leakage properties is needed</li>
+<li>As an alternative to Triangular when zero values at edges are required</li>
+</ul>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_WindowFunctionType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Window functions are special mathematical tools that help analyze signals (like audio)
+by focusing on specific portions of data.</p>
+<p>Imagine you have a long audio recording and want to analyze just small chunks at a time.
+Window functions help you &quot;look through&quot; a specific section while smoothly fading out the rest.</p>
+<p>Why use window functions?</p>
+<ul>
+<li>They reduce errors when analyzing signals (called &quot;spectral leakage&quot;)</li>
+<li>They help focus analysis on specific time segments</li>
+<li>They improve accuracy when converting time-based signals to frequency-based representations</li>
+</ul>
+<p>Different window functions have different shapes and properties:</p>
+<ul>
+<li>Some have sharp edges (like Rectangular)</li>
+<li>Others have gentle, rounded edges (like Hamming or Hanning)</li>
+<li>Some are specialized for specific types of analysis</li>
+</ul>
+<p>Choosing the right window function depends on what you're analyzing and what aspects
+of the signal you want to emphasize or preserve.</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/WindowFunctionType.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

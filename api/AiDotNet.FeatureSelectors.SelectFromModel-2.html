@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SelectFromModel&lt;T, TInput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SelectFromModel&lt;T, TInput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A feature selector that selects features based on importance weights from a trained model.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FeatureSelectors_SelectFromModel_2.md&amp;value=---%0Auid%3A%20AiDotNet.FeatureSelectors.SelectFromModel%602%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2">
+
+
+
+  <h1 id="AiDotNet_FeatureSelectors_SelectFromModel_2" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2" class="text-break">
+Class SelectFromModel&lt;T, TInput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/SelectFromModel.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FeatureSelectors.html">FeatureSelectors</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A feature selector that selects features based on importance weights from a trained model.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SelectFromModel&lt;T, TInput&gt; : FeatureSelectorBase&lt;T, TInput&gt;, IFeatureSelector&lt;T, TInput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (Matrix, Tensor, etc.).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html">FeatureSelectorBase</a>&lt;T, TInput&gt;</div>
+      <div><span class="xref">SelectFromModel&lt;T, TInput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureSelector-2.html">IFeatureSelector</a>&lt;T, TInput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_NumOps">FeatureSelectorBase&lt;T, TInput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_Engine">FeatureSelectorBase&lt;T, TInput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_HigherDimensionStrategy">FeatureSelectorBase&lt;T, TInput&gt;.HigherDimensionStrategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_DimensionWeights">FeatureSelectorBase&lt;T, TInput&gt;.DimensionWeights</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_SelectFeatures__1_">FeatureSelectorBase&lt;T, TInput&gt;.SelectFeatures(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_SelectFeatureIndices__1_System_Int32_System_Int32_">FeatureSelectorBase&lt;T, TInput&gt;.SelectFeatureIndices(TInput, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_ExtractFeatureVector__1_System_Int32_System_Int32_">FeatureSelectorBase&lt;T, TInput&gt;.ExtractFeatureVector(TInput, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FeatureSelectors_SelectFromModel_2_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This is an "embedded" feature selection method that extracts feature
+importance scores from a trained model and selects features based on those scores.
+</p>
+<p>
+Think of it like asking an expert (the trained model) which features they think are most important,
+and then keeping only those important features. Different types of models calculate importance
+in different ways:
+</p>
+<p>
+- Tree-based models (Decision Trees, Random Forests): Use how often a feature is used to split
+  the data and how much it reduces error when used
+- Linear models with L1 regularization (Lasso): Use the absolute values of coefficients
+- Neural networks: Can use various methods like gradient-based importance
+</p>
+<p>
+This approach is efficient because you only need to train the model once, then use its knowledge
+to select features. This is faster than wrapper methods (like SequentialFeatureSelector) which
+require training many models.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2.#ctor*"></a>
+
+  <h3 id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_AiDotNet_Interfaces_IFeatureImportance__0__AiDotNet_Enums_ImportanceThresholdStrategy_System_Nullable_System_Int32__AiDotNet_Enums_FeatureExtractionStrategy_" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2.#ctor(AiDotNet.Interfaces.IFeatureImportance{`0},AiDotNet.Enums.ImportanceThresholdStrategy,System.Nullable{System.Int32},AiDotNet.Enums.FeatureExtractionStrategy)">
+  SelectFromModel(IFeatureImportance&lt;T&gt;, ImportanceThresholdStrategy, int?, FeatureExtractionStrategy)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/SelectFromModel.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the SelectFromModel class using a threshold strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SelectFromModel(IFeatureImportance&lt;T&gt; model, ImportanceThresholdStrategy thresholdStrategy = ImportanceThresholdStrategy.Mean, int? maxFeatures = null, FeatureExtractionStrategy higherDimensionStrategy = FeatureExtractionStrategy.Mean)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</dt>
+    <dd><p>A trained model that provides feature importance scores.</p>
+</dd>
+    <dt><code>thresholdStrategy</code> <a class="xref" href="AiDotNet.Enums.ImportanceThresholdStrategy.html">ImportanceThresholdStrategy</a></dt>
+    <dd><p>The strategy for determining the importance threshold (default: Mean).</p>
+</dd>
+    <dt><code>maxFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional maximum number of features to select.</p>
+</dd>
+    <dt><code>higherDimensionStrategy</code> <a class="xref" href="AiDotNet.Enums.FeatureExtractionStrategy.html">FeatureExtractionStrategy</a></dt>
+    <dd><p>Strategy for extracting features from higher-dimensional tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_AiDotNet_Interfaces_IFeatureImportance__0__AiDotNet_Enums_ImportanceThresholdStrategy_System_Nullable_System_Int32__AiDotNet_Enums_FeatureExtractionStrategy__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a selector that uses a threshold strategy
+(Mean or Median) to decide which features to keep.
+</p>
+<p>
+The model parameter must be a trained model that implements IFeatureImportance. Common models include:
+- Decision Trees
+- Random Forests
+- Gradient Boosting models
+- Lasso (L1-regularized linear regression)
+</p>
+<p>
+The thresholdStrategy determines the cutoff:
+- Mean: Keep features with importance above the average
+- Median: Keep the top 50% of features
+</p>
+<p>
+If maxFeatures is specified, the selector will keep at most that many features, even if
+more features exceed the threshold.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2.#ctor*"></a>
+
+  <h3 id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_AiDotNet_Interfaces_IFeatureImportance__0__System_Int32_AiDotNet_Enums_FeatureExtractionStrategy_" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2.#ctor(AiDotNet.Interfaces.IFeatureImportance{`0},System.Int32,AiDotNet.Enums.FeatureExtractionStrategy)">
+  SelectFromModel(IFeatureImportance&lt;T&gt;, int, FeatureExtractionStrategy)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/SelectFromModel.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the SelectFromModel class that selects top K features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SelectFromModel(IFeatureImportance&lt;T&gt; model, int k, FeatureExtractionStrategy higherDimensionStrategy = FeatureExtractionStrategy.Mean)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</dt>
+    <dd><p>A trained model that provides feature importance scores.</p>
+</dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of top features to select.</p>
+</dd>
+    <dt><code>higherDimensionStrategy</code> <a class="xref" href="AiDotNet.Enums.FeatureExtractionStrategy.html">FeatureExtractionStrategy</a></dt>
+    <dd><p>Strategy for extracting features from higher-dimensional tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_AiDotNet_Interfaces_IFeatureImportance__0__System_Int32_AiDotNet_Enums_FeatureExtractionStrategy__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a selector that keeps exactly K features -
+the top K features with the highest importance scores.
+</p>
+<p>
+This is useful when you know exactly how many features you want, regardless of their
+actual importance values.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2.#ctor*"></a>
+
+  <h3 id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_AiDotNet_Interfaces_IFeatureImportance__0___0_System_Nullable_System_Int32__AiDotNet_Enums_FeatureExtractionStrategy_" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2.#ctor(AiDotNet.Interfaces.IFeatureImportance{`0},`0,System.Nullable{System.Int32},AiDotNet.Enums.FeatureExtractionStrategy)">
+  SelectFromModel(IFeatureImportance&lt;T&gt;, T, int?, FeatureExtractionStrategy)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/SelectFromModel.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the SelectFromModel class using a custom threshold value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SelectFromModel(IFeatureImportance&lt;T&gt; model, T threshold, int? maxFeatures = null, FeatureExtractionStrategy higherDimensionStrategy = FeatureExtractionStrategy.Mean)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</dt>
+    <dd><p>A trained model that provides feature importance scores.</p>
+</dd>
+    <dt><code>threshold</code> <span class="xref">T</span></dt>
+    <dd><p>The minimum importance value for a feature to be selected.</p>
+</dd>
+    <dt><code>maxFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional maximum number of features to select.</p>
+</dd>
+    <dt><code>higherDimensionStrategy</code> <a class="xref" href="AiDotNet.Enums.FeatureExtractionStrategy.html">FeatureExtractionStrategy</a></dt>
+    <dd><p>Strategy for extracting features from higher-dimensional tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FeatureSelectors_SelectFromModel_2__ctor_AiDotNet_Interfaces_IFeatureImportance__0___0_System_Nullable_System_Int32__AiDotNet_Enums_FeatureExtractionStrategy__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a selector that uses a specific threshold value
+to decide which features to keep. Only features with importance &gt;= threshold are selected.
+</p>
+<p>
+This gives you precise control over the cutoff point. For example, if you set threshold = 0.01,
+only features with importance of at least 0.01 will be kept.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FeatureSelectors_SelectFromModel_2_SelectFeatureIndices_" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2.SelectFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_FeatureSelectors_SelectFromModel_2_SelectFeatureIndices__1_System_Int32_System_Int32_" data-uid="AiDotNet.FeatureSelectors.SelectFromModel`2.SelectFeatureIndices(`1,System.Int32,System.Int32)">
+  SelectFeatureIndices(TInput, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/SelectFromModel.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines which features to select based on model importance scores.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;int&gt; SelectFeatureIndices(TInput allFeatures, int numSamples, int numFeatures)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>allFeatures</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data containing all features.</p>
+</dd>
+    <dt><code>numSamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of samples in the dataset.</p>
+</dd>
+    <dt><code>numFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of features.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A list of indices of the selected features.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FeatureSelectors_SelectFromModel_2_SelectFeatureIndices__1_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method:
+1. Extracts feature importance scores from the trained model
+2. Determines the threshold based on the specified strategy or custom value
+3. Selects features that meet the importance criteria
+4. Optionally limits to the top K features if maxFeatures is specified
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/SelectFromModel.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

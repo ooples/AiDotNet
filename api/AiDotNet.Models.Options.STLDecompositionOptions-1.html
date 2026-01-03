@@ -1,0 +1,2145 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class STLDecompositionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class STLDecompositionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Seasonal-Trend-Loess (STL) decomposition, a versatile method for decomposing time series into seasonal, trend, and residual components.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_STLDecompositionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.STLDecompositionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_STLDecompositionOptions_1" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1" class="text-break">
+Class STLDecompositionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Seasonal-Trend-Loess (STL) decomposition, a versatile method
+for decomposing time series into seasonal, trend, and residual components.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class STLDecompositionOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used in matrix operations for the decomposition.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">STLDecompositionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_STLDecompositionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+STL (Seasonal-Trend decomposition using Loess) is a robust method for decomposing time series data into 
+three components: seasonal, trend, and remainder (residual). It uses iterative Loess smoothing (locally 
+estimated scatterplot smoothing) to extract these components, making it flexible for handling a wide 
+variety of seasonal patterns and trends. The algorithm is particularly valuable for time series with 
+complex seasonality, non-linear trends, or outliers. This class provides extensive configuration options 
+for controlling the STL decomposition process, including parameters for the seasonal and trend components, 
+robustness iterations, window sizes, and additional adjustments for calendar effects. These options allow 
+fine-tuning of the decomposition to match the specific characteristics of the time series being analyzed.
+</p>
+<p><b>For Beginners:</b> STL decomposition helps break down your time series into meaningful components.
+<p>When analyzing time series data:</p>
+<ul>
+<li>It's often useful to separate different patterns in the data</li>
+<li>STL decomposition splits your data into three parts:
+<ol>
+<li>Seasonal component: Repeating patterns (daily, weekly, monthly, etc.)</li>
+<li>Trend component: Long-term direction (increasing, decreasing, etc.)</li>
+<li>Residual component: What remains after removing season and trend</li>
+</ol>
+</li>
+</ul>
+<p>This separation helps you:</p>
+<ul>
+<li>Understand the underlying patterns in your data</li>
+<li>Identify anomalies that don't fit the patterns</li>
+<li>Make better forecasts by modeling each component separately</li>
+<li>Remove seasonality to focus on the trend</li>
+</ul>
+<p>STL uses a technique called LOESS (locally estimated scatterplot smoothing) to
+extract these components in a flexible way that works for many different types of data.</p>
+<p>This class lets you configure exactly how the decomposition works to best match your data.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForDayOfWeek_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.AdjustForDayOfWeek*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForDayOfWeek" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.AdjustForDayOfWeek">
+  AdjustForDayOfWeek
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L800"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to adjust for day-of-week effects in the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AdjustForDayOfWeek { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean value, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForDayOfWeek_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies whether to incorporate day-of-week effects into the decomposition. When set to true, 
+the algorithm will attempt to identify and account for systematic variations associated with different days 
+of the week. This is particularly relevant for daily data where certain days (e.g., weekends or Mondays) might 
+have consistently different patterns. The day-of-week factors can be pre-specified using the DayOfWeekFactors 
+property or estimated from the data. The default value of false disables this adjustment, which is appropriate 
+for data that doesn't exhibit day-of-week patterns or for non-daily data. Enabling this adjustment requires 
+that dates are provided for the time series, either through the Dates array or through the StartDate and 
+Interval properties.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the algorithm accounts for different patterns on different days of the week.
+<p>Day-of-week adjustment:</p>
+<ul>
+<li>Helps identify and separate patterns specific to certain days</li>
+<li>For example, retail sales might always be higher on weekends</li>
+<li>Or website traffic might always drop on Sundays</li>
+</ul>
+<p>The default false value means:</p>
+<ul>
+<li>No adjustment is made for day-of-week effects</li>
+<li>All days are treated the same</li>
+</ul>
+<p>When to enable this feature:</p>
+<ul>
+<li>For daily data where different days of the week show consistent patterns</li>
+<li>When you want to separate these weekly patterns from other seasonal patterns</li>
+<li>Requires that dates are provided for your time series</li>
+</ul>
+<p>For example, if analyzing daily hospital admissions where weekends consistently
+have different patterns than weekdays, you would set this to true.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForHolidays_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.AdjustForHolidays*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForHolidays" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.AdjustForHolidays">
+  AdjustForHolidays
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L875"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to adjust for holiday effects in the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AdjustForHolidays { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean value, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForHolidays_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies whether to incorporate holiday effects into the decomposition. When set to true, 
+the algorithm will attempt to identify and account for systematic variations associated with holidays or 
+special events. This is particularly relevant for data where holidays might cause significant deviations 
+from the regular patterns. The holidays and their effects can be pre-specified using the Holidays property 
+or estimated from the data. The default value of false disables this adjustment, which is appropriate when 
+holidays don't have significant effects or when they're not of interest for the analysis. Enabling this 
+adjustment requires that dates are provided for the time series, either through the Dates array or through 
+the StartDate and Interval properties.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the algorithm accounts for the effects of holidays and special events.
+<p>Holiday adjustment:</p>
+<ul>
+<li>Helps identify and separate patterns specific to holidays</li>
+<li>For example, retail sales might spike before Christmas</li>
+<li>Or travel data might show unique patterns around major holidays</li>
+</ul>
+<p>The default false value means:</p>
+<ul>
+<li>No adjustment is made for holiday effects</li>
+<li>Holidays are treated like any other day</li>
+</ul>
+<p>When to enable this feature:</p>
+<ul>
+<li>When holidays consistently cause significant deviations in your data</li>
+<li>When you want to separate these holiday effects from regular patterns</li>
+<li>Requires that dates are provided for your time series</li>
+<li>Works best when you also specify the Holidays dictionary</li>
+</ul>
+<p>For example, if analyzing retail sales data where Christmas, Black Friday, and
+other shopping holidays create major spikes, you would set this to true.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForMonthOfYear_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.AdjustForMonthOfYear*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForMonthOfYear" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.AdjustForMonthOfYear">
+  AdjustForMonthOfYear
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L837"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to adjust for month-of-year effects in the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AdjustForMonthOfYear { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean value, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_AdjustForMonthOfYear_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies whether to incorporate month-of-year effects into the decomposition. When set to true, 
+the algorithm will attempt to identify and account for systematic variations associated with different months 
+of the year. This is particularly relevant for data where certain months might have consistently different 
+patterns beyond the regular seasonal cycle. The month-of-year factors can be pre-specified using the 
+MonthOfYearFactors property or estimated from the data. The default value of false disables this adjustment, 
+which is appropriate when the regular seasonal component adequately captures monthly variations. Enabling this 
+adjustment requires that dates are provided for the time series, either through the Dates array or through the 
+StartDate and Interval properties.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the algorithm accounts for specific effects of different months.
+<p>Month-of-year adjustment:</p>
+<ul>
+<li>Helps identify and separate patterns specific to certain months</li>
+<li>Goes beyond regular seasonality to capture month-specific effects</li>
+<li>For example, retail sales might have special patterns in December beyond the winter season effect</li>
+</ul>
+<p>The default false value means:</p>
+<ul>
+<li>No special adjustment is made for month-specific effects</li>
+<li>Monthly patterns are handled by the regular seasonal component</li>
+</ul>
+<p>When to enable this feature:</p>
+<ul>
+<li>When certain months consistently show unique patterns beyond regular seasonality</li>
+<li>When you want to separate these specific monthly effects</li>
+<li>Requires that dates are provided for your time series</li>
+</ul>
+<p>For example, if analyzing sales data where December has unique patterns beyond
+the regular winter seasonal effect, you would set this to true.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_AlgorithmType_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.AlgorithmType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_AlgorithmType" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.AlgorithmType">
+  AlgorithmType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L653"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of STL algorithm to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public STLAlgorithmType AlgorithmType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.AlgorithmTypes.STLAlgorithmType.html">STLAlgorithmType</a></dt>
+    <dd><p>A value from the STLAlgorithmType enumeration, defaulting to STLAlgorithmType.Standard.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_AlgorithmType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies which variant of the STL algorithm to use for the decomposition. Different variants 
+might have different approaches to handling the seasonal and trend components, with trade-offs in terms of 
+computational efficiency, flexibility, and robustness. The Standard algorithm (the default) is the classical 
+STL approach as described in the original literature. Other options might include variants optimized for 
+specific types of data or computational constraints. The choice of algorithm can affect both the quality of 
+the decomposition and the computational resources required.
+</p>
+<p><b>For Beginners:</b> This setting selects which version of the STL algorithm to use.
+<p>Different algorithm types:</p>
+<ul>
+<li>Represent different implementations or variants of the STL method</li>
+<li>May have different trade-offs in terms of speed, accuracy, and flexibility</li>
+</ul>
+<p>The default Standard algorithm:</p>
+<ul>
+<li>Implements the classical STL approach as described in the original research</li>
+<li>Works well for most applications</li>
+</ul>
+<p>Other possible options might include:</p>
+<ul>
+<li>Faster variants that sacrifice some accuracy for speed</li>
+<li>More robust variants that handle unusual data better</li>
+<li>Specialized variants for specific types of time series</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Keep the default for most applications</li>
+<li>Consider alternatives only if you have specific requirements or constraints</li>
+</ul>
+<p>This is an advanced setting that most users won't need to change unless they
+have specific knowledge about the different algorithm variants.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_Dates_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.Dates*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_Dates" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.Dates">
+  Dates
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L688"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the array of dates corresponding to the time series observations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DateTime[] Dates { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>[]</dt>
+    <dd><p>An array of DateTime values, defaulting to an empty array.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_Dates_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides the dates or timestamps for each observation in the time series. When specified, these 
+dates can be used to handle irregular time series (where observations are not equally spaced in time) and to 
+incorporate calendar effects into the decomposition. The dates are also useful for visualization and for 
+aligning the decomposed components with the original time series. If this property is not set, the time series 
+is assumed to be regular with consecutive integer indices. For regular time series with a known start date and 
+interval, the StartDate and Interval properties can be used instead of providing the full array of dates.
+</p>
+<p><b>For Beginners:</b> This setting provides the actual calendar dates for your time series data points.
+<p>The dates array:</p>
+<ul>
+<li>Associates each data point with its specific date or timestamp</li>
+<li>Helps the algorithm handle irregular time series (uneven spacing between observations)</li>
+<li>Enables calendar-based adjustments (day of week, holidays, etc.)</li>
+</ul>
+<p>The default empty array means:</p>
+<ul>
+<li>No specific dates are associated with the data points</li>
+<li>The algorithm treats the series as regular with integer indices (0, 1, 2, ...)</li>
+</ul>
+<p>When to set this value:</p>
+<ul>
+<li>Always provide dates when working with real-world time series data</li>
+<li>Especially important for irregular time series or when using calendar adjustments</li>
+<li>For regular time series, you can alternatively use StartDate and Interval</li>
+</ul>
+<p>For example, if analyzing monthly sales data, you would provide an array of dates
+like [2020-01-01, 2020-02-01, 2020-03-01, ...] to properly align the data with the calendar.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_DayOfWeekFactors_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.DayOfWeekFactors*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_DayOfWeekFactors" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.DayOfWeekFactors">
+  DayOfWeekFactors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L910"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factors for day-of-week effects.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; DayOfWeekFactors { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of length 7, defaulting to a new vector of length 7.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_DayOfWeekFactors_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the factors or coefficients for day-of-week effects when AdjustForDayOfWeek is set to 
+true. Each element in the vector corresponds to a day of the week, typically starting with Sunday (index 0) 
+through Saturday (index 6), though the exact mapping might depend on the implementation. These factors represent 
+the multiplicative or additive effect of each day of the week on the time series values. If not explicitly set, 
+these factors might be estimated from the data when AdjustForDayOfWeek is true. The default is an empty vector 
+of length 7, indicating that no pre-specified factors are provided.
+</p>
+<p><b>For Beginners:</b> This setting allows you to specify how different days of the week affect your data.
+<p>The day-of-week factors:</p>
+<ul>
+<li>Represent the effect of each day of the week on your data</li>
+<li>Are stored as a vector with 7 values (one for each day)</li>
+<li>Can be used to adjust for weekly patterns</li>
+</ul>
+<p>The default empty vector means:</p>
+<ul>
+<li>No pre-specified day-of-week effects are provided</li>
+<li>If AdjustForDayOfWeek is true, these will be estimated from the data</li>
+</ul>
+<p>When to set this value:</p>
+<ul>
+<li>When you have prior knowledge about day-of-week effects</li>
+<li>When you want to specify these effects manually rather than having them estimated</li>
+<li>Must be used with AdjustForDayOfWeek set to true</li>
+</ul>
+<p>For example, if you know that Saturdays typically have values 20% higher than
+the average day, you might set the Saturday factor to 1.2.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_Holidays_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.Holidays*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_Holidays" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.Holidays">
+  Holidays
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L985"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the dictionary of holiday dates and their effects.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;DateTime, T&gt; Holidays { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>, T&gt;</dt>
+    <dd><p>A dictionary mapping DateTime values to their effects, defaulting to an empty dictionary.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_Holidays_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the holidays or special events and their effects on the time series when AdjustForHolidays 
+is set to true. The dictionary keys are the dates of the holidays, and the values represent the multiplicative or 
+additive effect of each holiday on the time series values. If not explicitly set, these effects might be estimated 
+from the data when AdjustForHolidays is true, though this would typically require the algorithm to know which 
+dates are holidays. The default is an empty dictionary, indicating that no pre-specified holidays are provided. 
+This property is particularly useful for accounting for the effects of irregular events that don't follow a 
+regular calendar pattern, such as Easter, Thanksgiving, or other moving holidays.
+</p>
+<p><b>For Beginners:</b> This setting allows you to specify how holidays and special events affect your data.
+<p>The holidays dictionary:</p>
+<ul>
+<li>Maps specific dates to their effects on your data</li>
+<li>Allows you to account for irregular events like holidays</li>
+<li>Can handle both fixed holidays (like Christmas) and moving holidays (like Easter)</li>
+</ul>
+<p>The default empty dictionary means:</p>
+<ul>
+<li>No pre-specified holiday effects are provided</li>
+<li>If AdjustForHolidays is true, the algorithm will need to identify holidays</li>
+</ul>
+<p>When to set this value:</p>
+<ul>
+<li>When you have prior knowledge about holiday effects</li>
+<li>When you want to specify these effects manually</li>
+<li>Must be used with AdjustForHolidays set to true</li>
+</ul>
+<p>For example, you might create entries for:</p>
+<ul>
+<li>Christmas (December 25): 2.0 (double the normal value)</li>
+<li>Black Friday (day after Thanksgiving): 3.0 (triple the normal value)</li>
+<li>July 4th: 0.5 (half the normal value)</li>
+</ul>
+<p>This is particularly useful for retail, travel, or other data heavily influenced by holidays.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_IQRMultiplier_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.IQRMultiplier*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_IQRMultiplier" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.IQRMultiplier">
+  IQRMultiplier
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L1102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the multiplier for the interquartile range (IQR) when identifying outliers using the IQR method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double IQRMultiplier { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_IQRMultiplier_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the multiplier for the interquartile range (IQR) when using the IQR method 
+(OutlierDetectionMethod.IQR) to identify outliers. The IQR is the difference between the third quartile (Q3) 
+and the first quartile (Q1) of the data. Observations below Q1 - (IQRMultiplier * IQR) or above 
+Q3 + (IQRMultiplier * IQR) are considered outliers. The default value of 1.5 is a common choice in statistical 
+practice, corresponding to the "inner fences" in a box plot. A smaller value would identify more observations 
+as outliers, while a larger value would be more conservative, identifying only the most extreme observations 
+as outliers. This property is only relevant when OutlierDetectionMethod is set to IQR.
+</p>
+<p><b>For Beginners:</b> This setting determines how extreme a data point must be to be considered an outlier when using the IQR method.
+<p>The IQR multiplier:</p>
+<ul>
+<li>Defines how far beyond the quartiles a point must be to be an outlier</li>
+<li>Higher values mean fewer points will be identified as outliers</li>
+</ul>
+<p>The default value of 1.5 means:</p>
+<ul>
+<li>Points below Q1 - 1.5<em>IQR or above Q3 + 1.5</em>IQR are considered outliers</li>
+<li>This is the standard definition used in box plots</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 1.0): More aggressive outlier detection, more points flagged</li>
+<li>Higher values (e.g., 2.0): More conservative detection, only extreme points flagged</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when you want to be more aggressive in identifying outliers</li>
+<li>Increase it when you want to be more conservative</li>
+<li>Only relevant when OutlierDetectionMethod is set to IQR</li>
+</ul>
+<p>For example, in exploratory data analysis where you want to identify potential
+outliers for further investigation, you might use the standard value of 1.5.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_InnerLoopPasses_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.InnerLoopPasses*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_InnerLoopPasses" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.InnerLoopPasses">
+  InnerLoopPasses
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L269"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of passes through the inner loop of the STL algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int InnerLoopPasses { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 2.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_InnerLoopPasses_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the number of passes through the inner loop of the STL algorithm. The inner loop 
+consists of a sequence of smoothing operations that extract the seasonal and trend components. Multiple 
+passes through this loop help refine these components, particularly in the presence of complex patterns. 
+The default value of 2 provides a good balance between refinement and computational efficiency for many 
+applications. A higher value might provide more refined decomposition but requires more computation time. 
+A value of 1 might be sufficient for simpler time series or when computational resources are limited.
+</p>
+<p><b>For Beginners:</b> This setting controls how many times the algorithm refines its estimates of seasonal and trend components.
+<p>The STL algorithm works iteratively:</p>
+<ul>
+<li>It alternates between estimating seasonal and trend components</li>
+<li>Each pass through the inner loop refines these estimates</li>
+</ul>
+<p>The default value of 2 means:</p>
+<ul>
+<li>The algorithm makes two passes through the inner loop</li>
+<li>This provides good refinement for most applications</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>More passes: More refined decomposition but more computation time</li>
+<li>Fewer passes: Faster computation but potentially less precise decomposition</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it (to 3 or higher) for complex seasonal patterns that need more refinement</li>
+<li>Decrease it to 1 for simpler patterns or when speed is more important than precision</li>
+</ul>
+<p>For example, with complex economic data that has evolving seasonal patterns,
+increasing this to 3 or 4 might provide a more accurate decomposition.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_Interval_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.Interval*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_Interval" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.Interval">
+  Interval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L763"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the time interval between consecutive observations in the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan? Interval { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a>?</dt>
+    <dd><p>A nullable TimeSpan value, defaulting to null.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_Interval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the time interval between consecutive observations in the time series. When used 
+together with the StartDate property, it provides an alternative to the Dates array for regular time series 
+(where observations are equally spaced in time). The interval is used to generate the dates for all observations 
+by adding multiples of the interval to the start date. This approach is more memory-efficient than storing all 
+dates explicitly when the time series is regular. Common values include TimeSpan.FromDays(1) for daily data, 
+TimeSpan.FromDays(7) for weekly data, or TimeSpan.FromDays(30) for approximately monthly data. If both Dates 
+and Interval are provided, the Dates array takes precedence.
+</p>
+<p><b>For Beginners:</b> This setting specifies how much time passes between consecutive data points.
+<p>The interval:</p>
+<ul>
+<li>Defines the time spacing between observations in your time series</li>
+<li>Works together with the StartDate property for regular time series</li>
+<li>Provides a more efficient alternative to listing all dates</li>
+</ul>
+<p>The default null value means:</p>
+<ul>
+<li>No specific time interval is defined</li>
+<li>The algorithm treats the series as having integer indices</li>
+</ul>
+<p>When to set this value:</p>
+<ul>
+<li>For regular time series (equal spacing between observations)</li>
+<li>When you don't want to provide the full array of dates</li>
+<li>Must be used together with the StartDate property</li>
+</ul>
+<p>Common interval values:</p>
+<ul>
+<li>TimeSpan.FromDays(1): Daily data</li>
+<li>TimeSpan.FromDays(7): Weekly data</li>
+<li>TimeSpan.FromDays(30): Monthly data (approximate)</li>
+<li>TimeSpan.FromHours(1): Hourly data</li>
+</ul>
+<p>For example, if you have daily stock prices, you would set Interval to TimeSpan.FromDays(1).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_LowPassBandwidth_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.LowPassBandwidth*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_LowPassBandwidth" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.LowPassBandwidth">
+  LowPassBandwidth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L459"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the bandwidth parameter for the low-pass filter LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LowPassBandwidth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.75.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_LowPassBandwidth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the bandwidth parameter for the LOESS smoothing used in the low-pass filter step of 
+the STL algorithm. The low-pass filter helps separate the seasonal and trend components by smoothing the 
+detrended series. The bandwidth determines the proportion of data points used in each local regression, 
+controlling the smoothness of the fitted curve. A value closer to 1 uses more points in each local regression, 
+resulting in a smoother filter. A value closer to 0 uses fewer points, allowing for more local variation. 
+The default value of 0.75 provides a moderate level of smoothing suitable for many applications. The appropriate 
+value depends on the characteristics of the time series and the desired separation between seasonal and trend 
+components.
+</p>
+<p><b>For Beginners:</b> This setting controls how the algorithm separates seasonal and trend components.
+<p>The low-pass bandwidth determines:</p>
+<ul>
+<li>How the algorithm filters out high-frequency variations</li>
+<li>How clearly seasonal and trend components are separated</li>
+</ul>
+<p>The default value of 0.75 means:</p>
+<ul>
+<li>Each local regression in the low-pass filter uses 75% of the data points</li>
+<li>This creates a moderate separation between seasonal and trend components</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (closer to 1): Stronger separation between seasonal and trend components</li>
+<li>Lower values (closer to 0): Less distinct separation between components</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want clearer separation between seasonal and trend components</li>
+<li>Decrease it when the default separation seems too aggressive</li>
+</ul>
+<p>This is a more technical parameter that most users won't need to adjust unless
+they're experiencing specific issues with component separation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_LowPassFilterWindowSize_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.LowPassFilterWindowSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_LowPassFilterWindowSize" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.LowPassFilterWindowSize">
+  LowPassFilterWindowSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L576"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the window size for the low-pass filter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LowPassFilterWindowSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 12 (same as the default seasonal period).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_LowPassFilterWindowSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the window size for the low-pass filter used in the STL algorithm. The low-pass filter 
+helps separate the seasonal and trend components by smoothing the detrended series. A larger window results in 
+a smoother filter, while a smaller window allows for more local variation. The default value of 12 (which is 
+the same as the default seasonal period) provides a good balance for many applications with monthly data. For 
+time series with different seasonal periods or different requirements for component separation, this value might 
+need adjustment. A common practice is to set this equal to the seasonal period, which is reflected in the default 
+value.
+</p>
+<p><b>For Beginners:</b> This setting controls how the algorithm filters out high-frequency variations.
+<p>The low-pass filter window determines:</p>
+<ul>
+<li>How many consecutive points are used in the smoothing filter</li>
+<li>How effectively high-frequency variations are removed</li>
+</ul>
+<p>The default value of 12 means:</p>
+<ul>
+<li>For monthly data, the filter uses a 12-month window</li>
+<li>This aligns with the seasonal period, which works well for most applications</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values: Stronger filtering of high-frequency variations</li>
+<li>Smaller values: Less filtering, allowing more high-frequency components</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Usually best to keep this equal to your seasonal period</li>
+<li>Adjust only if you have specific requirements for component separation</li>
+</ul>
+<p>This is a technical parameter that most users won't need to adjust unless
+they're experiencing specific issues with the decomposition.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_MonthOfYearFactors_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.MonthOfYearFactors*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_MonthOfYearFactors" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.MonthOfYearFactors">
+  MonthOfYearFactors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L945"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factors for month-of-year effects.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; MonthOfYearFactors { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of length 12, defaulting to a new vector of length 12.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_MonthOfYearFactors_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the factors or coefficients for month-of-year effects when AdjustForMonthOfYear is set 
+to true. Each element in the vector corresponds to a month of the year, typically starting with January (index 0) 
+through December (index 11), though the exact mapping might depend on the implementation. These factors represent 
+the multiplicative or additive effect of each month on the time series values. If not explicitly set, these 
+factors might be estimated from the data when AdjustForMonthOfYear is true. The default is an empty vector of 
+length 12, indicating that no pre-specified factors are provided.
+</p>
+<p><b>For Beginners:</b> This setting allows you to specify how different months of the year affect your data.
+<p>The month-of-year factors:</p>
+<ul>
+<li>Represent the effect of each month on your data</li>
+<li>Are stored as a vector with 12 values (one for each month)</li>
+<li>Can be used to adjust for monthly patterns beyond regular seasonality</li>
+</ul>
+<p>The default empty vector means:</p>
+<ul>
+<li>No pre-specified month-of-year effects are provided</li>
+<li>If AdjustForMonthOfYear is true, these will be estimated from the data</li>
+</ul>
+<p>When to set this value:</p>
+<ul>
+<li>When you have prior knowledge about month-specific effects</li>
+<li>When you want to specify these effects manually rather than having them estimated</li>
+<li>Must be used with AdjustForMonthOfYear set to true</li>
+</ul>
+<p>For example, if you know that December typically has values 50% higher than
+the average month due to holiday effects, you might set the December factor to 1.5.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_OutlierDetectionMethod_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.OutlierDetectionMethod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_OutlierDetectionMethod" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.OutlierDetectionMethod">
+  OutlierDetectionMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L1024"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the method used for detecting outliers in the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OutlierDetectionMethod OutlierDetectionMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.OutlierDetectionMethod.html">OutlierDetectionMethod</a></dt>
+    <dd><p>A value from the OutlierDetectionMethod enumeration, defaulting to OutlierDetectionMethod.ZScore.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_OutlierDetectionMethod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the statistical method used to identify outliers in the time series. Outliers are 
+observations that deviate significantly from the expected pattern and might distort the decomposition if not 
+properly handled. Different methods have different approaches to defining what constitutes an outlier. The 
+Z-Score method (the default) identifies outliers based on how many standard deviations they are from the mean. 
+The IQR (Interquartile Range) method identifies outliers based on how far they are from the first and third 
+quartiles. Other methods might include modified Z-score, Tukey's method, or domain-specific approaches. The 
+choice of method can affect which observations are identified as outliers and how they are treated in the 
+decomposition.
+</p>
+<p><b>For Beginners:</b> This setting determines how the algorithm identifies unusual data points.
+<p>The outlier detection method:</p>
+<ul>
+<li>Defines the statistical approach used to identify outliers</li>
+<li>Helps the algorithm handle unusual data points appropriately</li>
+</ul>
+<p>The default Z-Score method:</p>
+<ul>
+<li>Identifies outliers based on how many standard deviations they are from the mean</li>
+<li>Points beyond the ZScoreThreshold (default 3.0) are considered outliers</li>
+</ul>
+<p>Common alternatives include:</p>
+<ul>
+<li>IQR (Interquartile Range): Identifies outliers based on the spread of the middle 50% of data</li>
+<li>Modified Z-Score: A more robust version of Z-Score for non-normal distributions</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Change to IQR when your data is skewed or has a non-normal distribution</li>
+<li>Keep at Z-Score (default) for most applications with roughly normal data</li>
+</ul>
+<p>For example, in financial data with extreme values, the IQR method might be
+more appropriate as it's less influenced by the extreme values themselves.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_RobustIterations_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.RobustIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_RobustIterations" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.RobustIterations">
+  RobustIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of robust iterations in the STL algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RobustIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_RobustIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the number of robust iterations in the STL algorithm. Robust iterations help 
+mitigate the influence of outliers by down-weighting them in subsequent passes through the algorithm. 
+A value of 0 disables robust fitting, while a value of 1 or more enables it. The default value of 1 
+provides a basic level of robustness suitable for many applications. Higher values provide more robustness 
+against outliers but require more computation time. Robust fitting is particularly valuable when the time 
+series contains anomalies or outliers that should not influence the seasonal and trend components.
+</p>
+<p><b>For Beginners:</b> This setting controls how the algorithm handles outliers or unusual data points.
+<p>Robust iterations:</p>
+<ul>
+<li>Help prevent outliers from distorting the seasonal and trend components</li>
+<li>Work by identifying unusual points and reducing their influence</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The algorithm performs one robust iteration</li>
+<li>This provides basic protection against outliers</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>0: No robustness (outliers can significantly influence the results)</li>
+<li>1: Basic robustness (default, good for most applications)</li>
+<li>2 or more: Increased robustness (better handling of severe outliers)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when your data contains many outliers or anomalies</li>
+<li>Set to 0 when you're certain your data has no outliers or when you want to preserve all variations</li>
+</ul>
+<p>For example, in retail sales data with occasional promotional spikes,
+increasing this to 2 or 3 would help prevent these spikes from distorting
+the underlying seasonal pattern.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_RobustWeightThreshold_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.RobustWeightThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_RobustWeightThreshold" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.RobustWeightThreshold">
+  RobustWeightThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for robust weights in outlier detection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RobustWeightThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value between 0 and 1, defaulting to 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_RobustWeightThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the threshold for determining which points are considered outliers in the robust 
+fitting process. Points with residuals that result in weights below this threshold are treated as severe 
+outliers. The default value of 0.001 means that points with weights less than 0.1% of the maximum weight 
+are considered severe outliers. A smaller value is more lenient, treating fewer points as severe outliers, 
+while a larger value is more strict, treating more points as severe outliers. This parameter is only relevant 
+when RobustIterations is greater than 0. The appropriate value depends on the expected frequency and severity 
+of outliers in the data.
+</p>
+<p><b>For Beginners:</b> This setting determines how extreme a point must be to be considered an outlier.
+<p>During robust iterations:</p>
+<ul>
+<li>The algorithm calculates weights for each data point</li>
+<li>Points that don't fit the pattern well receive lower weights</li>
+<li>This threshold determines which points are considered severe outliers</li>
+</ul>
+<p>The default value of 0.001 means:</p>
+<ul>
+<li>Points with weights below 0.1% of the maximum weight are treated as severe outliers</li>
+<li>This provides a reasonable balance for most applications</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 0.0001): More lenient, fewer points treated as severe outliers</li>
+<li>Higher values (e.g., 0.01): More strict, more points treated as severe outliers</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when you want to focus only on the most extreme outliers</li>
+<li>Increase it when you want to be more aggressive in identifying outliers</li>
+</ul>
+<p>This setting only matters when RobustIterations is greater than 0.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalBandwidth_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalBandwidth*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalBandwidth" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalBandwidth">
+  SeasonalBandwidth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the bandwidth parameter for the seasonal LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SeasonalBandwidth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.75.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalBandwidth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the bandwidth parameter for the LOESS smoothing of the seasonal component. The 
+bandwidth determines the proportion of data points used in each local regression, controlling the smoothness 
+of the fitted curve. A value closer to 1 uses more points in each local regression, resulting in a smoother 
+seasonal component. A value closer to 0 uses fewer points, allowing for more local variation but potentially 
+capturing noise. The default value of 0.75 provides a moderate level of smoothing suitable for many applications. 
+The appropriate value depends on the characteristics of the seasonal pattern and the presence of noise in the data.
+</p>
+<p><b>For Beginners:</b> This setting controls how smooth the seasonal component will be.
+<p>The seasonal bandwidth determines:</p>
+<ul>
+<li>What proportion of nearby points are used in each local regression</li>
+<li>How smooth vs. flexible the seasonal component will be</li>
+</ul>
+<p>The default value of 0.75 means:</p>
+<ul>
+<li>Each local regression uses 75% of the data points</li>
+<li>This creates a moderately smooth seasonal component</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (closer to 1): Smoother seasonal component, less responsive to local variations</li>
+<li>Lower values (closer to 0): More flexible seasonal component, more responsive to local variations</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want a smoother, more stable seasonal pattern</li>
+<li>Decrease it when you want to capture more detailed seasonal variations</li>
+</ul>
+<p>For example, in tourism data where seasonal patterns might have sharp peaks,
+decreasing this to 0.5 might better capture these distinctive features.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalDegree_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalDegree*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalDegree" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalDegree">
+  SeasonalDegree
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the degree of the polynomial used in the seasonal LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalDegree { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer value of 0 or 1, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalDegree_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the degree of the polynomial used in the LOESS smoothing for the seasonal component. 
+A value of 0 uses a constant (flat) local approximation, while a value of 1 (the default) uses a linear 
+local approximation. The linear approximation generally provides a better fit to the data, capturing local 
+trends within the seasonal component, but may be more sensitive to noise. The constant approximation is 
+more robust to noise but may not capture subtle changes in the seasonal pattern. The choice between these 
+options depends on the characteristics of the seasonal pattern and the presence of noise in the data.
+</p>
+<p><b>For Beginners:</b> This setting controls how flexible the seasonal component can be.
+<p>When extracting the seasonal component:</p>
+<ul>
+<li>The algorithm fits small local models to segments of data</li>
+<li>This setting determines whether those local models are flat or sloped</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>Local linear models are used (can have a slope)</li>
+<li>This allows the seasonal pattern to change more flexibly</li>
+</ul>
+<p>Your options are:</p>
+<ul>
+<li>0: Constant/flat local models (more stable, less flexible)</li>
+<li>1: Linear local models (more flexible, can capture changing patterns)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Set to 0 if your data is noisy and you want a more stable seasonal component</li>
+<li>Keep at 1 (default) if you want to capture subtle changes in the seasonal pattern</li>
+</ul>
+<p>For example, in retail sales data where seasonal patterns might gradually change
+over time, a value of 1 would better capture this evolution.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalJump_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalJump*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalJump" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalJump">
+  SeasonalJump
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the step size for the seasonal LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalJump { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalJump_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the step size or "jump" used in the LOESS smoothing for the seasonal component. 
+It determines how many points to skip when computing the local regressions. A value of 1 (the default) 
+means that every point is used, providing the most detailed smoothing. A value greater than 1 means that 
+only every n-th point is used, which can significantly reduce computation time for large datasets at the 
+cost of some precision. For example, a value of 2 would use every other point, and a value of 3 would use 
+every third point. The appropriate value depends on the size of the dataset and the required precision of 
+the decomposition.
+</p>
+<p><b>For Beginners:</b> This setting controls how many data points are used when smoothing the seasonal component.
+<p>During seasonal smoothing:</p>
+<ul>
+<li>The algorithm computes local models at various points</li>
+<li>This setting determines whether it uses every point or skips some</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The algorithm computes a local model at every data point</li>
+<li>This provides the most detailed seasonal component</li>
+</ul>
+<p>Higher values like 2 or 3 mean:</p>
+<ul>
+<li>The algorithm skips points (every 2nd or 3rd point)</li>
+<li>This makes computation faster but less precise</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it (to 2 or higher) for very large datasets to speed up computation</li>
+<li>Keep at 1 (default) for most applications where precision is important</li>
+</ul>
+<p>For example, with a 10-year daily dataset (3,650 points), setting this to 2 or 3
+might significantly speed up computation with minimal loss in quality.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalLoessWindow_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalLoessWindow*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalLoessWindow" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalLoessWindow">
+  SeasonalLoessWindow
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L538"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the window size for the seasonal component LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalLoessWindow { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive odd integer, defaulting to 121 (10 times the default seasonal period plus 1).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalLoessWindow_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the window size for the LOESS smoothing of the seasonal component. It determines how 
+many data points are considered in each local regression for extracting the seasonal component. The window 
+size should be odd to ensure symmetry around the central point. A larger window results in a smoother seasonal 
+component, while a smaller window allows for more variation in the seasonal pattern. The default value of 121 
+(which is 10 times the default seasonal period of 12, plus 1) provides a good balance for many applications 
+with monthly data. For time series with different seasonal periods or different requirements for seasonal 
+smoothness, this value might need adjustment. A common rule of thumb is to set this to 10 times the seasonal 
+period plus 1, which is reflected in the default value.
+</p>
+<p><b>For Beginners:</b> This setting controls how the seasonal pattern is extracted from the data.
+<p>The seasonal LOESS window determines:</p>
+<ul>
+<li>How many data points are used when extracting the seasonal component</li>
+<li>How stable vs. variable the seasonal pattern will be across cycles</li>
+</ul>
+<p>The default value of 121 means:</p>
+<ul>
+<li>For monthly data, the algorithm looks at about 10 years of data for each seasonal estimate</li>
+<li>This creates a stable seasonal pattern that doesn't change much from year to year</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values: More stable seasonal pattern that changes very little over time</li>
+<li>Smaller values: More adaptive seasonal pattern that can evolve over time</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want a very stable seasonal pattern</li>
+<li>Decrease it when you want to allow the seasonal pattern to evolve over time</li>
+<li>A common rule of thumb is to set it to 10 times your seasonal period plus 1</li>
+</ul>
+<p>For example, if you believe your seasonal pattern is gradually changing over time,
+you might reduce this to 7 times the seasonal period plus 1.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalPeriod_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalPeriod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalPeriod" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.SeasonalPeriod">
+  SeasonalPeriod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of time points in one seasonal cycle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalPeriod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 12 (monthly seasonality).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_SeasonalPeriod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the number of time points that make up one complete seasonal cycle in the data. 
+It represents the periodicity of the seasonal pattern. The default value of 12 is appropriate for monthly 
+data with yearly seasonality, which is common in many business and economic applications. Other common 
+values include 4 for quarterly data with yearly seasonality, 7 for daily data with weekly seasonality, 
+or 24 for hourly data with daily seasonality. This property overrides the SeasonalPeriod property 
+inherited from the base class to provide a more appropriate default value for STL decomposition. The 
+correct specification of the seasonal period is crucial for the algorithm to properly identify and 
+extract the seasonal component.
+</p>
+<p><b>For Beginners:</b> This setting defines how long one complete seasonal cycle is in your data.
+<p>The seasonal period tells the algorithm:</p>
+<ul>
+<li>How many data points make up one complete cycle</li>
+<li>What pattern to look for when extracting seasonality</li>
+</ul>
+<p>The default value of 12 means:</p>
+<ul>
+<li>The algorithm expects a pattern that repeats every 12 data points</li>
+<li>This is perfect for monthly data with a yearly seasonal pattern</li>
+</ul>
+<p>Common values include:</p>
+<ul>
+<li>12: Monthly data with yearly seasonality</li>
+<li>4: Quarterly data with yearly seasonality</li>
+<li>7: Daily data with weekly seasonality</li>
+<li>24: Hourly data with daily seasonality</li>
+<li>365: Daily data with yearly seasonality</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Change it to match the natural cycle in your data</li>
+<li>Must be set correctly for the decomposition to work properly</li>
+</ul>
+<p>For example, if analyzing hourly website traffic, you might set this to 24 to
+capture the daily pattern of activity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_StartDate_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.StartDate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_StartDate" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.StartDate">
+  StartDate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L722"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the start date of the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DateTime? StartDate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>A nullable DateTime value, defaulting to null.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_StartDate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the date or timestamp of the first observation in the time series. When used together 
+with the Interval property, it provides an alternative to the Dates array for regular time series (where 
+observations are equally spaced in time). The start date is used to generate the dates for all observations 
+by adding multiples of the interval. This approach is more memory-efficient than storing all dates explicitly 
+when the time series is regular. If both Dates and StartDate are provided, the Dates array takes precedence.
+</p>
+<p><b>For Beginners:</b> This setting specifies when your time series begins.
+<p>The start date:</p>
+<ul>
+<li>Defines the date of the first observation in your time series</li>
+<li>Works together with the Interval property for regular time series</li>
+<li>Provides a more efficient alternative to listing all dates</li>
+</ul>
+<p>The default null value means:</p>
+<ul>
+<li>No specific start date is defined</li>
+<li>The algorithm treats the series as having integer indices</li>
+</ul>
+<p>When to set this value:</p>
+<ul>
+<li>For regular time series (equal spacing between observations)</li>
+<li>When you don't want to provide the full array of dates</li>
+<li>Must be used together with the Interval property</li>
+</ul>
+<p>For example, if you have monthly data starting from January 2020, you would set
+StartDate to 2020-01-01 and Interval to TimeSpan.FromDays(30) or a similar value.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendBandwidth_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendBandwidth*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendBandwidth" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendBandwidth">
+  TrendBandwidth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L420"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the bandwidth parameter for the trend LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TrendBandwidth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.75.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendBandwidth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the bandwidth parameter for the LOESS smoothing of the trend component. The 
+bandwidth determines the proportion of data points used in each local regression, controlling the smoothness 
+of the fitted curve. A value closer to 1 uses more points in each local regression, resulting in a smoother 
+trend component. A value closer to 0 uses fewer points, allowing for more local variation but potentially 
+capturing noise. The default value of 0.75 provides a moderate level of smoothing suitable for many applications. 
+The appropriate value depends on the characteristics of the trend and the presence of noise in the data.
+</p>
+<p><b>For Beginners:</b> This setting controls how smooth the trend component will be.
+<p>The trend bandwidth determines:</p>
+<ul>
+<li>What proportion of nearby points are used in each local regression</li>
+<li>How smooth vs. flexible the trend component will be</li>
+</ul>
+<p>The default value of 0.75 means:</p>
+<ul>
+<li>Each local regression uses 75% of the data points</li>
+<li>This creates a moderately smooth trend component</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (closer to 1): Smoother trend, less responsive to local variations</li>
+<li>Lower values (closer to 0): More flexible trend, more responsive to local variations</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want a smoother, more stable trend</li>
+<li>Decrease it when you want to capture more detailed trend variations</li>
+</ul>
+<p>For example, in economic data where you want to capture the overall direction
+while ignoring short-term fluctuations, increasing this to 0.9 might be appropriate.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendDegree_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendDegree*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendDegree" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendDegree">
+  TrendDegree
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the degree of the polynomial used in the trend LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrendDegree { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer value of 0 or 1, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendDegree_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the degree of the polynomial used in the LOESS smoothing for the trend component. 
+A value of 0 uses a constant (flat) local approximation, while a value of 1 (the default) uses a linear 
+local approximation. The linear approximation generally provides a better fit to the data, capturing 
+changes in the direction of the trend, but may be more sensitive to noise. The constant approximation is 
+more robust to noise but may not capture changes in the trend direction as effectively. The choice between 
+these options depends on the characteristics of the trend and the presence of noise in the data.
+</p>
+<p><b>For Beginners:</b> This setting controls how flexible the trend component can be.
+<p>When extracting the trend component:</p>
+<ul>
+<li>The algorithm fits small local models to segments of data</li>
+<li>This setting determines whether those local models are flat or sloped</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>Local linear models are used (can have a slope)</li>
+<li>This allows the trend to change direction more flexibly</li>
+</ul>
+<p>Your options are:</p>
+<ul>
+<li>0: Constant/flat local models (more stable, less flexible)</li>
+<li>1: Linear local models (more flexible, can capture changing directions)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Set to 0 if your data is noisy and you want a more stable trend</li>
+<li>Keep at 1 (default) if you want to capture changes in trend direction</li>
+</ul>
+<p>For example, in economic data where trends might change direction during recessions
+and recoveries, a value of 1 would better capture these turning points.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendJump_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendJump*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendJump" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendJump">
+  TrendJump
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the step size for the trend LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrendJump { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendJump_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the step size or "jump" used in the LOESS smoothing for the trend component. 
+It determines how many points to skip when computing the local regressions. A value of 1 (the default) 
+means that every point is used, providing the most detailed smoothing. A value greater than 1 means that 
+only every n-th point is used, which can significantly reduce computation time for large datasets at the 
+cost of some precision. For example, a value of 2 would use every other point, and a value of 3 would use 
+every third point. The appropriate value depends on the size of the dataset and the required precision of 
+the decomposition.
+</p>
+<p><b>For Beginners:</b> This setting controls how many data points are used when smoothing the trend component.
+<p>During trend smoothing:</p>
+<ul>
+<li>The algorithm computes local models at various points</li>
+<li>This setting determines whether it uses every point or skips some</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The algorithm computes a local model at every data point</li>
+<li>This provides the most detailed trend component</li>
+</ul>
+<p>Higher values like 2 or 3 mean:</p>
+<ul>
+<li>The algorithm skips points (every 2nd or 3rd point)</li>
+<li>This makes computation faster but less precise</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it (to 2 or higher) for very large datasets to speed up computation</li>
+<li>Keep at 1 (default) for most applications where precision is important</li>
+</ul>
+<p>For example, with a 10-year daily dataset (3,650 points), setting this to 2 or 3
+might significantly speed up computation with minimal loss in quality.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendLoessWindow_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendLoessWindow*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendLoessWindow" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendLoessWindow">
+  TrendLoessWindow
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L615"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the window size for the trend LOESS smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrendLoessWindow { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 12 (same as the default seasonal period).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendLoessWindow_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the window size for the LOESS smoothing of the trend component. It determines how 
+many consecutive data points are considered in each local regression for the trend. This is an alternative 
+to using the TrendWindowSize property and might be used in certain implementations of the STL algorithm. 
+A larger window results in a smoother trend component, while a smaller window allows the trend to follow 
+more local variations. The default value of 12 (which is the same as the default seasonal period) provides 
+a moderate level of smoothing suitable for many applications with monthly data. For time series with different 
+seasonal periods or different requirements for trend smoothness, this value might need adjustment.
+</p>
+<p><b>For Beginners:</b> This setting is an alternative way to control how smooth the trend component will be.
+<p>The trend LOESS window determines:</p>
+<ul>
+<li>How many consecutive points are used in each local regression for the trend</li>
+<li>How smooth vs. responsive the trend component will be</li>
+</ul>
+<p>The default value of 12 means:</p>
+<ul>
+<li>Each local regression for the trend uses 12 consecutive data points</li>
+<li>For monthly data, this spans 1 year, which provides moderate smoothing</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values: Smoother trend that ignores short-term fluctuations</li>
+<li>Smaller values: More responsive trend that follows shorter-term changes</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want a smoother long-term trend</li>
+<li>Decrease it when you want the trend to capture more medium-term changes</li>
+<li>This setting may be used instead of TrendWindowSize in certain implementations</li>
+</ul>
+<p>For example, with quarterly data, you might set this to 4 for a one-year window,
+or 8 for a two-year window, depending on how smooth you want the trend to be.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendWindowSize_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendWindowSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendWindowSize" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.TrendWindowSize">
+  TrendWindowSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L498"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the window size for the trend component smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrendWindowSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 18 (1.5 times the default seasonal period).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_TrendWindowSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the window size for smoothing the trend component. It determines how many consecutive 
+data points are considered in each local regression for the trend. A larger window results in a smoother trend 
+component, while a smaller window allows the trend to follow more local variations. The default value of 18 
+(which is 1.5 times the default seasonal period of 12) provides a good balance for many applications with 
+monthly data. For time series with different seasonal periods or different requirements for trend smoothness, 
+this value might need adjustment. A common rule of thumb is to set this to 1.5 times the seasonal period, 
+which is reflected in the default value.
+</p>
+<p><b>For Beginners:</b> This setting controls how many data points are used when smoothing the trend.
+<p>The trend window size determines:</p>
+<ul>
+<li>How many consecutive points are used in each local regression for the trend</li>
+<li>How smooth vs. responsive the trend component will be</li>
+</ul>
+<p>The default value of 18 means:</p>
+<ul>
+<li>Each local regression for the trend uses 18 consecutive data points</li>
+<li>For monthly data, this spans 1.5 years, which is a good balance</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values: Smoother trend that ignores short-term fluctuations</li>
+<li>Smaller values: More responsive trend that follows shorter-term changes</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want a smoother long-term trend</li>
+<li>Decrease it when you want the trend to capture more medium-term changes</li>
+<li>A common rule of thumb is to set it to 1.5 times your seasonal period</li>
+</ul>
+<p>For example, with quarterly data (seasonal period of 4), you might set this to 6,
+while with daily data and weekly seasonality (period of 7), you might set it to 10-11.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_STLDecompositionOptions_1_ZScoreThreshold_" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.ZScoreThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_STLDecompositionOptions_1_ZScoreThreshold" data-uid="AiDotNet.Models.Options.STLDecompositionOptions`1.ZScoreThreshold">
+  ZScoreThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L1063"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for identifying outliers using the Z-Score method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ZScoreThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 3.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_STLDecompositionOptions_1_ZScoreThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the threshold for identifying outliers when using the Z-Score method 
+(OutlierDetectionMethod.ZScore). Observations with Z-scores (number of standard deviations from the mean) 
+exceeding this threshold in absolute value are considered outliers. The default value of 3.0 is a common 
+choice in statistical practice, corresponding to approximately 99.7% of the data in a normal distribution. 
+A smaller value would identify more observations as outliers, while a larger value would be more conservative, 
+identifying only the most extreme observations as outliers. This property is only relevant when 
+OutlierDetectionMethod is set to ZScore.
+</p>
+<p><b>For Beginners:</b> This setting determines how extreme a data point must be to be considered an outlier when using the Z-Score method.
+<p>The Z-Score threshold:</p>
+<ul>
+<li>Defines how many standard deviations from the mean a point must be to be an outlier</li>
+<li>Higher values mean fewer points will be identified as outliers</li>
+</ul>
+<p>The default value of 3.0 means:</p>
+<ul>
+<li>Points more than 3 standard deviations from the mean are considered outliers</li>
+<li>For normally distributed data, this identifies about 0.3% of points as outliers</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 2.0): More aggressive outlier detection, more points flagged</li>
+<li>Higher values (e.g., 4.0): More conservative detection, only extreme points flagged</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when you want to be more aggressive in identifying outliers</li>
+<li>Increase it when you want to be more conservative</li>
+<li>Only relevant when OutlierDetectionMethod is set to ZScore</li>
+</ul>
+<p>For example, in quality control applications where outliers represent defects,
+you might use a lower threshold like 2.5 to be more sensitive to potential issues.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/STLDecompositionOptions.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

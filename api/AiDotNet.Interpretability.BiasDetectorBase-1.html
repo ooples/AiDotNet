@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BiasDetectorBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BiasDetectorBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for all bias detectors that identify unfair treatment in model predictions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interpretability_BiasDetectorBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interpretability.BiasDetectorBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interpretability.BiasDetectorBase`1">
+
+
+
+  <h1 id="AiDotNet_Interpretability_BiasDetectorBase_1" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1" class="text-break">
+Class BiasDetectorBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interpretability.html">Interpretability</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for all bias detectors that identify unfair treatment in model predictions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class BiasDetectorBase&lt;T&gt; : IBiasDetector&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">BiasDetectorBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IBiasDetector-1.html">IBiasDetector</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interpretability.DemographicParityBiasDetector-1.html">DemographicParityBiasDetector&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Interpretability.DisparateImpactBiasDetector-1.html">DisparateImpactBiasDetector&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Interpretability.EqualOpportunityBiasDetector-1.html">EqualOpportunityBiasDetector&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interpretability_BiasDetectorBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This is a foundation class that all bias detectors build upon.
+<p>Think of a bias detector like an inspector checking for fairness:</p>
+<ul>
+<li>It examines how your model makes predictions for different groups of people</li>
+<li>It identifies when certain groups are being treated unfairly</li>
+<li>It provides metrics that measure the severity of the bias</li>
+</ul>
+<p>Different bias detectors might look for different types of unfairness, but they all
+share common functionality. This base class provides that shared foundation.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Interpretability_BiasDetectorBase_1__ctor_" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Interpretability_BiasDetectorBase_1__ctor_System_Boolean_" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.#ctor(System.Boolean)">
+  BiasDetectorBase(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the BiasDetectorBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected BiasDetectorBase(bool isLowerBiasBetter)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isLowerBiasBetter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Indicates whether lower bias scores represent better (fairer) models.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_BiasDetectorBase_1__ctor_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This sets up the basic properties of the bias detector.
+<p>Parameters:</p>
+<ul>
+<li>isLowerBiasBetter: Tells the system whether smaller numbers mean fairer models
+(typically true for bias metrics, where 0 represents perfect fairness)</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Interpretability_BiasDetectorBase_1__isLowerBiasBetter" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1._isLowerBiasBetter">
+  _isLowerBiasBetter
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether lower bias scores represent better (fairer) models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly bool _isLowerBiasBetter</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_BiasDetectorBase_1__isLowerBiasBetter_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This tells us whether smaller numbers mean fairer models.
+<p>For bias detection:</p>
+<ul>
+<li>Lower bias scores typically indicate fairer models (closer to equal treatment)</li>
+<li>A bias score of 0 would indicate perfect fairness</li>
+</ul>
+<p>This helps the system know how to compare different models for fairness.</p>
+
+</div>
+
+
+
+
+
+  <h3 id="AiDotNet_Interpretability_BiasDetectorBase_1__numOps" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1._numOps">
+  _numOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides mathematical operations for the specific numeric type being used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; _numOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_BiasDetectorBase_1__numOps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is a toolkit that helps perform math operations
+regardless of whether we're using integers, decimals, doubles, etc.
+<p>It allows the detector to work with different numeric types without
+having to rewrite the math operations for each type.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interpretability_BiasDetectorBase_1_IsLowerBiasBetter_" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.IsLowerBiasBetter*"></a>
+
+  <h3 id="AiDotNet_Interpretability_BiasDetectorBase_1_IsLowerBiasBetter" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.IsLowerBiasBetter">
+  IsLowerBiasBetter
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether lower bias scores represent better (fairer) models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsLowerBiasBetter { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_BiasDetectorBase_1_IsLowerBiasBetter_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This property tells you whether smaller numbers mean fairer models.
+<p>For most bias metrics:</p>
+<ul>
+<li>IsLowerBiasBetter is true (0 bias means perfect fairness)</li>
+<li>Lower values indicate the model treats different groups more equally</li>
+</ul>
+<p>This helps you interpret the scores correctly when comparing different models.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interpretability_BiasDetectorBase_1_DetectBias_" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.DetectBias*"></a>
+
+  <h3 id="AiDotNet_Interpretability_BiasDetectorBase_1_DetectBias_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.DetectBias(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  DetectBias(Vector&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects bias in model predictions by analyzing predictions across different groups.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BiasDetectionResult&lt;T&gt; DetectBias(Vector&lt;T&gt; predictions, Vector&lt;T&gt; sensitiveFeature, Vector&lt;T&gt;? actualLabels = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The model's predictions.</p>
+</dd>
+    <dt><code>sensitiveFeature</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The sensitive feature (e.g., race, gender) used to identify groups.</p>
+</dd>
+    <dt><code>actualLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional actual labels for computing additional bias metrics.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interpretability.BiasDetectionResult-1.html">BiasDetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>A result object containing bias detection metrics and analysis.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_BiasDetectorBase_1_DetectBias_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method checks if your model treats different groups fairly.
+<p>It works by:</p>
+<ol>
+<li>Validating that all required data is provided and properly formatted</li>
+<li>Calling the specific bias detection logic implemented by derived classes</li>
+<li>Returning detailed results about any bias found</li>
+</ol>
+<p>The method handles the common validation logic, while the specific bias detection
+algorithm is defined in each detector that extends this base class.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when predictions or sensitiveFeature is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when predictions and sensitiveFeature have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Interpretability_BiasDetectorBase_1_GetBiasDetectionResult_" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.GetBiasDetectionResult*"></a>
+
+  <h3 id="AiDotNet_Interpretability_BiasDetectorBase_1_GetBiasDetectionResult_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.GetBiasDetectionResult(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  GetBiasDetectionResult(Vector&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Abstract method that must be implemented by derived classes to perform specific bias detection logic.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract BiasDetectionResult&lt;T&gt; GetBiasDetectionResult(Vector&lt;T&gt; predictions, Vector&lt;T&gt; sensitiveFeature, Vector&lt;T&gt;? actualLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The model's predictions.</p>
+</dd>
+    <dt><code>sensitiveFeature</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The sensitive feature used to identify groups.</p>
+</dd>
+    <dt><code>actualLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional actual labels for computing additional bias metrics.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interpretability.BiasDetectionResult-1.html">BiasDetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>A result object containing bias detection metrics and analysis.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_BiasDetectorBase_1_GetBiasDetectionResult_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is a placeholder method that each specific detector must fill in.
+<p>Think of it like a template that says &quot;here's where you put your specific bias detection logic.&quot;
+Each detector that extends this base class will provide its own implementation of this method,
+defining exactly how it detects and measures bias.</p>
+<p>For example:</p>
+<ul>
+<li>A disparate impact detector would check if positive outcomes are equally distributed</li>
+<li>An equal opportunity detector would check if qualified individuals have equal chances</li>
+<li>A demographic parity detector would check for balanced outcomes across groups</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interpretability_BiasDetectorBase_1_IsBetterBiasScore_" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.IsBetterBiasScore*"></a>
+
+  <h3 id="AiDotNet_Interpretability_BiasDetectorBase_1_IsBetterBiasScore__0__0_" data-uid="AiDotNet.Interpretability.BiasDetectorBase`1.IsBetterBiasScore(`0,`0)">
+  IsBetterBiasScore(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether a new bias score represents better (fairer) performance than the current best score.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsBetterBiasScore(T currentBias, T bestBias)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentBias</code> <span class="xref">T</span></dt>
+    <dd><p>The current bias score to evaluate.</p>
+</dd>
+    <dt><code>bestBias</code> <span class="xref">T</span></dt>
+    <dd><p>The best (fairest) bias score found so far.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the current bias score is better (fairer) than the best bias score; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_BiasDetectorBase_1_IsBetterBiasScore__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method compares two bias scores and tells you which model is fairer.
+<p>It takes into account whether higher scores are better or lower scores are better:</p>
+<ul>
+<li>If lower scores are better (typical for bias), it returns true when the new score is lower</li>
+<li>If higher scores are better (less common), it returns true when the new score is higher</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>Selecting the fairest model from multiple options</li>
+<li>Deciding whether model changes improved fairness</li>
+<li>Tracking fairness improvements during model development</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/BiasDetectorBase.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class InstanceSegmenterBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class InstanceSegmenterBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for instance segmentation models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1" class="text-break">
+Class InstanceSegmenterBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L204"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.Segmentation.html">Segmentation</a>.<a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.html">InstanceSegmentation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for instance segmentation models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class InstanceSegmenterBase&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">InstanceSegmenterBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.MaskRCNN-1.html">MaskRCNN&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.SOLOv2-1.html">SOLOv2&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLOSeg-1.html">YOLOSeg&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1__ctor_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1__ctor_AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmentationOptions__0__" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.#ctor(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmentationOptions{`0})">
+  InstanceSegmenterBase(InstanceSegmentationOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance segmenter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected InstanceSegmenterBase(InstanceSegmentationOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmentationOptions-1.html">InstanceSegmentationOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_NumOps" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_Options" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly InstanceSegmentationOptions&lt;T&gt; Options</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmentationOptions-1.html">InstanceSegmentationOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_Name_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.Name*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_Name" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Name of this segmentation model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_ApplyMaskNMS_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.ApplyMaskNMS*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_ApplyMaskNMS_System_Collections_Generic_List_AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceMask__0___System_Double_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.ApplyMaskNMS(System.Collections.Generic.List{AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceMask{`0}},System.Double)">
+  ApplyMaskNMS(List&lt;InstanceMask&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L353"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies NMS to filter overlapping instances.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected List&lt;InstanceMask&lt;T&gt;&gt; ApplyMaskNMS(List&lt;InstanceMask&lt;T&gt;&gt; instances, double iouThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>instances</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceMask-1.html">InstanceMask</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>iouThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceMask-1.html">InstanceMask</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_ApplySigmoid_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.ApplySigmoid*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_ApplySigmoid_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.ApplySigmoid(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ApplySigmoid(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L341"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies sigmoid activation to tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ApplySigmoid(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_BinarizeMask_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.BinarizeMask*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_BinarizeMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0___0_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.BinarizeMask(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},`0)">
+  BinarizeMask(Tensor&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Binarizes a mask using threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Tensor&lt;T&gt; BinarizeMask(Tensor&lt;T&gt; mask, T threshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>threshold</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_CropMaskToBox_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.CropMaskToBox*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_CropMaskToBox_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Augmentation_Image_BoundingBox__0__System_Int32_System_Int32_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.CropMaskToBox(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Augmentation.Image.BoundingBox{`0},System.Int32,System.Int32)">
+  CropMaskToBox(Tensor&lt;T&gt;, BoundingBox&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L306"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Crops a mask to bounding box region.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Tensor&lt;T&gt; CropMaskToBox(Tensor&lt;T&gt; mask, BoundingBox&lt;T&gt; box, int imageHeight, int imageWidth)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>box</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>imageHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>imageWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_GetParameterCount_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.GetParameterCount*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_GetParameterCount" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.GetParameterCount">
+  GetParameterCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total parameter count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract long GetParameterCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_LoadWeightsAsync_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.LoadWeightsAsync*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_LoadWeightsAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.LoadWeightsAsync(System.String,System.Threading.CancellationToken)">
+  LoadWeightsAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads pretrained weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pathOrUrl</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_ResizeMask_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.ResizeMask*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_ResizeMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.ResizeMask(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32)">
+  ResizeMask(Tensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resizes a mask to target size using bilinear interpolation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Tensor&lt;T&gt; ResizeMask(Tensor&lt;T&gt; mask, int targetHeight, int targetWidth)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>targetHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>targetWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_SaveWeights_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.SaveWeights*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_SaveWeights_System_String_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.SaveWeights(System.String)">
+  SaveWeights(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves model weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void SaveWeights(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_Segment_" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.Segment*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Segmentation_InstanceSegmentation_InstanceSegmenterBase_1_Segment_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase`1.Segment(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Segment(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs instance segmentation on an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract InstanceSegmentationResult&lt;T&gt; Segment(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmentationResult-1.html">InstanceSegmentationResult</a>&lt;T&gt;</dt>
+    <dd><p>Instance segmentation result with masks.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Segmentation/InstanceSegmentation/InstanceSegmenterBase.cs/#L204" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

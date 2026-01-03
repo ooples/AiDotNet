@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PowellOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PowellOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Powell&#39;s method, a derivative-free optimization algorithm used for finding the minimum of a function without requiring gradient information.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_PowellOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.PowellOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_PowellOptimizerOptions_3" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3" class="text-break">
+Class PowellOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PowellOptimizerOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Powell's method, a derivative-free optimization algorithm used for finding
+the minimum of a function without requiring gradient information.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PowellOptimizerOptions&lt;T, TInput, TOutput&gt; : OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">PowellOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_PowellOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Powell's method is a powerful optimization technique that does not require gradient information, making it
+suitable for optimizing functions where derivatives are unavailable, unreliable, or expensive to compute.
+The algorithm works by performing a series of one-dimensional minimizations along different directions,
+sequentially updating these directions based on the progress made. Unlike gradient-based methods like
+gradient descent, Powell's method can navigate complex objective function landscapes even when the gradient
+is not available. It is particularly effective for smooth, continuous functions with moderate dimensionality.
+The method's efficiency and reliability can be significantly affected by the step size parameters and adaptation
+strategy specified in this options class.
+</p>
+<p><b>For Beginners:</b> Powell's method is a way to find the lowest point (or minimum) of a function without needing to calculate its slope.
+<p>Imagine you're trying to find the lowest point in a hilly landscape while blindfolded:</p>
+<ul>
+<li>Gradient-based methods are like feeling which way is downhill and stepping that way</li>
+<li>But what if you can't tell which way is downhill? That's where Powell's method helps</li>
+</ul>
+<p>What Powell's method does:</p>
+<ul>
+<li>It tries stepping in one direction, then another, then another</li>
+<li>It keeps track of which directions led to the most improvement</li>
+<li>It combines these successful directions to create new search directions</li>
+<li>It continues this process until it can't make further progress</li>
+</ul>
+<p>Think of it like exploring a dark room:</p>
+<ul>
+<li>First, you walk north for a while until you hit something</li>
+<li>Then east, then south, then west</li>
+<li>Based on what you found, you decide which directions to try next</li>
+<li>You keep exploring until you're confident you've found what you're looking for</li>
+</ul>
+<p>This class lets you configure how Powell's method explores the function landscape - how big its steps are,
+how small they can get, and how it adapts as it explores.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_PowellOptimizerOptions_3_AdaptationRate_" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.AdaptationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PowellOptimizerOptions_3_AdaptationRate" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.AdaptationRate">
+  AdaptationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PowellOptimizerOptions.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the rate at which the step size adapts when adaptive step sizing is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdaptationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The adaptation rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PowellOptimizerOptions_3_AdaptationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how quickly the step size changes when adaptive step sizing is enabled.
+A higher value causes more aggressive adaptation, with the step size changing substantially based
+on recent progress. A lower value results in more conservative adaptation, with the step size changing
+more gradually. The optimal value depends on the characteristics of the objective function. Too high
+an adaptation rate may cause instability in the optimization process, while too low a rate may negate
+the benefits of adaptive step sizing. This parameter is only relevant when UseAdaptiveStepSize is true.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the algorithm adjusts its step size when adaptation is enabled.
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>The step size adapts at a moderate rate</li>
+<li>It finds a balance between responsive adaptation and stability</li>
+</ul>
+<p>Think of it like learning to adjust your pace:</p>
+<ul>
+<li>A high adaptation rate (0.5) is like dramatically changing your pace with every obstacle</li>
+<li>A low adaptation rate (0.01) is like very gradually adjusting your pace over time</li>
+<li>The default (0.1) gives noticeable but not dramatic adjustments</li>
+</ul>
+<p>You might want a higher adaptation rate (like 0.3 or 0.5):</p>
+<ul>
+<li>When your function has widely varying characteristics in different regions</li>
+<li>When you want the algorithm to respond quickly to changes in progress</li>
+<li>When convergence seems too slow with the default setting</li>
+</ul>
+<p>You might want a lower adaptation rate (like 0.05 or 0.01):</p>
+<ul>
+<li>When you notice oscillating behavior in the optimization process</li>
+<li>When more stable, predictable step size changes are preferred</li>
+<li>When the function landscape is relatively uniform</li>
+</ul>
+<p>Note: This setting only has an effect when UseAdaptiveStepSize is set to true.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PowellOptimizerOptions_3_InitialStepSize_" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.InitialStepSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PowellOptimizerOptions_3_InitialStepSize" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.InitialStepSize">
+  InitialStepSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PowellOptimizerOptions.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial step size used by the algorithm when exploring the function space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialStepSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial step size, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PowellOptimizerOptions_3_InitialStepSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines the initial magnitude of steps taken by the algorithm during line searches.
+It represents a balance between exploration speed and precision. A larger initial step size allows
+the algorithm to explore the function space more quickly but may miss narrow valleys or detailed features.
+A smaller initial step size provides more detailed exploration but slows down the overall optimization process.
+The optimal value depends on the scale and characteristics of the objective function being optimized.
+Note that if adaptive step sizing is enabled, this value serves as the starting point for step size adjustment.
+</p>
+<p><b>For Beginners:</b> This setting controls how big the steps are when the algorithm first starts searching.
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>The algorithm initially takes moderately-sized steps when exploring</li>
+<li>It's a balance between speed and carefulness</li>
+</ul>
+<p>Think of it like searching for something in the dark:</p>
+<ul>
+<li>A small step size (0.01) is like taking tiny, cautious steps - safer but very slow</li>
+<li>A large step size (1.0) is like taking big strides - faster but might miss important details</li>
+<li>The default (0.1) is like normal walking - reasonably careful but not overly slow</li>
+</ul>
+<p>You might want a larger initial step size (like 0.5 or 1.0):</p>
+<ul>
+<li>When you're optimizing functions with broad, smooth landscapes</li>
+<li>When you know the minimum is far from the starting point</li>
+<li>When quick approximate solutions are more valuable than precise ones</li>
+</ul>
+<p>You might want a smaller initial step size (like 0.01):</p>
+<ul>
+<li>When your function has many narrow valleys or sharp features</li>
+<li>When high precision is required from the beginning</li>
+<li>When the minimum is expected to be close to the starting point</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PowellOptimizerOptions_3_MaxStepSize_" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.MaxStepSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PowellOptimizerOptions_3_MaxStepSize" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.MaxStepSize">
+  MaxStepSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PowellOptimizerOptions.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum step size allowed during the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxStepSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum step size, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PowellOptimizerOptions_3_MaxStepSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter establishes an upper bound on the step size used by the algorithm, preventing it from
+taking excessively large steps that might skip over important regions of the function space. Limiting
+the maximum step size is particularly important for functions with complex landscapes or multiple local
+minima, where large steps could lead to missing the global minimum. The value should be chosen based on
+the expected scale of the optimization domain and the characteristics of the objective function.
+When adaptive step sizing is enabled, this constraint ensures that the adaptation process doesn't
+produce counterproductively large steps.
+</p>
+<p><b>For Beginners:</b> This setting limits how large the algorithm's steps can become during optimization.
+<p>The default value of 1.0 means:</p>
+<ul>
+<li>The algorithm will never take steps larger than 1.0</li>
+<li>This prevents it from making huge jumps that might miss important features</li>
+</ul>
+<p>Think of it like searching a room for a small object:</p>
+<ul>
+<li>If you take giant leaps across the room, you might completely step over what you're looking for</li>
+<li>The maximum step size puts a limit on how far you can jump in a single move</li>
+<li>With adaptive step sizing, the algorithm might try to increase step size when making good progress</li>
+<li>This parameter ensures those steps don't become too large</li>
+</ul>
+<p>You might want a larger maximum step size (like 5.0 or 10.0):</p>
+<ul>
+<li>When optimizing over very large parameter spaces</li>
+<li>When the function is smooth and doesn't have small, important features</li>
+<li>When you want to explore more quickly, even at the risk of reduced precision</li>
+</ul>
+<p>You might want a smaller maximum step size (like 0.5 or 0.1):</p>
+<ul>
+<li>When your function has many closely-spaced local minima</li>
+<li>When you know the function has important small-scale features</li>
+<li>When you want to ensure a thorough exploration of the space</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PowellOptimizerOptions_3_MinStepSize_" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.MinStepSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PowellOptimizerOptions_3_MinStepSize" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.MinStepSize">
+  MinStepSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PowellOptimizerOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum step size allowed during optimization, serving as a stopping criterion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinStepSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum step size, defaulting to 1e-6 (0.000001).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PowellOptimizerOptions_3_MinStepSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter establishes a lower bound on the step size used by the algorithm. When the step size
+falls below this threshold, the algorithm considers that it has converged to a solution with sufficient
+precision. It effectively controls the precision of the final solution - a smaller minimum step size 
+allows for more precise results but may require more iterations to reach convergence. This parameter
+is particularly important for preventing the algorithm from spending excessive computational resources
+trying to achieve marginal improvements beyond the required precision.
+</p>
+<p><b>For Beginners:</b> This setting defines how small the steps can get before the algorithm decides it's done.
+<p>The default value of 0.000001 (1e-6) means:</p>
+<ul>
+<li>The algorithm will stop when its steps become extremely tiny</li>
+<li>At this point, further improvements would be negligible</li>
+</ul>
+<p>Think of it like finding a penny on the ground:</p>
+<ul>
+<li>At first, you might walk with normal steps looking for it</li>
+<li>As you get closer, you slow down and take smaller steps</li>
+<li>Eventually, you're making such tiny movements that continuing to search isn't worth the effort</li>
+<li>MinStepSize is like saying &quot;when I'm moving less than a millimeter at a time, I'm done searching&quot;</li>
+</ul>
+<p>You might want a smaller minimum step size (like 1e-8 or 1e-10):</p>
+<ul>
+<li>For applications requiring extremely high precision</li>
+<li>When even tiny improvements in the solution are valuable</li>
+<li>In scientific or engineering applications with strict accuracy requirements</li>
+</ul>
+<p>You might want a larger minimum step size (like 1e-4 or 1e-3):</p>
+<ul>
+<li>When approximate solutions are sufficient</li>
+<li>To finish optimization more quickly</li>
+<li>When the function being optimized doesn't warrant extreme precision</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PowellOptimizerOptions_3_UseAdaptiveStepSize_" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.UseAdaptiveStepSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PowellOptimizerOptions_3_UseAdaptiveStepSize" data-uid="AiDotNet.Models.Options.PowellOptimizerOptions`3.UseAdaptiveStepSize">
+  UseAdaptiveStepSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PowellOptimizerOptions.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the algorithm should adaptively adjust step sizes based on optimization progress.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseAdaptiveStepSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean indicating whether to use adaptive step sizing, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PowellOptimizerOptions_3_UseAdaptiveStepSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls whether the algorithm dynamically adjusts its step size based on progress.
+When enabled, the algorithm increases step size when making good progress (to speed up optimization)
+and decreases it when progress slows (to refine the search). Adaptive step sizing can significantly
+improve convergence rates and overall efficiency by balancing exploration (large steps) and exploitation
+(small steps) as needed throughout the optimization process. However, it adds some computational overhead
+and may introduce additional complexity in analyzing the algorithm's behavior.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the algorithm automatically adjusts its step size as it searches.
+<p>The default value of true means:</p>
+<ul>
+<li>The algorithm will dynamically change its step size during optimization</li>
+<li>It takes larger steps when making good progress</li>
+<li>It takes smaller steps when progress becomes difficult</li>
+</ul>
+<p>Think of it like adjusting your pace when hiking:</p>
+<ul>
+<li>On flat, clear terrain, you walk faster (larger steps)</li>
+<li>On rocky, steep terrain, you slow down and step carefully (smaller steps)</li>
+<li>This automatic adjustment helps you cover ground efficiently while still being careful when needed</li>
+</ul>
+<p>You might want to disable adaptive step size (set to false):</p>
+<ul>
+<li>When you need completely predictable algorithm behavior</li>
+<li>When you're comparing different optimization runs and want consistent settings</li>
+<li>When you've already fine-tuned the fixed step size for your specific problem</li>
+</ul>
+<p>The adaptive step size is generally recommended as it:</p>
+<ul>
+<li>Reduces the need to manually tune step size parameters</li>
+<li>Often converges faster than fixed step sizes</li>
+<li>Automatically adjusts to different regions of the function landscape</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PowellOptimizerOptions.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

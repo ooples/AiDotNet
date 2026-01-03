@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OnnxTensorConverter | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OnnxTensorConverter | AiDotNet Documentation ">
+      
+      <meta name="description" content="Converts between AiDotNet Tensor types and ONNX Runtime tensor types.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Onnx_OnnxTensorConverter.md&amp;value=---%0Auid%3A%20AiDotNet.Onnx.OnnxTensorConverter%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Onnx.OnnxTensorConverter">
+
+
+
+  <h1 id="AiDotNet_Onnx_OnnxTensorConverter" data-uid="AiDotNet.Onnx.OnnxTensorConverter" class="text-break">
+Class OnnxTensorConverter  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Onnx.html">Onnx</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Converts between AiDotNet Tensor types and ONNX Runtime tensor types.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class OnnxTensorConverter</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">OnnxTensorConverter</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Onnx_OnnxTensorConverter_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides static methods for converting tensors between AiDotNet's
+generic Tensor&lt;T&gt; format and ONNX Runtime's DenseTensor format.
+</p>
+<p><b>For Beginners:</b> When running ONNX models, we need to convert our data
+to a format that ONNX Runtime understands. This converter handles that translation:
+<ul><li>ToOnnx: Converts your AiDotNet tensor to ONNX format for model input</li><li>FromOnnx: Converts ONNX model output back to AiDotNet tensor</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxDouble_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxDouble*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxDouble__1_Microsoft_ML_OnnxRuntime_Tensors_Tensor_System_Double__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxDouble``1(Microsoft.ML.OnnxRuntime.Tensors.Tensor{System.Double})">
+  FromOnnxDouble&lt;T&gt;(Tensor&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an ONNX DenseTensor of doubles to an AiDotNet Tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromOnnxDouble&lt;T&gt;(Tensor&lt;double&gt; onnxTensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>onnxTensor</code> <a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/Tensor.shared.cs">Tensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>The ONNX tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>An AiDotNet Tensor with the same shape and data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The target tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxFloatRemoveBatch_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxFloatRemoveBatch*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxFloatRemoveBatch__1_Microsoft_ML_OnnxRuntime_Tensors_Tensor_System_Single__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxFloatRemoveBatch``1(Microsoft.ML.OnnxRuntime.Tensors.Tensor{System.Single})">
+  FromOnnxFloatRemoveBatch&lt;T&gt;(Tensor&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an ONNX tensor and removes the batch dimension if it's 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromOnnxFloatRemoveBatch&lt;T&gt;(Tensor&lt;float&gt; onnxTensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>onnxTensor</code> <a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/Tensor.shared.cs">Tensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The ONNX tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>An AiDotNet Tensor, with batch dimension removed if batch size is 1.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The target tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxFloat_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxFloat*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxFloat__1_Microsoft_ML_OnnxRuntime_Tensors_Tensor_System_Single__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxFloat``1(Microsoft.ML.OnnxRuntime.Tensors.Tensor{System.Single})">
+  FromOnnxFloat&lt;T&gt;(Tensor&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an ONNX DenseTensor of floats to an AiDotNet Tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromOnnxFloat&lt;T&gt;(Tensor&lt;float&gt; onnxTensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>onnxTensor</code> <a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/Tensor.shared.cs">Tensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The ONNX tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>An AiDotNet Tensor with the same shape and data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The target tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxInt_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxInt*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxInt__1_Microsoft_ML_OnnxRuntime_Tensors_Tensor_System_Int32__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxInt``1(Microsoft.ML.OnnxRuntime.Tensors.Tensor{System.Int32})">
+  FromOnnxInt&lt;T&gt;(Tensor&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an ONNX DenseTensor of integers to an AiDotNet Tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromOnnxInt&lt;T&gt;(Tensor&lt;int&gt; onnxTensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>onnxTensor</code> <a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/Tensor.shared.cs">Tensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The ONNX tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>An AiDotNet Tensor with the same shape and data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The target tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxLong_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxLong*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxLong__1_Microsoft_ML_OnnxRuntime_Tensors_Tensor_System_Int64__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxLong``1(Microsoft.ML.OnnxRuntime.Tensors.Tensor{System.Int64})">
+  FromOnnxLong&lt;T&gt;(Tensor&lt;long&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an ONNX DenseTensor of long integers to an AiDotNet Tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromOnnxLong&lt;T&gt;(Tensor&lt;long&gt; onnxTensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>onnxTensor</code> <a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/Tensor.shared.cs">Tensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd><p>The ONNX tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>An AiDotNet Tensor with the same shape and data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The target tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxValue_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxValue*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_FromOnnxValue__1_Microsoft_ML_OnnxRuntime_DisposableNamedOnnxValue_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.FromOnnxValue``1(Microsoft.ML.OnnxRuntime.DisposableNamedOnnxValue)">
+  FromOnnxValue&lt;T&gt;(DisposableNamedOnnxValue)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an ONNX DisposableNamedOnnxValue to an AiDotNet Tensor based on its actual element type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt;? FromOnnxValue&lt;T&gt;(DisposableNamedOnnxValue result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>result</code> <a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/DisposableNamedOnnxValue.shared.cs">DisposableNamedOnnxValue</a></dt>
+    <dd><p>The ONNX result value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>An AiDotNet Tensor with the converted data, or null if conversion failed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The target tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_GetOnnxTypeName_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.GetOnnxTypeName*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_GetOnnxTypeName_System_Type_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.GetOnnxTypeName(System.Type)">
+  GetOnnxTypeName(Type)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the ONNX element type name for a .NET type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string GetOnnxTypeName(Type type)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>type</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The .NET type.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The ONNX element type name.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxDouble_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxDouble*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxDouble__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxDouble``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  ToOnnxDouble&lt;T&gt;(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an AiDotNet Tensor to an ONNX DenseTensor of doubles.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DenseTensor&lt;double&gt; ToOnnxDouble&lt;T&gt;(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The AiDotNet tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/DenseTensor.shared.cs">DenseTensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>An ONNX DenseTensor with the same shape and data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The source tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxFloatWithBatch_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxFloatWithBatch*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxFloatWithBatch__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxFloatWithBatch``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  ToOnnxFloatWithBatch&lt;T&gt;(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an ONNX DenseTensor with a prepended batch dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DenseTensor&lt;float&gt; ToOnnxFloatWithBatch&lt;T&gt;(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The AiDotNet tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/DenseTensor.shared.cs">DenseTensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>An ONNX DenseTensor with shape [1, ...original_shape].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The source tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxFloat_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxFloat*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxFloat__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxFloat``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  ToOnnxFloat&lt;T&gt;(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an AiDotNet Tensor to an ONNX DenseTensor of floats.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DenseTensor&lt;float&gt; ToOnnxFloat&lt;T&gt;(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The AiDotNet tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/DenseTensor.shared.cs">DenseTensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>An ONNX DenseTensor with the same shape and data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The source tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxInt_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxInt*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxInt__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxInt``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  ToOnnxInt&lt;T&gt;(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an AiDotNet Tensor to an ONNX DenseTensor of integers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DenseTensor&lt;int&gt; ToOnnxInt&lt;T&gt;(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The AiDotNet tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/DenseTensor.shared.cs">DenseTensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>An ONNX DenseTensor with the same shape and data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The source tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxLong_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxLong*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxLong__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxLong``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  ToOnnxLong&lt;T&gt;(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an AiDotNet Tensor to an ONNX DenseTensor of long integers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DenseTensor&lt;long&gt; ToOnnxLong&lt;T&gt;(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The AiDotNet tensor to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/Tensors/DenseTensor.shared.cs">DenseTensor</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd><p>An ONNX DenseTensor with the same shape and data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The source tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxValue_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxValue*"></a>
+
+  <h3 id="AiDotNet_Onnx_OnnxTensorConverter_ToOnnxValue__1_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_String_" data-uid="AiDotNet.Onnx.OnnxTensorConverter.ToOnnxValue``1(System.String,AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.String)">
+  ToOnnxValue&lt;T&gt;(string, Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an AiDotNet Tensor to an ONNX NamedOnnxValue based on the target element type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NamedOnnxValue ToOnnxValue&lt;T&gt;(string name, Tensor&lt;T&gt; tensor, string elementType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input name for the ONNX model.</p>
+</dd>
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The AiDotNet tensor to convert.</p>
+</dd>
+    <dt><code>elementType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The target ONNX element type (e.g., &quot;float&quot;, &quot;double&quot;, &quot;int64&quot;).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://github.com/microsoft/onnxruntime/blob/master/csharp/src/Microsoft.ML.OnnxRuntime/NamedOnnxValue.shared.cs">NamedOnnxValue</a></dt>
+    <dd><p>A NamedOnnxValue with the converted tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The source tensor's element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxTensorConverter.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

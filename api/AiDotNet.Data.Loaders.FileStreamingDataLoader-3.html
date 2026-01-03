@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FileStreamingDataLoader&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FileStreamingDataLoader&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A streaming data loader that reads from files in a directory.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Loaders_FileStreamingDataLoader_3.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Loaders.FileStreamingDataLoader%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3">
+
+
+
+  <h1 id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3" class="text-break">
+Class FileStreamingDataLoader&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Loaders.html">Loaders</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A streaming data loader that reads from files in a directory.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FileStreamingDataLoader&lt;T, TInput, TOutput&gt; : StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;, IStreamingDataLoader&lt;T, TInput, TOutput&gt;, IDataLoader&lt;T&gt;, IResettable, ICountable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output/label data.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html">DataLoaderBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html">StreamingDataLoaderBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">FileStreamingDataLoader&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IStreamingDataLoader-3.html">IStreamingDataLoader</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html">IDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IResettable.html">IResettable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICountable.html">ICountable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_SampleCount">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.SampleCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_TotalCount">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_PrefetchCount">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.PrefetchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_NumWorkers">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.NumWorkers</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_ReadSampleAsync_System_Int32_System_Threading_CancellationToken_">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.ReadSampleAsync(int, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_AggregateSamples_System_Collections_Generic_IList_System_ValueTuple__1__2___">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.AggregateSamples(IList&lt;(TInput Input, TOutput Output)&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_GetBatches_System_Boolean_System_Boolean_System_Nullable_System_Int32__">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.GetBatches(bool, bool, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_GetBatchesAsync_System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Threading_CancellationToken_">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.GetBatchesAsync(bool, bool, int?, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_GetShuffledIndices_System_Boolean_System_Nullable_System_Int32__">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.GetShuffledIndices(bool, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_LoadDataCoreAsync_System_Threading_CancellationToken_">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.LoadDataCoreAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_UnloadDataCore">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.UnloadDataCore()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Description">DataLoaderBase&lt;T&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_IsLoaded">DataLoaderBase&lt;T&gt;.IsLoaded</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_TotalCount">DataLoaderBase&lt;T&gt;.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentIndex">DataLoaderBase&lt;T&gt;.CurrentIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchSize">DataLoaderBase&lt;T&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchCount">DataLoaderBase&lt;T&gt;.BatchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentBatchIndex">DataLoaderBase&lt;T&gt;.CurrentBatchIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Progress">DataLoaderBase&lt;T&gt;.Progress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Reset">DataLoaderBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Unload">DataLoaderBase&lt;T&gt;.Unload()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadDataCoreAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadDataCoreAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_UnloadDataCore">DataLoaderBase&lt;T&gt;.UnloadDataCore()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_OnReset">DataLoaderBase&lt;T&gt;.OnReset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_EnsureLoaded">DataLoaderBase&lt;T&gt;.EnsureLoaded()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceIndex_System_Int32_">DataLoaderBase&lt;T&gt;.AdvanceIndex(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceBatchIndex">DataLoaderBase&lt;T&gt;.AdvanceBatchIndex()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToAsyncPipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__">DataPipelineExtensions.ToAsyncPipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__">DataPipelineExtensions.ToPipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToSamplePipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__">DataPipelineExtensions.ToSamplePipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+FileStreamingDataLoader automatically discovers files in a directory and streams them
+during training. This is ideal for image datasets where each file is a sample.
+</p>
+<p><b>For Beginners:</b> If you have a folder full of images with labels in the filename
+or a separate label file, this loader will read them one by one as needed.
+<p>Example:</p>
+<pre><code class="lang-csharp">var loader = new FileStreamingDataLoader&lt;float, float[], int&gt;(
+    directory: "path/to/images",
+    filePattern: "*.png",
+    fileProcessor: async (filePath, ct) =&gt;
+    {
+        var pixels = await LoadImagePixels(filePath, ct);
+        var label = ExtractLabelFromPath(filePath);
+        return (pixels, label);
+    },
+    batchSize: 32
+);</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3__ctor_" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3__ctor_System_String_System_String_System_Func_System_String_System_Threading_CancellationToken_System_Threading_Tasks_Task_System_ValueTuple__1__2____System_Int32_System_IO_SearchOption_System_Int32_System_Int32_" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.#ctor(System.String,System.String,System.Func{System.String,System.Threading.CancellationToken,System.Threading.Tasks.Task{System.ValueTuple{`1,`2}}},System.Int32,System.IO.SearchOption,System.Int32,System.Int32)">
+  FileStreamingDataLoader(string, string, Func&lt;string, CancellationToken, Task&lt;(TInput, TOutput)&gt;&gt;, int, SearchOption, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the FileStreamingDataLoader class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FileStreamingDataLoader(string directory, string filePattern, Func&lt;string, CancellationToken, Task&lt;(TInput, TOutput)&gt;&gt; fileProcessor, int batchSize, SearchOption searchOption = SearchOption.TopDirectoryOnly, int prefetchCount = 2, int numWorkers = 4)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>directory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The directory containing the data files.</p>
+</dd>
+    <dt><code>filePattern</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The file pattern to match (e.g., &quot;*.png&quot;).</p>
+</dd>
+    <dt><code>fileProcessor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;(TInput, TOutput)&gt;&gt;</dt>
+    <dd><p>Function that processes a file and returns (input, output).</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples per batch.</p>
+</dd>
+    <dt><code>searchOption</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.searchoption">SearchOption</a></dt>
+    <dd><p>Whether to search subdirectories.</p>
+</dd>
+    <dt><code>prefetchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of batches to prefetch.</p>
+</dd>
+    <dt><code>numWorkers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parallel workers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_FilePaths_" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.FilePaths*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_FilePaths" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.FilePaths">
+  FilePaths
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all file paths in the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; FilePaths { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_Name_" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.Name*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_Name" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the human-readable name of this data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_Name_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Examples: &quot;MNIST&quot;, &quot;Cora Citation Network&quot;, &quot;IMDB Reviews&quot;</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_SampleCount_" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.SampleCount*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_SampleCount" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.SampleCount">
+  SampleCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of samples in the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int SampleCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_SampleCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This may be known upfront (e.g., from file metadata) or estimated.
+For truly streaming sources where the count is unknown, this may return -1.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_ReadSampleAsync_" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.ReadSampleAsync*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_ReadSampleAsync_System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.Data.Loaders.FileStreamingDataLoader`3.ReadSampleAsync(System.Int32,System.Threading.CancellationToken)">
+  ReadSampleAsync(int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a single sample by index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;(TInput Input, TOutput Output)&gt; ReadSampleAsync(int index, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the sample to read.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.output">Output</a>)&gt;</dt>
+    <dd><p>A tuple containing the input and output for the sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_FileStreamingDataLoader_3_ReadSampleAsync_System_Int32_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Derived classes must implement this to read a single sample from the data source.
+This method is called by the batching infrastructure to build batches.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L119" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

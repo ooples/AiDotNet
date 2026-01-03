@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StandardGeneticAlgorithm&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StandardGeneticAlgorithm&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Genetics_StandardGeneticAlgorithm_3.md&amp;value=---%0Auid%3A%20AiDotNet.Genetics.StandardGeneticAlgorithm%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3">
+
+
+
+  <h1 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3" class="text-break">
+Class StandardGeneticAlgorithm&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L5"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Genetics.html">Genetics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StandardGeneticAlgorithm&lt;T, TInput, TOutput&gt; : GeneticBase&lt;T, TInput, TOutput&gt;, IGeneticAlgorithm&lt;T, TInput, TOutput, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelParameterGene&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html">GeneticBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">StandardGeneticAlgorithm&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGeneticAlgorithm-5.html">IGeneticAlgorithm</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Genetics.AdaptiveGeneticAlgorithm-3.html">AdaptiveGeneticAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Genetics.IslandModelGeneticAlgorithm-3.html">IslandModelGeneticAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Genetics.NSGAII-3.html">NSGAII&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Genetics.SteadyStateGeneticAlgorithm-3.html">SteadyStateGeneticAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Population">GeneticBase&lt;T, TInput, TOutput&gt;.Population</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_BestIndividual">GeneticBase&lt;T, TInput, TOutput&gt;.BestIndividual</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_GeneticParams">GeneticBase&lt;T, TInput, TOutput&gt;.GeneticParams</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_FitnessCalculator">GeneticBase&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_ModelEvaluator">GeneticBase&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Random">GeneticBase&lt;T, TInput, TOutput&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_CrossoverOperators">GeneticBase&lt;T, TInput, TOutput&gt;.CrossoverOperators</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_MutationOperators">GeneticBase&lt;T, TInput, TOutput&gt;.MutationOperators</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_EvolutionStopwatch">GeneticBase&lt;T, TInput, TOutput&gt;.EvolutionStopwatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_CurrentStats">GeneticBase&lt;T, TInput, TOutput&gt;.CurrentStats</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_NumOps">GeneticBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_AddDefaultCrossoverOperators">GeneticBase&lt;T, TInput, TOutput&gt;.AddDefaultCrossoverOperators()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_AddDefaultMutationOperators">GeneticBase&lt;T, TInput, TOutput&gt;.AddDefaultMutationOperators()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_MutateGene_AiDotNet_Genetics_ModelParameterGene__0__">GeneticBase&lt;T, TInput, TOutput&gt;.MutateGene(ModelParameterGene&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_MutateGeneGaussian_AiDotNet_Genetics_ModelParameterGene__0__">GeneticBase&lt;T, TInput, TOutput&gt;.MutateGeneGaussian(ModelParameterGene&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_GetFitnessCalculator">GeneticBase&lt;T, TInput, TOutput&gt;.GetFitnessCalculator()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_SetFitnessCalculator_AiDotNet_Interfaces_IFitnessCalculator__0__1__2__">GeneticBase&lt;T, TInput, TOutput&gt;.SetFitnessCalculator(IFitnessCalculator&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_GetPopulation">GeneticBase&lt;T, TInput, TOutput&gt;.GetPopulation()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_GetBestIndividual">GeneticBase&lt;T, TInput, TOutput&gt;.GetBestIndividual()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_EvaluateIndividual_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0____1__2__1__2_">GeneticBase&lt;T, TInput, TOutput&gt;.EvaluateIndividual(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, TInput, TOutput, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Evolve_System_Int32__1__2__1__2_System_Func_AiDotNet_Statistics_EvolutionStats__0__1__2__System_Boolean__">GeneticBase&lt;T, TInput, TOutput&gt;.Evolve(int, TInput, TOutput, TInput, TOutput, Func&lt;EvolutionStats&lt;T, TInput, TOutput&gt;, bool&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_CreateNextGeneration__1__2__1__2_">GeneticBase&lt;T, TInput, TOutput&gt;.CreateNextGeneration(TInput, TOutput, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_GetElites_System_Int32_">GeneticBase&lt;T, TInput, TOutput&gt;.GetElites(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_EvaluatePopulation__1__2__1__2_">GeneticBase&lt;T, TInput, TOutput&gt;.EvaluatePopulation(TInput, TOutput, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_UpdateEvolutionStats">GeneticBase&lt;T, TInput, TOutput&gt;.UpdateEvolutionStats()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_FindBestIndividual">GeneticBase&lt;T, TInput, TOutput&gt;.FindBestIndividual()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_CalculateDiversity">GeneticBase&lt;T, TInput, TOutput&gt;.CalculateDiversity()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_CalculateGeneticDistance_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___">GeneticBase&lt;T, TInput, TOutput&gt;.CalculateGeneticDistance(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_InvertFitness__0_">GeneticBase&lt;T, TInput, TOutput&gt;.InvertFitness(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_IsBetterFitness__0__0_">GeneticBase&lt;T, TInput, TOutput&gt;.IsBetterFitness(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Crossover_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___System_Double_">GeneticBase&lt;T, TInput, TOutput&gt;.Crossover(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Mutate_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___System_Double_">GeneticBase&lt;T, TInput, TOutput&gt;.Mutate(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Select_System_Int32_AiDotNet_Enums_SelectionMethod_">GeneticBase&lt;T, TInput, TOutput&gt;.Select(int, SelectionMethod)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_TruncationSelection_System_Int32_">GeneticBase&lt;T, TInput, TOutput&gt;.TruncationSelection(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_UniformSelection_System_Int32_">GeneticBase&lt;T, TInput, TOutput&gt;.UniformSelection(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_StochasticUniversalSamplingSelection_System_Int32_">GeneticBase&lt;T, TInput, TOutput&gt;.StochasticUniversalSamplingSelection(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_TournamentSelection_System_Int32_">GeneticBase&lt;T, TInput, TOutput&gt;.TournamentSelection(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_RouletteWheelSelection_System_Int32_">GeneticBase&lt;T, TInput, TOutput&gt;.RouletteWheelSelection(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_RankSelection_System_Int32_">GeneticBase&lt;T, TInput, TOutput&gt;.RankSelection(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_InitializePopulation_System_Int32_AiDotNet_Enums_InitializationMethod_">GeneticBase&lt;T, TInput, TOutput&gt;.InitializePopulation(int, InitializationMethod)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_CreateIndividual_System_Collections_Generic_ICollection_AiDotNet_Genetics_ModelParameterGene__0___">GeneticBase&lt;T, TInput, TOutput&gt;.CreateIndividual(ICollection&lt;ModelParameterGene&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_IndividualToModel_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___">GeneticBase&lt;T, TInput, TOutput&gt;.IndividualToModel(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_GetEvolutionStats_AiDotNet_Interfaces_IFitnessCalculator__0__1__2__">GeneticBase&lt;T, TInput, TOutput&gt;.GetEvolutionStats(IFitnessCalculator&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_ConfigureGeneticParameters_AiDotNet_Interfaces_GeneticParameters_">GeneticBase&lt;T, TInput, TOutput&gt;.ConfigureGeneticParameters(GeneticParameters)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_GetGeneticParameters">GeneticBase&lt;T, TInput, TOutput&gt;.GetGeneticParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_AddCrossoverOperator_System_String_System_Func_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___System_Double_System_Collections_Generic_ICollection_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0_____">GeneticBase&lt;T, TInput, TOutput&gt;.AddCrossoverOperator(string, Func&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double, ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_AddMutationOperator_System_String_System_Func_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___System_Double_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0____">GeneticBase&lt;T, TInput, TOutput&gt;.AddMutationOperator(string, Func&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_SavePopulation_System_String_">GeneticBase&lt;T, TInput, TOutput&gt;.SavePopulation(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_SerializePopulation">GeneticBase&lt;T, TInput, TOutput&gt;.SerializePopulation()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_LoadPopulation_System_String_">GeneticBase&lt;T, TInput, TOutput&gt;.LoadPopulation(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_DeserializePopulation_System_Byte___">GeneticBase&lt;T, TInput, TOutput&gt;.DeserializePopulation(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Predict__1_">GeneticBase&lt;T, TInput, TOutput&gt;.Predict(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_GetMetaData">GeneticBase&lt;T, TInput, TOutput&gt;.GetMetaData()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Serialize">GeneticBase&lt;T, TInput, TOutput&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_SerializeIndividual_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___">GeneticBase&lt;T, TInput, TOutput&gt;.SerializeIndividual(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_SerializeModelData">GeneticBase&lt;T, TInput, TOutput&gt;.SerializeModelData()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_Deserialize_System_Byte___">GeneticBase&lt;T, TInput, TOutput&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_DeserializeIndividual_System_Byte___">GeneticBase&lt;T, TInput, TOutput&gt;.DeserializeIndividual(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Genetics.GeneticBase-3.html#AiDotNet_Genetics_GeneticBase_3_DeserializeModelData_System_Byte___">GeneticBase&lt;T, TInput, TOutput&gt;.DeserializeModelData(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3__ctor_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3__ctor_System_Func_AiDotNet_Interfaces_IFullModel__0__1__2___AiDotNet_Interfaces_IFitnessCalculator__0__1__2__AiDotNet_Interfaces_IModelEvaluator__0__1__2__" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.#ctor(System.Func{AiDotNet.Interfaces.IFullModel{`0,`1,`2}},AiDotNet.Interfaces.IFitnessCalculator{`0,`1,`2},AiDotNet.Interfaces.IModelEvaluator{`0,`1,`2})">
+  StandardGeneticAlgorithm(Func&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;, IFitnessCalculator&lt;T, TInput, TOutput&gt;, IModelEvaluator&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L10"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StandardGeneticAlgorithm(Func&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt; modelFactory, IFitnessCalculator&lt;T, TInput, TOutput&gt; fitnessCalculator, IModelEvaluator&lt;T, TInput, TOutput&gt; modelEvaluator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelFactory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-1">Func</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>fitnessCalculator</code> <a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>modelEvaluator</code> <a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_CreateIndividual_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.CreateIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_CreateIndividual_System_Collections_Generic_ICollection_AiDotNet_Genetics_ModelParameterGene__0___" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.CreateIndividual(System.Collections.Generic.ICollection{AiDotNet.Genetics.ModelParameterGene{`0}})">
+  CreateIndividual(ICollection&lt;ModelParameterGene&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new individual with the specified genes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; CreateIndividual(ICollection&lt;ModelParameterGene&lt;T&gt;&gt; genes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>genes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The genes to include in the individual.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new individual with the specified genes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_DeserializeIndividual_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.DeserializeIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_DeserializeIndividual_System_Byte___" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.DeserializeIndividual(System.Byte[])">
+  DeserializeIndividual(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L397"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes an individual from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; DeserializeIndividual(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized individual.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The deserialized individual.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_DeserializeModelData_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.DeserializeModelData*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_DeserializeModelData_System_Byte___" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.DeserializeModelData(System.Byte[])">
+  DeserializeModelData(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L433"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes model-specific data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeModelData(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_DeserializePopulation_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.DeserializePopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_DeserializePopulation_System_Byte___" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.DeserializePopulation(System.Byte[])">
+  DeserializePopulation(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L455"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a population from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; DeserializePopulation(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized population.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The deserialized population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_GetMetaData_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.GetMetaData*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_GetMetaData" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.GetMetaData">
+  GetMetaData()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L362"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the metadata for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetMetaData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The model metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_IndividualToModel_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.IndividualToModel*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_IndividualToModel_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.IndividualToModel(AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}})">
+  IndividualToModel(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an individual to a trained model that can make predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, TInput, TOutput&gt; IndividualToModel(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; individual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>individual</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The individual to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A model capable of making predictions based on the individual's genes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_InitializePopulation_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.InitializePopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_InitializePopulation_System_Int32_AiDotNet_Enums_InitializationMethod_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.InitializePopulation(System.Int32,AiDotNet.Enums.InitializationMethod)">
+  InitializePopulation(int, InitializationMethod)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new population with random individuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; InitializePopulation(int populationSize, InitializationMethod initializationMethod)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>populationSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the population to create.</p>
+</dd>
+    <dt><code>initializationMethod</code> <a class="xref" href="AiDotNet.Enums.InitializationMethod.html">InitializationMethod</a></dt>
+    <dd><p>The method to use for initialization.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The newly created population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_MutateGene_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.MutateGene*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_MutateGene_AiDotNet_Genetics_ModelParameterGene__0__" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.MutateGene(AiDotNet.Genetics.ModelParameterGene{`0})">
+  MutateGene(ModelParameterGene&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a mutated version of a gene.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelParameterGene&lt;T&gt; MutateGene(ModelParameterGene&lt;T&gt; gene)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gene</code> <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;</dt>
+    <dd><p>The gene to mutate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;</dt>
+    <dd><p>A mutated copy of the gene.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_MutateGeneGaussian_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.MutateGeneGaussian*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_MutateGeneGaussian_AiDotNet_Genetics_ModelParameterGene__0__" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.MutateGeneGaussian(AiDotNet.Genetics.ModelParameterGene{`0})">
+  MutateGeneGaussian(ModelParameterGene&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a mutated version of a gene using Gaussian noise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelParameterGene&lt;T&gt; MutateGeneGaussian(ModelParameterGene&lt;T&gt; gene)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gene</code> <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;</dt>
+    <dd><p>The gene to mutate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;</dt>
+    <dd><p>A mutated copy of the gene.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_SerializeIndividual_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.SerializeIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_SerializeIndividual_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.SerializeIndividual(AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}})">
+  SerializeIndividual(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L378"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes an individual to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override byte[] SerializeIndividual(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; individual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>individual</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The individual to serialize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized individual.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_SerializeModelData_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.SerializeModelData*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_SerializeModelData" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.SerializeModelData">
+  SerializeModelData()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L427"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes model-specific data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override byte[] SerializeModelData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_SerializePopulation_" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.SerializePopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_StandardGeneticAlgorithm_3_SerializePopulation" data-uid="AiDotNet.Genetics.StandardGeneticAlgorithm`3.SerializePopulation">
+  SerializePopulation()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L438"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the population to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override byte[] SerializePopulation()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/StandardGeneticAlgorithm.cs/#L5" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

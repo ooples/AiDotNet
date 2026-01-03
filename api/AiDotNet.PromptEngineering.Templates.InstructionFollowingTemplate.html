@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class InstructionFollowingTemplate | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class InstructionFollowingTemplate | AiDotNet Documentation ">
+      
+      <meta name="description" content="Template optimized for clear, structured instruction-following tasks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate" class="text-break">
+Class InstructionFollowingTemplate  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Templates.html">Templates</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Template optimized for clear, structured instruction-following tasks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class InstructionFollowingTemplate : PromptTemplateBase, IPromptTemplate</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html">PromptTemplateBase</a></div>
+      <div><span class="xref">InstructionFollowingTemplate</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html#AiDotNet_PromptEngineering_Templates_PromptTemplateBase_Template">PromptTemplateBase.Template</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html#AiDotNet_PromptEngineering_Templates_PromptTemplateBase_InputVariables">PromptTemplateBase.InputVariables</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html#AiDotNet_PromptEngineering_Templates_PromptTemplateBase_Format_System_Collections_Generic_Dictionary_System_String_System_String__">PromptTemplateBase.Format(Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html#AiDotNet_PromptEngineering_Templates_PromptTemplateBase_Validate_System_Collections_Generic_Dictionary_System_String_System_String__">PromptTemplateBase.Validate(Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This template provides a clear structure for instructions, context, and constraints,
+helping models understand and follow complex multi-step instructions accurately.
+</p>
+<p><b>For Beginners:</b> Structures instructions for clear AI execution.
+<p>Example:</p>
+<pre><code class="lang-csharp">var template = new InstructionFollowingTemplate()
+    .WithObjective("Summarize the meeting notes")
+    .AddInstruction("Read through all the notes")
+    .AddInstruction("Identify the main topics discussed")
+    .AddInstruction("Note any action items and their owners")
+    .AddConstraint("Keep summary under 200 words")
+    .AddConstraint("Use bullet points for action items");
+
+var prompt = template.Format(new Dictionary&lt;string, string&gt;
+{
+    { "input", meetingNotes }
+});</code></pre>
+<p>Benefits:</p>
+<ul>
+<li>Clear separation of objective, steps, and constraints</li>
+<li>Numbered instructions for sequential execution</li>
+<li>Explicit constraints prevent unwanted behavior</li>
+<li>Input/output sections clearly marked</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate__ctor_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate__ctor" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.#ctor">
+  InstructionFollowingTemplate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the InstructionFollowingTemplate class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate__ctor_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate__ctor_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.#ctor(System.String)">
+  InstructionFollowingTemplate(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance with a custom template string.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate(string template)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>template</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The custom template string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_AddConstraint_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.AddConstraint*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_AddConstraint_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.AddConstraint(System.String)">
+  AddConstraint(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a constraint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate AddConstraint(string constraint)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>constraint</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The constraint to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd><p>A new template with the constraint added.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_AddConstraints_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.AddConstraints*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_AddConstraints_System_String___" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.AddConstraints(System.String[])">
+  AddConstraints(params string[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds multiple constraints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate AddConstraints(params string[] constraints)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>constraints</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>The constraints to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd><p>A new template with the constraints added.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_AddInstruction_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.AddInstruction*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_AddInstruction_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.AddInstruction(System.String)">
+  AddInstruction(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an instruction step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate AddInstruction(string instruction)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>instruction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The instruction to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd><p>A new template with the instruction added.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_AddInstructions_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.AddInstructions*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_AddInstructions_System_String___" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.AddInstructions(System.String[])">
+  AddInstructions(params string[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds multiple instruction steps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate AddInstructions(params string[] instructions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>instructions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>The instructions to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd><p>A new template with the instructions added.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_Builder_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.Builder*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_Builder" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.Builder">
+  Builder()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L348"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a builder for constructing instruction-following templates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InstructionFollowingBuilder Builder()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingBuilder.html">InstructionFollowingBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_Classification_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.Classification*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_Classification_System_String___" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.Classification(System.String[])">
+  Classification(params string[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a classification template.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InstructionFollowingTemplate Classification(params string[] categories)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>categories</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>The available categories.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_FormatCore_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.FormatCore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_FormatCore_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.FormatCore(System.Collections.Generic.Dictionary{System.String,System.String})">
+  FormatCore(Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L262"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Formats the instruction-following template.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override string FormatCore(Dictionary&lt;string, string&gt; variables)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>variables</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_QuestionAnswering_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.QuestionAnswering*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_QuestionAnswering" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.QuestionAnswering">
+  QuestionAnswering()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L332"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a question-answering template.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InstructionFollowingTemplate QuestionAnswering()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_Summarization_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.Summarization*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_Summarization_System_Int32_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.Summarization(System.Int32)">
+  Summarization(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L279"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a summarization template.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InstructionFollowingTemplate Summarization(int maxLength = 200)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum length of the summary.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_Translation_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.Translation*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_Translation_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.Translation(System.String)">
+  Translation(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a translation template.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InstructionFollowingTemplate Translation(string targetLanguage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>targetLanguage</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The target language for translation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_WithInputDescription_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.WithInputDescription*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_WithInputDescription_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.WithInputDescription(System.String)">
+  WithInputDescription(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the input description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate WithInputDescription(string description)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of expected input.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd><p>A new template with the input description set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_WithObjective_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.WithObjective*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_WithObjective_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.WithObjective(System.String)">
+  WithObjective(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the objective for the task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate WithObjective(string objective)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>objective</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The main objective or goal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd><p>A new template with the objective set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_WithOutputDescription_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.WithOutputDescription*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_InstructionFollowingTemplate_WithOutputDescription_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.WithOutputDescription(System.String)">
+  WithOutputDescription(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the output description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InstructionFollowingTemplate WithOutputDescription(string description)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of expected output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate.html">InstructionFollowingTemplate</a></dt>
+    <dd><p>A new template with the output description set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/InstructionFollowingTemplate.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

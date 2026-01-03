@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>GPU GEMM Optimization Roadmap for AMD RDNA1 (RX 5500 XT) | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="GPU GEMM Optimization Roadmap for AMD RDNA1 (RX 5500 XT) | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_OPTIMIZATION_ROADMAP.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="gpu-gemm-optimization-roadmap-for-amd-rdna1-rx-5500-xt">GPU GEMM Optimization Roadmap for AMD RDNA1 (RX 5500 XT)</h1>
+
+<h2 id="current-state-2026-01-01-phase-15-complete---now-faster-than-clblast">Current State (2026-01-01, Phase 1.5 Complete - NOW FASTER THAN CLBLAST!)</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPU</td>
+<td>AMD RX 5500 XT (gfx1012, 11 CUs)</td>
+</tr>
+<tr>
+<td>Theoretical Peak</td>
+<td>~5,196 GFLOPS</td>
+</tr>
+<tr>
+<td>CLBlast Performance</td>
+<td>2,258 GFLOPS @ 2048x2048</td>
+</tr>
+<tr>
+<td><strong>Our Performance</strong></td>
+<td><strong>3,137 GFLOPS @ 2048x2048 (139% of CLBlast!)</strong></td>
+</tr>
+<tr>
+<td>1024x1024</td>
+<td><strong>2,605 GFLOPS (1.43x FASTER than CLBlast!)</strong></td>
+</tr>
+<tr>
+<td>2048x2048</td>
+<td><strong>3,137 GFLOPS (1.39x FASTER than CLBlast!)</strong></td>
+</tr>
+<tr>
+<td>4096x4096</td>
+<td><strong>2,334 GFLOPS (5.4x FASTER than CLBlast!)</strong></td>
+</tr>
+<tr>
+<td>DenseLayer</td>
+<td><strong>1,235 GFLOPS (1.22x FASTER than CLBlast!)</strong></td>
+</tr>
+<tr>
+<td>Phase 1 Status</td>
+<td><strong>COMPLETE</strong> - All low-complexity optimizations applied</td>
+</tr>
+<tr>
+<td>Phase 1.5 Status</td>
+<td><strong>COMPLETE</strong> - Row-major swap eliminates 48% transpose overhead!</td>
+</tr>
+<tr>
+<td>Current Achievement</td>
+<td><strong>60% of theoretical peak, 40% faster than CLBlast!</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="key-discoveries">Key Discoveries</h2>
+<p><strong>1. RX 5500 XT (gfx1012) is NOT in CLBlast's tuning database!</strong></p>
+<ul>
+<li>CLBlast has tuned params for gfx1010 (RX 5700) but not gfx1012</li>
+<li>FIXED: Added gfx1012 entries to all CLBlast databases</li>
+</ul>
+<p><strong>2. XgemmDirect kernel excels for small/DenseLayer workloads!</strong></p>
+<ul>
+<li>Direct path avoids transpose overhead for row-major data</li>
+<li>256x256: 559-773 GFLOPS (1.5-2x faster than CLBlast)</li>
+<li>512x512: 1349 GFLOPS (1.4x faster than CLBlast)</li>
+<li>DenseLayer: 1350 GFLOPS (1.16x faster than CLBlast)</li>
+</ul>
+<p><strong>3. Row-Major Swap Trick (BREAKTHROUGH!)</strong></p>
+<ul>
+<li>Previous approach: Physical transpose of A and C matrices (48% overhead!)</li>
+<li>New approach: Swap A↔B and M↔N, no data movement at all</li>
+<li>For row-major C = A × B, compute column-major C^T = B^T × A^T</li>
+<li>Result: GEMM kernel alone runs at 2800-3200 GFLOPS, matching raw compute!</li>
+<li>2048x2048: From 1,636 GFLOPS (71% CLBlast) to 3,137 GFLOPS (139% CLBlast)!</li>
+</ul>
+<hr>
+<h2 id="phase-1-match-clblast-critical">Phase 1: Match CLBlast (CRITICAL)</h2>
+<p>These optimizations should bring us from 1,000 to 2,300+ GFLOPS.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Optimization</th>
+<th>Expected Gain</th>
+<th>Complexity</th>
+<th>Risk</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Use CLBlast baseline kernel directly</strong></td>
+<td>+50% (1.5x)</td>
+<td>Low</td>
+<td>Low</td>
+<td><strong>DONE</strong> ✓</td>
+</tr>
+<tr>
+<td>1a</td>
+<td><strong>Add gfx1012 to CLBlast databases</strong></td>
+<td>+10%</td>
+<td>Low</td>
+<td>Low</td>
+<td><strong>DONE</strong> ✓</td>
+</tr>
+<tr>
+<td>1b</td>
+<td><strong>Hybrid direct/indirect path selection</strong></td>
+<td>+10%</td>
+<td>Low</td>
+<td>Low</td>
+<td><strong>DONE</strong> ✓</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>LDS Bank Conflict Padding</strong> (+4 stride to arrays)</td>
+<td>+6%</td>
+<td>Low</td>
+<td>Low</td>
+<td><strong>DONE</strong> ✓</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>VWM=4, VWN=4</strong> (wider vectorization)</td>
+<td>+2%</td>
+<td>Low</td>
+<td>Low</td>
+<td><strong>DONE</strong> ✓</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>K-loop Unrolling (KWI&gt;2)</strong></td>
+<td>-2% (regression!)</td>
+<td>Low</td>
+<td>Low</td>
+<td><strong>SKIP</strong> ✗</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Phase 1 COMPLETE - Final Performance (before row-major swap):</strong></p>
+<ul>
+<li><strong>2048x2048: 1,636 GFLOPS (71% of CLBlast)</strong></li>
+<li>K-loop unrolling (KWI=4, KWI=8) tested but caused register pressure regression on 11-CU RDNA1</li>
+<li>LDS padding: +6%, Vectorization: +2% - both kept</li>
+</ul>
+<hr>
+<h2 id="phase-15-row-major-swap-trick-breakthrough">Phase 1.5: Row-Major Swap Trick (BREAKTHROUGH!)</h2>
+<p>Target: Eliminate 48% transpose overhead discovered in Phase 1.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Optimization</th>
+<th>Expected Gain</th>
+<th>Complexity</th>
+<th>Risk</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5</td>
+<td><strong>Row-Major Swap Trick</strong></td>
+<td>+92% (2x)</td>
+<td>Medium</td>
+<td>Low</td>
+<td><strong>DONE</strong> ✓</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The Problem:</strong></p>
+<ul>
+<li>CLBlast Xgemm kernel expects column-major data layout</li>
+<li>Our row-major data required physical transpose of A and C matrices</li>
+<li>Timing showed: GEMM kernel = 52% of time, Transpose = 48% of time!</li>
+<li>GEMM kernel alone achieved 2800-3200 GFLOPS - faster than CLBlast!</li>
+</ul>
+<p><strong>The Solution - Row-Major Swap Trick:</strong>
+For row-major GEMM <code>C = A × B</code>:</p>
+<ol>
+<li>Row-major data reinterpreted as column-major is already transposed</li>
+<li>So: <code>C^T = (A × B)^T = B^T × A^T</code></li>
+<li>Swap A↔B and M↔N in kernel call</li>
+<li>Kernel produces column-major result = row-major result (no data movement!)</li>
+</ol>
+<p><strong>Implementation:</strong></p>
+<pre><code class="lang-csharp">// Instead of:
+// 1. Transpose A (row-major M×K) to A' (column-major K×M) [EXPENSIVE]
+// 2. Call kernel: C' = A' × B
+// 3. Transpose C' (column-major) to C (row-major) [EXPENSIVE]
+
+// We do:
+// 1. Swap arguments: aBuf = B, bBuf = A (zero cost)
+// 2. Swap dimensions: swappedM = N, swappedN = M (zero cost)
+// 3. Call kernel: C' = B' × A' where ' means row-major as column-major
+// 4. Result is directly in correct row-major layout! (no transpose)
+</code></pre>
+<p><strong>Phase 1.5 COMPLETE - Final Performance:</strong></p>
+<ul>
+<li><strong>1024x1024: 2,605 GFLOPS (1.43x FASTER than CLBlast!)</strong></li>
+<li><strong>2048x2048: 3,137 GFLOPS (1.39x FASTER than CLBlast!)</strong></li>
+<li><strong>4096x4096: 2,334 GFLOPS (5.4x FASTER than CLBlast!)</strong></li>
+<li><strong>DenseLayer: 1,235 GFLOPS (1.22x FASTER than CLBlast!)</strong></li>
+<li><strong>Overall: 60% of theoretical peak, 40% faster than CLBlast!</strong></li>
+</ul>
+<h3 id="implementation-details">Implementation Details</h3>
+<h4 id="1-clblast-baseline-kernel">1. CLBlast Baseline Kernel</h4>
+<ul>
+<li>Use <code>KernelName = &quot;clblast_baseline_k0&quot;</code> config</li>
+<li>This triggers <code>ClBlastXgemmKernel.BuildSource()</code> - the actual CLBlast kernel</li>
+<li>Parameters: MWG=64, NWG=64, KWG=16, VWM=2, VWN=2, SA=1, SB=1</li>
+</ul>
+<h4 id="2-lds-bank-conflict-padding">2. LDS Bank Conflict Padding</h4>
+<pre><code class="lang-opencl">// BEFORE (bank conflicts)
+__local float Als[KWG][MWG];
+
+// AFTER (conflict-free)
+__local float Als[KWG][MWG + 4];  // +4 padding
+</code></pre>
+<h4 id="3-vectorization-vwm4-vwn4">3. Vectorization (VWM=4, VWN=4)</h4>
+<ul>
+<li>Use <code>float4</code> for global memory loads</li>
+<li>Requires 16-byte alignment</li>
+<li>4x fewer memory instructions</li>
+</ul>
+<h4 id="4-k-loop-unrolling-skipped---causes-regression">4. K-loop Unrolling (SKIPPED - Causes Regression)</h4>
+<pre><code class="lang-opencl">// TESTED: KWI=4 and KWI=8 both caused performance regression
+// Root cause: Register pressure on 11-CU RDNA1 (RX 5500 XT)
+// Larger CU count GPUs may benefit, but 11 CUs cannot sustain high VGPR usage
+// Keep KWI=2 (default) for best performance on gfx1012
+</code></pre>
+<hr>
+<h2 id="phase-2-exceed-clblast-high-priority">Phase 2: Exceed CLBlast (HIGH PRIORITY)</h2>
+<p>Target: 2,300 to 3,500+ GFLOPS</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Optimization</th>
+<th>Expected Gain</th>
+<th>Complexity</th>
+<th>Risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5</td>
+<td><strong>Larger Thread Tiles (16x8)</strong></td>
+<td>+20-30%</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Wave32 Mode</strong> (RDNA1 native)</td>
+<td>+10-30%</td>
+<td>Medium</td>
+<td>Low-Medium</td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Three-Level Double Buffering</strong></td>
+<td>+20-50%</td>
+<td>High</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>8</td>
+<td><strong>VGPR Occupancy Optimization</strong></td>
+<td>+10-25%</td>
+<td>Medium</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>9</td>
+<td><strong>128-byte Cache Line Alignment</strong></td>
+<td>+5-15%</td>
+<td>Medium</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>10</td>
+<td><strong>XOR-Based LDS Swizzle</strong></td>
+<td>+10-20%</td>
+<td>Medium</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<h3 id="implementation-details-1">Implementation Details</h3>
+<h4 id="5-larger-thread-tiles">5. Larger Thread Tiles</h4>
+<ul>
+<li>Increase from 8x8 to 16x8 per thread</li>
+<li>More arithmetic intensity per memory access</li>
+<li>Watch register pressure (target &lt;128 VGPRs)</li>
+</ul>
+<h4 id="6-wave32-mode">6. Wave32 Mode</h4>
+<ul>
+<li>RDNA1's native execution mode (vs GCN's wave64)</li>
+<li>2x more wave slots with same VGPR count</li>
+<li>Compiler flag: <code>-mwavefrontsize32</code></li>
+</ul>
+<h4 id="7-double-buffering">7. Double Buffering</h4>
+<pre><code>Iteration N:   [Compute A[N]] [Load A[N+1] to LDS]
+Iteration N+1: [Compute A[N+1]] [Load A[N+2] to LDS]
+</code></pre>
+<ul>
+<li>Overlaps compute and memory</li>
+<li>Requires 2x LDS allocation</li>
+<li>Use <code>s_waitcnt</code> for synchronization</li>
+</ul>
+<h4 id="8-vgpr-occupancy-rdna1-specific">8. VGPR Occupancy (RDNA1 Specific)</h4>
+<table>
+<thead>
+<tr>
+<th>VGPRs Used</th>
+<th>Max Waves (wave32)</th>
+<th>Occupancy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>64</td>
+<td>20</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>96</td>
+<td>16</td>
+<td>80%</td>
+</tr>
+<tr>
+<td>128</td>
+<td>12</td>
+<td>60%</td>
+</tr>
+<tr>
+<td>256</td>
+<td>6</td>
+<td>30%</td>
+</tr>
+</tbody>
+</table>
+<h4 id="9-128-byte-cache-lines">9. 128-byte Cache Lines</h4>
+<ul>
+<li>RDNA1 L0 cache uses 128-byte lines (not 64-byte like GCN)</li>
+<li>Align tile loads to 128-byte boundaries</li>
+<li>Wave32 accessing 32 x 4-byte = 128 bytes = 1 cache line</li>
+</ul>
+<h4 id="10-xor-based-lds-swizzle">10. XOR-Based LDS Swizzle</h4>
+<pre><code class="lang-opencl">// Bank-conflict-free indexing
+int lds_idx = row ^ col;  // XOR swizzle
+Als[lds_idx] = data;
+</code></pre>
+<hr>
+<h2 id="phase-3-rdna1-specific-optimizations-medium-priority">Phase 3: RDNA1-Specific Optimizations (MEDIUM PRIORITY)</h2>
+<p>Target: 3,500 to 4,500+ GFLOPS</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Optimization</th>
+<th>Expected Gain</th>
+<th>Complexity</th>
+<th>Risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>11</td>
+<td><strong>GEMM + Bias + Activation Fusion</strong></td>
+<td>+20-50%</td>
+<td>Medium</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>12</td>
+<td><strong>L2-Aware Tile Rasterization</strong> (Z-order)</td>
+<td>+10-20%</td>
+<td>Medium</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>13</td>
+<td><strong>Explicit FMA Instructions</strong></td>
+<td>+5-10%</td>
+<td>Low</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>14</td>
+<td><strong>cl_khr_subgroups Operations</strong></td>
+<td>+5-15%</td>
+<td>Medium</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>15</td>
+<td><strong>DPP Cross-Lane Operations</strong></td>
+<td>+10-15%</td>
+<td>High</td>
+<td>High</td>
+</tr>
+</tbody>
+</table>
+<h3 id="implementation-details-2">Implementation Details</h3>
+<h4 id="11-kernel-fusion">11. Kernel Fusion</h4>
+<pre><code class="lang-opencl">// Fused epilogue - no extra memory round-trip
+float result = alpha * acc + beta * C[idx];
+result += bias[col];           // Bias add
+result = max(0.0f, result);    // ReLU
+C[idx] = result;
+</code></pre>
+<h4 id="12-z-order-tile-rasterization">12. Z-Order Tile Rasterization</h4>
+<ul>
+<li>Instead of row-major workgroup scheduling</li>
+<li>Use Morton/Z-order for better L2 locality</li>
+<li>Remap: <code>tile_id = interleave_bits(tile_x, tile_y)</code></li>
+</ul>
+<h4 id="14-subgroup-operations">14. Subgroup Operations</h4>
+<pre><code class="lang-opencl">// Wave-level reduction (no LDS needed)
+float sum = sub_group_reduce_add(partial);
+</code></pre>
+<hr>
+<h2 id="phase-4-advanced-techniques-lower-priority">Phase 4: Advanced Techniques (LOWER PRIORITY)</h2>
+<p>Target: Approaching theoretical peak (4,500-5,000+ GFLOPS)</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Optimization</th>
+<th>Expected Gain</th>
+<th>Complexity</th>
+<th>Risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>16</td>
+<td><strong>Split-K for Tall-Skinny Matrices</strong></td>
+<td>+100-300%</td>
+<td>Medium</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>17</td>
+<td><strong>Power-of-2 Padding Fix</strong></td>
+<td>+Up to 5x</td>
+<td>Medium</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>18</td>
+<td><strong>Persistent Kernels</strong></td>
+<td>+20-50%</td>
+<td>High</td>
+<td>High</td>
+</tr>
+<tr>
+<td>19</td>
+<td><strong>Stream-K Work Distribution</strong></td>
+<td>+95-108%</td>
+<td>High</td>
+<td>High</td>
+</tr>
+<tr>
+<td>20</td>
+<td><strong>CU Mode vs WGP Mode</strong></td>
+<td>Unknown</td>
+<td>Low</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<h3 id="implementation-details-3">Implementation Details</h3>
+<h4 id="16-split-k-parallelization">16. Split-K Parallelization</h4>
+<ul>
+<li>For matrices with small M, N but large K</li>
+<li>Partition K across workgroups</li>
+<li>Final reduction with atomics or second kernel</li>
+</ul>
+<h4 id="17-power-of-2-fix">17. Power-of-2 Fix</h4>
+<ul>
+<li>CLBlast has 5x performance cliff at 8192x8192</li>
+<li>Add asymmetric padding: <code>M' = M + (M % 32 == 0 ? 1 : 0)</code></li>
+</ul>
+<hr>
+<h2 id="ab-testing-protocol">A/B Testing Protocol</h2>
+<p>For each optimization:</p>
+<pre><code>1. BASELINE: Benchmark current best config
+   - Record GFLOPS, time, bottleneck analysis
+
+2. CHANGE: Apply ONE surgical modification
+   - Document exactly what changed
+
+3. BENCHMARK: Run same test suite
+   - Record GFLOPS, time, bottleneck analysis
+
+4. COMPARE:
+   - If improved by &gt;2%: KEEP, update baseline
+   - If regressed: REVERT immediately
+   - If within noise (&lt;2%): Keep if simpler, else revert
+
+5. DOCUMENT:
+   - Config parameters
+   - GFLOPS achieved
+   - Bottleneck indicators
+   - Decision rationale
+</code></pre>
+<hr>
+<h2 id="bottleneck-analysis-checklist">Bottleneck Analysis Checklist</h2>
+<p>For each benchmark run, capture:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+<th>How to Measure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Occupancy</td>
+<td>&gt;50%</td>
+<td><code>OccupancyEst</code> in BottleneckDiagnostics</td>
+</tr>
+<tr>
+<td>LDS Usage</td>
+<td>&lt;64KB</td>
+<td><code>LdsUsageKb</code></td>
+</tr>
+<tr>
+<td>Register Pressure</td>
+<td>&lt;256 VGPRs</td>
+<td><code>RegistersEst</code></td>
+</tr>
+<tr>
+<td>Wave Utilization</td>
+<td>&gt;90%</td>
+<td><code>WaveUtilization</code></td>
+</tr>
+<tr>
+<td>Compute Intensity</td>
+<td>MWI×NWI &gt;16</td>
+<td><code>ComputeIntensity</code></td>
+</tr>
+<tr>
+<td>Vector Bandwidth</td>
+<td>VWM×VWN &gt;4</td>
+<td><code>VectorBandwidth</code></td>
+</tr>
+<tr>
+<td>Memory vs Compute Bound</td>
+<td>-</td>
+<td><code>IsLikelyMemoryBound</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="files-reference">Files Reference</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OpenCL/DynamicGemmKernel.cs</code></td>
+<td>Kernel generation and compilation</td>
+</tr>
+<tr>
+<td><code>OpenCL/ClBlastXgemmKernel.cs</code></td>
+<td>CLBlast baseline kernel source</td>
+</tr>
+<tr>
+<td><code>OpenCL/GemmAutoTuner.cs</code></td>
+<td>Bayesian auto-tuning + bottleneck analysis</td>
+</tr>
+<tr>
+<td><code>OpenCL/GemmConfig.cs</code></td>
+<td>Configuration parameters</td>
+</tr>
+<tr>
+<td><code>OpenCL/GemmTuningDatabase.cs</code></td>
+<td>Persistent config storage</td>
+</tr>
+<tr>
+<td><code>OpenCL/ClBlastXgemmDatabase.Generated.cs</code></td>
+<td>CLBlast tuned params</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="research-sources">Research Sources</h2>
+<h3 id="agent-acd2567---clblast-source-analysis">Agent acd2567 - CLBlast Source Analysis</h3>
+<ul>
+<li>CLBlast GitHub Issues: #566 (RDNA3), #403 (Vega), #350 (Vega FE), #510 (GCN cross-lane), #53 (power-of-2)</li>
+<li>Key finding: VWN=1 too conservative, power-of-2 cliff, no DPP usage</li>
+</ul>
+<h3 id="agent-a1da307---modern-gemm-techniques">Agent a1da307 - Modern GEMM Techniques</h3>
+<ul>
+<li>AMD ROCm GEMM Blog</li>
+<li>Deep Dive into Matrix Optimization on AMD GPUs (160% of rocBLAS achieved!)</li>
+<li>CUTLASS tutorials</li>
+<li>Key finding: Hierarchical tiling + VGPR bank allocation = major gains</li>
+</ul>
+<h3 id="agent-a9bd745---rdna1-architecture">Agent a9bd745 - RDNA1 Architecture</h3>
+<ul>
+<li>AMD GPUOpen: RDNA Performance Guide, Occupancy Explained, GCN Memory Coalescing</li>
+<li>Key finding: Wave32 mode, 128-byte cache lines, 32-bank LDS</li>
+</ul>
+<hr>
+<h2 id="changelog">Changelog</h2>
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Change</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-01-01</td>
+<td>Initial roadmap created</td>
+<td>-</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Implemented CLBlast baseline kernel as default</td>
+<td>1000 → 1428 GFLOPS (+43%)</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Added gfx1012 to CLBlast databases</td>
+<td>Better parameter matching</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Implemented XgemmDirect for row-major data</td>
+<td>Small matrices 1.5-2x faster than CLBlast!</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Implemented hybrid direct/indirect path selection</td>
+<td>2048x2048: 1502 GFLOPS (65% of CLBlast)</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>DenseLayer-style workloads now 1.16x faster than CLBlast</td>
+<td>Key neural network use case optimized</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Implemented LDS bank conflict padding (+4 stride)</td>
+<td>2048x2048: 1597 GFLOPS (+6%, 69% of CLBlast)</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Implemented VWM=4, VWN=4 wider vectorization</td>
+<td>2048x2048: 1632 GFLOPS (+2%, 70% of CLBlast)</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Tested K-loop unrolling (KWI=4, KWI=8)</td>
+<td><strong>REGRESSION</strong> - reverted to KWI=2</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td><strong>PHASE 1 COMPLETE</strong></td>
+<td>2048x2048: 1636 GFLOPS (71%), 256x256: 1.9x faster than CLBlast</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td><strong>CRITICAL BUG FIX</strong>: MinIndirectSize threshold not being used!</td>
+<td>Direct path was used for ALL sizes!</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Fixed path selection: use indirect for M/N &gt;= 448</td>
+<td>2048x2048: 550→1657 GFLOPS (3x improvement, now 71% of CLBlast)</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Current status: DenseLayer 1.17x faster, Large matrices 1.09x faster than CLBlast</td>
+<td>Key workloads optimized!</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td>Discovered 48% transpose overhead in indirect path</td>
+<td>GEMM kernel alone: 2800+ GFLOPS!</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td><strong>PHASE 1.5: Row-Major Swap Trick</strong></td>
+<td>Eliminates ALL transpose overhead!</td>
+</tr>
+<tr>
+<td>2026-01-01</td>
+<td><strong>NOW FASTER THAN CLBLAST!</strong></td>
+<td>1024: 2605 GFLOPS (1.43x), 2048: 3137 GFLOPS (1.39x), 4096: 2334 GFLOPS (5.4x)</td>
+</tr>
+</tbody>
+</table>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_OPTIMIZATION_ROADMAP.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

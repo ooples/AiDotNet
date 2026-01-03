@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ILatentDiffusionModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ILatentDiffusionModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for latent diffusion models that operate in a compressed latent space.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ILatentDiffusionModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ILatentDiffusionModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ILatentDiffusionModel_1" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1" class="text-break">
+Interface ILatentDiffusionModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for latent diffusion models that operate in a compressed latent space.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ILatentDiffusionModel&lt;T&gt; : IDiffusionModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_Scheduler">IDiffusionModel&lt;T&gt;.Scheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_Generate_System_Int32___System_Int32_System_Nullable_System_Int32__">IDiffusionModel&lt;T&gt;.Generate(int[], int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_PredictNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">IDiffusionModel&lt;T&gt;.PredictNoise(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">IDiffusionModel&lt;T&gt;.ComputeLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html#AiDotNet_Interfaces_IFullModel_3_DefaultLossFunction">IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Train__0__1_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Predict__0_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_GetModelMetadata">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_">ICheckpointableModel.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_">ICheckpointableModel.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_GetParameters">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_GetActiveFeatureIndices">IFeatureAware.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">IFeatureAware.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_IsFeatureUsed_System_Int32_">IFeatureAware.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html#AiDotNet_Interfaces_IFeatureImportance_1_GetFeatureImportance">IFeatureImportance&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_DeepCopy">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_Clone">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Latent diffusion models are a highly efficient variant of diffusion models that perform
+the denoising process in a compressed latent space rather than pixel space. This is the
+architecture behind Stable Diffusion and many other state-of-the-art generative models.
+</p>
+<p>
+<b>For Beginners:</b> Latent diffusion combines the power of diffusion models with the
+efficiency of autoencoders.
+<p>How it works:</p>
+<ol>
+<li>A VAE compresses images (512x512) into small latents (64x64)</li>
+<li>Diffusion happens in this compressed space (much faster!)</li>
+<li>The VAE decompresses the result back to a full image</li>
+</ol>
+<p>Benefits:</p>
+<ul>
+<li>Training is ~50x faster than pixel-space diffusion</li>
+<li>Generation is ~50x faster</li>
+<li>Quality remains very high</li>
+<li>Enables practical high-resolution generation</li>
+</ul>
+<p>Key components:</p>
+<ul>
+<li>VAE: Compresses and decompresses images</li>
+<li>Noise Predictor (U-Net/DiT): Predicts noise in latent space</li>
+<li>Scheduler: Controls the denoising process</li>
+<li>Conditioner: Encodes text/images for guided generation</li>
+</ul>
+
+<p>
+This interface extends <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel&lt;T&gt;</a> with latent-space specific operations.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_Conditioner_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.Conditioner*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_Conditioner" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.Conditioner">
+  Conditioner
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the conditioning module (optional, for conditioned generation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IConditioningModule&lt;T&gt;? Conditioner { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IConditioningModule-1.html">IConditioningModule</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_GuidanceScale_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.GuidanceScale*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_GuidanceScale" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.GuidanceScale">
+  GuidanceScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default guidance scale for classifier-free guidance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double GuidanceScale { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILatentDiffusionModel_1_GuidanceScale_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Higher values make generation more closely follow the conditioning.
+Typical values: 7.5 for Stable Diffusion, 5.0 for SDXL.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_LatentChannels_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.LatentChannels*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_LatentChannels" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.LatentChannels">
+  LatentChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of latent channels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int LatentChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILatentDiffusionModel_1_LatentChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Typically 4 for Stable Diffusion models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_NoisePredictor_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.NoisePredictor*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_NoisePredictor" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.NoisePredictor">
+  NoisePredictor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the noise predictor model (U-Net, DiT, etc.).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">INoisePredictor&lt;T&gt; NoisePredictor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.INoisePredictor-1.html">INoisePredictor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_SupportsInpainting_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.SupportsInpainting*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_SupportsInpainting" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.SupportsInpainting">
+  SupportsInpainting
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports inpainting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsInpainting { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_SupportsNegativePrompt_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.SupportsNegativePrompt*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_SupportsNegativePrompt" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.SupportsNegativePrompt">
+  SupportsNegativePrompt
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports negative prompts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsNegativePrompt { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_VAE_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.VAE*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_VAE" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.VAE">
+  VAE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the VAE model used for encoding and decoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IVAEModel&lt;T&gt; VAE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_DecodeFromLatent_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.DecodeFromLatent*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_DecodeFromLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.DecodeFromLatent(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  DecodeFromLatent(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decodes a latent representation back to an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; DecodeFromLatent(Tensor&lt;T&gt; latent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>latent</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The latent tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The decoded image tensor [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILatentDiffusionModel_1_DecodeFromLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This decompresses a latent back to an image:
+- Input: Small latent (e.g., 64x64x4)
+- Output: Full-size image (e.g., 512x512x3)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_EncodeToLatent_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.EncodeToLatent*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_EncodeToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.EncodeToLatent(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Boolean)">
+  EncodeToLatent(Tensor&lt;T&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes an image into latent space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; EncodeToLatent(Tensor&lt;T&gt; image, bool sampleMode = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor [batch, channels, height, width].</p>
+</dd>
+    <dt><code>sampleMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to sample from the VAE distribution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The latent representation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILatentDiffusionModel_1_EncodeToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This compresses an image for processing:
+- Input: Full-size image (e.g., 512x512)
+- Output: Small latent (e.g., 64x64x4)
+<p>Use sampleMode=true during training for VAE regularization,
+and sampleMode=false for deterministic encoding during editing.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_GenerateFromText_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.GenerateFromText*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_GenerateFromText_System_String_System_String_System_Int32_System_Int32_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.GenerateFromText(System.String,System.String,System.Int32,System.Int32,System.Int32,System.Nullable{System.Double},System.Nullable{System.Int32})">
+  GenerateFromText(string, string?, int, int, int, double?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates images from text prompts using classifier-free guidance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateFromText(string prompt, string? negativePrompt = null, int width = 512, int height = 512, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text prompt describing the desired image.</p>
+</dd>
+    <dt><code>negativePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional negative prompt (what to avoid).</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image width in pixels (should be divisible by VAE downsample factor).</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image height in pixels (should be divisible by VAE downsample factor).</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>How closely to follow the prompt (higher = closer).</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The generated image tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILatentDiffusionModel_1_GenerateFromText_System_String_System_String_System_Int32_System_Int32_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the main text-to-image generation method. It performs:
+1. Encode text prompts to conditioning embeddings
+2. Generate random latent noise
+3. Iteratively denoise with classifier-free guidance
+4. Decode latent to image
+</p>
+<p>
+<b>For Beginners:</b> This is how you generate images from text:
+- prompt: What you want ("a cat in a spacesuit")
+- negativePrompt: What to avoid ("blurry, low quality")
+- guidanceScale: How strictly to follow the prompt (7.5 is typical)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_ImageToImage_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.ImageToImage*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_ImageToImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Double_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.ImageToImage(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String,System.Double,System.Int32,System.Nullable{System.Double},System.Nullable{System.Int32})">
+  ImageToImage(Tensor&lt;T&gt;, string, string?, double, int, double?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs image-to-image generation (style transfer, editing).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ImageToImage(Tensor&lt;T&gt; inputImage, string prompt, string? negativePrompt = null, double strength = 0.8, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image to transform.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text prompt describing the desired transformation.</p>
+</dd>
+    <dt><code>negativePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional negative prompt.</p>
+</dd>
+    <dt><code>strength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>How much to transform (0.0 = no change, 1.0 = full regeneration).</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The transformed image tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILatentDiffusionModel_1_ImageToImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Double_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Image-to-image works by:
+1. Encode the input image to latent
+2. Add noise to the latent (controlled by strength)
+3. Denoise with text guidance
+4. Decode back to image
+<p><b>For Beginners:</b> This transforms an existing image based on a prompt:</p>
+<ul>
+<li>strength=0.3: Minor changes, keeps most of the original</li>
+<li>strength=0.7: Major changes, but composition remains</li>
+<li>strength=1.0: Complete regeneration, original is just a starting point</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_Inpaint_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.Inpaint*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_Inpaint_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.Inpaint(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String,System.Int32,System.Nullable{System.Double},System.Nullable{System.Int32})">
+  Inpaint(Tensor&lt;T&gt;, Tensor&lt;T&gt;, string, string?, int, double?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L200"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs inpainting (filling in masked regions).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Inpaint(Tensor&lt;T&gt; inputImage, Tensor&lt;T&gt; mask, string prompt, string? negativePrompt = null, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image with areas to inpaint.</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Binary mask where 1 = inpaint, 0 = keep original.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text prompt describing what to generate in the masked area.</p>
+</dd>
+    <dt><code>negativePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional negative prompt.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The inpainted image tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILatentDiffusionModel_1_Inpaint_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Inpainting fills in masked regions while keeping unmasked areas intact.
+The mask should be the same spatial size as the image.
+</p>
+<p>
+<b>For Beginners:</b> This is like a smart "fill" tool:
+- Draw a mask over what you want to replace
+- Describe what should go there
+- The model generates content that blends naturally
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILatentDiffusionModel_1_SetGuidanceScale_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.SetGuidanceScale*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILatentDiffusionModel_1_SetGuidanceScale_System_Double_" data-uid="AiDotNet.Interfaces.ILatentDiffusionModel`1.SetGuidanceScale(System.Double)">
+  SetGuidanceScale(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the guidance scale for classifier-free guidance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetGuidanceScale(double scale)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The guidance scale (typically 1.0-20.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILatentDiffusionModel.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

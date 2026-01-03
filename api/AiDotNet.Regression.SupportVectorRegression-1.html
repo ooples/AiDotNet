@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SupportVectorRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SupportVectorRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Support Vector Regression (SVR), which creates a regression model by finding a hyperplane that lies within a specified margin (epsilon) of the training data. This approach is effective for both linear and nonlinear regression problems.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_SupportVectorRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.SupportVectorRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.SupportVectorRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_SupportVectorRegression_1" data-uid="AiDotNet.Regression.SupportVectorRegression`1" class="text-break">
+Class SupportVectorRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Support Vector Regression (SVR), which creates a regression model by finding
+a hyperplane that lies within a specified margin (epsilon) of the training data.
+This approach is effective for both linear and nonlinear regression problems.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SupportVectorRegression&lt;T&gt; : NonLinearRegressionBase&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically float or double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html">NonLinearRegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SupportVectorRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_NumOps">NonLinearRegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Engine">NonLinearRegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Options">NonLinearRegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Regularization">NonLinearRegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SupportVectors">NonLinearRegressionBase&lt;T&gt;.SupportVectors</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Alphas">NonLinearRegressionBase&lt;T&gt;.Alphas</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_B">NonLinearRegressionBase&lt;T&gt;.B</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_FeatureNames">NonLinearRegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ValidateInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.ValidateInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_InitializeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.InitializeModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ExtractModelParameters">NonLinearRegressionBase&lt;T&gt;.ExtractModelParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_KernelFunction_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.KernelFunction(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Clip__0__0__0_">NonLinearRegressionBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetParameters">NonLinearRegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetActiveFeatureIndices">NonLinearRegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_IsFeatureUsed_System_Int32_">NonLinearRegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">NonLinearRegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetFeatureImportance">NonLinearRegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_DeepCopy">NonLinearRegressionBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Clone">NonLinearRegressionBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ParameterCount">NonLinearRegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SaveModel_System_String_">NonLinearRegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_LoadModel_System_String_">NonLinearRegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_DefaultLossFunction">NonLinearRegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">NonLinearRegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">NonLinearRegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SaveState_System_IO_Stream_">NonLinearRegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_LoadState_System_IO_Stream_">NonLinearRegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SupportsJitCompilation">NonLinearRegressionBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">NonLinearRegressionBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_SupportVectorRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Support Vector Regression (SVR) works by:
+- Transforming data into a higher-dimensional space using kernel functions
+- Finding the optimal hyperplane that fits within an epsilon-width tube around the data
+- Using only a subset of the training examples (support vectors) to make predictions
+- Balancing model complexity and training error through the C parameter
+<p>Unlike traditional regression methods that minimize squared errors, SVR aims to find
+a function that deviates from training data by no more than epsilon while remaining as flat as possible.</p>
+
+<p><b>For Beginners:</b> Support Vector Regression is like creating a tunnel through your data.
+<p>Think of it like this:</p>
+<ul>
+<li>You want to draw a line (or curve) through your data points</li>
+<li>Instead of drawing the line directly through the points, you create a tunnel of a certain width</li>
+<li>You try to include as many points as possible inside this tunnel</li>
+<li>Points outside the tunnel are called &quot;support vectors&quot; and help define its shape</li>
+</ul>
+<p>For example, when predicting house prices, SVR would create a tunnel through the data
+that captures the general trend while allowing some houses to fall outside the tunnel
+if they're unusually priced for their features.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1__ctor_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1__ctor_AiDotNet_Models_Options_SupportVectorRegressionOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.SupportVectorRegression`1.#ctor(AiDotNet.Models.Options.SupportVectorRegressionOptions,AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  SupportVectorRegression(SupportVectorRegressionOptions?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new Support Vector Regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SupportVectorRegression(SupportVectorRegressionOptions? options = null, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.SupportVectorRegressionOptions.html">SupportVectorRegressionOptions</a></dt>
+    <dd><p>Optional configuration settings for the SVR model. These settings control aspects like:</p>
+<ul>
+<li>The width of the epsilon-insensitive tube (epsilon)</li>
+<li>The regularization parameter (C)</li>
+<li>The type of kernel function to use
+If not provided, default options will be used.</li>
+</ul>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization method to prevent overfitting.
+If not provided, no additional regularization will be applied beyond the built-in regularization of SVR.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1__ctor_AiDotNet_Models_Options_SupportVectorRegressionOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new Support Vector Regression model with the specified configuration options
+and regularization method. If options are not provided, default values are used.
+</p>
+<p><b>For Beginners:</b> This method sets up a new SVR model before training.
+<p>Think of it like configuring a new tool:</p>
+<ul>
+<li>You can use the default settings (by not specifying options)</li>
+<li>Or you can customize how it works (by providing specific options)</li>
+<li>The regularization parameter provides extra protection against overfitting</li>
+</ul>
+<p>After setting up the model with these options, you'll need to train it on your data
+to find the support vectors and coefficients that best describe your data pattern.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1_CreateInstance_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1_CreateInstance" data-uid="AiDotNet.Regression.SupportVectorRegression`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L606"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the Support Vector Regression model with the same configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the Support Vector Regression model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a deep copy of the current Support Vector Regression model, including its options,
+support vectors, alpha coefficients, bias term, and regularization settings. The new instance is completely 
+independent of the original, allowing modifications without affecting the original model.
+</p>
+<p><b>For Beginners:</b> This method creates an exact copy of your trained model.
+<p>Think of it like making a perfect duplicate of your tunnel:</p>
+<ul>
+<li>It copies all the configuration settings (like epsilon, C, and kernel type)</li>
+<li>It preserves the support vectors (the key data points that define your tunnel)</li>
+<li>It maintains the alpha coefficients (how important each support vector is)</li>
+<li>It keeps the bias term (B) which affects the overall position of your tunnel</li>
+</ul>
+<p>Creating a copy is useful when you want to:</p>
+<ul>
+<li>Create a backup before further modifying the model</li>
+<li>Create variations of the same model for different purposes</li>
+<li>Share the model with others while keeping your original intact</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the creation fails or required components are null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1_Deserialize_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.SupportVectorRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L566"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the support vector regression model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] modelData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs the model from a byte array created by the Serialize method. It restores 
+the model's coefficients, support vectors, and configuration options, allowing a previously saved model 
+to be loaded and used for predictions.
+</p>
+<p><b>For Beginners:</b> This method loads a saved model from computer memory.
+<p>Think of it like opening a saved document:</p>
+<ul>
+<li>It takes the byte array created by the Serialize method</li>
+<li>It rebuilds all the settings, support vectors, and coefficients</li>
+<li>The model is then ready to use for making predictions</li>
+</ul>
+<p>This allows you to:</p>
+<ul>
+<li>Use a previously trained model without having to train it again</li>
+<li>Load models that others have shared with you</li>
+<li>Use the same model across different applications</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1_GetModelMetadata_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1_GetModelMetadata" data-uid="AiDotNet.Regression.SupportVectorRegression`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L467"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the SVR model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the SVR model, including:
+- Base metadata from the parent class
+- The epsilon parameter (width of the insensitive tube)
+- The C parameter (regularization strength)
+- The type of regularization used
+<p>This metadata is useful for model inspection, logging, and debugging.</p>
+
+<p><b>For Beginners:</b> This method shares details about your model's configuration.
+<p>It's like getting a summary sheet about your model:</p>
+<ul>
+<li>It includes the basic information about your model</li>
+<li>It adds SVR-specific settings like epsilon and C</li>
+<li>It notes what type of regularization was used</li>
+</ul>
+<p>This information is helpful for comparing different models or documenting
+which settings worked best for your problem.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1_GetModelType_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.GetModelType*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1_GetModelType" data-uid="AiDotNet.Regression.SupportVectorRegression`1.GetModelType">
+  GetModelType()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L499"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the type identifier for this regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelType GetModelType()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd><p>The model type identifier for support vector regression.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1_GetModelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the enum value that identifies this model as a support vector regression model.
+This is used for model identification in serialization/deserialization and for logging purposes.
+</p>
+<p><b>For Beginners:</b> This method simply tells the system what kind of model this is.
+<p>It's like a name tag for the model that says &quot;I am a support vector regression model.&quot;
+This is useful when:</p>
+<ul>
+<li>Saving the model to a file</li>
+<li>Loading a model from a file</li>
+<li>Logging information about the model</li>
+</ul>
+<p>You generally won't need to call this method directly in your code.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1_OptimizeModel_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.OptimizeModel*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1_OptimizeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.SupportVectorRegression`1.OptimizeModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  OptimizeModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizes the SVR model using the provided input data and target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OptimizeModel(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input feature matrix, where rows represent observations and columns represent features.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector containing the actual output values to predict.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1_OptimizeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the core optimization for SVR. It:
+1. Applies regularization to the input matrix
+2. Uses the Sequential Minimal Optimization (SMO) algorithm to find the optimal parameters
+3. Applies regularization to the resulting alpha coefficients
+<p>The SMO algorithm is an efficient way to solve the quadratic programming problem
+that arises when training an SVR model.</p>
+
+<p><b>For Beginners:</b> This method finds the best tunnel through your data points.
+<p>The process works like this:</p>
+<ol>
+<li>The model prepares your data with regularization (like smoothing it out)</li>
+<li>It uses a special algorithm (SMO) to find the optimal tunnel shape</li>
+<li>It identifies which points (support vectors) are most important for defining this tunnel</li>
+<li>It calculates how much influence each support vector should have on predictions</li>
+</ol>
+<p>After optimization, the model knows exactly how to predict new values based on
+the patterns it found in your training data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1_Predict_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.SupportVectorRegression`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts target values for a matrix of input features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input feature matrix for which to make predictions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predicted values, one for each row in the input matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method makes predictions for multiple input samples. It predicts each sample individually
+using the PredictSingle method, computing kernel similarities with support vectors. Note that
+SVR regularization is controlled through the C parameter during training, not through data
+transformation during prediction.
+</p>
+<p><b>For Beginners:</b> This method uses your trained model to predict values for new data.
+<p>The prediction process works like this:
+For each row of data (like each house you want to price):</p>
+<ul>
+<li>It calculates how similar this house is to each support vector</li>
+<li>It combines these similarities using the trained weights (alphas)</li>
+<li>It adds the bias term (B) to get the final prediction</li>
+</ul>
+<p>This lets you predict many values at once, like estimating prices for multiple houses simultaneously.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1_PredictSingle_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.SupportVectorRegression`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts a target value for a single input feature vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input feature vector for which to make a prediction.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value for the input vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the SVR prediction function for a single input sample:
+f(x) = b + sum(alpha_i * K(support_vector_i, x))
+<p>where:</p>
+<ul>
+<li>b is the bias term (B)</li>
+<li>alpha_i are the Lagrange multipliers (Alphas)</li>
+<li>K is the kernel function</li>
+<li>support_vector_i are the training examples that define the model</li>
+</ul>
+
+<p><b>For Beginners:</b> This method predicts a value for a single data point.
+<p>Think of it like this:</p>
+<ol>
+<li>Start with a base value (the bias term B)</li>
+<li>For each support vector (key data points from training):
+<ul>
+<li>Calculate how similar your input is to this support vector using the kernel function</li>
+<li>Multiply this similarity by the importance (alpha) of that support vector</li>
+<li>Add this contribution to your prediction</li>
+</ul>
+</li>
+<li>The final sum is your predicted value</li>
+</ol>
+<p>For example, predicting a house price might involve comparing the house to several key
+houses (support vectors) from your training data, with each comparison weighted by how
+important that house is for making predictions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_SupportVectorRegression_1_Serialize_" data-uid="AiDotNet.Regression.SupportVectorRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_SupportVectorRegression_1_Serialize" data-uid="AiDotNet.Regression.SupportVectorRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L526"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the support vector regression model to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_SupportVectorRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the model, including its coefficients, support vectors, and configuration options, into a 
+byte array. This enables the model to be saved to a file, stored in a database, or transmitted over a network.
+</p>
+<p><b>For Beginners:</b> This method saves the model to computer memory so you can use it later.
+<p>Think of it like taking a snapshot of the model:</p>
+<ul>
+<li>It captures all the important values, settings, and support vectors</li>
+<li>It converts them into a format that can be easily stored</li>
+<li>The resulting byte array can be saved to a file or database</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Train the model once and use it many times</li>
+<li>Share the model with others</li>
+<li>Use the model in a different application</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/SupportVectorRegression.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

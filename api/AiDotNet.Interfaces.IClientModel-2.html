@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IClientModel&lt;TData, TUpdate&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IClientModel&lt;TData, TUpdate&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the functionality for a client-side model in federated learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IClientModel_2.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IClientModel%602%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IClientModel`2">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IClientModel_2" data-uid="AiDotNet.Interfaces.IClientModel`2" class="text-break">
+Interface IClientModel&lt;TData, TUpdate&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IClientModel.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the functionality for a client-side model in federated learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IClientModel&lt;TData, TUpdate&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TData</code></dt>
+    <dd><p>The type of the local training data.</p>
+</dd>
+    <dt><code>TUpdate</code></dt>
+    <dd><p>The type of the model update to send to the server.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IClientModel_2_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>This interface represents a model that exists on a client device or node in a federated
+learning system. Each client maintains its own copy of the global model and trains it
+on local data.</p>
+<p><b>For Beginners:</b> A client model is like a student's personal copy of study materials.
+Each student (client) has their own copy, studies it with their own resources, and
+contributes improvements back to the class.</p>
+<p>Think of client models as distributed learners:</p>
+<ul>
+<li>Each client has a copy of the global model</li>
+<li>Clients train on their own private data</li>
+<li>Local training happens independently and in parallel</li>
+<li>Only model updates (not data) are sent to the server</li>
+</ul>
+<p>For example, in smartphone keyboard prediction:</p>
+<ul>
+<li>Each phone has a copy of the global typing prediction model</li>
+<li>The phone learns from the user's typing patterns</li>
+<li>It sends model improvements (not actual typed text) to the server</li>
+<li>The server combines improvements from millions of phones</li>
+<li>Each phone gets the improved model back</li>
+</ul>
+<p>This design ensures:</p>
+<ul>
+<li>Data privacy: Raw data never leaves the client</li>
+<li>Personalization: Can adapt to local data distribution</li>
+<li>Scalability: Training happens in parallel across all clients</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IClientModel_2_GetModelUpdate_" data-uid="AiDotNet.Interfaces.IClientModel`2.GetModelUpdate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IClientModel_2_GetModelUpdate" data-uid="AiDotNet.Interfaces.IClientModel`2.GetModelUpdate">
+  GetModelUpdate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IClientModel.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes and retrieves the model update to send to the server.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TUpdate GetModelUpdate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TUpdate</span></dt>
+    <dd><p>The model update containing weight changes or gradients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IClientModel_2_GetModelUpdate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The model update represents the improvements the client made through local training.
+This is typically the difference between the current model and the initial global model.</p>
+<p><b>For Beginners:</b> This is like preparing a summary of what you learned from studying,
+rather than sharing your entire study materials. You share the insights, not the sources.</p>
+<p>The update typically contains:</p>
+<ul>
+<li>Weight differences: New weights - original weights</li>
+<li>Gradients: Direction and magnitude of improvement</li>
+<li>Metadata: Number of local samples, local loss, etc.</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>Original weight for feature &quot;age&quot;: 0.5</li>
+<li>After training, weight for &quot;age&quot;: 0.6</li>
+<li>Update to send: +0.1</li>
+<li>This tells the server how to adjust that weight</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IClientModel_2_GetSampleCount_" data-uid="AiDotNet.Interfaces.IClientModel`2.GetSampleCount*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IClientModel_2_GetSampleCount" data-uid="AiDotNet.Interfaces.IClientModel`2.GetSampleCount">
+  GetSampleCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IClientModel.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of training samples available on this client.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int GetSampleCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of training samples on this client.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IClientModel_2_GetSampleCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Sample count is used to weight client contributions during aggregation.
+Clients with more data typically receive higher weights.</p>
+<p><b>For Beginners:</b> This is like indicating how many practice problems you solved.
+If you solved 1000 problems and someone else solved 100, your insights about
+problem-solving patterns are likely more reliable.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IClientModel_2_TrainLocal_" data-uid="AiDotNet.Interfaces.IClientModel`2.TrainLocal*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IClientModel_2_TrainLocal__0_System_Int32_System_Double_" data-uid="AiDotNet.Interfaces.IClientModel`2.TrainLocal(`0,System.Int32,System.Double)">
+  TrainLocal(TData, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IClientModel.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the local model on the client's private data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void TrainLocal(TData localData, int epochs, double learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>localData</code> <span class="xref">TData</span></dt>
+    <dd><p>The client's private training data.</p>
+</dd>
+    <dt><code>epochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of training iterations to perform on local data.</p>
+</dd>
+    <dt><code>learningRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Step size for gradient descent optimization.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IClientModel_2_TrainLocal__0_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Local training is the core of federated learning where each client improves the model
+using their own data without sharing that data with anyone.</p>
+<p><b>For Beginners:</b> This is like studying independently with your own materials.
+You use your personal notes and resources to learn, and later share what you learned,
+not the actual materials.</p>
+<p>The training process:</p>
+<ol>
+<li>Receive the global model from the server</li>
+<li>Train on local data for specified number of epochs</li>
+<li>Compute the difference between updated and original model (the &quot;update&quot;)</li>
+<li>Prepare this update to send back to the server</li>
+</ol>
+<p>For example:</p>
+<ul>
+<li>Client receives global model with accuracy 80%</li>
+<li>Trains on local data for 5 epochs</li>
+<li>Local model now has accuracy 85% on local data</li>
+<li>Computes weight changes (delta) that improved the model</li>
+<li>Sends these weight changes to server, not the local data</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IClientModel_2_UpdateFromGlobal_" data-uid="AiDotNet.Interfaces.IClientModel`2.UpdateFromGlobal*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IClientModel_2_UpdateFromGlobal__1_" data-uid="AiDotNet.Interfaces.IClientModel`2.UpdateFromGlobal(`1)">
+  UpdateFromGlobal(TUpdate)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IClientModel.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the local model with the new global model from the server.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateFromGlobal(TUpdate globalModelUpdate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>globalModelUpdate</code> <span class="xref">TUpdate</span></dt>
+    <dd><p>The aggregated global model from the server.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IClientModel_2_UpdateFromGlobal__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>After the server aggregates updates from all clients, it sends the improved global
+model back to clients for the next round of training.</p>
+<p><b>For Beginners:</b> This is like receiving the updated textbook that incorporates
+everyone's contributions. You replace your old version with this improved version
+before the next study session.</p>
+<p>The update process:</p>
+<ol>
+<li>Receive aggregated global model from server</li>
+<li>Replace local model weights with global model weights</li>
+<li>Optionally keep some personalized layers</li>
+<li>Ready for next round of local training</li>
+</ol>
+<p>For example:</p>
+<ul>
+<li>Round 1: Trained local model, sent update</li>
+<li>Server aggregated all updates</li>
+<li>Round 2: Receive improved global model</li>
+<li>Use this as starting point for next round of training</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IClientModel.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

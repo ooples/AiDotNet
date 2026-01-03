@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RotationPredictionLoss&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RotationPredictionLoss&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Self-supervised loss function based on rotation prediction for images.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LossFunctions_RotationPredictionLoss_1.md&amp;value=---%0Auid%3A%20AiDotNet.LossFunctions.RotationPredictionLoss%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LossFunctions.RotationPredictionLoss`1">
+
+
+
+  <h1 id="AiDotNet_LossFunctions_RotationPredictionLoss_1" data-uid="AiDotNet.LossFunctions.RotationPredictionLoss`1" class="text-break">
+Class RotationPredictionLoss&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/RotationPredictionLoss.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LossFunctions.html">LossFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Self-supervised loss function based on rotation prediction for images.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RotationPredictionLoss&lt;T&gt; : ISelfSupervisedLoss&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">RotationPredictionLoss&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ISelfSupervisedLoss-1.html">ISelfSupervisedLoss</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_LossFunctions_RotationPredictionLoss_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Rotation prediction is a self-supervised task where:
+1. Images are rotated by 0°, 90°, 180°, or 270°
+2. Model predicts which rotation was applied (4-class classification)
+3. Model learns spatial relationships and features without needing class labels
+</p>
+<p><b>For Beginners:</b> This teaches the model to understand image structure without labels.
+<p>Imagine showing someone 100 photos, each rotated randomly:</p>
+<ul>
+<li>They learn to recognize: which way is &quot;up&quot;, spatial relationships, object orientations</li>
+<li>They don't need to know: what the objects are (no labels needed)</li>
+</ul>
+<p>After this training, when you show them 5 labeled cat photos:</p>
+<ul>
+<li>They already understand image structure</li>
+<li>They just need to learn: &quot;cats look like THIS&quot;</li>
+<li>Much faster than learning everything from scratch!</li>
+</ul>
+<p><b>How it works:</b></p>
+<ol>
+<li>Take each unlabeled image</li>
+<li>Create 4 versions: rotated by 0°, 90°, 180°, 270°</li>
+<li>Label each version: 0, 1, 2, 3 (which rotation was applied)</li>
+<li>Train model to predict the rotation</li>
+</ol>
+<p><b>What the model learns:</b></p>
+<ul>
+<li>Edge orientations</li>
+<li>Spatial relationships</li>
+<li>Object structure</li>
+<li>&quot;Natural&quot; vs &quot;unnatural&quot; orientations</li>
+</ul>
+<p>These features are very useful for actual classification tasks!</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LossFunctions_RotationPredictionLoss_1_CreateTask_" data-uid="AiDotNet.LossFunctions.RotationPredictionLoss`1.CreateTask*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_RotationPredictionLoss_1_CreateTask__2___0_" data-uid="AiDotNet.LossFunctions.RotationPredictionLoss`1.CreateTask``2(``0)">
+  CreateTask&lt;TInput, TOutput&gt;(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/RotationPredictionLoss.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a self-supervised task from unlabeled input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (TInput augmentedX, TOutput augmentedY) CreateTask&lt;TInput, TOutput&gt;(TInput input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>Unlabeled input data (e.g., images).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.output">Output</a>)</dt>
+    <dd><p>A tuple containing:</p>
+<ul>
+<li>augmentedX: Transformed input data for the self-supervised task</li>
+<li>augmentedY: Labels for the self-supervised task (e.g., rotation angles)</li>
+</ul>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LossFunctions_RotationPredictionLoss_1_CreateTask__2___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method transforms unlabeled data into a supervised learning problem
+by creating artificial labels based on the transformation applied.
+</p>
+<p><b>For Beginners:</b> This converts "unlabeled data" into a "labeled learning problem".
+<p>Example for rotation prediction:</p>
+<ul>
+<li>Input: 10 unlabeled images</li>
+<li>Output: 40 labeled images (each original rotated 4 times: 0°, 90°, 180°, 270°)</li>
+<li>Labels: [0, 1, 2, 3] indicating which rotation was applied</li>
+</ul>
+<p>The model learns to recognize rotations, which teaches it about:</p>
+<ul>
+<li>Edge orientations</li>
+<li>Spatial relationships</li>
+<li>Object structure</li>
+</ul>
+<p>These learned features are useful for the actual classification task!</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/RotationPredictionLoss.cs/#L44" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

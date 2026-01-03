@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ADMMOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ADMMOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Alternating Direction Method of Multipliers (ADMM) optimization algorithm, which is particularly effective for problems with complex regularization requirements.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_ADMMOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.ADMMOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3" class="text-break">
+Class ADMMOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Alternating Direction Method of Multipliers (ADMM) optimization algorithm,
+which is particularly effective for problems with complex regularization requirements.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ADMMOptimizerOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">ADMMOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ADMM is an advanced optimization algorithm that breaks complex problems into smaller, more manageable subproblems.
+It's especially useful for large-scale distributed optimization and problems with L1/L2 regularization.
+</p>
+<p><b>For Beginners:</b> ADMM is like solving a complex puzzle by breaking it into smaller pieces.
+Instead of trying to solve everything at once, it tackles different parts of the problem separately and then
+combines the solutions. This approach is particularly good when you want your AI model to be both accurate and simple
+(avoiding unnecessary complexity). Think of it as a team of specialists working together rather than one person
+trying to do everything.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AbsoluteTolerance_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.AbsoluteTolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AbsoluteTolerance" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.AbsoluteTolerance">
+  AbsoluteTolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance that determines when the algorithm should stop.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AbsoluteTolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The absolute tolerance, defaulting to 0.0001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AbsoluteTolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The algorithm stops when the error falls below this threshold, indicating that the solution is sufficiently accurate.
+</p>
+<p><b>For Beginners:</b> This is like deciding when a measurement is "close enough."
+If you're measuring ingredients for a recipe, you might be satisfied when you're within 0.0001 ounces of the target.
+Similarly, this value tells the algorithm when its solution is close enough to stop trying to improve further.
+A smaller value means higher precision but might take longer to achieve.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoDecrease_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.AdaptiveRhoDecrease*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoDecrease" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.AdaptiveRhoDecrease">
+  AdaptiveRhoDecrease
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which to decrease Rho when dual residuals are much larger than primal residuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdaptiveRhoDecrease { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The decrease factor, defaulting to 2.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoDecrease_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When dual residuals are significantly larger than primal residuals, Rho is divided by this factor.
+</p>
+<p><b>For Beginners:</b> This determines how quickly the algorithm relaxes constraint enforcement when it's being
+too strict. The default value of 2.0 means it will reduce the strictness by half when it detects that it's
+focusing too much on constraints at the expense of the main objective. It's like easing up when you realize
+you're being too perfectionist about one aspect of a project.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoFactor_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.AdaptiveRhoFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoFactor" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.AdaptiveRhoFactor">
+  AdaptiveRhoFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor used to determine when to adjust the adaptive Rho value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdaptiveRhoFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The adaptive Rho factor, defaulting to 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+If the ratio of primal to dual residuals exceeds this factor, Rho will be adjusted to balance them.
+</p>
+<p><b>For Beginners:</b> This controls how sensitive the "automatic transmission" is to changing conditions.
+A higher value (like the default 10.0) means the algorithm will only adjust Rho when there's a significant imbalance
+in how well different parts of the problem are being solved. It's like setting the threshold for when your car decides
+to shift gears - too sensitive and it shifts constantly, too insensitive and it stays in the wrong gear too long.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoIncrease_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.AdaptiveRhoIncrease*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoIncrease" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.AdaptiveRhoIncrease">
+  AdaptiveRhoIncrease
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which to increase Rho when primal residuals are much larger than dual residuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdaptiveRhoIncrease { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The increase factor, defaulting to 2.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_AdaptiveRhoIncrease_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When primal residuals are significantly larger than dual residuals, Rho is multiplied by this factor.
+</p>
+<p><b>For Beginners:</b> This determines how aggressively the algorithm increases the enforcement of constraints
+when needed. The default value of 2.0 means it will double the strictness when it detects that constraints aren't
+being satisfied well enough. Think of it like doubling your effort when you notice you're falling behind on a project.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for mini-batch processing within each ADMM iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to -1 (full batch).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+in each iteration. ADMM traditionally operates on the full dataset (batch size -1) because it
+solves linear systems that involve the entire data matrix. Use -1 for standard ADMM behavior,
+or set a positive value for stochastic ADMM variants that may be implemented in the future.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_DecompositionType_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_DecompositionType" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of matrix decomposition to use when solving linear systems within the ADMM algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The decomposition type, defaulting to LU decomposition.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Different decomposition methods have different trade-offs in terms of numerical stability, memory usage, and computational efficiency.
+LU decomposition is a good general-purpose choice.
+</p>
+<p><b>For Beginners:</b> This is like choosing which mathematical tool to use for solving equations within the algorithm.
+The default (Lu) works well for most problems, similar to how a standard screwdriver works for most screws.
+Other options might be more efficient for specific types of problems, just like specialized tools can be better
+for specific tasks. Unless you have a specific reason to change this, the default is usually the best choice.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_ElasticNetMixing_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.ElasticNetMixing*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_ElasticNetMixing" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.ElasticNetMixing">
+  ElasticNetMixing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mixing parameter for ElasticNet regularization, balancing L1 and L2 penalties.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ElasticNetMixing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The mixing parameter, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_ElasticNetMixing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Only used when RegularizationType is set to ElasticNet. A value of 1.0 corresponds to pure L1 regularization,
+while 0.0 corresponds to pure L2 regularization.
+</p>
+<p><b>For Beginners:</b> If you're using ElasticNet regularization (which combines L1 and L2),
+this controls the balance between them. The default value of 0.5 gives equal weight to both approaches.
+Values closer to 1.0 favor the L1 approach (selecting fewer features), while values closer to 0.0
+favor the L2 approach (making all features smaller). Think of it like adjusting the blend in a coffee mix
+between two different beans to get the flavor profile you want.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_RegularizationStrength_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.RegularizationStrength*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_RegularizationStrength" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.RegularizationStrength">
+  RegularizationStrength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the strength of the regularization penalty.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RegularizationStrength { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The regularization strength, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_RegularizationStrength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Higher values result in stronger regularization, which means simpler models with potentially lower accuracy on training data
+but better generalization to new data.
+</p>
+<p><b>For Beginners:</b> This controls how strict your "budget constraint" is.
+A higher value forces the model to be simpler, which helps prevent overfitting but might miss some patterns in the data.
+A lower value allows more complexity, which can capture more patterns but risks memorizing noise in the training data.
+The default of 0.1 is a moderate value that works well for many problems, but you might need to adjust it
+based on how complex your data is and how much training data you have.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_RegularizationType_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.RegularizationType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_RegularizationType" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.RegularizationType">
+  RegularizationType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of regularization to apply to the optimization problem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RegularizationType RegularizationType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.RegularizationType.html">RegularizationType</a></dt>
+    <dd><p>The regularization type, defaulting to L1 regularization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_RegularizationType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Regularization helps prevent overfitting by adding a penalty for model complexity.
+L1 promotes sparsity (more zero coefficients), L2 promotes smaller coefficients overall,
+and ElasticNet combines both approaches.
+</p>
+<p><b>For Beginners:</b> Regularization is like adding a budget constraint to your model.
+L1 (the default) is like having a limited number of features you can use - it forces the model to pick only
+the most important ones and set the rest to zero. L2 is like having a limited total "strength" to distribute
+among features - it makes all features smaller but keeps most of them. ElasticNet is a mix of both approaches.
+This helps prevent your model from becoming too complex and "memorizing" the training data instead of learning general patterns.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_Rho_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.Rho*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_Rho" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.Rho">
+  Rho
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the penalty parameter that controls the balance between the original objective and the constraint satisfaction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Rho { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The penalty parameter, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_Rho_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Rho affects how strongly the algorithm enforces constraints during optimization.
+Higher values prioritize constraint satisfaction over optimizing the original objective.
+</p>
+<p><b>For Beginners:</b> Rho is like a referee that decides how strictly to enforce the rules.
+A higher value (above 1.0) means the algorithm will focus more on following the constraints (rules)
+even if it means a slightly less optimal solution. A lower value allows more flexibility but might
+bend the rules too much. The default value of 1.0 provides a balanced approach for most problems.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_UseAdaptiveRho_" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.UseAdaptiveRho*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_UseAdaptiveRho" data-uid="AiDotNet.Models.Options.ADMMOptimizerOptions`3.UseAdaptiveRho">
+  UseAdaptiveRho
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether the algorithm should automatically adjust the Rho parameter during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseAdaptiveRho { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use adaptive Rho (default), false to keep Rho constant.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ADMMOptimizerOptions_3_UseAdaptiveRho_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the algorithm will dynamically adjust the Rho parameter based on the relative magnitudes of primal and dual residuals.
+</p>
+<p><b>For Beginners:</b> This is like having an automatic transmission in a car versus a manual one.
+When set to true (the default), the algorithm will automatically adjust how strictly it enforces constraints
+as it progresses, similar to how an automatic transmission changes gears based on driving conditions.
+This usually leads to better performance without requiring you to fine-tune the Rho value yourself.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ADMMOptimizerOptions.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

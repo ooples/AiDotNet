@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum SplitCriterion | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum SplitCriterion | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies the criterion used to determine the best way to split data in decision trees and other tree-based models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_SplitCriterion.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.SplitCriterion%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.SplitCriterion">
+
+
+
+
+  <h1 id="AiDotNet_Enums_SplitCriterion" data-uid="AiDotNet.Enums.SplitCriterion" class="text-break">
+Enum SplitCriterion  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/SplitCriterion.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies the criterion used to determine the best way to split data in decision trees and other tree-based models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum SplitCriterion</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_SplitCriterion_FriedmanMSE"><code>FriedmanMSE = 3</code></dt>
+  <dd><p>Selects splits using Friedman's improvement to MSE, which accounts for the potential improvement from further splits.</p>
+<p><b>For Beginners:</b> This is an advanced version of MSE that looks ahead to future possibilities.</p>
+<p>Named after statistician Jerome Friedman, this criterion:</p>
+<ul>
+<li>Uses the standard MSE calculation but with an additional factor</li>
+<li>Considers not just the current split but potential future improvements</li>
+<li>Often leads to better tree structures in gradient boosting models</li>
+</ul>
+<p>Think of it like a chess player who doesn't just consider the current move,
+but also thinks about how that move sets up future opportunities.</p>
+<p>This criterion is particularly useful in gradient boosting decision trees (like XGBoost or LightGBM)
+and can lead to better overall model performance.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SplitCriterion_MeanAbsoluteError"><code>MeanAbsoluteError = 2</code></dt>
+  <dd><p>Selects splits that minimize the mean absolute error between the actual and predicted values.</p>
+<p><b>For Beginners:</b> This criterion focuses on reducing the absolute (positive) difference between predictions and actual values.</p>
+<p>Mean Absolute Error (MAE) works by:</p>
+<ol>
+<li>Taking the difference between each actual value and the predicted value</li>
+<li>Converting each difference to a positive number (absolute value)</li>
+<li>Calculating the average of these absolute differences</li>
+</ol>
+<p>This criterion:</p>
+<ul>
+<li>Treats all sizes of errors more equally than MSE</li>
+<li>Is more robust to outliers (unusual values)</li>
+<li>May be better when your data has some extreme values</li>
+</ul>
+<p>Think of it like measuring the average distance between your guesses and the correct answers,
+regardless of whether you guessed too high or too low.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SplitCriterion_MeanSquaredError"><code>MeanSquaredError = 1</code></dt>
+  <dd><p>Selects splits that minimize the mean squared error between the actual and predicted values.</p>
+<p><b>For Beginners:</b> This criterion focuses on reducing the squared difference between predictions and actual values.</p>
+<p>Mean Squared Error (MSE) works by:</p>
+<ol>
+<li>Taking the difference between each actual value and the predicted value</li>
+<li>Squaring each difference (to make negatives positive and emphasize large errors)</li>
+<li>Calculating the average of these squared differences</li>
+</ol>
+<p>This criterion:</p>
+<ul>
+<li>Penalizes large errors more heavily than small ones</li>
+<li>Is sensitive to outliers (unusual values far from the average)</li>
+<li>Often produces similar results to VarianceReduction</li>
+</ul>
+<p>Think of it like trying to minimize the &quot;penalty points&quot; you get when your guess is wrong,
+with bigger mistakes costing exponentially more points.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SplitCriterion_VarianceReduction"><code>VarianceReduction = 0</code></dt>
+  <dd><p>Selects splits that maximize the reduction in variance of the target variable.</p>
+<p><b>For Beginners:</b> This criterion tries to group similar values together.</p>
+<p>Variance measures how spread out numbers are. High variance means the numbers are all over the place,
+while low variance means they're clustered together.</p>
+<p>Example: If we have house prices [100K, 105K, 110K] in one group and [500K, 510K, 490K] in another,
+each group has low variance (the prices are similar within each group).</p>
+<p>This criterion:</p>
+<ul>
+<li>Tries to create groups where the values within each group are as similar as possible</li>
+<li>Is the traditional approach for regression trees</li>
+<li>Works well for most regression problems</li>
+</ul>
+<p>Think of it like sorting books by height, so each shelf has books of similar height.</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_SplitCriterion_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Split criteria are like the &quot;rules&quot; that help decision trees decide how to divide data.</p>
+<p>Imagine you're organizing books on shelves. You could sort them by:</p>
+<ul>
+<li>Size (big books vs. small books)</li>
+<li>Color (red books vs. blue books)</li>
+<li>Topic (fiction vs. non-fiction)</li>
+</ul>
+<p>But which way of sorting is best? Split criteria help the AI decide which way of dividing
+the data will lead to the most accurate predictions. Different criteria measure &quot;best&quot; in
+different ways, each with their own advantages.</p>
+<p>These criteria are primarily used for regression problems (predicting numeric values like
+house prices or temperatures) rather than classification problems (predicting categories).</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/SplitCriterion.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

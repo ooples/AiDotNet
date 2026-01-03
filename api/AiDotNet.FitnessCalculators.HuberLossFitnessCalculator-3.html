@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HuberLossFitnessCalculator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HuberLossFitnessCalculator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A fitness calculator that uses Huber Loss to evaluate model performance, combining the best aspects of Mean Squared Error and Mean Absolute Error.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3.md&amp;value=---%0Auid%3A%20AiDotNet.FitnessCalculators.HuberLossFitnessCalculator%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FitnessCalculators.HuberLossFitnessCalculator`3">
+
+
+
+  <h1 id="AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3" data-uid="AiDotNet.FitnessCalculators.HuberLossFitnessCalculator`3" class="text-break">
+Class HuberLossFitnessCalculator&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/HuberLossFitnessCalculator.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FitnessCalculators.html">FitnessCalculators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A fitness calculator that uses Huber Loss to evaluate model performance, combining the best aspects of Mean Squared Error and Mean Absolute Error.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HuberLossFitnessCalculator&lt;T, TInput, TOutput&gt; : FitnessCalculatorBase&lt;T, TInput, TOutput&gt;, IFitnessCalculator&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html">FitnessCalculatorBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">HuberLossFitnessCalculator&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__isHigherScoreBetter">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._isHigherScoreBetter</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__numOps">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._numOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__dataSetType">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._dataSetType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.CalculateFitnessScore(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.CalculateFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsHigherScoreBetter">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.IsHigherScoreBetter</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsBetterFitness__0__0_">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.IsBetterFitness(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This calculator helps evaluate how well your model is performing, especially for regression tasks
+(where you're predicting continuous values like prices, temperatures, etc.).
+<p>Huber Loss is a special type of loss function that combines two popular approaches:</p>
+<ul>
+<li>Mean Squared Error (MSE): Good for most predictions but very sensitive to outliers</li>
+<li>Mean Absolute Error (MAE): Less sensitive to outliers but doesn't penalize large errors as strongly</li>
+</ul>
+<p>How Huber Loss works:</p>
+<ul>
+<li>For small errors (less than delta): It behaves like Mean Squared Error</li>
+<li>For large errors (greater than delta): It behaves like Mean Absolute Error</li>
+</ul>
+<p>Think of it like this:
+Imagine you're a teacher grading papers:</p>
+<ul>
+<li>For small mistakes (typos, minor calculation errors), you take off points proportional to the mistake (like MSE)</li>
+<li>For huge mistakes (completely wrong answers), you cap the penalty at a certain level (like MAE)</li>
+<li>The &quot;delta&quot; parameter is where you draw the line between &quot;small&quot; and &quot;huge&quot; mistakes</li>
+</ul>
+<p>This makes Huber Loss more robust against outliers (unusual data points) while still
+maintaining the benefits of Mean Squared Error for normal cases.</p>
+<p>Note: Huber Loss is also sometimes called &quot;Smooth L1 Loss&quot; in some frameworks like PyTorch,
+but they refer to the same loss function with slightly different parameterizations.</p>
+<p>Common applications include:</p>
+<ul>
+<li>Price prediction</li>
+<li>Any regression task where outliers might be present</li>
+<li>Situations where both small and large errors need to be handled appropriately</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3__ctor_" data-uid="AiDotNet.FitnessCalculators.HuberLossFitnessCalculator`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3__ctor__0_AiDotNet_Enums_DataSetType_" data-uid="AiDotNet.FitnessCalculators.HuberLossFitnessCalculator`3.#ctor(`0,AiDotNet.Enums.DataSetType)">
+  HuberLossFitnessCalculator(T?, DataSetType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/HuberLossFitnessCalculator.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the HuberLossFitnessCalculator class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HuberLossFitnessCalculator(T? delta = default, DataSetType dataSetType = DataSetType.Validation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>delta</code> <span class="xref">T</span></dt>
+    <dd><p>The threshold parameter that determines the transition point between quadratic and linear loss (default is 1.0).</p>
+</dd>
+    <dt><code>dataSetType</code> <a class="xref" href="AiDotNet.Enums.DataSetType.html">DataSetType</a></dt>
+    <dd><p>The type of dataset to use for fitness calculation (default is Validation).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3__ctor__0_AiDotNet_Enums_DataSetType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a new calculator that will use Huber Loss
+to evaluate your model's performance, which is especially good for regression problems
+where you might have some unusual data points (outliers).
+<p>Parameters:</p>
+<ul>
+<li><p>delta: Controls where the loss function switches behavior (default 1.0)</p>
+<ul>
+<li>Smaller values make the function more robust to outliers</li>
+<li>Larger values make the function more sensitive to all errors</li>
+</ul>
+</li>
+<li><p>dataSetType: Which data to evaluate (default is Validation)</p>
+<ul>
+<li>Training: The data used to train the model (not recommended for evaluation)</li>
+<li>Validation: A separate set of data used to tune the model (recommended)</li>
+<li>Test: A completely separate set of data used for final evaluation</li>
+</ul>
+</li>
+</ul>
+<p>We set the first parameter to &quot;false&quot; in the base constructor because in Huber Loss,
+lower values indicate better performance (0 would be a perfect model).</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3_GetFitnessScore_" data-uid="AiDotNet.FitnessCalculators.HuberLossFitnessCalculator`3.GetFitnessScore*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__" data-uid="AiDotNet.FitnessCalculators.HuberLossFitnessCalculator`3.GetFitnessScore(AiDotNet.Models.DataSetStats{`0,`1,`2})">
+  GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/HuberLossFitnessCalculator.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Huber Loss fitness score for the given dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt; dataSet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataSet</code> <a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The dataset containing predicted and actual values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated Huber Loss score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_HuberLossFitnessCalculator_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how well your model is performing using Huber Loss.
+<p>It works by:</p>
+<ol>
+<li>Taking the predictions your model made</li>
+<li>Comparing them to the actual correct answers</li>
+<li>Calculating a score that represents how wrong the model was, with special handling:
+<ul>
+<li>For small errors (less than delta): Uses squared error (like MSE)</li>
+<li>For large errors (greater than delta): Uses absolute error (like MAE)</li>
+</ul>
+</li>
+</ol>
+<p>A lower score means better performance (0 would be perfect).</p>
+<p>This method uses the NeuralNetworkHelper to do the actual Huber Loss calculation,
+passing in your model's predictions, the actual values, and the delta parameter.</p>
+<p>Huber Loss is particularly useful when your data might contain some unusual values
+that could throw off a standard Mean Squared Error calculation.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/HuberLossFitnessCalculator.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

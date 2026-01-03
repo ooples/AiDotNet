@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>PR #447 Sprint Plan — 3D AI Models (Issue #399) | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="PR #447 Sprint Plan — 3D AI Models (Issue #399) | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/PR447_3D_AI_SPRINT_PLAN.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="pr-447-sprint-plan--3d-ai-models-issue-399">PR #447 Sprint Plan — 3D AI Models (Issue #399)</h1>
+
+<p>This document is the exhaustive, phased plan to take PR #447 (“3D AI capabilities: point clouds + neural radiance fields”) from its current state to production-ready, while preserving AiDotNet’s facade philosophy: end users primarily interact via <code>PredictionModelBuilder</code> (build/train) and <code>PredictionModelResult</code> (inference).</p>
+<h2 id="goals-user-facing-outcome">Goals (User-Facing Outcome)</h2>
+<ul>
+<li>No change to user-facing entry points:
+<ul>
+<li>Users can still provide a concrete model via <code>PredictionModelBuilder.ConfigureModel(...)</code>.</li>
+<li>AutoML can still select a model automatically when enabled.</li>
+<li>Agents can still recommend/assemble a model and configuration.</li>
+</ul>
+</li>
+<li>Add production-ready 3D-focused models and workflows:
+<ul>
+<li>Point cloud processing models.</li>
+<li>Neural radiance field models.</li>
+<li>Industry-standard defaults for all new options, with opt-in customization via options classes.</li>
+</ul>
+</li>
+</ul>
+<h2 id="non-negotiable-constraints">Non-Negotiable Constraints</h2>
+<ul>
+<li>Public API surface area remains minimal and consistent:
+<ul>
+<li>No new “power user” public entry points that bypass the builder/result flow.</li>
+<li>Prefer configuration option classes (with defaults) over exposing low-level delegates/callbacks.</li>
+</ul>
+</li>
+<li>All new models must follow the existing architecture patterns:
+<ul>
+<li>Concrete model types must ultimately implement <code>IFullModel&lt;T, TInput, TOutput&gt;</code> (directly or through a base type).</li>
+<li>Ensure compatibility with serialization/cloning patterns used by other models.</li>
+</ul>
+</li>
+<li>Use AiDotNet’s optimized data types and numeric abstractions:
+<ul>
+<li>Prefer <code>Tensor&lt;T&gt;</code>, <code>Matrix&lt;T&gt;</code>, <code>Vector&lt;T&gt;</code>, and <code>INumericOperations&lt;T&gt;</code> patterns over raw arrays and <code>where T : INumber&lt;T&gt;</code> constraints.</li>
+</ul>
+</li>
+</ul>
+<h2 id="current-pr-447-snapshot-whats-in-scope-today">Current PR #447 Snapshot (What’s in Scope Today)</h2>
+<p><strong>Files added/modified (high-level):</strong></p>
+<ul>
+<li>Point cloud: <code>src/PointCloud/**</code> (PointNet, PointNet++, DGCNN, layers, interfaces, data).</li>
+<li>Radiance fields: <code>src/NeuralRadianceFields/**</code> (NeRF, InstantNGP, GaussianSplatting, ray + interface).</li>
+<li>Docs: <code>docs/3D_AI_Features.md</code>.</li>
+<li>Tests: a small set of unit tests for PointNet/NeRF.</li>
+</ul>
+<p><strong>CI status (as of latest check):</strong></p>
+<ul>
+<li>Failing: <code>gate</code>, <code>SonarCloud Analysis</code>, <code>CodeQL Analysis</code> (skips some downstream jobs).</li>
+<li>Passing: <code>commitlint</code>, <code>Fix Commit Messages</code>, <code>Codacy Security Scan</code>, etc.</li>
+</ul>
+<h2 id="phase-0--pre-implementation-audit-gap-analysis-deliverables">Phase 0 — Pre-Implementation Audit (Gap Analysis Deliverables)</h2>
+<p>This phase is about producing a precise checklist of what must change before any large refactors.</p>
+<h3 id="01-architecture-fit-check-model-contracts">0.1 Architecture Fit Check (Model Contracts)</h3>
+<ul>
+<li>Confirm how existing “core” model families implement <code>IFullModel</code>:
+<ul>
+<li>Identify the canonical base class(es) used by other neural-network-based models.</li>
+<li>Confirm expected overrides: <code>Predict</code>, <code>Train</code> (internal use), <code>Serialize/Deserialize</code>, <code>Clone/DeepCopy</code>, metadata.</li>
+</ul>
+</li>
+<li>For each new 3D model:
+<ul>
+<li>Define the exact <code>TInput</code> / <code>TOutput</code> types to be supported.</li>
+<li>Verify the model can be passed to <code>PredictionModelBuilder.ConfigureModel(...)</code> without adapters.</li>
+<li>Verify <code>PredictionModelResult&lt;T,TInput,TOutput&gt;</code> can run inference for those types.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria:</strong> For every 3D model, we have a one-page “contract sheet”:</p>
+<ul>
+<li>Model type name + namespace.</li>
+<li>Implements <code>IFullModel&lt;T, TInput, TOutput&gt;</code> (how/where).</li>
+<li>Supported input/output structures.</li>
+<li>Training expectations (if used through builder).</li>
+<li>Serialization and cloning policy.</li>
+</ul>
+<h3 id="02-options-inventory-defaults-first">0.2 Options Inventory (Defaults-First)</h3>
+<ul>
+<li>Decide which options belong in:
+<ul>
+<li>Per-model options (<code>PointNetOptions</code>, <code>PointNetPlusPlusOptions</code>, <code>DgcnnOptions</code>, <code>NeRFOptions</code>, <code>InstantNgpOptions</code>, <code>GaussianSplattingOptions</code>).</li>
+<li>Shared pipeline options (<code>PointCloudPipelineOptions</code>, <code>RadianceFieldPipelineOptions</code>) if needed.</li>
+</ul>
+</li>
+<li>For each option:
+<ul>
+<li>Default value (industry standard).</li>
+<li>“Auto” behavior (when user doesn’t specify).</li>
+<li>Validation rules and failure modes.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria:</strong> Options matrix with defaults and validation rules, written before code changes.</p>
+<h3 id="03-integration-inventory-facade-wiring">0.3 Integration Inventory (Facade Wiring)</h3>
+<ul>
+<li>Identify required integration points in:
+<ul>
+<li><code>src/PredictionModelBuilder.cs</code> (AutoML/Agents selection flow, model family routing).</li>
+<li><code>src/Models/Results/PredictionModelResult.cs</code> (inference session flow, tensor shapes, batching expectations).</li>
+<li>Any existing “model registry” / “task family” mapping used by AutoML and agents.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria:</strong> A routing map that explicitly answers:</p>
+<ul>
+<li>“How does AutoML pick a 3D model?”</li>
+<li>“How do Agents recommend a 3D model?”</li>
+<li>“What defaults are applied when task type is not specified?”</li>
+</ul>
+<h2 id="phase-1--ciquality-gate-stabilization-production-readiness-baseline">Phase 1 — CI/Quality Gate Stabilization (Production-Readiness Baseline)</h2>
+<h3 id="11-fix-gate-failures">1.1 Fix <code>gate</code> failures</h3>
+<ul>
+<li>Use GraphQL to enumerate unresolved review threads.</li>
+<li>Address unresolved items one-by-one:
+<ul>
+<li>Fix the underlying issue.</li>
+<li>Resolve the thread (or comment when it is a code-scanning thread that cannot be manually resolved).</li>
+</ul>
+</li>
+</ul>
+<h3 id="12-fix-sonar--codeql-failures">1.2 Fix Sonar + CodeQL failures</h3>
+<ul>
+<li>Remove or correct:
+<ul>
+<li>Invalid encodings / non-ASCII artifacts in XML docs (these frequently trip analyzers).</li>
+<li>Any unsafe patterns flagged by CodeQL.</li>
+<li>Any obvious performance pitfalls (alloc-heavy paths) flagged by analyzers.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria:</strong> PR #447 is back to “green checks” with no workflow workarounds.</p>
+<h2 id="phase-2--point-cloud-core-correctness--performance--options">Phase 2 — Point Cloud Core (Correctness + Performance + Options)</h2>
+<h3 id="20-internal-pointclouddatat--tensor-adapters-facade-safe">2.0 Internal <code>PointCloudData&lt;T&gt;</code> + Tensor Adapters (Facade-Safe)</h3>
+<p><strong>Decision:</strong> Public-facing model inputs remain <code>Tensor&lt;T&gt;</code> (builder/result consistency). Internally, we introduce a <code>PointCloudData&lt;T&gt;</code> container plus helpers/adapters for correctness, ergonomics, and performance.</p>
+<ul>
+<li><p><code>PointCloudData&lt;T&gt;</code> (internal helper/container)</p>
+<ul>
+<li>Stores point positions and optional per-point attributes without forcing padding/masks by default:
+<ul>
+<li>Positions: <code>Tensor&lt;T&gt;</code> shaped <code>[N, 3]</code> (or <code>[B, N, 3]</code> when explicitly batched).</li>
+<li>Optional attributes: normals/colors/intensity/features as tensors (explicitly typed and shaped).</li>
+<li>Optional metadata: coordinate frame, units, and precomputed neighborhood indices (when beneficial).</li>
+</ul>
+</li>
+<li>Centralizes invariants and validation (finite values, expected ranks, consistent first dimension, etc.).</li>
+</ul>
+</li>
+<li><p>Adapters (internal)</p>
+<ul>
+<li><code>PointCloudTensorAdapter</code> to convert between:
+<ul>
+<li><code>Tensor&lt;T&gt;</code> representations used by <code>IFullModel&lt;T, TInput, TOutput&gt;</code> implementations.</li>
+<li>The internal <code>PointCloudData&lt;T&gt;</code> representation used by dataset loaders, augmentations, and neighborhood construction.</li>
+</ul>
+</li>
+<li>Defines a single canonical <code>Tensor&lt;T&gt;</code> layout for point clouds (documented and enforced).</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>The model types still accept <code>Tensor&lt;T&gt;</code> as <code>TInput</code> (no new public surface required).</li>
+<li>Internal code (training pipelines, augmentation, sampling/grouping) can operate on <code>PointCloudData&lt;T&gt;</code> without repeated shape checks and without unnecessary padding allocations.</li>
+</ul>
+<h3 id="21-canonical-inputoutput-shapes">2.1 Canonical Input/Output Shapes</h3>
+<ul>
+<li>Establish and document supported representations:
+<ul>
+<li>Point clouds: <code>[numPoints, 3]</code> positions; optional normals/features <code>[numPoints, F]</code>.</li>
+<li>Batching strategy: either <code>[batch, numPoints, channels]</code> tensors or a <code>PointCloudData&lt;T&gt;</code> batch abstraction.</li>
+</ul>
+</li>
+<li>Define how labels are represented:
+<ul>
+<li>Classification: class index vector / one-hot (match existing conventions).</li>
+<li>Segmentation: per-point labels.</li>
+</ul>
+</li>
+</ul>
+<h3 id="22-pointnet">2.2 PointNet</h3>
+<ul>
+<li>Verify and complete:
+<ul>
+<li>Permutation invariance correctness.</li>
+<li>Input transform (T-Net) and feature transform behavior.</li>
+<li>Global feature vector caching rules (thread-safety / inference correctness).</li>
+</ul>
+</li>
+<li>Options coverage:
+<ul>
+<li>Toggle transforms, hidden widths, pooling types, dropout, normalization, activations, etc.</li>
+</ul>
+</li>
+</ul>
+<h3 id="23-pointnet">2.3 PointNet++</h3>
+<ul>
+<li>Implement the missing “industry standard” components if not present:
+<ul>
+<li>Farthest point sampling (FPS).</li>
+<li>Local neighborhood grouping (ball query / kNN).</li>
+<li>Set abstraction + feature propagation layers.</li>
+<li>Multi-scale grouping (MSG) option.</li>
+</ul>
+</li>
+<li>Add defaults aligned to the paper and typical implementations.</li>
+</ul>
+<h3 id="24-dgcnn">2.4 DGCNN</h3>
+<ul>
+<li>Ensure dynamic graph construction is production-ready:
+<ul>
+<li>Efficient kNN (reuse existing tensor ops where possible).</li>
+<li>EdgeConv implementation using AiDotNet tensor primitives.</li>
+<li>Deterministic behavior when a random seed is configured.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria (Point Cloud):</strong></p>
+<ul>
+<li>Unit tests: shape checks, permutation invariance (PointNet), basic forward pass determinism.</li>
+<li>Integration tests: <code>PredictionModelBuilder -&gt; Build -&gt; PredictionModelResult -&gt; Predict</code> for at least one point cloud task.</li>
+</ul>
+<h2 id="phase-3--radiance-fields-core-correctness--options--scalability">Phase 3 — Radiance Fields Core (Correctness + Options + Scalability)</h2>
+<h3 id="31-nerf-baseline">3.1 NeRF (baseline)</h3>
+<ul>
+<li>Ensure correct volume rendering pipeline:
+<ul>
+<li>Ray sampling, stratified sampling, compositing.</li>
+<li>Positional encoding implementation and parameterization.</li>
+<li>Chunked inference (avoid OOM).</li>
+</ul>
+</li>
+<li>Options coverage:
+<ul>
+<li>Encoding levels, sample counts, near/far, background handling, activation choices.</li>
+</ul>
+</li>
+</ul>
+<h3 id="32-instant-ngp-hash-encoding">3.2 Instant-NGP (hash encoding)</h3>
+<ul>
+<li>Complete “industry standard” parts if missing:
+<ul>
+<li>Multiresolution hash grid encoding.</li>
+<li>Tiny MLP and level parameters.</li>
+<li>Optional occupancy grid acceleration.</li>
+</ul>
+</li>
+<li>Performance-focused defaults with opt-out switches.</li>
+</ul>
+<h3 id="33-3d-gaussian-splatting">3.3 3D Gaussian Splatting</h3>
+<ul>
+<li>Define the production boundary:
+<ul>
+<li>MVP: inference/rendering interface + basic training hooks (if training is intended in AiDotNet scope).</li>
+<li>If training is in scope: densification, pruning, and optimization schedule options.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria (Radiance Fields):</strong></p>
+<ul>
+<li>Unit tests: ray math, positional encoding, stable forward pass.</li>
+<li>Integration tests: builder/result flow for a tiny synthetic scene (minimal render sanity test).</li>
+</ul>
+<h2 id="phase-4--automl--agents-integration-exhaustive-defaults">Phase 4 — AutoML + Agents Integration (Exhaustive Defaults)</h2>
+<h3 id="41-automl-model-selection">4.1 AutoML model selection</h3>
+<ul>
+<li>Extend AutoML model family selection logic to include:
+<ul>
+<li>Point cloud classification/segmentation.</li>
+<li>Radiance-field training/inference tasks (if supported by AutoML).</li>
+</ul>
+</li>
+<li>Ensure defaults when user does not specify a task:
+<ul>
+<li>Define a deterministic fallback (documented).</li>
+</ul>
+</li>
+</ul>
+<h3 id="42-agents-recommendations">4.2 Agents recommendations</h3>
+<ul>
+<li>Add rule-based recommendations for:
+<ul>
+<li>When to use PointNet vs PointNet++ vs DGCNN.</li>
+<li>When to use NeRF vs Instant-NGP vs Gaussian splatting.</li>
+</ul>
+</li>
+<li>Ensure the agent output maps to concrete option classes + builder configuration.</li>
+</ul>
+<p><strong>Acceptance criteria:</strong> A user can enable AutoML/Agents and get a valid 3D model chosen and configured without touching internal types.</p>
+<h2 id="phase-5--inference--serving-alignment-coordinate-with-inference-optimization-prs">Phase 5 — Inference &amp; Serving Alignment (Coordinate With Inference Optimization PRs)</h2>
+<p>This phase is explicitly dependent on what is already merged vs still in-flight in inference optimization PRs.</p>
+<h3 id="51-dependency-audit">5.1 Dependency audit</h3>
+<ul>
+<li>List which inference features are already merged in <code>master</code> vs in open PRs:
+<ul>
+<li>KV cache, paged attention/KV, batching, speculative decoding, session APIs, etc.</li>
+</ul>
+</li>
+<li>Decide merge order:
+<ul>
+<li>If 3D inference can reuse existing infrastructure, integrate now.</li>
+<li>If not, defer integration and track as a follow-on PR with explicit acceptance criteria.</li>
+</ul>
+</li>
+</ul>
+<h3 id="52-serving-integration-optional-use-case-driven">5.2 Serving integration (optional, use-case driven)</h3>
+<ul>
+<li>Only add serving-specific toggles where they provide clear value:
+<ul>
+<li>Multi-scene batching for radiance fields.</li>
+<li>Render scheduling policies.</li>
+<li>Safety/resource limits by default (timeouts, max rays, max points).</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria:</strong> 3D models can run inference reliably via <code>PredictionModelResult</code>; serving extensions are optional and isolated.</p>
+<h2 id="phase-6--serialization-cloning-and-reproducibility">Phase 6 — Serialization, Cloning, and Reproducibility</h2>
+<ul>
+<li>Ensure 3D models support:
+<ul>
+<li><code>Serialize/Deserialize</code> round-trip.</li>
+<li>Deep clone where required (avoid shared mutable state between sessions).</li>
+<li>Reproducible initialization with configured random seeds.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria:</strong> Integration test that:</p>
+<ul>
+<li>Builds a model, serializes, reloads, and produces identical predictions for a fixed input/seed.</li>
+</ul>
+<h2 id="phase-7--documentation-match-repo-standards">Phase 7 — Documentation (Match Repo Standards)</h2>
+<ul>
+<li>Update <code>docs/3D_AI_Features.md</code> to:
+<ul>
+<li>Use builder/result examples (primary flow).</li>
+<li>Keep direct model construction examples only as “advanced” and still routed through <code>ConfigureModel</code>.</li>
+<li>Normalize formatting and remove any encoding artifacts.</li>
+</ul>
+</li>
+<li>Add a module-level README if needed (per your preference), e.g.:
+<ul>
+<li><code>src/PointCloud/README.md</code></li>
+<li><code>src/NeuralRadianceFields/README.md</code></li>
+</ul>
+</li>
+</ul>
+<p><strong>Acceptance criteria:</strong> Docs are consistent with existing repo doc structure and compile cleanly (no analyzer-breaking characters).</p>
+<h2 id="phase-8--tests--benchmarks-industry-standard--beyond">Phase 8 — Tests &amp; Benchmarks (Industry Standard + Beyond)</h2>
+<h3 id="81-unit-tests">8.1 Unit tests</h3>
+<ul>
+<li>Determinism with fixed seeds.</li>
+<li>Shape validation and error messages.</li>
+<li>Null/empty input handling.</li>
+</ul>
+<h3 id="82-integration-tests">8.2 Integration tests</h3>
+<ul>
+<li>End-to-end builder/result flow for:
+<ul>
+<li>Point cloud classification (tiny synthetic dataset).</li>
+<li>NeRF forward/render for a tiny synthetic scene.</li>
+</ul>
+</li>
+</ul>
+<h3 id="83-performance-checks">8.3 Performance checks</h3>
+<ul>
+<li>Add at least one benchmark per category (if the repo already has benchmark patterns):
+<ul>
+<li>Point cloud forward pass throughput.</li>
+<li>NeRF render chunk throughput.</li>
+</ul>
+</li>
+</ul>
+<h2 id="phase-9--pr-hardening--merge-readiness">Phase 9 — PR Hardening / Merge Readiness</h2>
+<ul>
+<li>Re-run GraphQL unresolved-thread loop until no resolvable review threads remain.</li>
+<li>Ensure all required checks pass without special-casing.</li>
+<li>Update PR description to match <code>docs/PRODUCTION_READY_PR_PROCESS.md</code> checklist items:
+<ul>
+<li>Verification evidence and final SHA.</li>
+</ul>
+</li>
+</ul>
+<h2 id="open-questions-need-your-confirmation-before-implementation">Open Questions (Need Your Confirmation Before Implementation)</h2>
+<p>These are now resolved based on your guidance:</p>
+<ol>
+<li><p><strong>Radiance fields training is in scope.</strong></p>
+<ul>
+<li>Plan impact: NeRF / Instant-NGP / Gaussian Splatting phases include training loops, optimizer schedules, and dataset/input pipelines as first-class requirements (not “inference-only MVPs”).</li>
+</ul>
+</li>
+<li><p><strong>Standardize point cloud inputs on <code>Tensor&lt;T&gt;</code> (public-facing).</strong></p>
+<ul>
+<li>Default plan: <code>TInput</code> for point cloud models is <code>Tensor&lt;T&gt;</code> (or other existing core tensor primitives) so the builder/result flow stays consistent and avoids proliferating new public data containers.</li>
+<li>Why <code>PointCloudData&lt;T&gt;</code> might still be useful (internal): real point cloud workloads often have variable point counts, optional per-point attributes (normals, colors, intensities), and metadata (coordinate frames). A dedicated container can avoid padding/masks, preserve semantics, and make dataset loaders cleaner.</li>
+<li>Recommendation: keep any <code>PointCloudData&lt;T&gt;</code>-style helpers <strong>internal</strong> (or “advanced/internal”) and provide adapters that materialize to/from <code>Tensor&lt;T&gt;</code> so the facade remains consistent.</li>
+</ul>
+</li>
+<li><p><strong>AutoML should treat 3D tasks as new task families.</strong></p>
+<ul>
+<li>Plan impact: add explicit 3D task families (e.g., point-cloud classification/segmentation; radiance-field reconstruction/rendering) and wire them through AutoML + Agents routing rather than inferring via input shape alone.</li>
+</ul>
+</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/PR447_3D_AI_SPRINT_PLAN.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

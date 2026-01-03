@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Program Synthesis Benchmarks (HumanEval + CodeXGLUE) | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Program Synthesis Benchmarks (HumanEval + CodeXGLUE) | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/reasoning/ProgramSynthesisBenchmarks.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="program-synthesis-benchmarks-humaneval--codexglue">Program Synthesis Benchmarks (HumanEval + CodeXGLUE)</h1>
+
+<p>This document describes how to run program synthesis/code generation benchmarks using the façade APIs:</p>
+<ul>
+<li>Build/configure via <code>PredictionModelBuilder</code></li>
+<li>Evaluate via <code>PredictionModelResult</code></li>
+<li>Prefer <code>AiDotNet.Serving</code> for untrusted execution</li>
+</ul>
+<h2 id="humaneval-execution-based">HumanEval (execution-based)</h2>
+<p>HumanEval evaluation is implemented as <strong>execution-based</strong> correctness:</p>
+<ul>
+<li>Preferred: execute via <code>AiDotNet.Serving</code> sandbox (<code>ExecuteProgramAsync</code>)</li>
+<li>Optional (dev only): local execution behind <code>AIDOTNET_HUMANEVAL_EXECUTION=1</code></li>
+</ul>
+<p>Recommended pattern:</p>
+<ol>
+<li>Configure a model result with program-synthesis serving:
+<ul>
+<li><code>PredictionModelBuilder.ConfigureProgramSynthesisServing(...)</code></li>
+</ul>
+</li>
+<li>Use:
+<ul>
+<li><code>PredictionModelResult.EvaluateHumanEvalAsync(...)</code> (pass@1 style)</li>
+<li><code>PredictionModelResult.EvaluateHumanEvalPassAtKAsync(k, ...)</code> (pass@k)</li>
+</ul>
+</li>
+</ol>
+<h2 id="codexglue">CodeXGLUE</h2>
+<p>CodeXGLUE evaluation is dataset-driven and does not ship datasets in this repository.</p>
+<ol>
+<li>Prepare a JSONL file (see <code>docs/reasoning/CodeXGLUE.md</code>).</li>
+<li>Use <code>AiDotNet.Reasoning.Benchmarks.CodeXGlueBenchmark&lt;T&gt;</code> with <code>CodeXGlueBenchmarkOptions</code> and provide an <code>evaluateFunction</code>.</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/reasoning/ProgramSynthesisBenchmarks.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

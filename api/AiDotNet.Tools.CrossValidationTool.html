@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CrossValidationTool | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CrossValidationTool | AiDotNet Documentation ">
+      
+      <meta name="description" content="A specialized tool that recommends optimal cross-validation strategies based on dataset characteristics, problem type, and computational constraints.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tools_CrossValidationTool.md&amp;value=---%0Auid%3A%20AiDotNet.Tools.CrossValidationTool%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tools.CrossValidationTool">
+
+
+
+  <h1 id="AiDotNet_Tools_CrossValidationTool" data-uid="AiDotNet.Tools.CrossValidationTool" class="text-break">
+Class CrossValidationTool  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/CrossValidationTool.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tools.html">Tools</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A specialized tool that recommends optimal cross-validation strategies based on dataset characteristics,
+problem type, and computational constraints.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CrossValidationTool : ToolBase, ITool</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Tools.ToolBase.html">ToolBase</a></div>
+      <div><span class="xref">CrossValidationTool</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITool.html">ITool</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Tools.ToolBase.html#AiDotNet_Tools_ToolBase_Execute_System_String_">ToolBase.Execute(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tools.ToolBase.html#AiDotNet_Tools_ToolBase_GetEmptyInputErrorMessage">ToolBase.GetEmptyInputErrorMessage()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tools.ToolBase.html#AiDotNet_Tools_ToolBase_GetGenericErrorMessage_System_Exception_">ToolBase.GetGenericErrorMessage(Exception)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tools.ToolBase.html#AiDotNet_Tools_ToolBase_TryGetString_Newtonsoft_Json_Linq_JToken_System_String_System_String_">ToolBase.TryGetString(JToken, string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tools.ToolBase.html#AiDotNet_Tools_ToolBase_TryGetInt_Newtonsoft_Json_Linq_JToken_System_String_System_Int32_">ToolBase.TryGetInt(JToken, string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tools.ToolBase.html#AiDotNet_Tools_ToolBase_TryGetDouble_Newtonsoft_Json_Linq_JToken_System_String_System_Double_">ToolBase.TryGetDouble(JToken, string, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tools.ToolBase.html#AiDotNet_Tools_ToolBase_TryGetBool_Newtonsoft_Json_Linq_JToken_System_String_System_Boolean_">ToolBase.TryGetBool(JToken, string, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tools_CrossValidationTool_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This tool provides AI agents with expert guidance on cross-validation methodology. Cross-validation is a
+critical technique for assessing model performance and preventing overfitting. The tool analyzes factors
+such as dataset size, problem type (classification vs regression), class imbalance, temporal structure,
+and computational resources to recommend the most appropriate CV strategy, number of folds, and validation
+approach. It helps ensure that model evaluation is robust, unbiased, and computationally feasible.
+</p>
+<p><b>For Beginners:</b> This tool helps you choose the right way to test whether your model actually works well.
+<p>What is cross-validation?
+Cross-validation is a technique for testing your model's performance by:</p>
+<ol>
+<li>Splitting your data into multiple parts (folds)</li>
+<li>Training on some parts and testing on others</li>
+<li>Rotating which parts are used for training vs testing</li>
+<li>Averaging the results to get a reliable performance estimate</li>
+</ol>
+<p>Why it matters:</p>
+<ul>
+<li><strong>Prevents overfitting</strong>: Ensures your model works on new data, not just training data</li>
+<li><strong>Reliable estimates</strong>: Gives you confidence that reported accuracy is real</li>
+<li><strong>Catches problems</strong>: Identifies if model only works on certain subsets of data</li>
+<li><strong>Guides decisions</strong>: Helps you choose between different models and hyperparameters</li>
+</ul>
+<p>Different CV strategies:</p>
+<ul>
+<li><strong>K-Fold</strong>: Standard approach, splits data into K equal parts</li>
+<li><strong>Stratified K-Fold</strong>: Maintains class proportions in each fold (for classification)</li>
+<li><strong>Time Series Split</strong>: Respects temporal order (for time-based data)</li>
+<li><strong>Leave-One-Out</strong>: Uses each sample once as validation (for very small datasets)</li>
+<li><strong>Hold-Out</strong>: Simple train/test split (fastest but less reliable)</li>
+</ul>
+<p>Example input (JSON format):</p>
+<pre><code class="lang-csharp">{
+  "n_samples": 5000,
+  "n_features": 20,
+  "problem_type": "classification",
+  "is_time_series": false,
+  "is_imbalanced": true,
+  "has_groups": false,
+  "computational_budget": "moderate"
+}</code></pre>
+<p>Example output:
+&quot;Recommended Cross-Validation Strategy:\n\n&quot; +
+&quot;Strategy: Stratified K-Fold Cross-Validation\n&quot; +
+&quot;Number of Folds: 5\n\n&quot; +
+&quot;Reasoning:\n&quot; +
+&quot;- Dataset size (5,000 samples) is suitable for 5-fold CV\n&quot; +
+&quot;- Stratified folding maintains class proportions in imbalanced data\n&quot; +
+&quot;- Each fold will have ~1,000 samples for validation\n&quot; +
+&quot;- Provides good balance between reliability and computational cost\n\n&quot; +
+&quot;Implementation Tips:\n&quot; +
+&quot;- Use StratifiedKFold from scikit-learn\n&quot; +
+&quot;- Set random_state for reproducibility\n&quot; +
+&quot;- Consider stratified sampling if classes are highly imbalanced&quot;</p>
+<p>This guidance ensures your model evaluation is trustworthy and appropriate for your specific situation.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tools_CrossValidationTool_Description_" data-uid="AiDotNet.Tools.CrossValidationTool.Description*"></a>
+
+  <h3 id="AiDotNet_Tools_CrossValidationTool_Description" data-uid="AiDotNet.Tools.CrossValidationTool.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/CrossValidationTool.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a detailed description of what the tool does and how to use it.
+This description helps the agent understand when and how to use the tool effectively.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string describing the tool's functionality, input format, and expected output.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tools_CrossValidationTool_Name_" data-uid="AiDotNet.Tools.CrossValidationTool.Name*"></a>
+
+  <h3 id="AiDotNet_Tools_CrossValidationTool_Name" data-uid="AiDotNet.Tools.CrossValidationTool.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/CrossValidationTool.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the unique name of the tool.
+This name is used by the agent to identify and invoke the tool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string representing the tool's name (e.g., &quot;Calculator&quot;, &quot;Search&quot;, &quot;WebScraper&quot;).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tools_CrossValidationTool_ExecuteCore_" data-uid="AiDotNet.Tools.CrossValidationTool.ExecuteCore*"></a>
+
+  <h3 id="AiDotNet_Tools_CrossValidationTool_ExecuteCore_System_String_" data-uid="AiDotNet.Tools.CrossValidationTool.ExecuteCore(System.String)">
+  ExecuteCore(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/CrossValidationTool.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes the tool's core logic with validated input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override string ExecuteCore(string input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated input string (guaranteed to be non-null and non-empty).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The result of the tool's execution or an error message.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tools_CrossValidationTool_ExecuteCore_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes implement this method to provide their specific tool functionality. The input has already
+been validated by the base class, so implementations can assume it's not null or empty. JSON parsing errors
+and general exceptions are automatically caught and handled by the base class, so implementations can focus
+on their core logic.
+</p>
+<p><b>For Beginners:</b> This is where you put the actual "work" your tool does.
+<p>When you create a new tool, you override this method:</p>
+<pre><code class="lang-csharp">protected override string ExecuteCore(string input)
+{
+    // Parse JSON input
+    var json = JObject.Parse(input);
+
+    // Extract what you need
+    string value = json["some_field"]?.ToString() ?? "";
+
+    // Do your tool's work
+    string result = ProcessData(value);
+
+    // Return the result
+    return result;
+}</code></pre>
+<p>Benefits of overriding ExecuteCore instead of Execute:</p>
+<ul>
+<li>Input is already validated (not null/empty)</li>
+<li>Errors are automatically caught and formatted nicely</li>
+<li>You just focus on your tool's specific logic</li>
+<li>Consistent error handling across all tools</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tools_CrossValidationTool_GetJsonErrorMessage_" data-uid="AiDotNet.Tools.CrossValidationTool.GetJsonErrorMessage*"></a>
+
+  <h3 id="AiDotNet_Tools_CrossValidationTool_GetJsonErrorMessage_Newtonsoft_Json_JsonReaderException_" data-uid="AiDotNet.Tools.CrossValidationTool.GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException)">
+  GetJsonErrorMessage(JsonReaderException)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/CrossValidationTool.cs/#L291"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the error message to return when JSON parsing fails.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override string GetJsonErrorMessage(JsonReaderException ex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ex</code> <span class="xref">JsonReaderException</span></dt>
+    <dd><p>The JsonReaderException that occurred.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A formatted error message explaining the JSON parsing failure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tools_CrossValidationTool_GetJsonErrorMessage_Newtonsoft_Json_JsonReaderException__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes can override this method to provide tool-specific JSON error messages with
+example input formats. The default implementation provides a generic JSON format error message.
+</p>
+<p><b>For Beginners:</b> This defines what error message users see if their JSON is invalid.
+<p>You can override this to show the expected JSON format for your specific tool:</p>
+<pre><code class="lang-csharp">protected override string GetJsonErrorMessage(JsonReaderException ex)
+{
+    return $"Error: Invalid JSON format. {ex.Message}\n" +
+           "Expected format: { \"expression\": \"2 + 2\" }";
+}</code></pre>
+<p>This helps users understand exactly what JSON structure your tool expects.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/CrossValidationTool.cs/#L69" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

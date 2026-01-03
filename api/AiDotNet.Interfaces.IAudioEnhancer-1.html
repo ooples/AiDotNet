@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IAudioEnhancer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IAudioEnhancer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for audio enhancement models that improve audio quality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IAudioEnhancer_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IAudioEnhancer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IAudioEnhancer`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IAudioEnhancer_1" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1" class="text-break">
+Interface IAudioEnhancer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for audio enhancement models that improve audio quality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IAudioEnhancer&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IAudioEnhancer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Audio enhancement encompasses various techniques to improve audio quality:
+<ul><li>Noise Reduction: Remove background noise while preserving speech/music</li><li>Speech Enhancement: Improve speech intelligibility and quality</li><li>Dereverberation: Remove room echo and reverb artifacts</li><li>Echo Cancellation: Remove acoustic echo in communication systems</li><li>Bandwidth Extension: Extend frequency range of narrowband audio</li></ul>
+
+<p><b>For Beginners:</b> Audio enhancement is like photo editing for sound!
+<p>Common use cases:</p>
+<ul>
+<li>Cleaning up podcast recordings (removing AC hum, keyboard clicks)</li>
+<li>Improving phone call quality (reducing background noise)</li>
+<li>Restoring old recordings (removing tape hiss, crackle)</li>
+<li>Video conferencing (echo cancellation, noise suppression)</li>
+<li>Hearing aids (speech enhancement in noisy environments)</li>
+</ul>
+<p>How it works (simplified):</p>
+<ol>
+<li>Analyze the audio to identify &quot;noise&quot; vs &quot;signal&quot;</li>
+<li>Create a filter that reduces noise while keeping the signal</li>
+<li>Apply the filter to produce cleaner audio</li>
+</ol>
+<p>Modern approaches use neural networks that learn what clean audio
+should sound like, producing much better results than traditional methods.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_EnhancementStrength_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.EnhancementStrength*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_EnhancementStrength" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.EnhancementStrength">
+  EnhancementStrength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the enhancement strength (0.0 = no enhancement, 1.0 = maximum).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double EnhancementStrength { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioEnhancer_1_EnhancementStrength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Higher values provide more noise reduction but may introduce artifacts.
+Start with 0.5-0.7 for natural-sounding results.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_LatencySamples_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.LatencySamples*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_LatencySamples" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.LatencySamples">
+  LatencySamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the processing latency in samples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int LatencySamples { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioEnhancer_1_LatencySamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Important for real-time applications. Lower latency means faster
+response but potentially lower quality enhancement.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_NumChannels_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.NumChannels*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_NumChannels" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.NumChannels">
+  NumChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of audio channels supported.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int NumChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_SampleRate_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_SampleRate" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sample rate this enhancer operates at.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_Enhance_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.Enhance*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_Enhance_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.Enhance(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Enhance(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enhances audio quality by reducing noise and artifacts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Enhance(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio tensor with shape [channels, samples] or [samples].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Enhanced audio tensor with the same shape as input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_EnhanceWithReference_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.EnhanceWithReference*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_EnhanceWithReference_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.EnhanceWithReference(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  EnhanceWithReference(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enhances audio with a reference signal for echo cancellation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; EnhanceWithReference(Tensor&lt;T&gt; audio, Tensor&lt;T&gt; reference)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio (microphone signal).</p>
+</dd>
+    <dt><code>reference</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Reference audio (speaker playback signal).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Enhanced audio with echo removed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioEnhancer_1_EnhanceWithReference_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is for video calls!
+<p>The problem: Your microphone picks up sound from your speakers,
+creating an echo for the other person.</p>
+<p>Solution: We know what's playing from the speakers (reference),
+so we can subtract it from what the microphone picks up.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_EstimateNoiseProfile_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.EstimateNoiseProfile*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_EstimateNoiseProfile_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.EstimateNoiseProfile(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  EstimateNoiseProfile(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates the noise profile from a segment of audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void EstimateNoiseProfile(Tensor&lt;T&gt; noiseOnlyAudio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>noiseOnlyAudio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio containing only noise (no signal).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioEnhancer_1_EstimateNoiseProfile_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some enhancers work better if you tell them
+what the noise sounds like. Record a few seconds of "silence" (just the
+background noise) and pass it here.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_ProcessChunk_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.ProcessChunk*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_ProcessChunk_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.ProcessChunk(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ProcessChunk(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Processes audio in real-time streaming mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ProcessChunk(Tensor&lt;T&gt; audioChunk)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audioChunk</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A small chunk of audio for real-time processing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Enhanced audio chunk (may have latency).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioEnhancer_1_ProcessChunk_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For real-time applications like video calls. The enhancer maintains
+internal state between calls for continuity.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEnhancer_1_ResetState_" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.ResetState*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEnhancer_1_ResetState" data-uid="AiDotNet.Interfaces.IAudioEnhancer`1.ResetState">
+  ResetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets internal state for streaming mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ResetState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEnhancer.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

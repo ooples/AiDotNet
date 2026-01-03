@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MultiGpuManager | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MultiGpuManager | AiDotNet Documentation ">
+      
+      <meta name="description" content="Manages multiple GPU devices for parallel computation within a single process.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_MultiGpuManager.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.MultiGpuManager%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.MultiGpuManager">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_MultiGpuManager" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager" class="text-break">
+Class MultiGpuManager  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Manages multiple GPU devices for parallel computation within a single process.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MultiGpuManager : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MultiGpuManager</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_MultiGpuManager_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+MultiGpuManager enables using multiple GPUs for training or inference. It supports
+data parallelism (same model on multiple GPUs, different data) and can coordinate
+gradient synchronization across devices.
+</p>
+<p><b>For Beginners:</b> If you have multiple GPUs, this lets you use them all at once!
+<p>Benefits:</p>
+<ul>
+<li>Train faster by processing more data in parallel</li>
+<li>Handle larger models that don't fit on a single GPU</li>
+<li>Increase throughput for inference</li>
+</ul>
+<p>Common patterns:</p>
+<ul>
+<li>Data Parallelism: Same model on each GPU, different data batches</li>
+<li>Model Parallelism: Different parts of model on different GPUs</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager__ctor_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager__ctor_System_Int32___" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.#ctor(System.Int32[])">
+  MultiGpuManager(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MultiGpuManager class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MultiGpuManager(int[]? deviceIds = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>deviceIds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Specific device IDs to use. If null, uses all available devices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_DeviceCount_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.DeviceCount*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_DeviceCount" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.DeviceCount">
+  DeviceCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of available GPU devices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DeviceCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_Devices_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.Devices*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_Devices" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.Devices">
+  Devices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all available GPU devices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;GpuDevice&gt; Devices { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.GpuDevice.html">GpuDevice</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_PrimaryDeviceId_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.PrimaryDeviceId*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_PrimaryDeviceId" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.PrimaryDeviceId">
+  PrimaryDeviceId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the primary device used for aggregation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PrimaryDeviceId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_AllReduceGradients_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.AllReduceGradients*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_AllReduceGradients__1_System_Collections_Generic_Dictionary_System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor___0___" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.AllReduceGradients``1(System.Collections.Generic.Dictionary{System.Int32,AiDotNet.Tensors.LinearAlgebra.Tensor{``0}})">
+  AllReduceGradients&lt;T&gt;(Dictionary&lt;int, Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gathers gradients from all GPUs and averages them.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; AllReduceGradients&lt;T&gt;(Dictionary&lt;int, Tensor&lt;T&gt;&gt; gradients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Dictionary mapping device ID to its gradients.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Averaged gradients on the primary device.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_MultiGpuManager_AllReduceGradients__1_System_Collections_Generic_Dictionary_System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> After each GPU computes gradients on its data portion,
+this combines them by averaging. The result is the same as if you had trained
+on all the data with a single GPU.
+<pre><code class="lang-csharp">// Each GPU computes gradients
+var allGrads = new Dictionary&lt;int, Tensor&lt;float&gt;&gt;();
+foreach (var device in manager.Devices)
+{
+    allGrads[device.Id] = ComputeGradientsOnDevice(device.Id);
+}
+
+// Combine gradients
+var avgGradients = manager.AllReduceGradients(allGrads);
+
+// Update model with combined gradients
+optimizer.Step(avgGradients);</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_BroadcastParametersAsync_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.BroadcastParametersAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_BroadcastParametersAsync__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.BroadcastParametersAsync``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  BroadcastParametersAsync&lt;T&gt;(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Broadcasts model parameters from primary device to all other devices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;Dictionary&lt;int, Tensor&lt;T&gt;&gt;&gt; BroadcastParametersAsync&lt;T&gt;(Tensor&lt;T&gt; parameters) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Parameters on the primary device.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>Dictionary mapping device ID to replicated parameters.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_Dispose_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.Dispose*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_Dispose" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L376"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_DistributeData_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.DistributeData*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_DistributeData__1___0___" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.DistributeData``1(``0[])">
+  DistributeData&lt;T&gt;(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Distributes data across all GPUs for data parallel training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;int, T[]&gt; DistributeData&lt;T&gt;(T[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> T[]</dt>
+    <dd><p>The data to distribute.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T[]&gt;</dt>
+    <dd><p>Dictionary mapping device ID to its data portion.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_MultiGpuManager_DistributeData__1___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This splits your training batch across GPUs:
+<pre><code class="lang-csharp">// If you have 128 samples and 4 GPUs:
+var distributed = manager.DistributeData(batchData);
+// GPU 0 gets samples 0-31
+// GPU 1 gets samples 32-63
+// GPU 2 gets samples 64-95
+// GPU 3 gets samples 96-127</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_DistributeTensor_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.DistributeTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_DistributeTensor__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.DistributeTensor``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  DistributeTensor&lt;T&gt;(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Distributes tensor data across all GPUs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;int, Tensor&lt;T&gt;&gt; DistributeTensor&lt;T&gt;(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to distribute.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Dictionary mapping device ID to its tensor portion.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_ExecuteOnAllDevicesAsync_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.ExecuteOnAllDevicesAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_ExecuteOnAllDevicesAsync__2_System_Collections_Generic_Dictionary_System_Int32___0__System_Func_System_Int32___0_System_Threading_Tasks_Task___1___" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.ExecuteOnAllDevicesAsync``2(System.Collections.Generic.Dictionary{System.Int32,``0},System.Func{System.Int32,``0,System.Threading.Tasks.Task{``1}})">
+  ExecuteOnAllDevicesAsync&lt;TInput, TOutput&gt;(Dictionary&lt;int, TInput&gt;, Func&lt;int, TInput, Task&lt;TOutput&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes a function on all GPUs in parallel.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;Dictionary&lt;int, TOutput&gt;&gt; ExecuteOnAllDevicesAsync&lt;TInput, TOutput&gt;(Dictionary&lt;int, TInput&gt; inputs, Func&lt;int, TInput, Task&lt;TOutput&gt;&gt; function)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, TInput&gt;</dt>
+    <dd><p>Dictionary of inputs per device.</p>
+</dd>
+    <dt><code>function</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, TInput, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;TOutput&gt;&gt;</dt>
+    <dd><p>Function to execute on each device.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, TOutput&gt;&gt;</dt>
+    <dd><p>Dictionary of outputs per device.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TInput</code></dt>
+    <dd><p>Input type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>Output type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_ExecuteOnAllDevices_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.ExecuteOnAllDevices*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_ExecuteOnAllDevices__2_System_Collections_Generic_Dictionary_System_Int32___0__System_Func_System_Int32___0___1__" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.ExecuteOnAllDevices``2(System.Collections.Generic.Dictionary{System.Int32,``0},System.Func{System.Int32,``0,``1})">
+  ExecuteOnAllDevices&lt;TInput, TOutput&gt;(Dictionary&lt;int, TInput&gt;, Func&lt;int, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes a function on all GPUs in parallel (synchronous version).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;int, TOutput&gt; ExecuteOnAllDevices&lt;TInput, TOutput&gt;(Dictionary&lt;int, TInput&gt; inputs, Func&lt;int, TInput, TOutput&gt; function)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, TInput&gt;</dt>
+    <dd></dd>
+    <dt><code>function</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_GetMemoryUsage_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.GetMemoryUsage*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_GetMemoryUsage" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.GetMemoryUsage">
+  GetMemoryUsage()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L353"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets memory usage across all devices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;int, GpuMemoryInfo&gt; GetMemoryUsage()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.Engines.GpuMemoryInfo.html">GpuMemoryInfo</a>&gt;</dt>
+    <dd><p>Dictionary mapping device ID to memory usage info.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_MultiGpuManager_SelectBestDevice_" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.SelectBestDevice*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_MultiGpuManager_SelectBestDevice" data-uid="AiDotNet.Tensors.Engines.MultiGpuManager.SelectBestDevice">
+  SelectBestDevice()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L369"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects the best device based on available memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SelectBestDevice()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/MultiGpuManager.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

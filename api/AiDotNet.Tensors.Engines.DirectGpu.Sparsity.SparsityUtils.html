@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SparsityUtils | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SparsityUtils | AiDotNet Documentation ">
+      
+      <meta name="description" content="Utilities for working with 2:4 structured sparsity.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils" class="text-break">
+Class SparsityUtils  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.html">DirectGpu</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.html">Sparsity</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Utilities for working with 2:4 structured sparsity.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class SparsityUtils</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SparsityUtils</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>2:4 Structured Sparsity:</b></p>
+<p>
+A sparsity pattern where every group of 4 consecutive elements contains exactly 2 zeros.
+This provides predictable memory access patterns and enables hardware acceleration
+on AMD MI200+ and NVIDIA Ampere+ GPUs.
+</p>
+<p><b>Benefits:</b></p>
+<ul><li>2x memory compression</li><li>2x compute reduction</li><li>Predictable memory access patterns</li><li>Hardware-accelerated sparse tensor cores</li></ul>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_CalculateSparsityRatio_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.CalculateSparsityRatio*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_CalculateSparsityRatio_System_Single___System_Single_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.CalculateSparsityRatio(System.Single[],System.Single)">
+  CalculateSparsityRatio(float[], float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the sparsity ratio of a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float CalculateSparsityRatio(float[] data, float threshold = 1E-06)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Matrix data.</p>
+</dd>
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Values below this threshold are considered zero.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Ratio of zero elements (0.0 to 1.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_CompressTo2x4_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.CompressTo2x4*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_CompressTo2x4_System_Single___System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.CompressTo2x4(System.Single[],System.Int32,System.Int32)">
+  CompressTo2x4(float[], int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a 2:4 sparse matrix into the compressed format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Compressed2x4Sparse CompressTo2x4(float[] denseData, int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>denseData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Dense matrix data with 2:4 sparsity pattern.</p>
+</dd>
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of rows.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.Compressed2x4Sparse.html">Compressed2x4Sparse</a></dt>
+    <dd><p>Compressed sparse representation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_DecompressFrom2x4_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.DecompressFrom2x4*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_DecompressFrom2x4_AiDotNet_Tensors_Engines_DirectGpu_Sparsity_Compressed2x4Sparse_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.DecompressFrom2x4(AiDotNet.Tensors.Engines.DirectGpu.Sparsity.Compressed2x4Sparse)">
+  DecompressFrom2x4(Compressed2x4Sparse)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decompresses a 2:4 sparse matrix back to dense format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float[] DecompressFrom2x4(Compressed2x4Sparse sparse)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.Compressed2x4Sparse.html">Compressed2x4Sparse</a></dt>
+    <dd><p>Compressed sparse matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Dense matrix data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_Enforce2x4SparsityInPlace_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.Enforce2x4SparsityInPlace*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_Enforce2x4SparsityInPlace_System_Single___System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.Enforce2x4SparsityInPlace(System.Single[],System.Int32,System.Int32)">
+  Enforce2x4SparsityInPlace(float[], int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enforces 2:4 structured sparsity by zeroing the 2 smallest magnitude values in each group of 4.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Enforce2x4SparsityInPlace(float[] data, int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Matrix data to sparsify (modified in place).</p>
+</dd>
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of rows.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of columns (must be divisible by 4).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown if cols is not divisible by 4.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_EstimateSparsityBenefit_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.EstimateSparsityBenefit*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_EstimateSparsityBenefit_System_Single___System_Single_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.EstimateSparsityBenefit(System.Single[],System.Single)">
+  EstimateSparsityBenefit(float[], float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L319"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates the potential speedup from using 2:4 sparsity on a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float EstimateSparsityBenefit(float[] data, float threshold = 1E-06)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Matrix data.</p>
+</dd>
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Zero threshold.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Estimated speedup factor (1.0 = no benefit, 2.0 = optimal).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_Has2x4SparsityPattern_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.Has2x4SparsityPattern*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_Has2x4SparsityPattern_System_Single___System_Int32_System_Int32_System_Single_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.Has2x4SparsityPattern(System.Single[],System.Int32,System.Int32,System.Single)">
+  Has2x4SparsityPattern(float[], int, int, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a matrix already has a valid 2:4 sparsity pattern.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool Has2x4SparsityPattern(float[] data, int rows, int cols, float threshold = 1E-06)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Matrix data in row-major order.</p>
+</dd>
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of rows.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of columns (must be divisible by 4).</p>
+</dd>
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Values below this threshold are considered zero.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the matrix has valid 2:4 sparsity, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_SparseGemmCpu_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.SparseGemmCpu*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_Sparsity_SparsityUtils_SparseGemmCpu_AiDotNet_Tensors_Engines_DirectGpu_Sparsity_Compressed2x4Sparse_System_Single___System_Single___System_Int32_System_Single_System_Single_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.SparsityUtils.SparseGemmCpu(AiDotNet.Tensors.Engines.DirectGpu.Sparsity.Compressed2x4Sparse,System.Single[],System.Single[],System.Int32,System.Single,System.Single)">
+  SparseGemmCpu(Compressed2x4Sparse, float[], float[], int, float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs CPU sparse GEMM: C = alpha * A_sparse * B + beta * C</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void SparseGemmCpu(Compressed2x4Sparse sparseA, float[] denseB, float[] C, int N, float alpha = 1, float beta = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparseA</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.Sparsity.Compressed2x4Sparse.html">Compressed2x4Sparse</a></dt>
+    <dd><p>Compressed sparse A matrix.</p>
+</dd>
+    <dt><code>denseB</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Dense B matrix (K x N).</p>
+</dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Output C matrix (M x N).</p>
+</dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Columns of B and C.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Scalar for A*B.</p>
+</dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Scalar for C.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/Sparsity/SparsityUtils.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

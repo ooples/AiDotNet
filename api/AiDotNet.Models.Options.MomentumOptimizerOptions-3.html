@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MomentumOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MomentumOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Momentum Optimizer, which enhances gradient descent by adding a fraction of the previous update direction to the current update.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_MomentumOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.MomentumOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_MomentumOptimizerOptions_3" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3" class="text-break">
+Class MomentumOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MomentumOptimizerOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Momentum Optimizer, which enhances gradient descent by adding
+a fraction of the previous update direction to the current update.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MomentumOptimizerOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">MomentumOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Momentum Optimizer is an extension of gradient descent that helps accelerate convergence and
+reduce oscillation in the optimization process. It achieves this by accumulating a velocity vector
+in the direction of persistent reduction in the objective function across iterations. This approach
+allows the optimizer to build up "momentum" in consistent directions, helping it navigate flat regions
+more quickly and dampening oscillations in directions with high curvature. Both the learning rate and
+momentum coefficient can be adapted during training based on the optimization performance.
+</p>
+<p><b>For Beginners:</b> The Momentum Optimizer is like adding a "memory" to the learning process,
+which helps the algorithm learn faster and more effectively.
+<p>Imagine you're rolling a ball down a hilly landscape to find the lowest point:</p>
+<ul>
+<li>Standard gradient descent is like gently nudging the ball in the downhill direction at each point</li>
+<li>Momentum is like letting the ball build up speed as it rolls</li>
+</ul>
+<p>This has several advantages:</p>
+<ul>
+<li>The ball can roll through small bumps and plateaus without getting stuck</li>
+<li>It builds up speed in consistent directions, moving faster toward the solution</li>
+<li>It can dampen the &quot;zig-zagging&quot; that happens on steep slopes</li>
+</ul>
+<p>This class lets you configure how the ball rolls: how fast it can go (learning rate),
+how much momentum it builds up, and how these values adjust during training based on
+whether progress is being made.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MomentumOptimizerOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for mini-batch gradient descent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 32.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+before making an update to the model. The default of 32 is a good balance for momentum-based optimizers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_LearningRateDecreaseFactor_" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.LearningRateDecreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_LearningRateDecreaseFactor" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.LearningRateDecreaseFactor">
+  LearningRateDecreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MomentumOptimizerOptions.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the learning rate is decreased when the loss is getting worse.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateDecreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate decrease multiplier, defaulting to 0.95 (5% decrease).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_LearningRateDecreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how quickly the learning rate is reduced when the optimization encounters
+difficulties (i.e., when the loss increases). After an unsuccessful update, the current learning
+rate is multiplied by this factor, forcing the algorithm to take smaller, more cautious steps. This
+adaptive approach helps the algorithm recover from overshooting and navigate complex loss landscapes
+by automatically adjusting the step size based on the observed performance.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm decreases its step size
+when it makes a mistake.
+<p>In our rolling ball scenario:</p>
+<ul>
+<li>If the ball suddenly starts rolling uphill, we've gone too far or in the wrong direction</li>
+<li>We want to be more careful with how hard we push it in the next step</li>
+<li>This setting determines how much more cautious we become</li>
+</ul>
+<p>The default value of 0.95 means:</p>
+<ul>
+<li>Each time the model gets worse, the learning rate decreases by 5%</li>
+<li>For example, a learning rate of 0.1 would become 0.095 after an unsuccessful update</li>
+</ul>
+<p>This adjustment helps the algorithm:</p>
+<ul>
+<li>Recover from overshooting the optimal values</li>
+<li>Navigate tricky, curved areas of the loss landscape</li>
+<li>Eventually settle into a minimum</li>
+</ul>
+<p>You might want to decrease this value (like to 0.8) if:</p>
+<ul>
+<li>Training seems unstable</li>
+<li>You want the algorithm to become more cautious more quickly after mistakes</li>
+</ul>
+<p>You might want to increase this value (like to 0.99) if:</p>
+<ul>
+<li>You want to be more persistent with the current learning rate</li>
+<li>You're worried about getting stuck in local minima</li>
+<li>The loss function is noisy and you don't want to overreact to small increases</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_LearningRateIncreaseFactor_" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.LearningRateIncreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_LearningRateIncreaseFactor" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.LearningRateIncreaseFactor">
+  LearningRateIncreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MomentumOptimizerOptions.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the learning rate is increased when the loss is improving.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateIncreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate increase multiplier, defaulting to 1.05 (5% increase).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_LearningRateIncreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how aggressively the learning rate is increased when the optimization is
+making progress (i.e., when the loss is decreasing). After a successful update, the current learning
+rate is multiplied by this factor, allowing the algorithm to take larger steps when moving in a
+promising direction. This adaptive approach can speed up convergence by taking larger steps when
+it's safe to do so, but the rate will never exceed the MaxLearningRate.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm increases its step size
+when things are going well.
+<p>Continuing our rolling ball analogy:</p>
+<ul>
+<li>When the ball is moving consistently downhill, we might want to push it harder</li>
+<li>This setting determines how much to increase that push with each successful step</li>
+</ul>
+<p>The default value of 1.05 means:</p>
+<ul>
+<li>Each time the model improves, the learning rate increases by 5%</li>
+<li>For example, a learning rate of 0.1 would become 0.105 after a successful update</li>
+</ul>
+<p>This gradual increase helps the algorithm:</p>
+<ul>
+<li>Speed up when it's on the right track</li>
+<li>Cover flat regions more efficiently</li>
+<li>Potentially escape shallow local minima</li>
+</ul>
+<p>You might want to increase this value (like to 1.1) if:</p>
+<ul>
+<li>Training seems too slow</li>
+<li>You're confident the optimization landscape is well-behaved</li>
+</ul>
+<p>You might want to decrease this value (like to 1.01) if:</p>
+<ul>
+<li>You want more conservative adaptation</li>
+<li>You notice training becomes unstable after periods of progress</li>
+</ul>
+<p>The learning rate will never exceed the MaxLearningRate value, regardless of how many
+successful updates occur.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MaxLearningRate_" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.MaxLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MaxLearningRate" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.MaxLearningRate">
+  MaxLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MomentumOptimizerOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed learning rate for the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum learning rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MaxLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate determines the step size in the parameter space during each update. This parameter
+sets an upper limit on how large the learning rate can become, even when using adaptive techniques that
+might otherwise increase it further. The 'new' keyword indicates this property overrides a similar
+property in the base class, potentially with a different default value or behavior specific to
+momentum-based optimization.
+</p>
+<p><b>For Beginners:</b> This setting controls how big of a step the algorithm can take
+in any given direction during training.
+<p>Using our rolling ball analogy:</p>
+<ul>
+<li>The learning rate is like controlling how hard you can push the ball at each point</li>
+<li>A higher rate means stronger pushes, potentially moving faster but risking overshooting</li>
+<li>A lower rate means gentler pushes, moving more safely but potentially very slowly</li>
+</ul>
+<p>The default value of 0.1 provides a reasonable balance for many problems:</p>
+<ul>
+<li>High enough to make meaningful progress</li>
+<li>Low enough to avoid wild overshooting in most scenarios</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Training is progressing too slowly</li>
+<li>The optimization landscape is relatively smooth</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Training is unstable or diverging</li>
+<li>You're getting inconsistent results</li>
+<li>Your optimization problem is particularly complex or ill-conditioned</li>
+</ul>
+<p>Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MomentumDecreaseFactor_" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.MomentumDecreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MomentumDecreaseFactor" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.MomentumDecreaseFactor">
+  MomentumDecreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MomentumOptimizerOptions.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the momentum coefficient is decreased when the loss is getting worse.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MomentumDecreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The momentum decrease multiplier, defaulting to 0.98 (2% decrease).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MomentumDecreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how the momentum coefficient is adjusted when optimization is facing challenges.
+When the loss is increasing, the momentum coefficient is multiplied by this factor, reducing the
+influence of previous update directions. Lower momentum can help the algorithm make more careful,
+deliberate progress in complex or highly curved regions of the loss surface. The 'new' keyword indicates
+this property overrides a similar property in the base class.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm decreases its "memory"
+of previous steps when it makes a mistake.
+<p>In our rolling ball analogy:</p>
+<ul>
+<li>If the ball is rolling in the wrong direction, its momentum is working against us</li>
+<li>We want to reduce this momentum to allow for changes in direction</li>
+<li>This setting determines how much to decrease that momentum after an unsuccessful step</li>
+</ul>
+<p>The default value of 0.98 means:</p>
+<ul>
+<li>Each time the model gets worse, the momentum coefficient decreases by 2%</li>
+<li>This gradually reduces the influence of the established direction</li>
+</ul>
+<p>Decreasing momentum when problems are encountered helps:</p>
+<ul>
+<li>Recover from overshooting or moving in unproductive directions</li>
+<li>Navigate complex, curved areas of the loss landscape</li>
+<li>Make more deliberate progress in tricky regions</li>
+</ul>
+<p>You might want to decrease this value (like to 0.95) if:</p>
+<ul>
+<li>You want momentum to drop more quickly after mistakes</li>
+<li>The loss landscape has many sharp turns or narrow valleys</li>
+</ul>
+<p>You might want to increase this value (like to 0.99) if:</p>
+<ul>
+<li>You want to preserve momentum more persistently</li>
+<li>The loss function is noisy and you don't want to overreact to small increases</li>
+<li>You're worried about getting stuck in local minima</li>
+</ul>
+<p>Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MomentumIncreaseFactor_" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.MomentumIncreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MomentumIncreaseFactor" data-uid="AiDotNet.Models.Options.MomentumOptimizerOptions`3.MomentumIncreaseFactor">
+  MomentumIncreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MomentumOptimizerOptions.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the momentum coefficient is increased when the loss is improving.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MomentumIncreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The momentum increase multiplier, defaulting to 1.02 (2% increase).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MomentumOptimizerOptions_3_MomentumIncreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how the momentum coefficient is adjusted when optimization is making progress.
+When the loss is decreasing, the momentum coefficient is multiplied by this factor, increasing the
+influence of previous update directions. Higher momentum can help accelerate progress in consistent
+directions and move through plateaus more efficiently. The 'new' keyword indicates this property
+overrides a similar property in the base class.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm increases its "memory"
+of previous steps when things are going well.
+<p>In our rolling ball analogy:</p>
+<ul>
+<li>Momentum is like the ball's tendency to keep rolling in the same direction</li>
+<li>When we're making good progress, we might want to trust this momentum more</li>
+<li>This setting determines how much to increase that trust with each successful step</li>
+</ul>
+<p>The default value of 1.02 means:</p>
+<ul>
+<li>Each time the model improves, the momentum coefficient increases by 2%</li>
+<li>This gradually gives more weight to the established direction of movement</li>
+</ul>
+<p>Increasing momentum when progress is being made helps:</p>
+<ul>
+<li>Build up speed in productive directions</li>
+<li>Move through flat regions more quickly</li>
+<li>Potentially skip over small local minima</li>
+</ul>
+<p>You might want to increase this value (like to 1.05) if:</p>
+<ul>
+<li>You want to accelerate training more aggressively</li>
+<li>Your optimization landscape has long, flat regions</li>
+</ul>
+<p>You might want to decrease this value (like to 1.01) if:</p>
+<ul>
+<li>You want more conservative momentum adaptation</li>
+<li>You notice the algorithm tends to overshoot after periods of progress</li>
+</ul>
+<p>Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MomentumOptimizerOptions.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

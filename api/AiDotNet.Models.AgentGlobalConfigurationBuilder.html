@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AgentGlobalConfigurationBuilder | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AgentGlobalConfigurationBuilder | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a fluent interface for configuring global AI agent settings including API keys and default providers.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_AgentGlobalConfigurationBuilder.md&amp;value=---%0Auid%3A%20AiDotNet.Models.AgentGlobalConfigurationBuilder%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder">
+
+
+
+  <h1 id="AiDotNet_Models_AgentGlobalConfigurationBuilder" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder" class="text-break">
+Class AgentGlobalConfigurationBuilder  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentGlobalConfigurationBuilder.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a fluent interface for configuring global AI agent settings including API keys and default providers.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AgentGlobalConfigurationBuilder</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AgentGlobalConfigurationBuilder</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_AgentGlobalConfigurationBuilder_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This builder class is used internally by AgentGlobalConfiguration.Configure() to provide a type-safe, fluent
+API for setting up global agent configuration. It allows you to configure API keys for multiple LLM providers
+(OpenAI, Anthropic, Azure OpenAI) and specify which provider should be used by default. The builder pattern
+enables method chaining for clean, readable configuration code. Once all settings are configured, the Apply()
+method transfers them to the AgentGlobalConfiguration static class where they're stored for use across the application.
+</p>
+<p><b>For Beginners:</b> This class helps you set up your AI agent credentials using a clean, readable syntax.
+<p>You don't create this class directly - instead, you receive it through AgentGlobalConfiguration.Configure():</p>
+<pre><code class="lang-csharp">AgentGlobalConfiguration.Configure(builder =&gt; builder
+    .ConfigureOpenAI("your-api-key")
+    .UseDefaultProvider(LLMProvider.OpenAI));</code></pre>
+<p>The builder pattern:</p>
+<ul>
+<li>Makes configuration code easy to read</li>
+<li>Lets you chain multiple setup calls together</li>
+<li>Provides IntelliSense (autocomplete) to guide you</li>
+<li>Ensures all settings are valid before they're applied</li>
+</ul>
+<p>Think of it as a temporary workspace where you specify all your settings. Once you're done configuring,
+the builder transfers everything to the global configuration where it's stored and used by your models.</p>
+<p>For example:</p>
+<pre><code class="lang-csharp">// At application startup
+AgentGlobalConfiguration.Configure(config =&gt; config
+    .ConfigureOpenAI("sk-...")           // Set OpenAI API key
+    .ConfigureAnthropic("sk-ant-...")    // Set Anthropic API key
+    .UseDefaultProvider(LLMProvider.OpenAI));  // Choose default
+
+// All three methods return the builder, so they chain together
+// When the lambda completes, Apply() is called automatically
+// Your settings are now stored globally for all models to use</code></pre>
+<p>This approach keeps your configuration code organized and readable, especially when setting up multiple providers.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureAnthropic_" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder.ConfigureAnthropic*"></a>
+
+  <h3 id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureAnthropic_System_String_" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder.ConfigureAnthropic(System.String)">
+  ConfigureAnthropic(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentGlobalConfigurationBuilder.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the API key for Anthropic's Claude language models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentGlobalConfigurationBuilder ConfigureAnthropic(string apiKey)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>apiKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Your Anthropic API key, obtainable from console.anthropic.com.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentGlobalConfigurationBuilder.html">AgentGlobalConfigurationBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureAnthropic_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets the API key that will be used for all Anthropic API calls when agent assistance is enabled.
+The key should be obtained from your Anthropic account at console.anthropic.com. Once configured, this key
+will be used automatically by any PredictionModelBuilder that enables agent assistance with the Anthropic provider,
+unless explicitly overridden at the builder level. Anthropic's Claude models are known for detailed explanations
+and large context windows.
+</p>
+<p><b>For Beginners:</b> This sets up your Anthropic credentials so the AI agent can use Claude models.
+<p>How to get an Anthropic API key:</p>
+<ol>
+<li>Sign up at console.anthropic.com</li>
+<li>Navigate to API keys in your account settings</li>
+<li>Click to create a new key</li>
+<li>Copy the key (it starts with &quot;sk-ant-&quot;) and save it securely</li>
+<li>Use it here in your configuration</li>
+</ol>
+<p>Example:</p>
+<pre><code class="lang-csharp">AgentGlobalConfiguration.Configure(config =&gt; config
+    .ConfigureAnthropic("sk-ant-...your-key-here..."));</code></pre>
+<p>Why choose Anthropic:</p>
+<ul>
+<li>Claude models provide very detailed, thoughtful explanations</li>
+<li>Large context windows can handle more information at once</li>
+<li>Known for being particularly helpful and safe</li>
+<li>Good for educational use cases where detailed reasoning matters</li>
+</ul>
+<p>Security tips:</p>
+<ul>
+<li>Never commit your API key to source control</li>
+<li>Use environment variables or secret management in production</li>
+<li>Monitor your usage to control costs</li>
+</ul>
+<p>Once configured, all your models can use Anthropic's Claude for agent assistance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureAzureOpenAI_" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder.ConfigureAzureOpenAI*"></a>
+
+  <h3 id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureAzureOpenAI_System_String_" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder.ConfigureAzureOpenAI(System.String)">
+  ConfigureAzureOpenAI(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentGlobalConfigurationBuilder.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the API key for Azure OpenAI Service.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentGlobalConfigurationBuilder ConfigureAzureOpenAI(string apiKey)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>apiKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Your Azure OpenAI API key, obtainable from the Azure Portal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentGlobalConfigurationBuilder.html">AgentGlobalConfigurationBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureAzureOpenAI_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets the API key that will be used for all Azure OpenAI API calls when agent assistance is enabled.
+The key should be obtained from your Azure OpenAI resource in the Azure Portal. Note that Azure OpenAI requires
+additional configuration beyond just the API key - you'll also need to specify the endpoint URL and deployment
+name when configuring individual models. Azure OpenAI provides the same models as OpenAI but with enterprise
+features like regional data residency, enhanced security, and integration with Azure services.
+</p>
+<p><b>For Beginners:</b> This sets up your Azure OpenAI credentials for enterprise-grade AI assistance.
+<p>How to get an Azure OpenAI API key:</p>
+<ol>
+<li>Create an Azure account and get approved for Azure OpenAI Service</li>
+<li>Create an Azure OpenAI resource in the Azure Portal</li>
+<li>Navigate to &quot;Keys and Endpoint&quot; in your resource</li>
+<li>Copy one of the keys shown</li>
+<li>Also note your endpoint URL - you'll need it later</li>
+<li>Deploy a model (like GPT-4) and note the deployment name</li>
+<li>Use the key here in your global configuration</li>
+</ol>
+<p>Example:</p>
+<pre><code class="lang-csharp">AgentGlobalConfiguration.Configure(config =&gt; config
+    .ConfigureAzureOpenAI("your-azure-key")
+    .UseDefaultProvider(LLMProvider.AzureOpenAI));</code></pre>
+<p>Why choose Azure OpenAI:</p>
+<ul>
+<li>Enterprise-grade security and compliance (SOC 2, HIPAA, etc.)</li>
+<li>Data stays in your specified Azure region</li>
+<li>Integrated billing with other Azure services</li>
+<li>Same powerful GPT models as OpenAI</li>
+<li>Virtual network support and private endpoints</li>
+</ul>
+<p>Important notes:</p>
+<ul>
+<li>Azure OpenAI requires approval (apply at azure.microsoft.com/products/cognitive-services/openai-service)</li>
+<li>You need to specify endpoint and deployment name when building models</li>
+<li>Pricing may differ from direct OpenAI API</li>
+</ul>
+<p>This is the preferred option for enterprise applications with strict compliance requirements.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureOpenAI_" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder.ConfigureOpenAI*"></a>
+
+  <h3 id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureOpenAI_System_String_" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder.ConfigureOpenAI(System.String)">
+  ConfigureOpenAI(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentGlobalConfigurationBuilder.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the API key for OpenAI's language models (GPT-3.5, GPT-4, etc.).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentGlobalConfigurationBuilder ConfigureOpenAI(string apiKey)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>apiKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Your OpenAI API key, obtainable from platform.openai.com.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentGlobalConfigurationBuilder.html">AgentGlobalConfigurationBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentGlobalConfigurationBuilder_ConfigureOpenAI_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets the API key that will be used for all OpenAI API calls when agent assistance is enabled.
+The key should be obtained from your OpenAI account at platform.openai.com. Once configured, this key
+will be used automatically by any PredictionModelBuilder that enables agent assistance with the OpenAI provider,
+unless explicitly overridden at the builder level.
+</p>
+<p><b>For Beginners:</b> This sets up your OpenAI credentials so the AI agent can use OpenAI's models.
+<p>How to get an OpenAI API key:</p>
+<ol>
+<li>Sign up at platform.openai.com</li>
+<li>Navigate to API keys in your account settings</li>
+<li>Click &quot;Create new secret key&quot;</li>
+<li>Copy the key (it starts with &quot;sk-&quot;) and save it securely</li>
+<li>Use it here in your configuration</li>
+</ol>
+<p>Example:</p>
+<pre><code class="lang-csharp">AgentGlobalConfiguration.Configure(config =&gt; config
+    .ConfigureOpenAI("sk-proj-...your-key-here..."));</code></pre>
+<p>Security tips:</p>
+<ul>
+<li>Never commit your API key to source control (use environment variables or secret management)</li>
+<li>Don't share your key publicly or in screenshots</li>
+<li>Rotate keys periodically for security</li>
+<li>Use OpenAI's usage limits and monitoring to prevent unexpected charges</li>
+</ul>
+<p>Once configured, all your models can use OpenAI's GPT models for agent assistance without
+needing to provide the key again.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentGlobalConfigurationBuilder_UseDefaultProvider_" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder.UseDefaultProvider*"></a>
+
+  <h3 id="AiDotNet_Models_AgentGlobalConfigurationBuilder_UseDefaultProvider_AiDotNet_Enums_LLMProvider_" data-uid="AiDotNet.Models.AgentGlobalConfigurationBuilder.UseDefaultProvider(AiDotNet.Enums.LLMProvider)">
+  UseDefaultProvider(LLMProvider)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentGlobalConfigurationBuilder.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets which LLM provider should be used by default when one is not explicitly specified.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentGlobalConfigurationBuilder UseDefaultProvider(LLMProvider provider)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>provider</code> <a class="xref" href="AiDotNet.Enums.LLMProvider.html">LLMProvider</a></dt>
+    <dd><p>The LLMProvider to use as the default (OpenAI, Anthropic, or AzureOpenAI).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentGlobalConfigurationBuilder.html">AgentGlobalConfigurationBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentGlobalConfigurationBuilder_UseDefaultProvider_AiDotNet_Enums_LLMProvider__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method specifies which LLM provider will be used by default across all model builders when agent
+assistance is enabled but no specific provider is chosen. This eliminates the need to specify the provider
+for each individual model, while still allowing overrides when needed. Choose the provider you'll use most
+frequently as your default. If not specified, OpenAI is used as the default.
+</p>
+<p><b>For Beginners:</b> This tells the system which AI service to use when you don't specify one.
+<p>Setting a default provider:</p>
+<ul>
+<li>Saves you from specifying the provider every time you build a model</li>
+<li>Ensures consistency across your application</li>
+<li>Can still be overridden for specific models when needed</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">AgentGlobalConfiguration.Configure(config =&gt; config
+    .ConfigureOpenAI("sk-...")
+    .ConfigureAnthropic("sk-ant-...")
+    .UseDefaultProvider(LLMProvider.Anthropic));  // Use Anthropic by default</code></pre>
+<p>How to choose your default:</p>
+<ul>
+<li>If you primarily use OpenAI: LLMProvider.OpenAI</li>
+<li>If you primarily use Anthropic: LLMProvider.Anthropic</li>
+<li>If you're in an enterprise Azure environment: LLMProvider.AzureOpenAI</li>
+</ul>
+<p>What happens:</p>
+<pre><code class="lang-csharp">// Uses your default provider (Anthropic in the example above)
+var result = await builder
+    .ConfigureAgentAssistance(options =&gt; options.EnableModelSelection())
+    .BuildAsync();
+
+// Override to use a different provider for this specific model
+var result2 = await builder
+    .ConfigureAgentAssistance(
+        options =&gt; options.EnableModelSelection(),
+        provider: LLMProvider.OpenAI)  // Use OpenAI just for this one
+    .BuildAsync();</code></pre>
+<p>Choose whichever provider best fits your needs, budget, and compliance requirements.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentGlobalConfigurationBuilder.cs/#L51" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

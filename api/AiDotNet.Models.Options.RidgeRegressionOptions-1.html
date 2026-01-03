@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RidgeRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RidgeRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Ridge Regression (L2 regularized linear regression).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_RidgeRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.RidgeRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.RidgeRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_RidgeRegressionOptions_1" data-uid="AiDotNet.Models.Options.RidgeRegressionOptions`1" class="text-break">
+Class RidgeRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RidgeRegressionOptions.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Ridge Regression (L2 regularized linear regression).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RidgeRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">RidgeRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_RidgeRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Ridge Regression extends ordinary least squares regression by adding an L2 penalty term
+to the loss function. This penalty shrinks the coefficients toward zero, helping to prevent
+overfitting, especially when dealing with multicollinearity (highly correlated features) or
+when the number of features is large relative to the number of samples.
+</p>
+<p>
+The objective function minimized is: ||y - Xw||^2 + alpha * ||w||^2
+where alpha controls the strength of the regularization.
+</p>
+<p><b>For Beginners:</b> Ridge Regression is like standard linear regression with a "shrinkage" effect.
+<p>Imagine you're fitting a line to data points, but some of your features are noisy or redundant.
+Without regularization, the model might give these noisy features large coefficients, leading to
+poor predictions on new data (overfitting).</p>
+<p>Ridge Regression solves this by:</p>
+<ul>
+<li>Adding a penalty for large coefficient values</li>
+<li>Shrinking all coefficients toward zero (but never exactly to zero)</li>
+<li>Making the model more stable and generalizable</li>
+</ul>
+<p>When to use Ridge Regression:</p>
+<ul>
+<li>When you have many features that might be correlated</li>
+<li>When you want to prevent overfitting without removing features</li>
+<li>When all features are expected to contribute to the prediction</li>
+</ul>
+<p>The &quot;alpha&quot; parameter controls how much shrinkage is applied:</p>
+<ul>
+<li>Higher alpha = more shrinkage = simpler model (might underfit)</li>
+<li>Lower alpha = less shrinkage = more complex model (might overfit)</li>
+</ul>
+<p>Note: If your features are on different scales, consider normalizing your data
+before training using INormalizer implementations like ZScoreNormalizer or MinMaxNormalizer.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_RidgeRegressionOptions_1_Alpha_" data-uid="AiDotNet.Models.Options.RidgeRegressionOptions`1.Alpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RidgeRegressionOptions_1_Alpha" data-uid="AiDotNet.Models.Options.RidgeRegressionOptions`1.Alpha">
+  Alpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RidgeRegressionOptions.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the regularization strength (alpha). Must be a non-negative value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Alpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The regularization parameter, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RidgeRegressionOptions_1_Alpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the strength of the L2 regularization penalty. Larger values
+specify stronger regularization, which results in smaller coefficient values and
+potentially underfitting. Smaller values allow the model to fit the training data
+more closely but may lead to overfitting.
+</p>
+<p><b>For Beginners:</b> Alpha controls how much the model prioritizes simplicity versus
+fitting the data closely.
+<p>Think of it like a dial:</p>
+<ul>
+<li>Alpha = 0.0: No regularization (equivalent to ordinary least squares)</li>
+<li>Alpha = 1.0: Moderate regularization (default, good starting point)</li>
+<li>Alpha = 10.0: Strong regularization (very simple model)</li>
+<li>Alpha = 100.0: Very strong regularization (coefficients very close to zero)</li>
+</ul>
+<p>Tips for choosing alpha:</p>
+<ul>
+<li>Start with the default (1.0) and evaluate model performance</li>
+<li>If the model overfits (good on training, poor on test), increase alpha</li>
+<li>If the model underfits (poor on both training and test), decrease alpha</li>
+<li>Use cross-validation to find the optimal value systematically</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when value is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_Options_RidgeRegressionOptions_1_DecompositionType_" data-uid="AiDotNet.Models.Options.RidgeRegressionOptions`1.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RidgeRegressionOptions_1_DecompositionType" data-uid="AiDotNet.Models.Options.RidgeRegressionOptions`1.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RidgeRegressionOptions.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of matrix decomposition used to solve the ridge regression equations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The matrix decomposition type, defaulting to Cholesky.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RidgeRegressionOptions_1_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Ridge Regression has a closed-form solution that requires solving a linear system.
+Different decomposition methods offer trade-offs between speed and numerical stability.
+Cholesky is the fastest for positive definite matrices (which the regularized normal
+equation always produces). SVD is more robust but slower.
+</p>
+<p><b>For Beginners:</b> This determines how the mathematical equations are solved internally.
+<p>The default (Cholesky) is fastest and works well for most problems. You might consider:</p>
+<ul>
+<li>Cholesky: Fast, stable, recommended for most cases</li>
+<li>SVD: More robust for ill-conditioned problems (when features are highly correlated)</li>
+<li>QR: Good balance between speed and numerical stability</li>
+</ul>
+<p>Unless you encounter numerical issues, the default is fine.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RidgeRegressionOptions.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ObjectDetectorBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ObjectDetectorBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for all object detection models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1" class="text-break">
+Class ObjectDetectorBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.html">Detection</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.html">ObjectDetection</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for all object detection models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class ObjectDetectorBase&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ObjectDetectorBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DETR-1.html">DETR&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO-1.html">DINO&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.RTDETR-1.html">RTDETR&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.CascadeRCNN-1.html">CascadeRCNN&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN-1.html">FasterRCNN&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10-1.html">YOLOv10&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv11-1.html">YOLOv11&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv8-1.html">YOLOv8&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9-1.html">YOLOv9&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> An object detector takes an image and finds all objects in it,
+returning their locations (bounding boxes), types (class labels), and confidence scores.
+This base class provides the common structure and methods that all detection models share.</p>
+<p>A typical detector has three parts:
+- Backbone: Extracts features from the image
+- Neck: Combines features at multiple scales
+- Head: Produces final predictions (boxes, classes, scores)
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1__ctor_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1__ctor_AiDotNet_Models_Options_ObjectDetectionOptions__0__" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.#ctor(AiDotNet.Models.Options.ObjectDetectionOptions{`0})">
+  ObjectDetectorBase(ObjectDetectionOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new object detector with the specified options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ObjectDetectorBase(ObjectDetectionOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.ObjectDetectionOptions-1.html">ObjectDetectionOptions</a>&lt;T&gt;</dt>
+    <dd><p>Configuration options for the detector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_IsTrainingMode" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.IsTrainingMode">
+  IsTrainingMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the model is in training mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool IsTrainingMode</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Nms" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Nms">
+  Nms
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>NMS algorithm for removing duplicate detections.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly NMS&lt;T&gt; Nms</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.PostProcessing.NMS-1.html">NMS</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_NumOps" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Options" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configuration options for this detector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly ObjectDetectionOptions&lt;T&gt; Options</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.ObjectDetectionOptions-1.html">ObjectDetectionOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_WeightDownloader" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.WeightDownloader">
+  WeightDownloader
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Weight downloader for fetching pre-trained weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly WeightDownloader WeightDownloader</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Weights.WeightDownloader.html">WeightDownloader</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Backbone_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Backbone*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Backbone" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Backbone">
+  Backbone
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The backbone network for feature extraction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected BackboneBase&lt;T&gt;? Backbone { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase-1.html">BackboneBase</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ClassNames_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.ClassNames*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ClassNames" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.ClassNames">
+  ClassNames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Class names for detection labels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] ClassNames { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Name_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Name*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Name" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Name of this detector architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Neck_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Neck*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Neck" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Neck">
+  Neck
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The neck module for feature fusion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NeckBase&lt;T&gt;? Neck { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.Necks.NeckBase-1.html">NeckBase</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Detect_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Detect*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Detect(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects objects in an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual DetectionResult&lt;T&gt; Detect(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor with shape [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.DetectionResult-1.html">DetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>Detection results for each image in the batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the main method you call to detect objects.
+Pass in an image (as a tensor) and get back a list of detected objects with
+their bounding boxes, class labels, and confidence scores.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Detect_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Detect*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Double_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double,System.Double)">
+  Detect(Tensor&lt;T&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects objects in an image with custom thresholds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DetectionResult&lt;T&gt; Detect(Tensor&lt;T&gt; image, double confidenceThreshold, double nmsThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor.</p>
+</dd>
+    <dt><code>confidenceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum confidence to keep a detection.</p>
+</dd>
+    <dt><code>nmsThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>IoU threshold for NMS.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.DetectionResult-1.html">DetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>Detection results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_DetectBatch_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.DetectBatch*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_DetectBatch_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.DetectBatch(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  DetectBatch(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects objects in a batch of images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual BatchDetectionResult&lt;T&gt; DetectBatch(Tensor&lt;T&gt; images)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Batch of images with shape [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult-1.html">BatchDetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>Detection results for each image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_DetectBatch_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.DetectBatch*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_DetectBatch_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Double_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.DetectBatch(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double,System.Double)">
+  DetectBatch(Tensor&lt;T&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects objects in a batch of images with custom thresholds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual BatchDetectionResult&lt;T&gt; DetectBatch(Tensor&lt;T&gt; images, double confidenceThreshold, double nmsThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Batch of images.</p>
+</dd>
+    <dt><code>confidenceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum confidence.</p>
+</dd>
+    <dt><code>nmsThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>NMS threshold.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult-1.html">BatchDetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>Batch detection results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ExtractBatchItem_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.ExtractBatchItem*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ExtractBatchItem_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.ExtractBatchItem(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  ExtractBatchItem(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L415"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a single image from a batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Tensor&lt;T&gt; ExtractBatchItem(Tensor&lt;T&gt; batch, int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batch</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Batch of images.</p>
+</dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Index of the image to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Single image tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ExtractBatchOutputs_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.ExtractBatchOutputs*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ExtractBatchOutputs_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.ExtractBatchOutputs(System.Collections.Generic.List{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32)">
+  ExtractBatchOutputs(List&lt;Tensor&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts the outputs for a single batch item from batch outputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual List&lt;Tensor&lt;T&gt;&gt; ExtractBatchOutputs(List&lt;Tensor&lt;T&gt;&gt; batchOutputs, int batchIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchOutputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>batchIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Forward_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Forward*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs forward pass through the network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract List&lt;Tensor&lt;T&gt;&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Raw network outputs before post-processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_GetCocoClassNames_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.GetCocoClassNames*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_GetCocoClassNames" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.GetCocoClassNames">
+  GetCocoClassNames()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L438"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default COCO class names.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static string[] GetCocoClassNames()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Array of 80 COCO class names.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_GetHeadParameterCount_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.GetHeadParameterCount*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_GetHeadParameterCount" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.GetHeadParameterCount">
+  GetHeadParameterCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L306"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the detection head.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract long GetHeadParameterCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Number of parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_GetParameterCount_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.GetParameterCount*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_GetParameterCount" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.GetParameterCount">
+  GetParameterCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L293"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual long GetParameterCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Number of trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_LoadPretrainedWeightsAsync_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.LoadPretrainedWeightsAsync*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_LoadPretrainedWeightsAsync_System_Threading_CancellationToken_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.LoadPretrainedWeightsAsync(System.Threading.CancellationToken)">
+  LoadPretrainedWeightsAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads default pre-trained weights for this architecture and size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task LoadPretrainedWeightsAsync(CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_LoadWeightsAsync_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.LoadWeightsAsync*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_LoadWeightsAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.LoadWeightsAsync(System.String,System.Threading.CancellationToken)">
+  LoadWeightsAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads pre-trained weights from a file or URL.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pathOrUrl</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Local file path or URL to weights.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Normalize_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Normalize*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Normalize_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Normalize(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Normalize(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L396"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes image values to [0, 1] range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Tensor&lt;T&gt; Normalize(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image with values [0, 255].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Normalized image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_PostProcess_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.PostProcess*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_PostProcess_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_System_Int32_System_Double_System_Double_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.PostProcess(System.Collections.Generic.List{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32,System.Int32,System.Double,System.Double)">
+  PostProcess(List&lt;Tensor&lt;T&gt;&gt;, int, int, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Post-processes raw network outputs into detections.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract List&lt;Detection&lt;T&gt;&gt; PostProcess(List&lt;Tensor&lt;T&gt;&gt; outputs, int imageWidth, int imageHeight, double confidenceThreshold, double nmsThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Raw network outputs.</p>
+</dd>
+    <dt><code>imageWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Original image width.</p>
+</dd>
+    <dt><code>imageHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Original image height.</p>
+</dd>
+    <dt><code>confidenceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum confidence threshold.</p>
+</dd>
+    <dt><code>nmsThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>NMS IoU threshold.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of detections after NMS.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Preprocess_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Preprocess*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Preprocess_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.Preprocess(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Preprocess(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L313"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Preprocesses an image for input to the network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Tensor&lt;T&gt; Preprocess(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Raw image tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Preprocessed tensor ready for the network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ResizeImage_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.ResizeImage*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ResizeImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.ResizeImage(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32)">
+  ResizeImage(Tensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L335"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resizes an image tensor to the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Tensor&lt;T&gt; ResizeImage(Tensor&lt;T&gt; image, int targetHeight, int targetWidth)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image.</p>
+</dd>
+    <dt><code>targetHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Target height.</p>
+</dd>
+    <dt><code>targetWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Target width.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Resized image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_SaveWeights_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.SaveWeights*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_SaveWeights_System_String_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.SaveWeights(System.String)">
+  SaveWeights(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves model weights to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void SaveWeights(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>File path to save weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_SetTrainingMode_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.SetTrainingMode*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_SetTrainingMode_System_Boolean_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase`1.SetTrainingMode(System.Boolean)">
+  SetTrainingMode(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model to training or inference mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetTrainingMode(bool training)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>training</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True for training mode, false for inference.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/ObjectDetectorBase.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

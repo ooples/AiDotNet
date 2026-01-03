@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface INoiseScheduler&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface INoiseScheduler&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for diffusion model noise schedulers that control the noise schedule during inference.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_INoiseScheduler_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.INoiseScheduler%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.INoiseScheduler`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_INoiseScheduler_1" data-uid="AiDotNet.Interfaces.INoiseScheduler`1" class="text-break">
+Interface INoiseScheduler&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for diffusion model noise schedulers that control the noise schedule during inference.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface INoiseScheduler&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_INoiseScheduler_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Noise schedulers are a core component of diffusion models that control how noise is gradually
+added to or removed from data during the diffusion process. They define the noise schedule
+(how much noise at each timestep) and provide the mathematical operations to denoise samples.
+</p>
+<p>
+<b>Note:</b> This interface was renamed from IStepScheduler to INoiseScheduler to avoid
+confusion with learning rate schedulers (ILearningRateScheduler). Noise schedulers are
+specific to diffusion models, while learning rate schedulers control optimization dynamics.
+</p>
+<p>
+<b>For Beginners:</b> Think of a noise scheduler like a recipe for gradually revealing a hidden picture.
+<p>Imagine you have a clear photograph that you've covered with many layers of static (noise).
+The scheduler tells you:</p>
+<ul>
+<li>How many layers of static there are (timesteps)</li>
+<li>How much static is in each layer (noise schedule)</li>
+<li>How to remove one layer at a time to gradually reveal the picture (step function)</li>
+</ul>
+<p>Different schedulers (DDIM, PNDM, DPM-Solver) are like different techniques for removing
+the static - some are faster, some produce better quality, and some offer a tradeoff.</p>
+<p>Key concepts:</p>
+<ul>
+<li>Timesteps: Discrete steps in the noise schedule (e.g., 1000 training steps, 50 inference steps)</li>
+<li>Beta schedule: Controls how much noise is added at each step</li>
+<li>Step function: Takes a noisy sample and model prediction, returns a slightly less noisy sample</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_Config_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.Config*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_Config" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.Config">
+  Config
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scheduler configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">SchedulerConfig&lt;T&gt; Config { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig-1.html">SchedulerConfig</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INoiseScheduler_1_Config_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The configuration contains the parameters used to create and initialize the scheduler,
+such as the beta schedule, prediction type, and training timesteps.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_Timesteps_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.Timesteps*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_Timesteps" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.Timesteps">
+  Timesteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the timesteps for the current inference schedule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int[] Timesteps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INoiseScheduler_1_Timesteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+These are the discrete time indices at which denoising steps will be performed.
+The array is typically in descending order (from highest noise to lowest).
+</p>
+<p>
+<b>For Beginners:</b> This is like a list of checkpoints. If you have 50 inference
+steps, this array tells you exactly which of the original 1000 training timesteps
+to use for denoising.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_TrainTimesteps_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.TrainTimesteps*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_TrainTimesteps" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.TrainTimesteps">
+  TrainTimesteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of training timesteps this scheduler was configured with.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int TrainTimesteps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INoiseScheduler_1_TrainTimesteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the total number of timesteps used during training, typically 1000.
+The scheduler interpolates between these for inference.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_AddNoise_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.AddNoise*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_AddNoise_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.AddNoise(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  AddNoise(Vector&lt;T&gt;, Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds noise to a clean sample according to the noise schedule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; AddNoise(Vector&lt;T&gt; originalSample, Vector&lt;T&gt; noise, int timestep)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>originalSample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The clean sample to add noise to.</p>
+</dd>
+    <dt><code>noise</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The noise to add.</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The timestep determining how much noise to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The noisy sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INoiseScheduler_1_AddNoise_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This implements the forward diffusion process: q(x_t | x_0) = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
+</p>
+<p>
+<b>For Beginners:</b> This is like adding a specific amount of static to a clear image.
+Higher timesteps add more noise. This is used during training to create noisy samples
+for the model to learn from.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_GetAlphaCumulativeProduct_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.GetAlphaCumulativeProduct*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_GetAlphaCumulativeProduct_System_Int32_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.GetAlphaCumulativeProduct(System.Int32)">
+  GetAlphaCumulativeProduct(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the cumulative product of alphas (signal retention) at a given timestep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T GetAlphaCumulativeProduct(int timestep)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The timestep to query.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The cumulative alpha value at that timestep.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INoiseScheduler_1_GetAlphaCumulativeProduct_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Alpha cumulative product represents how much of the original signal is retained
+at each timestep. At t=0, it's close to 1 (mostly signal). At t=T, it's close
+to 0 (mostly noise).
+</p>
+<p>
+<b>For Beginners:</b> This tells you "how clear" the image is at each step.
+At the start (t=0), the image is clear (alpha near 1). At the end (t=T),
+it's pure noise (alpha near 0).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_GetState_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.GetState*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_GetState" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.GetState">
+  GetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current scheduler state for checkpointing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;string, object&gt; GetState()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary containing the scheduler's state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_LoadState_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.LoadState*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_LoadState_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.LoadState(System.Collections.Generic.Dictionary{System.String,System.Object})">
+  LoadState(Dictionary&lt;string, object&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads scheduler state from a checkpoint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LoadState(Dictionary&lt;string, object&gt; state)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>state</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>The state dictionary to load from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_SetTimesteps_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.SetTimesteps*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_SetTimesteps_System_Int32_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.SetTimesteps(System.Int32)">
+  SetTimesteps(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets up the inference timesteps based on the number of steps desired.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetTimesteps(int inferenceSteps)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps to use during inference.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INoiseScheduler_1_SetTimesteps_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates which timesteps from the training schedule should be used
+for the given number of inference steps. Using fewer steps is faster but may
+reduce quality.
+</p>
+<p>
+<b>For Beginners:</b> This is like choosing how many steps to take when walking
+from point A to point B. More steps (50-100) give smoother results, fewer steps
+(10-20) are faster but may miss details.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when inferenceSteps is less than 1 or greater than TrainTimesteps.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Interfaces_INoiseScheduler_1_Step_" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.Step*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INoiseScheduler_1_Step_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.INoiseScheduler`1.Step(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Step(Vector&lt;T&gt;, int, Vector&lt;T&gt;, T, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs one denoising step using the model output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; Step(Vector&lt;T&gt; modelOutput, int timestep, Vector&lt;T&gt; sample, T eta, Vector&lt;T&gt;? noise = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The model's prediction (typically noise prediction).</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current timestep in the diffusion process.</p>
+</dd>
+    <dt><code>sample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The current noisy sample.</p>
+</dd>
+    <dt><code>eta</code> <span class="xref">T</span></dt>
+    <dd><p>Stochasticity parameter: 0 = deterministic (DDIM), 1 = fully stochastic (DDPM).
+Values between 0 and 1 interpolate between these behaviors.</p>
+</dd>
+    <dt><code>noise</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional noise for stochastic sampling. If null and eta &gt; 0, uses zero noise (deterministic fallback).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The denoised sample for the previous timestep.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INoiseScheduler_1_Step_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the core denoising operation. Given the current noisy sample and the model's
+prediction of what noise was added, it computes a slightly less noisy version.
+</p>
+<p>
+<b>For Beginners:</b> This is one step of "un-blurring" the image. The model
+looks at the current noisy image and guesses what noise is there. This method
+then removes that estimated noise to get a cleaner image.
+<p>The eta parameter controls randomness:</p>
+<ul>
+<li>eta=0: Always produces the same output for the same input (deterministic)</li>
+<li>eta=1: Adds randomness, making each generation unique (stochastic)</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when modelOutput or sample is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when modelOutput and sample have different lengths.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when timestep is negative or greater than TrainTimesteps.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INoiseScheduler.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

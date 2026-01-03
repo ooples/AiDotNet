@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SpectralAnalysisModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SpectralAnalysisModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements spectral analysis for time series data, which transforms time domain signals into the frequency domain.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TimeSeries_SpectralAnalysisModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.TimeSeries.SpectralAnalysisModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1">
+
+
+
+  <h1 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1" class="text-break">
+Class SpectralAnalysisModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TimeSeries.html">TimeSeries</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements spectral analysis for time series data, which transforms time domain signals into the frequency domain.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SpectralAnalysisModel&lt;T&gt; : TimeSeriesModelBase&lt;T&gt;, ITimeSeriesModel&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html">TimeSeriesModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SpectralAnalysisModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesModel-1.html">ITimeSeriesModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options">TimeSeriesModelBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps">TimeSeriesModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine">TimeSeriesModelBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters">TimeSeriesModelBase&lt;T&gt;.ModelParameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained">TimeSeriesModelBase&lt;T&gt;.IsTrained</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics">TimeSeriesModelBase&lt;T&gt;.LastEvaluationMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0__">TimeSeriesModelBase&lt;T&gt;.ValidateOptions(TimeSeriesRegressionOptions&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ValidateTrainingInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">TimeSeriesModelBase&lt;T&gt;.ValidatePredictionInput(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.CalculateErrorMetrics(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize">TimeSeriesModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_System_Byte___">TimeSeriesModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters">TimeSeriesModelBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ApplyParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices">TimeSeriesModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_System_Int32_">TimeSeriesModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_System_Int32_">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">TimeSeriesModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy">TimeSeriesModelBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clone">TimeSeriesModelBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Reset">TimeSeriesModelBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip__0__0__0_">TimeSeriesModelBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.Forecast(Vector&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_System_Collections_Generic_List__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.PrepareForecastFeatures(List&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount">TimeSeriesModelBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_System_String_">TimeSeriesModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_System_String_">TimeSeriesModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction">TimeSeriesModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">TimeSeriesModelBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">TimeSeriesModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Spectral analysis is a technique used to analyze the frequency content of time series data. It helps identify
+periodic patterns and dominant frequencies in the data by transforming it from the time domain to the frequency domain.
+</p>
+<p>
+<b>For Beginners:</b>
+Spectral analysis is like breaking down a song into its individual notes. Just as a song is made up of different
+notes played at different times, time series data can contain different patterns that repeat at different frequencies.
+<p>For example, if you analyze temperature data over several years, spectral analysis might reveal:</p>
+<ul>
+<li>A strong yearly cycle (frequency = 1/365 days) due to seasonal changes</li>
+<li>A daily cycle (frequency = 1/24 hours) due to day/night temperature differences</li>
+<li>Other cycles you might not notice just by looking at the raw data</li>
+</ul>
+<p>This model uses the Fast Fourier Transform (FFT) algorithm to convert time data into frequency information,
+showing you how strong each frequency component is in your data.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1__ctor_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1__ctor_AiDotNet_Models_Options_SpectralAnalysisOptions__0__" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.#ctor(AiDotNet.Models.Options.SpectralAnalysisOptions{`0})">
+  SpectralAnalysisModel(SpectralAnalysisOptions&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the SpectralAnalysisModel class with optional configuration options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SpectralAnalysisModel(SpectralAnalysisOptions&lt;T&gt;? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.SpectralAnalysisOptions-1.html">SpectralAnalysisOptions</a>&lt;T&gt;</dt>
+    <dd><p>The configuration options for spectral analysis. If null, default options are used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_SupportsJitCompilation_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_SupportsJitCompilation" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L678"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Returns <code>true</code> when the model has computed a periodogram.
+Spectral analysis prediction simply returns the precomputed periodogram,
+which can be efficiently exported as a constant tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> JIT compilation for spectral analysis is straightforward
+because the "prediction" is just the precomputed periodogram. The FFT analysis
+is done during training, and prediction just returns the result.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_CreateInstance_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_CreateInstance" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L642"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the SpectralAnalysisModel with the same options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the SpectralAnalysisModel.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method creates a fresh copy of the spectral analysis model with the same
+configuration settings but no trained data. It's useful when you want to:
+- Analyze a different dataset with the same settings
+- Create multiple models with similar configurations
+- Reset the model to start fresh with the same options
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_DeserializeCore_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.DeserializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_DeserializeCore_System_IO_BinaryReader_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.DeserializeCore(System.IO.BinaryReader)">
+  DeserializeCore(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model's core parameters from a binary reader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeCore(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_DeserializeCore_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+Deserialization is the process of loading a previously saved model from disk.
+This method reads the model's parameters from a file and reconstructs the model
+exactly as it was when it was saved.
+<p>This allows you to train a model once and then use it many times without retraining.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_EvaluateModel_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.EvaluateModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.EvaluateModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the performance of the trained model on test data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, T&gt; EvaluateModel(Matrix&lt;T&gt; xTest, Vector&lt;T&gt; yTest)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix for testing (not used directly).</p>
+</dd>
+    <dt><code>yTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual time series data for testing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary containing evaluation metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method compares the spectral analysis of your training data with the spectral analysis
+of your test data to see how similar they are. It calculates several metrics:
+<ul>
+<li>MSE (Mean Squared Error): The average squared difference between the training and test periodograms</li>
+<li>RMSE (Root Mean Squared Error): The square root of MSE, giving an error in the same units</li>
+<li>MAE (Mean Absolute Error): The average absolute difference between the periodograms</li>
+<li>R2 (R-squared): How well the training periodogram explains the variation in the test periodogram</li>
+<li>Peak Frequency Difference: The difference between the dominant frequencies in both datasets</li>
+</ul>
+<p>Lower values for MSE, RMSE, MAE, and Peak Frequency Difference indicate better model performance.
+Higher values for R2 (closer to 1) indicate better model performance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_ExportComputationGraph_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L695"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the Spectral Analysis Model as a computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A list to which input nodes will be added (not used for spectral analysis).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node containing the periodogram.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Since spectral analysis doesn't make traditional predictions but returns the computed
+periodogram, the computation graph simply returns the precomputed periodogram as a constant.
+</p>
+<p><b>For Beginners:</b> Unlike other models that compute predictions from input,
+spectral analysis just returns the frequency content it found in your data during training.
+The JIT-compiled version returns this precomputed result efficiently.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetFrequencies_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.GetFrequencies*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetFrequencies" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.GetFrequencies">
+  GetFrequencies()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the frequency values corresponding to each point in the periodogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetFrequencies()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of frequency values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetFrequencies_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method returns the frequencies that were analyzed in your data.
+Each value represents a frequency (how often a pattern repeats).
+For example, a frequency of 0.5 means the pattern repeats every 2 time units.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetModelMetadata_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetModelMetadata" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L556"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the model, including its type, parameters, and characteristics of the spectral analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method provides a summary of the spectral analysis, including:
+- The configuration settings used (FFT size, window function type, etc.)
+- Statistics about the frequency analysis (dominant frequencies, frequency range, etc.)
+- Overall metrics that describe the spectrum
+<p>This information is useful for comparing different analyses, documenting your process,
+or sharing your findings with others.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetPeriodogram_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.GetPeriodogram*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetPeriodogram" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.GetPeriodogram">
+  GetPeriodogram()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the periodogram (power spectral density) values for each frequency.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetPeriodogram()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of periodogram values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_GetPeriodogram_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method returns the "strength" of each frequency in your data.
+Higher values mean that frequency is more prominent in your data.
+By looking at which frequencies have the highest values, you can identify
+the most important repeating patterns in your time series.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_Predict_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.Predict*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the periodogram (power spectral density) as the prediction result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix (not used in spectral analysis).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The periodogram (power spectral density) of the trained model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+Unlike most prediction models, spectral analysis doesn't predict future values.
+Instead, it analyzes the frequency content of your data. This method simply returns
+the periodogram (the strength of each frequency component) that was calculated during training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_PredictSingle_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L442"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts a single value based on the dominant frequency component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector containing a time index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A predicted value based on the dominant frequency component.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+Unlike traditional forecasting models, spectral analysis doesn't really predict future values.
+Instead, it identifies patterns in the data. This method tries to provide a prediction by:
+1. Finding the strongest frequency component in your data
+2. Using that frequency to generate a value at the time index you specified
+<p>This is primarily useful for synthetic data generation or simplified predictions
+based on the dominant cycle in your data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_SerializeCore_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.SerializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_SerializeCore_System_IO_BinaryWriter_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.SerializeCore(System.IO.BinaryWriter)">
+  SerializeCore(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model's core parameters to a binary writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void SerializeCore(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_SerializeCore_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+Serialization is the process of converting the model's state into a format that can be saved to disk.
+This allows you to save a trained model and load it later without having to retrain it.
+<p>This method saves:</p>
+<ul>
+<li>The spectral analysis options (like FFT size and window function settings)</li>
+<li>The calculated frequencies</li>
+<li>The calculated periodogram (power spectral density)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_TrainCore_" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.TrainCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.SpectralAnalysisModel`1.TrainCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainCore(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core implementation of the training logic for the spectral analysis model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void TrainCore(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix (not used in spectral analysis).</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The time series data to analyze.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_SpectralAnalysisModel_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method contains the actual implementation of the spectral analysis process.
+It takes your time series data and breaks it down into its frequency components,
+similar to how a prism breaks light into different colors. This helps identify
+which patterns (frequencies) are most prominent in your data.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/SpectralAnalysisModel.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Zero123Model&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Zero123Model&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Zero-1-to-3 model for novel view synthesis from a single image.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Diffusion_Models_Zero123Model_1.md&amp;value=---%0Auid%3A%20AiDotNet.Diffusion.Models.Zero123Model%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Diffusion.Models.Zero123Model`1">
+
+
+
+  <h1 id="AiDotNet_Diffusion_Models_Zero123Model_1" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1" class="text-break">
+Class Zero123Model&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.Diffusion.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Zero-1-to-3 model for novel view synthesis from a single image.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Zero123Model&lt;T&gt; : LatentDiffusionModelBase&lt;T&gt;, ILatentDiffusionModel&lt;T&gt;, IDiffusionModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html">DiffusionModelBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html">LatentDiffusionModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">Zero123Model&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILatentDiffusionModel-1.html">ILatentDiffusionModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_GuidanceScale">LatentDiffusionModelBase&lt;T&gt;.GuidanceScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SupportsNegativePrompt">LatentDiffusionModelBase&lt;T&gt;.SupportsNegativePrompt</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SupportsInpainting">LatentDiffusionModelBase&lt;T&gt;.SupportsInpainting</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_EncodeToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_">LatentDiffusionModelBase&lt;T&gt;.EncodeToLatent(Tensor&lt;T&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_DecodeFromLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LatentDiffusionModelBase&lt;T&gt;.DecodeFromLatent(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_GenerateFromText_System_String_System_String_System_Int32_System_Int32_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.GenerateFromText(string, string, int, int, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ImageToImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Double_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.ImageToImage(Tensor&lt;T&gt;, string, string, double, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_Inpaint_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.Inpaint(Tensor&lt;T&gt;, Tensor&lt;T&gt;, string, string, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SetGuidanceScale_System_Double_">LatentDiffusionModelBase&lt;T&gt;.SetGuidanceScale(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_PredictNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">LatentDiffusionModelBase&lt;T&gt;.PredictNoise(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_Generate_System_Int32___System_Int32_System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.Generate(int[], int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ApplyGuidance_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_">LatentDiffusionModelBase&lt;T&gt;.ApplyGuidance(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SampleNoiseTensor_System_Int32___System_Random_">LatentDiffusionModelBase&lt;T&gt;.SampleNoiseTensor(int[], Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ResizeMaskToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">LatentDiffusionModelBase&lt;T&gt;.ResizeMaskToLatent(Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_BlendLatentsWithMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">LatentDiffusionModelBase&lt;T&gt;.BlendLatentsWithMask(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_NumOps">DiffusionModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_RandomGenerator">DiffusionModelBase&lt;T&gt;.RandomGenerator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LossFunction">DiffusionModelBase&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LearningRate">DiffusionModelBase&lt;T&gt;.LearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Scheduler">DiffusionModelBase&lt;T&gt;.Scheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_DefaultLossFunction">DiffusionModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SupportsJitCompilation">DiffusionModelBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">DiffusionModelBase&lt;T&gt;.ComputeLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">DiffusionModelBase&lt;T&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">DiffusionModelBase&lt;T&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetModelMetadata">DiffusionModelBase&lt;T&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">DiffusionModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Serialize">DiffusionModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Deserialize_System_Byte___">DiffusionModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SaveModel_System_String_">DiffusionModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LoadModel_System_String_">DiffusionModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SaveState_System_IO_Stream_">DiffusionModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LoadState_System_IO_Stream_">DiffusionModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetActiveFeatureIndices">DiffusionModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">DiffusionModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_IsFeatureUsed_System_Int32_">DiffusionModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetFeatureImportance">DiffusionModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__">DiffusionModelBase&lt;T&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">DiffusionModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">DiffusionModelBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SampleNoise_System_Int32_System_Random_">DiffusionModelBase&lt;T&gt;.SampleNoise(int, Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+  <h2 id="AiDotNet_Diffusion_Models_Zero123Model_1_examples">Examples</h2>
+  <pre><code class="lang-csharp">// Create a Zero123 model
+var zero123 = new Zero123Model&lt;float&gt;();
+
+// Generate novel view
+var inputImage = LoadImage("object.png");
+var novelView = zero123.GenerateNovelView(
+    inputImage: inputImage,
+    polarAngle: 30.0,    // Rotate up 30 degrees
+    azimuthAngle: 45.0,  // Rotate right 45 degrees
+    radius: 1.0);        // Keep same distance
+
+// Generate multiple views for 3D reconstruction
+var views = zero123.Generate360Views(inputImage, numViews: 8);</code></pre>
+
+
+  <h2 id="AiDotNet_Diffusion_Models_Zero123Model_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Zero-1-to-3 (Zero123) generates new viewpoints of an object from just a single
+input image. It uses camera pose conditioning to control the viewpoint change,
+enabling 3D-aware image generation without explicit 3D reconstruction.
+</p>
+<p>
+<b>For Beginners:</b> Zero123 is like having a magical camera that can show you
+what an object looks like from different angles, even though you only gave it
+one photograph.
+<p>What it does:</p>
+<ul>
+<li>Takes a single image of an object</li>
+<li>Generates images of that same object from different viewpoints</li>
+<li>Works with any object: cars, furniture, animals, etc.</li>
+</ul>
+<p>Input parameters:</p>
+<ul>
+<li>Image: The original photo of the object</li>
+<li>Camera rotation: How much to rotate the view (polar/azimuth angles)</li>
+<li>Scale change: How close/far to zoom</li>
+</ul>
+<p>Use cases:</p>
+<ul>
+<li>E-commerce: Show products from multiple angles</li>
+<li>3D reconstruction: Generate training data for 3D models</li>
+<li>AR/VR: Create object previews from any angle</li>
+<li>Game development: Generate sprite variations</li>
+</ul>
+
+<p>
+Technical details:
+- Fine-tuned from Stable Diffusion
+- Uses CLIP image encoder for conditioning
+- Camera pose embedding via sinusoidal encoding
+- Supports arbitrary viewpoint changes
+- Can be used iteratively for 360° reconstruction
+<p>Reference: Liu et al., &quot;Zero-1-to-3: Zero-shot One Image to 3D Object&quot;, 2023</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1__ctor_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1__ctor" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.#ctor">
+  Zero123Model()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of Zero123Model with default parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Zero123Model()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1__ctor_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1__ctor_AiDotNet_Models_Options_DiffusionModelOptions__0__AiDotNet_Interfaces_INoiseScheduler__0__AiDotNet_Diffusion_NoisePredictors_UNetNoisePredictor__0__AiDotNet_Diffusion_VAE_StandardVAE__0__System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.#ctor(AiDotNet.Models.Options.DiffusionModelOptions{`0},AiDotNet.Interfaces.INoiseScheduler{`0},AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor{`0},AiDotNet.Diffusion.VAE.StandardVAE{`0},System.Int32,System.Nullable{System.Int32})">
+  Zero123Model(DiffusionModelOptions&lt;T&gt;?, INoiseScheduler&lt;T&gt;?, UNetNoisePredictor&lt;T&gt;?, StandardVAE&lt;T&gt;?, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of Zero123Model with custom parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Zero123Model(DiffusionModelOptions&lt;T&gt;? options = null, INoiseScheduler&lt;T&gt;? scheduler = null, UNetNoisePredictor&lt;T&gt;? unet = null, StandardVAE&lt;T&gt;? vae = null, int imageSize = 256, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DiffusionModelOptions-1.html">DiffusionModelOptions</a>&lt;T&gt;</dt>
+    <dd><p>Configuration options.</p>
+</dd>
+    <dt><code>scheduler</code> <a class="xref" href="AiDotNet.Interfaces.INoiseScheduler-1.html">INoiseScheduler</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom scheduler.</p>
+</dd>
+    <dt><code>unet</code> <a class="xref" href="AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor-1.html">UNetNoisePredictor</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom U-Net.</p>
+</dd>
+    <dt><code>vae</code> <a class="xref" href="AiDotNet.Diffusion.VAE.StandardVAE-1.html">StandardVAE</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom VAE.</p>
+</dd>
+    <dt><code>imageSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image size for generation.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_Conditioner_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.Conditioner*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_Conditioner" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.Conditioner">
+  Conditioner
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the conditioning module (optional, for conditioned generation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IConditioningModule&lt;T&gt;? Conditioner { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IConditioningModule-1.html">IConditioningModule</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_LatentChannels_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.LatentChannels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_LatentChannels" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.LatentChannels">
+  LatentChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of latent channels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int LatentChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_Zero123Model_1_LatentChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Typically 4 for Stable Diffusion models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_NoisePredictor_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.NoisePredictor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_NoisePredictor" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.NoisePredictor">
+  NoisePredictor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the noise predictor model (U-Net, DiT, etc.).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override INoisePredictor&lt;T&gt; NoisePredictor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.INoisePredictor-1.html">INoisePredictor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_ParameterCount_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_ParameterCount" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_Zero123Model_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_VAE_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.VAE*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_VAE" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.VAE">
+  VAE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the VAE model used for encoding and decoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IVAEModel&lt;T&gt; VAE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_Clone_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_Clone" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L514"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IDiffusionModel&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel</a>&lt;T&gt;</dt>
+    <dd><p>A new instance with the same parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_DeepCopy_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_DeepCopy" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L508"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_Generate360Views_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.Generate360Views*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_Generate360Views_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Double_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.Generate360Views(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Double,System.Int32,System.Nullable{System.Double},System.Nullable{System.Int32})">
+  Generate360Views(Tensor&lt;T&gt;, int, double, int, double?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L321"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates multiple views around an object (360° views).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual List&lt;Tensor&lt;T&gt;&gt; Generate360Views(Tensor&lt;T&gt; inputImage, int numViews = 8, double polarAngle = 0, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image.</p>
+</dd>
+    <dt><code>numViews</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of views to generate.</p>
+</dd>
+    <dt><code>polarAngle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Fixed polar angle for all views.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Denoising steps per view.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of generated views.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_GenerateMultipleViews_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.GenerateMultipleViews*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_GenerateMultipleViews_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double___System_Double___System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.GenerateMultipleViews(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double[],System.Double[],System.Int32,System.Nullable{System.Double},System.Nullable{System.Int32})">
+  GenerateMultipleViews(Tensor&lt;T&gt;, double[], double[], int, double?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L362"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates views at multiple elevation angles.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual List&lt;Tensor&lt;T&gt;&gt; GenerateMultipleViews(Tensor&lt;T&gt; inputImage, double[] azimuthAngles, double[] polarAngles, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image.</p>
+</dd>
+    <dt><code>azimuthAngles</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>List of azimuth angles.</p>
+</dd>
+    <dt><code>polarAngles</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>List of polar angles.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of generated views.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_GenerateNovelView_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.GenerateNovelView*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_GenerateNovelView_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Double_System_Double_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.GenerateNovelView(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double,System.Double,System.Double,System.Int32,System.Nullable{System.Double},System.Nullable{System.Int32})">
+  GenerateNovelView(Tensor&lt;T&gt;, double, double, double, int, double?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a novel view of an object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Tensor&lt;T&gt; GenerateNovelView(Tensor&lt;T&gt; inputImage, double polarAngle, double azimuthAngle, double radius = 1, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image of the object.</p>
+</dd>
+    <dt><code>polarAngle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Polar angle change in degrees (vertical rotation).</p>
+</dd>
+    <dt><code>azimuthAngle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Azimuth angle change in degrees (horizontal rotation).</p>
+</dd>
+    <dt><code>radius</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Relative radius change (1.0 = same distance).</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The generated novel view image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_GetParameters_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_GetParameters" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L449"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters that can be optimized.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_Zero123Model_1_SetParameters_" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_Zero123Model_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Diffusion.Models.Zero123Model`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L470"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_Zero123Model_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method allows direct modification of the model's internal parameters.
+This is useful for optimization algorithms that need to update parameters iteratively.
+If the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>,
+an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a> should be thrown.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/Zero123Model.cs/#L73" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TransferFunctionModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TransferFunctionModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Transfer Function Model for time series analysis, which combines ARIMA modeling with external input variables to capture dynamic relationships between multiple time series.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TimeSeries_TransferFunctionModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.TimeSeries.TransferFunctionModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1">
+
+
+
+  <h1 id="AiDotNet_TimeSeries_TransferFunctionModel_1" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1" class="text-break">
+Class TransferFunctionModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TimeSeries.html">TimeSeries</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Transfer Function Model for time series analysis, which combines ARIMA modeling with
+external input variables to capture dynamic relationships between multiple time series.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TransferFunctionModel&lt;T&gt; : TimeSeriesModelBase&lt;T&gt;, ITimeSeriesModel&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html">TimeSeriesModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">TransferFunctionModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesModel-1.html">ITimeSeriesModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options">TimeSeriesModelBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps">TimeSeriesModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine">TimeSeriesModelBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters">TimeSeriesModelBase&lt;T&gt;.ModelParameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained">TimeSeriesModelBase&lt;T&gt;.IsTrained</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics">TimeSeriesModelBase&lt;T&gt;.LastEvaluationMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0__">TimeSeriesModelBase&lt;T&gt;.ValidateOptions(TimeSeriesRegressionOptions&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ValidateTrainingInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">TimeSeriesModelBase&lt;T&gt;.ValidatePredictionInput(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.CalculateErrorMetrics(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize">TimeSeriesModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_System_Byte___">TimeSeriesModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters">TimeSeriesModelBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ApplyParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices">TimeSeriesModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_System_Int32_">TimeSeriesModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_System_Int32_">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">TimeSeriesModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy">TimeSeriesModelBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clone">TimeSeriesModelBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Reset">TimeSeriesModelBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip__0__0__0_">TimeSeriesModelBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.Forecast(Vector&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_System_Collections_Generic_List__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.PrepareForecastFeatures(List&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount">TimeSeriesModelBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_System_String_">TimeSeriesModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_System_String_">TimeSeriesModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction">TimeSeriesModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">TimeSeriesModelBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">TimeSeriesModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SupportsJitCompilation">TimeSeriesModelBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">TimeSeriesModelBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_TimeSeries_TransferFunctionModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Transfer Function Model extends traditional ARIMA models by incorporating the effects of
+external input variables. It models the relationship between an output time series and one or more
+input time series, accounting for both immediate and lagged effects.
+</p>
+<p>
+<b>For Beginners:</b>
+A Transfer Function Model helps you understand how one time series affects another over time.
+<p>For example, you might want to know:</p>
+<ul>
+<li>How advertising spending affects sales (with delays of days or weeks)</li>
+<li>How temperature changes affect energy consumption</li>
+<li>How interest rate changes impact housing prices</li>
+</ul>
+<p>This model captures both:</p>
+<ul>
+<li>The internal patterns of your target variable (like sales following their own seasonal patterns)</li>
+<li>The external influence of input variables (like how advertising boosts sales)</li>
+</ul>
+<p>It's particularly useful when you know there are external factors influencing your target variable
+and you want to quantify their effects, including any time delays in those effects.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1__ctor_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1__ctor_AiDotNet_Models_Options_TransferFunctionOptions__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.#ctor(AiDotNet.Models.Options.TransferFunctionOptions{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  TransferFunctionModel(TransferFunctionOptions&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the TransferFunctionModel class with optional configuration options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TransferFunctionModel(TransferFunctionOptions&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.TransferFunctionOptions-3.html">TransferFunctionOptions</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The configuration options for the Transfer Function Model. If null, default options are used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1__ctor_AiDotNet_Models_Options_TransferFunctionOptions__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+When you create a Transfer Function Model, you can customize it with various options:
+<ul>
+<li>AR Order: How many past values of the output series to consider</li>
+<li>MA Order: How many past error terms to consider</li>
+<li>Input Lag Order: How many past values of the input series to consider</li>
+<li>Output Lag Order: How many additional past values of the output to consider</li>
+<li>Optimizer: The algorithm used to find the best parameter values</li>
+</ul>
+<p>The constructor initializes all the parameters that will be estimated during training.
+These parameters start empty and will be filled with values during the training process.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1_CreateInstance_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1_CreateInstance" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L681"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the Transfer Function Model with the same options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the Transfer Function Model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new instance of the Transfer Function Model with the same configuration options
+as the current instance. This new instance is not trained and will need to be trained on data.
+</p>
+<p>
+<b>For Beginners:</b>
+This method creates a fresh copy of the model with the same settings but no training.
+<p>It's useful when you want to:</p>
+<ul>
+<li>Create multiple versions of the same model</li>
+<li>Train models on different data sets</li>
+<li>Experiment with ensemble models (combining multiple models)</li>
+<li>Compare different training approaches with the same model structure</li>
+</ul>
+<p>The new model copy will have identical configuration options but will need to be
+trained from scratch on your data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1_DeserializeCore_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.DeserializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1_DeserializeCore_System_IO_BinaryReader_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.DeserializeCore(System.IO.BinaryReader)">
+  DeserializeCore(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L488"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model's core parameters from a binary reader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeCore(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1_DeserializeCore_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+Deserialization is the process of loading a previously saved model from disk.
+This method reads the model's parameters from a file and reconstructs the model
+exactly as it was when it was saved.
+<p>It reads:</p>
+<ul>
+<li>The AR parameters</li>
+<li>The MA parameters</li>
+<li>The input lag parameters</li>
+<li>The output lag parameters</li>
+<li>The model configuration options</li>
+</ul>
+<p>After deserialization, the model is ready to make predictions without needing to be retrained.
+This is particularly useful for:</p>
+<ul>
+<li>Deploying models to production environments</li>
+<li>Sharing models between different applications</li>
+<li>Saving computation time by not having to retrain complex models</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1_EvaluateModel_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.EvaluateModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.EvaluateModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the performance of the trained model on test data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, T&gt; EvaluateModel(Matrix&lt;T&gt; xTest, Vector&lt;T&gt; yTest)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix for testing.</p>
+</dd>
+    <dt><code>yTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual target values for testing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary containing evaluation metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method tests how well the model performs on data it hasn't seen during training.
+<p>It works by:</p>
+<ol>
+<li>Using the model to make predictions on the test data</li>
+<li>Comparing these predictions to the actual test values</li>
+<li>Calculating various error metrics to quantify the accuracy</li>
+</ol>
+<p>The metrics calculated include:</p>
+<ul>
+<li><p>MAE (Mean Absolute Error): The average absolute difference between predictions and actual values</p>
+<ul>
+<li>Lower is better</li>
+<li>Easy to interpret: &quot;On average, predictions are off by X units&quot;</li>
+</ul>
+</li>
+<li><p>MSE (Mean Squared Error): The average squared difference</p>
+<ul>
+<li>Lower is better</li>
+<li>Penalizes large errors more heavily</li>
+</ul>
+</li>
+<li><p>RMSE (Root Mean Squared Error): The square root of MSE</p>
+<ul>
+<li>Lower is better</li>
+<li>In the same units as the original data</li>
+</ul>
+</li>
+<li><p>R² (R-squared): The proportion of variance explained by the model</p>
+<ul>
+<li>Ranges from 0 to 1 (higher is better)</li>
+<li>0.7 means the model explains 70% of the variation in the data</li>
+</ul>
+</li>
+</ul>
+<p>These metrics help you understand how accurate your model is and compare it to other models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1_GetModelMetadata_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1_GetModelMetadata" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L629"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the model, including its type, parameters, and configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns detailed metadata about the Transfer Function Model, including its type,
+parameters (AR, MA, input lags, output lags), and configuration options. This metadata can be used
+for model selection, comparison, documentation, and serialization purposes.
+</p>
+<p>
+<b>For Beginners:</b>
+This method provides a summary of your model's settings and what it has learned.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (Transfer Function Model)</li>
+<li>Information about each set of parameters and how many there are</li>
+<li>Configuration settings like AR order, MA order, etc.</li>
+<li>A serialized version of the entire model</li>
+</ul>
+<p>This information is useful for:</p>
+<ul>
+<li>Keeping track of different models you've created</li>
+<li>Comparing model configurations</li>
+<li>Documenting which settings worked best</li>
+<li>Sharing model information with others</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1_Predict_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.Predict*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates forecasts using the trained Transfer Function Model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix containing external variables.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of forecasted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method uses the trained model to predict values for new input data.
+<p>For each time point, it:</p>
+<ol>
+<li>Considers the AR terms (past values of the output)</li>
+<li>Adds the MA terms (past prediction errors)</li>
+<li>Adds the effects of the input variables at various lags</li>
+<li>Adds the effects of additional output lags</li>
+</ol>
+<p>The result is a forecast that accounts for both:</p>
+<ul>
+<li>The internal patterns of the output series</li>
+<li>The influence of the input variables</li>
+</ul>
+<p>This is useful for scenarios like predicting sales based on advertising spend,
+where you want to account for both the natural sales patterns and the boost from ads.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1_PredictSingle_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L577"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a prediction for a single input vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector containing features for prediction.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates a single prediction based on the input vector, using the trained model parameters
+to combine autoregressive, moving average, and transfer function components.
+</p>
+<p>
+<b>For Beginners:</b>
+This method creates a prediction for a single point in time based on your input data.
+<p>It combines several components to make this prediction:</p>
+<ol>
+<li>The effect of past values of the output variable (AR component)</li>
+<li>The effect of past prediction errors (MA component)</li>
+<li>The effect of the input variables at different time lags</li>
+<li>The effect of additional past output values</li>
+</ol>
+<p>The method checks if the model has been trained first and then carefully
+applies each component to generate an accurate prediction. This is particularly
+useful when you need just one prediction rather than a whole series.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model hasn't been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1_SerializeCore_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.SerializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1_SerializeCore_System_IO_BinaryWriter_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.SerializeCore(System.IO.BinaryWriter)">
+  SerializeCore(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L448"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model's core parameters to a binary writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void SerializeCore(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1_SerializeCore_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+Serialization is the process of converting the model's state into a format that can be saved to disk.
+This allows you to save a trained model and load it later without having to retrain it.
+<p>This method saves:</p>
+<ul>
+<li>The AR parameters (how past output values affect current values)</li>
+<li>The MA parameters (how past errors affect current values)</li>
+<li>The input lag parameters (how past input values affect current output)</li>
+<li>The output lag parameters (how additional past output values affect current output)</li>
+<li>The model configuration options (AR order, MA order, etc.)</li>
+</ul>
+<p>After serializing, you can store the model and later deserialize it to make predictions
+without repeating the training process, which can save significant time for complex models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TransferFunctionModel_1_TrainCore_" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.TrainCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TransferFunctionModel_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TransferFunctionModel`1.TrainCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainCore(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L529"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The core implementation of the training process for the Transfer Function Model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void TrainCore(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix containing external variables.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The output time series data to model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TransferFunctionModel_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the training process for the Transfer Function Model, handling validation,
+initialization, parameter optimization, and residual computation.
+</p>
+<p>
+<b>For Beginners:</b>
+This is the engine that powers the training process. It follows these steps:
+<ol>
+<li>First, it checks that your input and output data have the right dimensions</li>
+<li>Then, it stores the output data for later use</li>
+<li>Next, it creates initial values for all model parameters</li>
+<li>It then finds the optimal values for these parameters to best fit your data</li>
+<li>Finally, it calculates how well these parameters worked by computing the errors</li>
+</ol>
+<p>Each step builds on the previous one to create a model that understands both:</p>
+<ul>
+<li>How your target variable changes over time on its own</li>
+<li>How your input variables influence your target variable</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the input matrix rows don't match the output vector length.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TransferFunctionModel.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

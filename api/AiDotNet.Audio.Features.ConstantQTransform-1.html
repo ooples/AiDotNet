@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ConstantQTransform&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ConstantQTransform&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Constant-Q Transform (CQT) for music analysis with logarithmic frequency resolution.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Audio_Features_ConstantQTransform_1.md&amp;value=---%0Auid%3A%20AiDotNet.Audio.Features.ConstantQTransform%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Audio.Features.ConstantQTransform`1">
+
+
+
+  <h1 id="AiDotNet_Audio_Features_ConstantQTransform_1" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1" class="text-break">
+Class ConstantQTransform&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Audio.html">Audio</a>.<a class="xref" href="AiDotNet.Audio.Features.html">Features</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Constant-Q Transform (CQT) for music analysis with logarithmic frequency resolution.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ConstantQTransform&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ConstantQTransform&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Audio_Features_ConstantQTransform_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Unlike the FFT which has linear frequency spacing, the CQT uses logarithmic spacing
+where each frequency bin is a constant ratio (Q factor) above the previous one.
+This matches how humans perceive pitch: octaves are equally spaced.
+</p>
+<p><b>For Beginners:</b> The CQT is perfect for music analysis because:
+<ul><li>Musical notes are logarithmically spaced (each octave doubles frequency)</li><li>Low notes get wide bins, high notes get narrow bins (matches perception)</li><li>Makes chord/key detection much easier than FFT</li></ul>
+<p>Usage:</p>
+<pre><code class="lang-csharp">var cqt = new ConstantQTransform&lt;float&gt;(
+    sampleRate: 22050,
+    fMin: 32.7, // C1
+    binsPerOctave: 12, // Semitones
+    numOctaves: 7);
+
+var audio = LoadAudio("music.wav");
+var cqtSpectrum = cqt.Transform(audio);
+// cqtSpectrum has shape [time_frames, num_bins] where num_bins = 12 * 7 = 84</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1__ctor_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1__ctor_System_Int32_System_Double_System_Int32_System_Int32_System_Int32_AiDotNet_Audio_Features_WindowType_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.#ctor(System.Int32,System.Double,System.Int32,System.Int32,System.Int32,AiDotNet.Audio.Features.WindowType)">
+  ConstantQTransform(int, double, int, int, int, WindowType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new Constant-Q Transform instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ConstantQTransform(int sampleRate = 22050, double fMin = 32.7, int binsPerOctave = 12, int numOctaves = 7, int hopLength = 512, WindowType windowType = WindowType.Hann)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Audio sample rate in Hz.</p>
+</dd>
+    <dt><code>fMin</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum frequency in Hz (default: C1 = 32.7 Hz).</p>
+</dd>
+    <dt><code>binsPerOctave</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of bins per octave (default: 12 for semitones).</p>
+</dd>
+    <dt><code>numOctaves</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of octaves to cover (default: 7).</p>
+</dd>
+    <dt><code>hopLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Hop length between frames (default: 512).</p>
+</dd>
+    <dt><code>windowType</code> <a class="xref" href="AiDotNet.Audio.Features.WindowType.html">WindowType</a></dt>
+    <dd><p>Window type for analysis (default: Hann).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_Frequencies_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.Frequencies*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_Frequencies" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.Frequencies">
+  Frequencies
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the center frequencies for each bin.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[] Frequencies { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_NumBins_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.NumBins*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_NumBins" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.NumBins">
+  NumBins
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of frequency bins in the CQT output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumBins { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_QFactor_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.QFactor*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_QFactor" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.QFactor">
+  QFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Q factor (quality factor) for this CQT.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double QFactor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_SampleRate_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_SampleRate" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sample rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_GetMidiNote_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.GetMidiNote*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_GetMidiNote_System_Int32_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.GetMidiNote(System.Int32)">
+  GetMidiNote(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the MIDI note number for a given bin index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GetMidiNote(int binIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>binIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The CQT bin index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The corresponding MIDI note number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_GetNoteName_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.GetNoteName*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_GetNoteName_System_Int32_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.GetNoteName(System.Int32)">
+  GetNoteName(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L327"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the note name for a given bin index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetNoteName(int binIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>binIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The CQT bin index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The note name (e.g., &quot;C4&quot;, &quot;A#3&quot;).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_Transform_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.Transform*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_Transform_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.Transform(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Transform(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the Constant-Q Transform of an audio signal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Transform(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio waveform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>CQT magnitude spectrogram with shape [time_frames, num_bins].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_TransformComplex_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.TransformComplex*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_TransformComplex_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.TransformComplex(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  TransformComplex(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the complex CQT (with phase information).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TransformComplex(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio waveform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Complex CQT with shape [time_frames, num_bins, 2] where last dim is [real, imag].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_TransformDb_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.TransformDb*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_TransformDb_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Double_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.TransformDb(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double,System.Double)">
+  TransformDb(Tensor&lt;T&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L293"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes CQT in decibels (log scale).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TransformDb(Tensor&lt;T&gt; audio, double refValue = 1, double minDb = -80)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio waveform.</p>
+</dd>
+    <dt><code>refValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Reference value for dB conversion.</p>
+</dd>
+    <dt><code>minDb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum dB value (floor).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>CQT spectrogram in decibels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_ConstantQTransform_1_TransformPower_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.TransformPower*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_ConstantQTransform_1_TransformPower_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.Audio.Features.ConstantQTransform`1.TransformPower(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  TransformPower(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes CQT with power spectrum (magnitude squared).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TransformPower(Tensor&lt;T&gt; audio, double power = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio waveform.</p>
+</dd>
+    <dt><code>power</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Power exponent (default: 2.0 for power spectrum).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Power CQT spectrogram.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/ConstantQTransform.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

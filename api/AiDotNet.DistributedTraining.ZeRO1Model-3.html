@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ZeRO1Model&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ZeRO1Model&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements ZeRO Stage 1 model wrapper - shards optimizer states only.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DistributedTraining_ZeRO1Model_3.md&amp;value=---%0Auid%3A%20AiDotNet.DistributedTraining.ZeRO1Model%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3">
+
+
+
+  <h1 id="AiDotNet_DistributedTraining_ZeRO1Model_3" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3" class="text-break">
+Class ZeRO1Model&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DistributedTraining.html">DistributedTraining</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements ZeRO Stage 1 model wrapper - shards optimizer states only.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ZeRO1Model&lt;T, TInput, TOutput&gt; : ShardedModelBase&lt;T, TInput, TOutput&gt;, IShardedModel&lt;T, TInput, TOutput&gt;, IFullModel&lt;T, TInput, TOutput&gt;, IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, TInput, TOutput&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;, IGradientComputable&lt;T, TInput, TOutput&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html">ShardedModelBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">ZeRO1Model&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.IShardedModel-3.html">IShardedModel</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_NumOps">ShardedModelBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_Config">ShardedModelBase&lt;T, TInput, TOutput&gt;.Config</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_LocalShard">ShardedModelBase&lt;T, TInput, TOutput&gt;.LocalShard</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_CachedFullParameters">ShardedModelBase&lt;T, TInput, TOutput&gt;.CachedFullParameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_ShardStartIndex">ShardedModelBase&lt;T, TInput, TOutput&gt;.ShardStartIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_ShardSize">ShardedModelBase&lt;T, TInput, TOutput&gt;.ShardSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_WrappedModel">ShardedModelBase&lt;T, TInput, TOutput&gt;.WrappedModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_WrappedModelInternal">ShardedModelBase&lt;T, TInput, TOutput&gt;.WrappedModelInternal</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_Rank">ShardedModelBase&lt;T, TInput, TOutput&gt;.Rank</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_WorldSize">ShardedModelBase&lt;T, TInput, TOutput&gt;.WorldSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_LocalParameterShard">ShardedModelBase&lt;T, TInput, TOutput&gt;.LocalParameterShard</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_ShardingConfiguration">ShardedModelBase&lt;T, TInput, TOutput&gt;.ShardingConfiguration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_ParameterCount">ShardedModelBase&lt;T, TInput, TOutput&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_InitializeSharding">ShardedModelBase&lt;T, TInput, TOutput&gt;.InitializeSharding()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_GatherFullParameters">ShardedModelBase&lt;T, TInput, TOutput&gt;.GatherFullParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_SynchronizeGradients">ShardedModelBase&lt;T, TInput, TOutput&gt;.SynchronizeGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_InvalidateCache">ShardedModelBase&lt;T, TInput, TOutput&gt;.InvalidateCache()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_UpdateLocalShardFromFull_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ShardedModelBase&lt;T, TInput, TOutput&gt;.UpdateLocalShardFromFull(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_Train__1__2_">ShardedModelBase&lt;T, TInput, TOutput&gt;.Train(TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_Predict__1_">ShardedModelBase&lt;T, TInput, TOutput&gt;.Predict(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_GetModelMetadata">ShardedModelBase&lt;T, TInput, TOutput&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_GetParameters">ShardedModelBase&lt;T, TInput, TOutput&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ShardedModelBase&lt;T, TInput, TOutput&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ShardedModelBase&lt;T, TInput, TOutput&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_Serialize">ShardedModelBase&lt;T, TInput, TOutput&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_Deserialize_System_Byte___">ShardedModelBase&lt;T, TInput, TOutput&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_SaveModel_System_String_">ShardedModelBase&lt;T, TInput, TOutput&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_LoadModel_System_String_">ShardedModelBase&lt;T, TInput, TOutput&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_Clone">ShardedModelBase&lt;T, TInput, TOutput&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_DeepCopy">ShardedModelBase&lt;T, TInput, TOutput&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_GetFeatureImportance">ShardedModelBase&lt;T, TInput, TOutput&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_GetActiveFeatureIndices">ShardedModelBase&lt;T, TInput, TOutput&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">ShardedModelBase&lt;T, TInput, TOutput&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_IsFeatureUsed_System_Int32_">ShardedModelBase&lt;T, TInput, TOutput&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_DefaultLossFunction">ShardedModelBase&lt;T, TInput, TOutput&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">ShardedModelBase&lt;T, TInput, TOutput&gt;.ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">ShardedModelBase&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_SupportsJitCompilation">ShardedModelBase&lt;T, TInput, TOutput&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">ShardedModelBase&lt;T, TInput, TOutput&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_SaveState_System_IO_Stream_">ShardedModelBase&lt;T, TInput, TOutput&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedModelBase-3.html#AiDotNet_DistributedTraining_ShardedModelBase_3_LoadState_System_IO_Stream_">ShardedModelBase&lt;T, TInput, TOutput&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DistributedTraining_ZeRO1Model_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Strategy Overview:</b>
+ZeRO Stage 1 (Zero Redundancy Optimizer) shards only the optimizer states (momentum, variance buffers)
+across processes while keeping parameters and gradients replicated. This provides memory savings
+for the optimizer state without changing the training communication pattern significantly.
+</p>
+<p><b>For Beginners:</b>
+This class implements ZeRO Stage 1, which is a middle ground between DDP and full sharding.
+The model parameters and gradients are replicated (like DDP), but the optimizer's internal state
+(like momentum buffers in Adam) is split across processes to save memory.
+</p>
+<p>
+Think of it like a team where everyone has the full playbook (parameters) and shares all their
+notes (gradients), but each person keeps their own personal training journal (optimizer state)
+rather than everyone keeping a copy of everyone's journals.
+</p>
+<p><b>Use Cases:</b>
+- When optimizer state is large (Adam, RMSprop) but model fits in memory
+- Want some memory savings without full FSDP complexity
+- Gradual migration path from DDP to ZeRO-3/FSDP
+</p>
+<p><b>Trade-offs:</b>
+- Memory: Good - saves optimizer state memory (4x for Adam: fp32 params + momentum + variance + gradients)
+- Communication: Low - same as DDP (AllReduce gradients)
+- Complexity: Low - similar to DDP, works with ZeRO1Optimizer
+- Best for: Large models with stateful optimizers, transitioning from DDP
+</p>
+<p>
+Example:
+<pre><code class="lang-csharp">// Original model
+var model = new NeuralNetworkModel&lt;double&gt;(...);
+<p>// Wrap it for ZeRO-1 distributed training
+var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
+var config = new ShardingConfiguration&lt;double&gt;(backend);
+var zero1Model = new ZeRO1Model&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(model, config);</p>
+<p>// Use with ZeRO1Optimizer for full ZeRO-1 benefits
+var zero1Optimizer = new ZeRO1Optimizer&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(optimizer, config);</p></code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3__ctor_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_DistributedTraining_IShardingConfiguration__0__" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.DistributedTraining.IShardingConfiguration{`0})">
+  ZeRO1Model(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new ZeRO-1 model wrapping an existing model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ZeRO1Model(IFullModel&lt;T, TInput, TOutput&gt; wrappedModel, IShardingConfiguration&lt;T&gt; config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>wrappedModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to wrap with ZeRO-1 capabilities</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd><p>Configuration for sharding and communication</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if model or config is null</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_Clone_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Clone*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_Clone" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L240"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a shallow copy of this object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, TInput, TOutput&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_Deserialize_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_Deserialize_System_Byte___" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized model from binary data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ZeRO1Model_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes binary data created by the Serialize method and uses it to
+restore a model to its previous state.</p>
+<p><b>For Beginners:</b> This is like opening a saved file to continue your work.</p>
+<p>When you call this method:</p>
+<ul>
+<li>You provide the binary data (bytes) that was previously created by Serialize</li>
+<li>The model rebuilds itself using this data</li>
+<li>After deserializing, the model is exactly as it was when serialized</li>
+<li>It's ready to make predictions without needing to be trained again</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You download a pre-trained model file for detecting spam emails</li>
+<li>You deserialize this file into your application</li>
+<li>Immediately, your application can detect spam without any training</li>
+<li>The model has all the knowledge that was built into it by its original creator</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>You want to use a model that took days to train</li>
+<li>You need to deploy the same model across multiple devices</li>
+<li>You're creating an application that non-technical users will use</li>
+</ul>
+<p>Think of it like installing the brain of a trained expert directly into your application.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_GetModelMetadata_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_GetModelMetadata" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves metadata and performance metrics about the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>An object containing metadata and performance metrics about the trained model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ZeRO1Model_3_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides information about the model's structure, parameters, and performance metrics.</p>
+<p><b>For Beginners:</b> Model metadata is like a report card for your machine learning model.</p>
+<p>Just as a report card shows how well a student is performing in different subjects,
+model metadata shows how well your model is performing and provides details about its structure.</p>
+<p>This information typically includes:</p>
+<ul>
+<li>Accuracy measures: How well does the model's predictions match actual values?</li>
+<li>Error metrics: How far off are the model's predictions on average?</li>
+<li>Model parameters: What patterns did the model learn from the data?</li>
+<li>Training information: How long did training take? How many iterations were needed?</li>
+</ul>
+<p>For example, in a house price prediction model, metadata might include:</p>
+<ul>
+<li>Average prediction error (e.g., off by $15,000 on average)</li>
+<li>How strongly each feature (bedrooms, location) influences the prediction</li>
+<li>How well the model fits the training data</li>
+</ul>
+<p>This information helps you understand your model's strengths and weaknesses,
+and decide if it's ready to use or needs more training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_InitializeSharding_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.InitializeSharding*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_InitializeSharding" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.InitializeSharding">
+  InitializeSharding()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes ZeRO-1 - no parameter sharding, keeps full parameters like DDP.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void InitializeSharding()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_LoadModel_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.LoadModel*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_LoadModel_System_String_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the file containing the saved model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ZeRO1Model_3_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to load a model directly from disk.
+It combines file I/O operations with deserialization.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Open&quot; in a document editor.
+Instead of manually reading from a file and then calling Deserialize(), this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when the specified file does not exist.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while reading from the file or when the file contains corrupted or invalid model data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_Predict_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Predict*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_Predict__1_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Predict(`1)">
+  Predict(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Uses the trained model to make predictions for new input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Predict(TInput input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>A matrix where each row represents a new example to predict and each column represents a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>A vector containing the predicted values for each input example.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ZeRO1Model_3_Predict__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>After training, this method applies the learned patterns to new data to predict outcomes.</p>
+<p><b>For Beginners:</b> Prediction is when the model uses what it learned to make educated guesses about new information.</p>
+<p>Continuing the fruit identification example:</p>
+<ul>
+<li>After learning from many examples, the child (model) can now identify new fruits they haven't seen before</li>
+<li>They look at the color, shape, and size to make their best guess</li>
+</ul>
+<p>In machine learning:</p>
+<ul>
+<li>You give the model new data it hasn't seen during training</li>
+<li>The model applies the patterns it learned to make predictions</li>
+<li>The output is the model's best estimate based on its training</li>
+</ul>
+<p>For example, in a house price prediction model:</p>
+<ul>
+<li>You provide features of a new house (square footage, bedrooms, location)</li>
+<li>The model predicts what price that house might sell for</li>
+</ul>
+<p>This method is used after training is complete, when you want to apply your model to real-world data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_SaveModel_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.SaveModel*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_SaveModel_System_String_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ZeRO1Model_3_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to save the model directly to disk.
+It combines serialization with file I/O operations.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Save As&quot; in a document editor.
+Instead of manually calling Serialize() and then writing to a file, this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while writing to the file.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.unauthorizedaccessexception">UnauthorizedAccessException</a></dt>
+    <dd><p>Thrown when the caller does not have the required permission to write to the specified file path.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_Serialize_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_Serialize" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the current state of a machine learning model into a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ZeRO1Model_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method captures all the essential information about a trained model and converts it
+into a sequence of bytes that can be stored or transmitted.</p>
+<p><b>For Beginners:</b> This is like exporting your work to a file.</p>
+<p>When you call this method:</p>
+<ul>
+<li>The model's current state (all its learned patterns and parameters) is captured</li>
+<li>This information is converted into a compact binary format (bytes)</li>
+<li>You can then save these bytes to a file, database, or send them over a network</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>After training a model to recognize cats vs. dogs in images</li>
+<li>You can serialize the model to save all its learned knowledge</li>
+<li>Later, you can use this saved data to recreate the model exactly as it was</li>
+<li>The recreated model will make the same predictions as the original</li>
+</ul>
+<p>Think of it like taking a snapshot of your model's brain at a specific moment in time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_SynchronizeGradients_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.SynchronizeGradients*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_SynchronizeGradients" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.SynchronizeGradients">
+  SynchronizeGradients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes gradients across all processes using AllReduce.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SynchronizeGradients()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ZeRO1Model_3_SynchronizeGradients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+After this operation, all processes have the same averaged gradients.
+</p>
+<p><b>For Beginners:</b>
+During training, each process calculates gradients based on its portion
+of the data. This method combines (averages) those gradients so that
+everyone is learning from everyone else's experiences. It's like a team
+meeting where everyone shares what they learned.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_Train_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Train*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_Train__1__2_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.Train(`1,`2)">
+  Train(TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the model using input features and their corresponding target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Train(TInput input, TOutput expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+    <dt><code>expectedOutput</code> <span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ZeRO1Model_3_Train__1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes training data and adjusts the model's internal parameters to learn patterns in the data.</p>
+<p><b>For Beginners:</b> Training is like teaching the model by showing it examples.</p>
+<p>Imagine teaching a child to identify fruits:</p>
+<ul>
+<li>You show them many examples of apples, oranges, and bananas (input features x)</li>
+<li>You tell them the correct name for each fruit (target values y)</li>
+<li>Over time, they learn to recognize the patterns that distinguish each fruit</li>
+</ul>
+<p>In machine learning:</p>
+<ul>
+<li>The x parameter contains features (characteristics) of your data</li>
+<li>The y parameter contains the correct answers you want the model to learn</li>
+<li>During training, the model adjusts its internal calculations to get better at predicting y from x</li>
+</ul>
+<p>For example, in a house price prediction model:</p>
+<ul>
+<li>x would contain features like square footage, number of bedrooms, location</li>
+<li>y would contain the actual sale prices of those houses</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ZeRO1Model_3_WithParameters_" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.WithParameters*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ZeRO1Model_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DistributedTraining.ZeRO1Model`3.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, TInput, TOutput&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ZeRO1Model.cs/#L56" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

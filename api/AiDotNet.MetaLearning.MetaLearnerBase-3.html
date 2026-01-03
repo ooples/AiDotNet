@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MetaLearnerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MetaLearnerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Unified base class for all meta-learning algorithms, providing both training infrastructure and shared algorithm utilities.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_MetaLearnerBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.MetaLearnerBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_MetaLearnerBase_3" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3" class="text-break">
+Class MetaLearnerBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Unified base class for all meta-learning algorithms, providing both training infrastructure
+and shared algorithm utilities.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class MetaLearnerBase&lt;T, TInput, TOutput&gt; : IMetaLearner&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MetaLearnerBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearner-3.html">IMetaLearner</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm-3.html">ANILAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.BOILAlgorithm-3.html">BOILAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm-3.html">CNAPAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.GNNMetaAlgorithm-3.html">GNNMetaAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.LEOAlgorithm-3.html">LEOAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.MAMLAlgorithm-3.html">MAMLAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.MANNAlgorithm-3.html">MANNAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm-3.html">MatchingNetworksAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.MetaOptNetAlgorithm-3.html">MetaOptNetAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.MetaSGDAlgorithm-3.html">MetaSGDAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.NTMAlgorithm-3.html">NTMAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.ProtoNetsAlgorithm-3.html">ProtoNetsAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.RelationNetworkAlgorithm-3.html">RelationNetworkAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.ReptileAlgorithm-3.html">ReptileAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.SEALAlgorithm-3.html">SEALAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.TADAMAlgorithm-3.html">TADAMAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.iMAMLAlgorithm-3.html">iMAMLAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_MetaLearnerBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This base class follows the TimeSeriesModelBase pattern where the base class does heavy lifting
+and concrete algorithm implementations override with their custom logic. It provides:
+</p>
+<ul><li>Configuration management and validation</li><li>Loss and accuracy computation</li><li>Model saving/loading with serialization</li><li>Training loop orchestration</li><li>Evaluation on multiple tasks</li><li>Gradient computation, clipping, and application utilities</li><li>Built-in inner/outer optimizer support with Adam defaults</li></ul>
+<p><b>For Algorithm Implementers:</b>
+To create a new meta-learning algorithm:
+1. Extend this base class
+2. Set AlgorithmType in constructor
+3. Override MetaTrainCore() with your algorithm's meta-update logic
+4. Override AdaptCore() with your task adaptation strategy
+5. All shared functionality (metrics, saving, evaluation) is handled automatically
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3__ctor_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Interfaces_ILossFunction__0__AiDotNet_Interfaces_IMetaLearnerOptions__0__AiDotNet_Interfaces_IEpisodicDataLoader__0__1__2__AiDotNet_Interfaces_IGradientBasedOptimizer__0__1__2__AiDotNet_Interfaces_IGradientBasedOptimizer__0__1__2__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Interfaces.IMetaLearnerOptions{`0},AiDotNet.Interfaces.IEpisodicDataLoader{`0,`1,`2},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,`1,`2},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,`1,`2})">
+  MetaLearnerBase(IFullModel&lt;T, TInput, TOutput&gt;, ILossFunction&lt;T&gt;, IMetaLearnerOptions&lt;T&gt;, IEpisodicDataLoader&lt;T, TInput, TOutput&gt;?, IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;?, IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MetaLearnerBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected MetaLearnerBase(IFullModel&lt;T, TInput, TOutput&gt; metaModel, ILossFunction&lt;T&gt; lossFunction, IMetaLearnerOptions&lt;T&gt; options, IEpisodicDataLoader&lt;T, TInput, TOutput&gt;? dataLoader = null, IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? metaOptimizer = null, IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? innerOptimizer = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metaModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to meta-train.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>Loss function for evaluation.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd><p>Configuration options with all hyperparameters.</p>
+</dd>
+    <dt><code>dataLoader</code> <a class="xref" href="AiDotNet.Interfaces.IEpisodicDataLoader-3.html">IEpisodicDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Optional episodic data loader for sampling tasks.</p>
+</dd>
+    <dt><code>metaOptimizer</code> <a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Optional optimizer for meta-updates. If null, gradient updates use manual SGD with OuterLearningRate.</p>
+</dd>
+    <dt><code>innerOptimizer</code> <a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Optional optimizer for inner-loop. If null, gradient updates use manual SGD with InnerLearningRate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when metaModel, lossFunction, or options is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when configuration validation fails.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_DataLoader" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.DataLoader">
+  DataLoader
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Episodic data loader for sampling meta-learning tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IEpisodicDataLoader&lt;T, TInput, TOutput&gt;? DataLoader</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IEpisodicDataLoader-3.html">IEpisodicDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_InnerOptimizer" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.InnerOptimizer">
+  InnerOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizer for task adaptation (inner loop).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? InnerOptimizer</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_LossFunction" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The loss function used to evaluate task performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly ILossFunction&lt;T&gt; LossFunction</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_MetaModel" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.MetaModel">
+  MetaModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The model being meta-trained.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IFullModel&lt;T, TInput, TOutput&gt; MetaModel</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_MetaOptimizer" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.MetaOptimizer">
+  MetaOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizer for meta-parameter updates (outer loop).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? MetaOptimizer</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_NumOps" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_RandomGenerator" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.RandomGenerator">
+  RandomGenerator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random number generator for stochastic operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Random RandomGenerator</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3__currentIteration" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3._currentIteration">
+  _currentIteration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Current meta-training iteration count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int _currentIteration</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3__options" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3._options">
+  _options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configuration options for meta-learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IMetaLearnerOptions&lt;T&gt; _options</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptationSteps_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.AdaptationSteps*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptationSteps" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.AdaptationSteps">
+  AdaptationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of adaptation steps to perform during task adaptation (inner loop).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AdaptationSteps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_AlgorithmType_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.AlgorithmType*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_AlgorithmType" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.AlgorithmType">
+  AlgorithmType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the type of meta-learning algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract MetaLearningAlgorithmType AlgorithmType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.MetaLearningAlgorithmType.html">MetaLearningAlgorithmType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_BaseModel_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.BaseModel*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_BaseModel" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.BaseModel">
+  BaseModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the base model being meta-trained.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; BaseModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_CurrentIteration_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.CurrentIteration*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_CurrentIteration" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.CurrentIteration">
+  CurrentIteration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current meta-training iteration count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CurrentIteration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Engine_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Engine*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Engine" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global execution engine for vectorized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_Engine_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The execution engine provides CPU/GPU-accelerated vector and matrix operations.
+All vectorized computations should use this engine rather than manual loops
+for optimal performance and hardware acceleration.
+</p>
+<p><b>For Beginners:</b> This engine automatically chooses the best way to
+run math operations - on your CPU with SIMD optimization, or on your GPU
+for massive parallelism. You don't need to change your code to switch between them.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_InnerLearningRate_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.InnerLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_InnerLearningRate" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.InnerLearningRate">
+  InnerLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the learning rate used for task adaptation (inner loop).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InnerLearningRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Options_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Options*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Options" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the meta-learner options (configuration).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMetaLearnerOptions&lt;T&gt; Options { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_OuterLearningRate_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.OuterLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_OuterLearningRate" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.OuterLearningRate">
+  OuterLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the learning rate used for meta-learning (outer loop).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OuterLearningRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Adapt_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Adapt*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Adapt(AiDotNet.Interfaces.IMetaLearningTask{`0,`1,`2})">
+  Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adapts the model to a new task using its support set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt; Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt; task)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>task</code> <a class="xref" href="AiDotNet.Interfaces.IMetaLearningTask-3.html">IMetaLearningTask</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The task to adapt to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new model instance adapted to the task.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is where the "quick learning" happens. Given a new task
+with just a few examples (the support set), this method creates a new model that's
+specialized for that specific task.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptAndEvaluate_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.AdaptAndEvaluate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptAndEvaluate_AiDotNet_Data_Structures_MetaLearningTask__0__1__2__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.AdaptAndEvaluate(AiDotNet.Data.Structures.MetaLearningTask{`0,`1,`2})">
+  AdaptAndEvaluate(MetaLearningTask&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adapts the model to a specific task and evaluates adaptation quality.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual MetaAdaptationResult&lt;T&gt; AdaptAndEvaluate(MetaLearningTask&lt;T, TInput, TOutput&gt; task)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>task</code> <a class="xref" href="AiDotNet.Data.Structures.MetaLearningTask-3.html">MetaLearningTask</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Meta-learning task with support set (for adaptation) and query set (for evaluation).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.MetaAdaptationResult-1.html">MetaAdaptationResult</a>&lt;T&gt;</dt>
+    <dd><p>Detailed metrics about adaptation performance and timing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ApplyGradients_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Double)">
+  ApplyGradients(Vector&lt;T&gt;, Vector&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L721"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies gradients to update model parameters using simple SGD.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; ApplyGradients(Vector&lt;T&gt; parameters, Vector&lt;T&gt; gradients, double learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Current parameters.</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Gradients to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Learning rate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Updated parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs vanilla SGD: θ = θ - lr * gradients.
+It does NOT use the stored <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaOptimizer">MetaOptimizer</a> or <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_InnerOptimizer">InnerOptimizer</a>
+because those optimizers expect to work with the full model, not just parameter vectors.
+</p>
+<p>
+<b>For Advanced Optimizers:</b> If you need momentum, Adam, or other adaptive methods,
+override this method in your algorithm implementation or use the stored optimizers directly
+in your <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__">MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt;)</a> and <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2__">Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt;)</a> implementations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ClipGradients_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ClipGradients*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ClipGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Nullable_System_Double__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ClipGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Nullable{System.Double})">
+  ClipGradients(Vector&lt;T&gt;, double?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L739"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clips gradients to prevent exploding gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; ClipGradients(Vector&lt;T&gt; gradients, double? threshold = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Gradients to clip.</p>
+</dd>
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Maximum gradient norm. If null, uses options value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Clipped gradients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_CloneModel_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.CloneModel*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_CloneModel" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.CloneModel">
+  CloneModel()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L971"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clones the meta-model for task-specific adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual IFullModel&lt;T, TInput, TOutput&gt; CloneModel()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model does not implement ICloneable. Meta-learning requires
+model cloning to prevent parameter corruption during parallel task adaptation.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeAccuracy_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeAccuracy*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeAccuracy__2__2_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeAccuracy(`2,`2)">
+  ComputeAccuracy(TOutput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L812"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes accuracy for classification tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual double ComputeAccuracy(TOutput predictions, TOutput labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Model predictions (logits or probabilities per class).</p>
+</dd>
+    <dt><code>labels</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Ground truth labels (one-hot encoded or class indices).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Accuracy as a value between 0.0 and 1.0, or 0.0 if computation is not possible.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeAccuracy__2__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes classification accuracy by comparing predicted class indices
+(argmax of predictions) against true class indices (argmax of labels for one-hot,
+or direct value for class indices).
+</p>
+<p>
+<b>For Beginners:</b> Accuracy is simply the fraction of samples where the model's
+predicted class matches the true class. For example, 0.85 means 85% correct predictions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeGradients_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeGradients_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeGradients(AiDotNet.Interfaces.IFullModel{`0,`1,`2},`1,`2)">
+  ComputeGradients(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L528"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss with respect to model parameters using the model's
+built-in gradient computation via <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable&lt;T, TInput, TOutput&gt;</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; ComputeGradients(IFullModel&lt;T, TInput, TOutput&gt; model, TInput input, TOutput expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to compute gradients for.</p>
+</dd>
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>Input data.</p>
+</dd>
+    <dt><code>expectedOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Expected output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Gradient vector with respect to all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeGradients_AiDotNet_Interfaces_IFullModel__0__1__2___1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method leverages the model's own gradient computation capabilities, which typically use:
+- Automatic differentiation (backpropagation for neural networks)
+- GPU acceleration via the Engine system when available
+- Optimized JIT-compiled gradient kernels
+</p>
+<p>
+<b>Production Implementation:</b> Models that implement <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable&lt;T, TInput, TOutput&gt;</a>
+provide their own efficient gradient computation. This is the preferred path for production use.
+</p>
+<p>
+<b>For Beginners:</b> Gradients tell us how to adjust each parameter to reduce the loss.
+This method asks the model to compute those gradients using its internal backpropagation
+mechanism, which is much more accurate and efficient than numerical approximations.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model does not implement <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable&lt;T, TInput, TOutput&gt;</a>
+and no fallback computation is possible.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeLossFromOutput_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeLossFromOutput*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeLossFromOutput__2__2_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeLossFromOutput(`2,`2)">
+  ComputeLossFromOutput(TOutput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L901"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes loss from TOutput by converting to Vector&lt;T&gt; if needed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The predictions from the model.</p>
+</dd>
+    <dt><code>expectedOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The expected output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The computed loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeMean_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeMean*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeMean_System_Collections_Generic_List__0__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeMean(System.Collections.Generic.List{`0})">
+  ComputeMean(List&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L948"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes mean of a list of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T ComputeMean(List&lt;T&gt; values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeSecondOrderGradients_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeSecondOrderGradients*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeSecondOrderGradients_AiDotNet_Interfaces_IFullModel__0__1__2__System_Collections_Generic_List_System_ValueTuple__1__2____1__2__0_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ComputeSecondOrderGradients(AiDotNet.Interfaces.IFullModel{`0,`1,`2},System.Collections.Generic.List{System.ValueTuple{`1,`2}},`1,`2,`0)">
+  ComputeSecondOrderGradients(IFullModel&lt;T, TInput, TOutput&gt;, List&lt;(TInput input, TOutput target)&gt;, TInput, TOutput, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L667"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes second-order gradients for full MAML by backpropagating through the adaptation process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; ComputeSecondOrderGradients(IFullModel&lt;T, TInput, TOutput&gt; model, List&lt;(TInput input, TOutput target)&gt; adaptationSteps, TInput queryInput, TOutput queryTarget, T innerLearningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to compute second-order gradients for.</p>
+</dd>
+    <dt><code>adaptationSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.target">target</a>)&gt;</dt>
+    <dd><p>Sequence of (input, target) pairs used during inner loop adaptation.</p>
+</dd>
+    <dt><code>queryInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>Query input for meta-gradient computation.</p>
+</dd>
+    <dt><code>queryTarget</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Query target for meta-gradient computation.</p>
+</dd>
+    <dt><code>innerLearningRate</code> <span class="xref">T</span></dt>
+    <dd><p>Learning rate used during inner loop adaptation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Meta-gradients that account for how changing initial parameters affects learning trajectory.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeSecondOrderGradients_AiDotNet_Interfaces_IFullModel__0__1__2__System_Collections_Generic_List_System_ValueTuple__1__2____1__2__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Second-order gradients are required for full MAML (Model-Agnostic Meta-Learning).
+They capture how changes to initial parameters affect the entire adaptation trajectory,
+not just the final adapted parameters.
+</p>
+<p>
+<b>Computational Cost:</b> O(K * P^2) where K is adaptation steps and P is parameter count.
+For large models, consider using first-order MAML (FOMAML) approximation instead.
+</p>
+<p>
+<b>For Beginners:</b> Normal gradients ask "how should I change parameters to improve?"
+Second-order gradients ask "how should I change my starting point so that learning
+itself becomes more effective?"
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model doesn't implement <a class="xref" href="AiDotNet.Interfaces.ISecondOrderGradientComputable-3.html">ISecondOrderGradientComputable&lt;T, TInput, TOutput&gt;</a>
+and second-order gradients are required.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ConvertToVector_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ConvertToVector*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ConvertToVector__2_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ConvertToVector(`2)">
+  ConvertToVector(TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L921"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts TOutput to Vector&lt;T&gt; if possible.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt;? ConvertToVector(TOutput output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The output to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The converted vector, or null if conversion is not possible.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_CreateTaskBatch_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.CreateTaskBatch*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_CreateTaskBatch_System_Collections_Generic_IReadOnlyList_AiDotNet_Data_Structures_MetaLearningTask__0__1__2___" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.CreateTaskBatch(System.Collections.Generic.IReadOnlyList{AiDotNet.Data.Structures.MetaLearningTask{`0,`1,`2}})">
+  CreateTaskBatch(IReadOnlyList&lt;MetaLearningTask&lt;T, TInput, TOutput&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L779"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a TaskBatch from a list of MetaLearningTasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected TaskBatch&lt;T, TInput, TOutput&gt; CreateTaskBatch(IReadOnlyList&lt;MetaLearningTask&lt;T, TInput, TOutput&gt;&gt; tasks)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tasks</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.MetaLearningTask-3.html">MetaLearningTask</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.Data.TaskBatch-3.html">TaskBatch</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Evaluate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Evaluate(AiDotNet.MetaLearning.Data.TaskBatch{`0,`1,`2})">
+  Evaluate(TaskBatch&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the meta-learning algorithm on a batch of tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual T Evaluate(TaskBatch&lt;T, TInput, TOutput&gt; taskBatch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskBatch</code> <a class="xref" href="AiDotNet.MetaLearning.Data.TaskBatch-3.html">TaskBatch</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The batch of tasks to evaluate on.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The average evaluation loss across all tasks.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This checks how well the meta-learning algorithm performs.
+For each task, it adapts using the support set and then tests on the query set.
+The returned value is the average loss across all tasks - lower means better performance.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Evaluate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_System_Int32_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Evaluate(System.Int32)">
+  Evaluate(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates meta-learning performance on multiple held-out tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual MetaEvaluationResult&lt;T&gt; Evaluate(int numTasks)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numTasks</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of tasks to evaluate (100-1000 recommended for statistics).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.MetaEvaluationResult-1.html">MetaEvaluationResult</a>&lt;T&gt;</dt>
+    <dd><p>Comprehensive metrics including mean accuracy, confidence intervals, and per-task statistics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses the episodic data loader configured during construction to sample evaluation tasks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_GetMetaModel_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.GetMetaModel*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_GetMetaModel" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.GetMetaModel">
+  GetMetaModel()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L376"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current meta-model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; GetMetaModel()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current meta-model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_GetMetaModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This returns the "meta-learned" model that has been trained
+on many tasks. This model itself may not be very good at any specific task, but it's
+excellent as a starting point for quickly adapting to new tasks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Load_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Load*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Load_System_String_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Load(System.String)">
+  Load(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L444"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously meta-trained model from disk.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Load(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>File path to the saved model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_Load_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method loads the meta-model parameters. Note that optimizer state is not restored
+and will be reset after loading. Call <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Reset">Reset()</a> after loading if you want
+to ensure a clean training state.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrain_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.MetaTrain*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.MetaTrain(AiDotNet.MetaLearning.Data.TaskBatch{`0,`1,`2})">
+  MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs one meta-training step on a batch of tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract T MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt; taskBatch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskBatch</code> <a class="xref" href="AiDotNet.MetaLearning.Data.TaskBatch-3.html">TaskBatch</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The batch of tasks to train on.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The meta-training loss for this batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method updates the model by training on multiple tasks at once.
+Each task teaches the model something about how to learn quickly. The returned loss value
+indicates how well the model is doing - lower is better.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrainStep_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.MetaTrainStep*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrainStep_System_Int32_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.MetaTrainStep(System.Int32)">
+  MetaTrainStep(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs one meta-training step (outer loop update) using the episodic data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual MetaTrainingStepResult&lt;T&gt; MetaTrainStep(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of tasks to sample for this meta-update.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.MetaTrainingStepResult-1.html">MetaTrainingStepResult</a>&lt;T&gt;</dt>
+    <dd><p>Metrics including meta-loss, task loss, accuracy, and timing information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrainStep_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses the episodic data loader configured during construction to sample tasks for this meta-update.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Reset_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Reset*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Reset" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L487"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the meta-learner to initial untrained state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Save_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Save*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Save_System_String_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Save(System.String)">
+  Save(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the meta-trained model to disk for later deployment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Save(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>File path where model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_Save_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method saves the meta-model parameters. Note that optimizer state (momentum, velocity)
+is not persisted and will be reset when loading. For production use, consider implementing
+a custom serialization scheme that saves:
+</p>
+<ul><li>Model parameters (saved here)</li><li>Optimizer state (momentum, velocity vectors)</li><li>Current iteration count</li><li>Learning rate schedules</li></ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_SetMetaModel_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.SetMetaModel*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_SetMetaModel_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.SetMetaModel(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  SetMetaModel(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L379"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the base model for this meta-learning algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetMetaModel(IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to use as the base.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_ToMetaLearningTask_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ToMetaLearningTask*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_ToMetaLearningTask_AiDotNet_Data_Structures_MetaLearningTask__0__1__2__" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.ToMetaLearningTask(AiDotNet.Data.Structures.MetaLearningTask{`0,`1,`2})">
+  ToMetaLearningTask(MetaLearningTask&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L789"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a MetaLearningTask to IMetaLearningTask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IMetaLearningTask&lt;T, TInput, TOutput&gt; ToMetaLearningTask(MetaLearningTask&lt;T, TInput, TOutput&gt; task)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>task</code> <a class="xref" href="AiDotNet.Data.Structures.MetaLearningTask-3.html">MetaLearningTask</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearningTask-3.html">IMetaLearningTask</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerBase_3_Train_" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Train*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerBase_3_Train" data-uid="AiDotNet.MetaLearning.MetaLearnerBase`3.Train">
+  Train()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the meta-learner using the configuration specified during construction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual MetaTrainingResult&lt;T&gt; Train()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.MetaTrainingResult-1.html">MetaTrainingResult</a>&lt;T&gt;</dt>
+    <dd><p>Complete training history with loss/accuracy progression and timing information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerBase_3_Train_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs the complete outer-loop meta-training process, repeatedly calling
+MetaTrainStep and collecting metrics across all iterations. All training parameters
+are specified in the IMetaLearnerOptions provided during construction.
+</p>
+<p>
+<b>For Beginners:</b> This is the main training method for meta-learning. Unlike traditional
+training where you train once on a dataset, this trains your model across many different tasks
+so it learns how to quickly adapt to new tasks.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerBase.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

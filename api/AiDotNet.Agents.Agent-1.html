@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Agent&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Agent&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a ReAct (Reasoning + Acting) agent that uses a language model and tools to solve problems. The agent alternates between thinking about what to do and taking actions with tools.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Agents_Agent_1.md&amp;value=---%0Auid%3A%20AiDotNet.Agents.Agent%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Agents.Agent`1">
+
+
+
+  <h1 id="AiDotNet_Agents_Agent_1" data-uid="AiDotNet.Agents.Agent`1" class="text-break">
+Class Agent&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/Agent.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Agents.html">Agents</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a ReAct (Reasoning + Acting) agent that uses a language model and tools to solve problems.
+The agent alternates between thinking about what to do and taking actions with tools.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Agent&lt;T&gt; : AgentBase&lt;T&gt;, IAgent&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters and operations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Agents.AgentBase-1.html">AgentBase</a>&lt;T&gt;</div>
+      <div><span class="xref">Agent&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAgent-1.html">IAgent</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_ChatModel">AgentBase&lt;T&gt;.ChatModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_Tools">AgentBase&lt;T&gt;.Tools</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_Scratchpad">AgentBase&lt;T&gt;.Scratchpad</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_AppendToScratchpad_System_String_">AgentBase&lt;T&gt;.AppendToScratchpad(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_ClearScratchpad">AgentBase&lt;T&gt;.ClearScratchpad()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_FindTool_System_String_">AgentBase&lt;T&gt;.FindTool(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_GetToolDescriptions">AgentBase&lt;T&gt;.GetToolDescriptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_ValidateMaxIterations_System_Int32_">AgentBase&lt;T&gt;.ValidateMaxIterations(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Agents_Agent_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+This is a concrete implementation of an AI agent that follows the ReAct pattern. ReAct stands for
+&quot;Reasoning and Acting&quot; - the agent alternates between:</p>
+<ol>
+<li><strong>Reasoning (Thought)</strong>: Thinking about what needs to be done next</li>
+<li><strong>Acting (Action)</strong>: Using a tool to perform an operation</li>
+<li><strong>Observing (Observation)</strong>: Seeing the result of the action</li>
+</ol>
+<p>The agent repeats this cycle until it has enough information to answer the query or reaches
+the maximum number of iterations.</p>
+<p>Example of how the agent works:</p>
+<pre><code class="lang-csharp">User Query: "What is 25 * 4 + 10?"
+
+Iteration 1:
+Thought: I need to calculate 25 * 4 first
+Action: Calculator
+Action Input: 25 * 4
+Observation: 100
+
+Iteration 2:
+Thought: Now I need to add 10 to 100
+Action: Calculator
+Action Input: 100 + 10
+Observation: 110
+
+Iteration 3:
+Thought: I have the final answer
+Final Answer: 110</code></pre>
+<p>This implementation uses JSON formatting for the LLM responses to make parsing easier and more reliable.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Agents_Agent_1__ctor_" data-uid="AiDotNet.Agents.Agent`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Agents_Agent_1__ctor_AiDotNet_Interfaces_IChatModel__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_ITool__" data-uid="AiDotNet.Agents.Agent`1.#ctor(AiDotNet.Interfaces.IChatModel{`0},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ITool})">
+  Agent(IChatModel&lt;T&gt;, IEnumerable&lt;ITool&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/Agent.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Agents.Agent-1.html">Agent&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Agent(IChatModel&lt;T&gt; chatModel, IEnumerable&lt;ITool&gt;? tools = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chatModel</code> <a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</dt>
+    <dd><p>The chat model used for reasoning and decision-making.</p>
+</dd>
+    <dt><code>tools</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ITool.html">ITool</a>&gt;</dt>
+    <dd><p>The collection of tools available to the agent.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Agents_Agent_1__ctor_AiDotNet_Interfaces_IChatModel__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_ITool___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This creates a new ReAct agent with the specified language model and tools.
+The agent will use the language model to think through problems and the tools
+to perform actions.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when <code class="paramref">chatModel</code> is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Agents_Agent_1_RunAsync_" data-uid="AiDotNet.Agents.Agent`1.RunAsync*"></a>
+
+  <h3 id="AiDotNet_Agents_Agent_1_RunAsync_System_String_System_Int32_" data-uid="AiDotNet.Agents.Agent`1.RunAsync(System.String,System.Int32)">
+  RunAsync(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/Agent.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes the agent's reasoning and action loop to answer a query or complete a task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;string&gt; RunAsync(string query, int maxIterations = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The question or task for the agent to solve.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of thought-action-observation cycles to prevent infinite loops.
+Default is 5.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains
+the agent's final answer or response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Agents_Agent_1_RunAsync_System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+The Run method is where the magic happens. When you give the agent a query like
+&quot;What is the square root of 144 plus 5?&quot;, it will:</p>
+<ol>
+<li>Think about what needs to be done</li>
+<li>Decide which tool to use (Calculator)</li>
+<li>Execute the tool with the right input (&quot;sqrt(144)&quot;)</li>
+<li>Observe the result (&quot;12&quot;)</li>
+<li>Think about the next step</li>
+<li>Use the calculator again (&quot;12 + 5&quot;)</li>
+<li>Observe the result (&quot;17&quot;)</li>
+<li>Conclude and provide the final answer</li>
+</ol>
+<p>The maxIterations parameter is a safety feature. It prevents the agent from getting stuck
+in an endless loop if something goes wrong. If the agent can't solve the problem within
+the maximum iterations, it will stop and return what it has learned so far.</p>
+<p>Implementation notes for developers:</p>
+<ul>
+<li>Maintain a &quot;scratchpad&quot; or conversation history throughout the iterations</li>
+<li>Format prompts to instruct the LLM to respond in a structured format (e.g., JSON)</li>
+<li>Parse the LLM's response to extract thoughts and actions</li>
+<li>Execute the specified tool and capture the observation</li>
+<li>Continue until the LLM indicates it has a final answer or max iterations is reached</li>
+<li>Handle errors gracefully and provide meaningful error messages</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/Agent.cs/#L48" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

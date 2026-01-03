@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IKeyDetector&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IKeyDetector&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for musical key detection models that identify the key and mode of music.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IKeyDetector_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IKeyDetector%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IKeyDetector`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IKeyDetector_1" data-uid="AiDotNet.Interfaces.IKeyDetector`1" class="text-break">
+Interface IKeyDetector&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for musical key detection models that identify the key and mode of music.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IKeyDetector&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IKeyDetector_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Key detection identifies the musical key (e.g., C major, A minor) of a piece of music.
+The key defines the central note (tonic) and scale (major/minor) that the music is based on.
+</p>
+<p>
+<b>For Beginners:</b> The musical key is like the "home base" of a song.
+<p>What is a key?</p>
+<ul>
+<li>Every song has a central note that feels like &quot;home&quot;</li>
+<li>The key tells you which note that is and whether it's major (happy) or minor (sad)</li>
+<li>&quot;C major&quot; means C is home and it sounds happy</li>
+<li>&quot;A minor&quot; means A is home and it sounds sad/dark</li>
+</ul>
+<p>How key detection works:</p>
+<ol>
+<li>Audio is analyzed to find which notes are used most</li>
+<li>This is compared to key profiles (templates of note usage)</li>
+<li>The best-matching key is selected</li>
+</ol>
+<p>Why it matters:</p>
+<ul>
+<li>DJ mixing (match keys for smooth transitions)</li>
+<li>Music recommendation (similar keys = similar feel)</li>
+<li>Music production (know what key to write melodies in)</li>
+<li>Transposition (shifting a song to a different key)</li>
+</ul>
+<p>Related concepts:</p>
+<ul>
+<li>Relative keys: Am is the relative minor of C major (same notes)</li>
+<li>Parallel keys: C major and C minor (same root, different mode)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_SampleRate_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_SampleRate" data-uid="AiDotNet.Interfaces.IKeyDetector`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the expected sample rate for input audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_SupportedKeys_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.SupportedKeys*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_SupportedKeys" data-uid="AiDotNet.Interfaces.IKeyDetector`1.SupportedKeys">
+  SupportedKeys
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the list of keys this model can detect.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;string&gt; SupportedKeys { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IKeyDetector_1_SupportedKeys_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Typically 24 keys: 12 major + 12 minor.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_Detect_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.Detect*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IKeyDetector`1.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Detect(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects the musical key of audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">KeyDetectionResult&lt;T&gt; Detect(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [samples] or [channels, samples].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.KeyDetectionResult-1.html">KeyDetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>Key detection result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IKeyDetector_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the main method for finding the key.
+- Pass in audio of a song
+- Get back the key (e.g., "C major" or "A minor")
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_DetectAsync_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.DetectAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_DetectAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.DetectAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Threading.CancellationToken)">
+  DetectAsync(Tensor&lt;T&gt;, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects the musical key asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;KeyDetectionResult&lt;T&gt;&gt; DetectAsync(Tensor&lt;T&gt; audio, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token for async operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.KeyDetectionResult-1.html">KeyDetectionResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Key detection result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_GetCamelotNotation_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.GetCamelotNotation*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_GetCamelotNotation_System_String_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.GetCamelotNotation(System.String)">
+  GetCamelotNotation(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Camelot wheel notation for a key.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GetCamelotNotation(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The key to convert (e.g., &quot;C major&quot;).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Camelot notation (e.g., &quot;8B&quot;).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IKeyDetector_1_GetCamelotNotation_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The Camelot wheel is a DJ tool that shows which
+keys mix well together. Adjacent numbers on the wheel = compatible keys.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_GetCompatibleKeys_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.GetCompatibleKeys*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_GetCompatibleKeys_System_String_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.GetCompatibleKeys(System.String)">
+  GetCompatibleKeys(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds compatible keys for mixing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;string&gt; GetCompatibleKeys(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The reference key.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>List of compatible keys for harmonic mixing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_GetKeyProbabilities_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.GetKeyProbabilities*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_GetKeyProbabilities_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IKeyDetector`1.GetKeyProbabilities(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetKeyProbabilities(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets key probabilities for all possible keys.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyDictionary&lt;string, T&gt; GetKeyProbabilities(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Dictionary mapping key names to probability scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IKeyDetector_1_GetKeyProbabilities_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Some songs are ambiguous - they might sound like
+they're in C major or A minor (these share the same notes). This method
+shows the probability for each possible key.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_GetRelativeKey_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.GetRelativeKey*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_GetRelativeKey_System_String_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.GetRelativeKey(System.String)">
+  GetRelativeKey(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the relative major/minor key.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GetRelativeKey(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The key to find the relative for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The relative key.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IKeyDetector_1_TrackKeyChanges_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.TrackKeyChanges*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IKeyDetector_1_TrackKeyChanges_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.Interfaces.IKeyDetector`1.TrackKeyChanges(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  TrackKeyChanges(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Tracks key changes over time within a piece.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">KeyTrackingResult&lt;T&gt; TrackKeyChanges(Tensor&lt;T&gt; audio, double segmentDuration = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+    <dt><code>segmentDuration</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Duration of each analysis segment in seconds.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.KeyTrackingResult-1.html">KeyTrackingResult</a>&lt;T&gt;</dt>
+    <dd><p>Key tracking result with key over time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IKeyDetector_1_TrackKeyChanges_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Some songs change key during the song (called modulation).
+This tracks those changes over time.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IKeyDetector.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

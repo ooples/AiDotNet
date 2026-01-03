@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IUnifiedMultimodalModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IUnifiedMultimodalModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for unified multimodal models that handle multiple modalities in a single architecture, similar to GPT-4o, Gemini, or Meta&#39;s CM3Leon.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IUnifiedMultimodalModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IUnifiedMultimodalModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1" class="text-break">
+Interface IUnifiedMultimodalModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for unified multimodal models that handle multiple modalities
+in a single architecture, similar to GPT-4o, Gemini, or Meta's CM3Leon.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IUnifiedMultimodalModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Unified multimodal models represent the next generation of AI systems that can
+seamlessly process and generate content across multiple modalities (text, image,
+audio, video) within a single unified architecture.
+</p>
+<p><b>For Beginners:</b> One model that can see, hear, read, and create!
+<p>Key capabilities:</p>
+<ul>
+<li>Any-to-any generation: Text → Image, Image → Text, Audio → Text, etc.</li>
+<li>Interleaved understanding: Process mixed sequences of text, images, audio</li>
+<li>Cross-modal reasoning: Answer questions using information from multiple sources</li>
+<li>Unified embeddings: All modalities share a common representation space</li>
+</ul>
+<p>Architecture concepts:</p>
+<ol>
+<li>Modality Encoders: Specialized encoders for each input type</li>
+<li>Unified Transformer: Core model that processes all modalities</li>
+<li>Modality Decoders: Generate outputs in any modality</li>
+<li>Cross-Attention: Allow modalities to attend to each other</li>
+</ol>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_EmbeddingDimension_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.EmbeddingDimension*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_EmbeddingDimension" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.EmbeddingDimension">
+  EmbeddingDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the unified embedding dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int EmbeddingDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_MaxSequenceLength_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.MaxSequenceLength*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_MaxSequenceLength" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.MaxSequenceLength">
+  MaxSequenceLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum sequence length for interleaved inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxSequenceLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_SupportedInputModalities_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.SupportedInputModalities*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_SupportedInputModalities" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.SupportedInputModalities">
+  SupportedInputModalities
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the supported input modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;ModalityType&gt; SupportedInputModalities { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_SupportedOutputModalities_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.SupportedOutputModalities*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_SupportedOutputModalities" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.SupportedOutputModalities">
+  SupportedOutputModalities
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the supported output modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;ModalityType&gt; SupportedOutputModalities { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_SupportsStreaming_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.SupportsStreaming*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_SupportsStreaming" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.SupportsStreaming">
+  SupportsStreaming
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the model supports streaming generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsStreaming { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_AlignTemporally_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.AlignTemporally*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_AlignTemporally_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.AlignTemporally(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}})">
+  AlignTemporally(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L421"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Aligns content across modalities temporally.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; AlignTemporally(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal inputs with temporal content.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Alignment matrix showing correspondences.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_AnswerQuestion_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.AnswerQuestion*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_AnswerQuestion_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_String_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.AnswerQuestion(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.String)">
+  AnswerQuestion(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L347"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Answers a question using multimodal context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(string Answer, T Confidence) AnswerQuestion(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; context, string question)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal context (images, documents, audio, etc.).</p>
+</dd>
+    <dt><code>question</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The question to answer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.label">Label</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.confidence">Confidence</a>)</dt>
+    <dd><p>Answer and confidence score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Chat_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Chat*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Chat_System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0_____System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_Int32_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Chat(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}}}},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.Int32)">
+  Chat(IEnumerable&lt;(string Role, IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; Content)&gt;, IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Conducts a multi-turn conversation with multimodal inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Chat(IEnumerable&lt;(string Role, IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; Content)&gt; conversationHistory, IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; newInputs, int maxTokens = 1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>conversationHistory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.ienumerable-aidotnet.interfaces.multimodalinput--0---.role">Role</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.ienumerable-aidotnet.interfaces.multimodalinput--0---.content">Content</a>)&gt;</dt>
+    <dd><p>Previous turns with multimodal content.</p>
+</dd>
+    <dt><code>newInputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>New multimodal inputs for this turn.</p>
+</dd>
+    <dt><code>maxTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Compare_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Compare*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Compare_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Compare(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.Collections.Generic.IEnumerable{System.String})">
+  Compare(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L474"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares multiple multimodal inputs and provides analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(string Analysis, Dictionary&lt;string, IEnumerable&lt;T&gt;&gt; Scores) Compare(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, IEnumerable&lt;string&gt; comparisonCriteria)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Items to compare.</p>
+</dd>
+    <dt><code>comparisonCriteria</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>What aspects to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.collections.generic.ienumerable--0---.analysis">Analysis</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.collections.generic.ienumerable--0---.scores">Scores</a>)</dt>
+    <dd><p>Comparison analysis.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_ComputeSimilarity_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.ComputeSimilarity*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_ComputeSimilarity_AiDotNet_Interfaces_MultimodalInput__0__AiDotNet_Interfaces_MultimodalInput__0__" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.ComputeSimilarity(AiDotNet.Interfaces.MultimodalInput{`0},AiDotNet.Interfaces.MultimodalInput{`0})">
+  ComputeSimilarity(MultimodalInput&lt;T&gt;, MultimodalInput&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L327"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes cross-modal similarity between inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeSimilarity(MultimodalInput&lt;T&gt; input1, MultimodalInput&lt;T&gt; input2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input1</code> <a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;</dt>
+    <dd><p>First multimodal input.</p>
+</dd>
+    <dt><code>input2</code> <a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;</dt>
+    <dd><p>Second multimodal input.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Similarity score (0-1).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Detect_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Detect*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Detect_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_String_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Detect(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.String)">
+  Detect(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L396"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects and localizes objects/events across modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(string Label, T Confidence, ModalityType Modality, object Location)&gt; Detect(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, string targetDescription)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal inputs to analyze.</p>
+</dd>
+    <dt><code>targetDescription</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>What to look for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,aidotnet.interfaces.modalitytype,system.object-.label">Label</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,aidotnet.interfaces.modalitytype,system.object-.confidence">Confidence</a>, <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,aidotnet.interfaces.modalitytype,system.object-.modality">Modality</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,aidotnet.interfaces.modalitytype,system.object-.location">Location</a>)&gt;</dt>
+    <dd><p>Detections with locations and modalities.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Edit_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Edit*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Edit_AiDotNet_Interfaces_MultimodalInput__0__System_String_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Edit(AiDotNet.Interfaces.MultimodalInput{`0},System.String)">
+  Edit(MultimodalInput&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Edits multimodal content based on instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">MultimodalOutput&lt;T&gt; Edit(MultimodalInput&lt;T&gt; original, string editInstructions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>original</code> <a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;</dt>
+    <dd><p>Original content.</p>
+</dd>
+    <dt><code>editInstructions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Instructions for editing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.MultimodalOutput-1.html">MultimodalOutput</a>&lt;T&gt;</dt>
+    <dd><p>Edited content.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Encode_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Encode*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Encode_AiDotNet_Interfaces_MultimodalInput__0__" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Encode(AiDotNet.Interfaces.MultimodalInput{`0})">
+  Encode(MultimodalInput&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L239"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes any supported modality into the unified embedding space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; Encode(MultimodalInput&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;</dt>
+    <dd><p>The multimodal input to encode.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Unified embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_EncodeSequence_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.EncodeSequence*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_EncodeSequence_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.EncodeSequence(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}})">
+  EncodeSequence(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes multiple interleaved inputs into a sequence of embeddings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; EncodeSequence(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Sequence of multimodal inputs in order.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of embeddings [numInputs, embeddingDim].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_EncodeSequence_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Process a conversation with mixed content!
+<p>Example input sequence:</p>
+<ol>
+<li>Text: &quot;Look at this image and describe what you see&quot;</li>
+<li>Image: [photo of a cat]</li>
+<li>Text: &quot;Now listen to this sound&quot;</li>
+<li>Audio: [meowing sound]</li>
+<li>Text: &quot;Are they related?&quot;</li>
+</ol>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_FewShotLearn_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.FewShotLearn*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_FewShotLearn_System_Collections_Generic_IEnumerable_System_ValueTuple_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___AiDotNet_Interfaces_MultimodalOutput__0____System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.FewShotLearn(System.Collections.Generic.IEnumerable{System.ValueTuple{System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},AiDotNet.Interfaces.MultimodalOutput{`0}}},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}})">
+  FewShotLearn(IEnumerable&lt;(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; Inputs, MultimodalOutput&lt;T&gt; Output)&gt;, IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L454"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs in-context learning from multimodal examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">MultimodalOutput&lt;T&gt; FewShotLearn(IEnumerable&lt;(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; Inputs, MultimodalOutput&lt;T&gt; Output)&gt; examples, IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; query)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>examples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.collections.generic.ienumerable-aidotnet.interfaces.multimodalinput--0--,aidotnet.interfaces.multimodaloutput--0--.inputs">Inputs</a>, <a class="xref" href="AiDotNet.Interfaces.MultimodalOutput-1.html">MultimodalOutput</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.collections.generic.ienumerable-aidotnet.interfaces.multimodalinput--0--,aidotnet.interfaces.multimodaloutput--0--.output">Output</a>)&gt;</dt>
+    <dd><p>Few-shot examples with inputs and outputs.</p>
+</dd>
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Query to process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.MultimodalOutput-1.html">MultimodalOutput</a>&lt;T&gt;</dt>
+    <dd><p>Predicted output based on examples.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Fuse_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Fuse*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Fuse_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_String_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Fuse(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.String)">
+  Fuse(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L429"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fuses multiple modality inputs into a unified representation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; Fuse(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, string fusionStrategy = &quot;attention&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Inputs to fuse.</p>
+</dd>
+    <dt><code>fusionStrategy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Strategy: &quot;early&quot;, &quot;late&quot;, &quot;attention&quot;, &quot;hybrid&quot;.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Fused embedding.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Generate_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Generate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Generate_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___AiDotNet_Interfaces_ModalityType_System_Int32_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Generate(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},AiDotNet.Interfaces.ModalityType,System.Int32)">
+  Generate(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, ModalityType, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates output in the specified modality given multimodal inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">MultimodalOutput&lt;T&gt; Generate(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, ModalityType outputModality, int maxLength = 1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Input sequence (can be multiple modalities).</p>
+</dd>
+    <dt><code>outputModality</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>Desired output modality.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum output length (tokens for text, frames for video, etc.).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.MultimodalOutput-1.html">MultimodalOutput</a>&lt;T&gt;</dt>
+    <dd><p>Generated output in the specified modality.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateAudio_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GenerateAudio*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateAudio_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_Double_System_Int32_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GenerateAudio(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.Double,System.Int32)">
+  GenerateAudio(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, double, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L304"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates audio from multimodal inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateAudio(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, double durationSeconds = 5, int sampleRate = 44100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal input sequence.</p>
+</dd>
+    <dt><code>durationSeconds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target audio duration.</p>
+</dd>
+    <dt><code>sampleRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output sample rate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated audio waveform.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateImage_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GenerateImage*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateImage_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_Int32_System_Int32_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GenerateImage(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.Int32,System.Int32)">
+  GenerateImage(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image from multimodal inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateImage(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, int width = 512, int height = 512)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal input sequence (text prompts, reference images, etc.).</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output image width.</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output image height.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image tensor [channels, height, width].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateInterleaved_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GenerateInterleaved*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateInterleaved_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Interfaces_ModalityType_System_Int32___" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GenerateInterleaved(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.Collections.Generic.IEnumerable{System.ValueTuple{AiDotNet.Interfaces.ModalityType,System.Int32}})">
+  GenerateInterleaved(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, IEnumerable&lt;(ModalityType Modality, int MaxLength)&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L412"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an interleaved sequence of multiple modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;MultimodalOutput&lt;T&gt;&gt; GenerateInterleaved(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, IEnumerable&lt;(ModalityType Modality, int MaxLength)&gt; outputSpec)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Input sequence.</p>
+</dd>
+    <dt><code>outputSpec</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.modalitytype,system.int32-.modality">Modality</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.modalitytype,system.int32-.maxlength">MaxLength</a>)&gt;</dt>
+    <dd><p>Specification of desired outputs (modality, length pairs).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalOutput-1.html">MultimodalOutput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Interleaved output sequence.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateInterleaved_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Interfaces_ModalityType_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This enables generation of content like illustrated stories,
+narrated videos, or multimedia presentations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateText_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GenerateText*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GenerateText_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_String_System_Int32_System_Double_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GenerateText(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.String,System.Int32,System.Double)">
+  GenerateText(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, string, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L279"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates text response from multimodal inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateText(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, string prompt, int maxTokens = 1024, double temperature = 0.7)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal input sequence.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text prompt/instruction.</p>
+</dd>
+    <dt><code>maxTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Sampling temperature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated text response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GetCrossModalAttention_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GetCrossModalAttention*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_GetCrossModalAttention_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.GetCrossModalAttention(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}})">
+  GetCrossModalAttention(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L446"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets attention weights showing cross-modal relationships.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GetCrossModalAttention(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal inputs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Attention weights between all input pairs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Reason_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Reason*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Reason_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_String_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Reason(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.String)">
+  Reason(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L364"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs reasoning across multiple modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(string Result, IEnumerable&lt;string&gt; ReasoningSteps) Reason(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, string task)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal inputs to reason about.</p>
+</dd>
+    <dt><code>task</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Reasoning task description.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.ienumerable-system.string--.result">Result</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.ienumerable-system.string--.reasoningsteps">ReasoningSteps</a>)</dt>
+    <dd><p>Reasoning result with step-by-step explanation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Reason_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Multi-step thinking across different inputs!
+<p>Example: Given an image of a recipe and audio of someone cooking,
+reason about whether they're following the recipe correctly.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Retrieve_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Retrieve*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Retrieve_AiDotNet_Interfaces_MultimodalInput__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___System_Int32_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Retrieve(AiDotNet.Interfaces.MultimodalInput{`0},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},System.Int32)">
+  Retrieve(MultimodalInput&lt;T&gt;, IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L336"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the most similar items from a database given a query.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(int Index, T Score, ModalityType Modality)&gt; Retrieve(MultimodalInput&lt;T&gt; query, IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; database, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;</dt>
+    <dd><p>Query input (any modality).</p>
+</dd>
+    <dt><code>database</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Database of items (any modalities).</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0,aidotnet.interfaces.modalitytype-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0,aidotnet.interfaces.modalitytype-.score">Score</a>, <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0,aidotnet.interfaces.modalitytype-.modality">Modality</a>)&gt;</dt>
+    <dd><p>Indices, scores, and modalities of matching items.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_SafetyCheck_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.SafetyCheck*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_SafetyCheck_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.SafetyCheck(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}})">
+  SafetyCheck(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L438"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks content for safety across all modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;ModalityType, (bool IsSafe, IEnumerable&lt;string&gt; Flags)&gt; SafetyCheck(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Content to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a>, (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,system.collections.generic.ienumerable-system.string--.issafe">IsSafe</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,system.collections.generic.ienumerable-system.string--.flags">Flags</a>)&gt;</dt>
+    <dd><p>Safety assessment per modality.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Summarize_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Summarize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Summarize_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_MultimodalInput__0___AiDotNet_Interfaces_ModalityType_System_Int32_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Summarize(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.MultimodalInput{`0}},AiDotNet.Interfaces.ModalityType,System.Int32)">
+  Summarize(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt;, ModalityType, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L385"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Summarizes multimodal content.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">MultimodalOutput&lt;T&gt; Summarize(IEnumerable&lt;MultimodalInput&lt;T&gt;&gt; inputs, ModalityType outputModality = ModalityType.Text, int maxLength = 256)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multimodal content to summarize.</p>
+</dd>
+    <dt><code>outputModality</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>Modality for the summary.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum summary length.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.MultimodalOutput-1.html">MultimodalOutput</a>&lt;T&gt;</dt>
+    <dd><p>Summary in the specified modality.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Translate_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Translate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IUnifiedMultimodalModel_1_Translate_AiDotNet_Interfaces_MultimodalInput__0__AiDotNet_Interfaces_ModalityType_" data-uid="AiDotNet.Interfaces.IUnifiedMultimodalModel`1.Translate(AiDotNet.Interfaces.MultimodalInput{`0},AiDotNet.Interfaces.ModalityType)">
+  Translate(MultimodalInput&lt;T&gt;, ModalityType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L374"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Translates content between modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">MultimodalOutput&lt;T&gt; Translate(MultimodalInput&lt;T&gt; input, ModalityType targetModality)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Interfaces.MultimodalInput-1.html">MultimodalInput</a>&lt;T&gt;</dt>
+    <dd><p>Source input.</p>
+</dd>
+    <dt><code>targetModality</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>Target modality.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.MultimodalOutput-1.html">MultimodalOutput</a>&lt;T&gt;</dt>
+    <dd><p>Translated content.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IUnifiedMultimodalModel.cs/#L207" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

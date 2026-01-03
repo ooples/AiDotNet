@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GradientBoostingRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GradientBoostingRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Gradient Boosting Regression model, which combines multiple decision trees sequentially to create a powerful ensemble that learns from the errors of previous trees.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_GradientBoostingRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.GradientBoostingRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.GradientBoostingRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_GradientBoostingRegression_1" data-uid="AiDotNet.Regression.GradientBoostingRegression`1" class="text-break">
+Class GradientBoostingRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Gradient Boosting Regression model, which combines multiple decision trees
+sequentially to create a powerful ensemble that learns from the errors of previous trees.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GradientBoostingRegression&lt;T&gt; : AsyncDecisionTreeRegressionBase&lt;T&gt;, IAsyncTreeBasedModel&lt;T&gt;, ITreeBasedRegression&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html">AsyncDecisionTreeRegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">GradientBoostingRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAsyncTreeBasedModel-1.html">IAsyncTreeBasedModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITreeBasedRegression-1.html">ITreeBasedRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_NumOps">AsyncDecisionTreeRegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Engine">AsyncDecisionTreeRegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Root">AsyncDecisionTreeRegressionBase&lt;T&gt;.Root</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Options">AsyncDecisionTreeRegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Regularization">AsyncDecisionTreeRegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_MaxDepth">AsyncDecisionTreeRegressionBase&lt;T&gt;.MaxDepth</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureImportances">AsyncDecisionTreeRegressionBase&lt;T&gt;.FeatureImportances</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Random">AsyncDecisionTreeRegressionBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureNames">AsyncDecisionTreeRegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.Predict(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetParameters">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetActiveFeatureIndices">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_IsFeatureUsed_System_Int32_">AsyncDecisionTreeRegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">AsyncDecisionTreeRegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetFeatureImportance">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DeepCopy">AsyncDecisionTreeRegressionBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Clone">AsyncDecisionTreeRegressionBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveModel_System_String_">AsyncDecisionTreeRegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadModel_System_String_">AsyncDecisionTreeRegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ParameterCount">AsyncDecisionTreeRegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DefaultLossFunction">AsyncDecisionTreeRegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">AsyncDecisionTreeRegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveState_System_IO_Stream_">AsyncDecisionTreeRegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadState_System_IO_Stream_">AsyncDecisionTreeRegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree">AsyncDecisionTreeRegressionBase&lt;T&gt;.UseSoftTree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SoftTreeTemperature">AsyncDecisionTreeRegressionBase&lt;T&gt;.SoftTreeTemperature</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_GradientBoostingRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Gradient Boosting is an ensemble technique that builds decision trees sequentially, with each tree
+correcting the errors made by the previous trees. The model starts with a simple prediction (typically
+the mean of the target values) and iteratively adds trees that predict the residuals (errors) of the
+current ensemble. These predictions are added to the ensemble with a learning rate that controls the
+contribution of each tree, helping to prevent overfitting.
+</p>
+<p><b>For Beginners:</b> Gradient Boosting is like having a team of experts who learn from each other's mistakes.
+<p>Imagine you're trying to predict house prices:</p>
+<ul>
+<li>You start with a simple guess (the average price of all houses)</li>
+<li>You build a decision tree to predict where your guess was wrong</li>
+<li>You adjust your prediction a little bit based on this tree</li>
+<li>You build another tree to predict where you're still making mistakes</li>
+<li>You keep adding trees, each one focusing on fixing the remaining errors</li>
+</ul>
+<p>The &quot;gradient&quot; part refers to how it identifies mistakes, and &quot;boosting&quot; means it builds trees
+sequentially, with each tree boosting the performance of the ensemble.</p>
+<p>This approach is very powerful because:</p>
+<ul>
+<li>It learns complex patterns gradually</li>
+<li>It focuses its effort on the hard-to-predict cases</li>
+<li>It combines many simple models (trees) into a strong predictive model</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1__ctor_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1__ctor_AiDotNet_Models_Options_GradientBoostingRegressionOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.#ctor(AiDotNet.Models.Options.GradientBoostingRegressionOptions,AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  GradientBoostingRegression(GradientBoostingRegressionOptions?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Regression.GradientBoostingRegression-1.html">GradientBoostingRegression&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GradientBoostingRegression(GradientBoostingRegressionOptions? options = null, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.GradientBoostingRegressionOptions.html">GradientBoostingRegressionOptions</a></dt>
+    <dd><p>Optional configuration options for the Gradient Boosting algorithm.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization strategy to prevent overfitting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1__ctor_AiDotNet_Models_Options_GradientBoostingRegressionOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new Gradient Boosting Regression model with the specified options and regularization
+strategy. If no options are provided, default values are used. If no regularization is specified, no regularization
+is applied.
+</p>
+<p><b>For Beginners:</b> This is how you create a new Gradient Boosting model.
+<p>When creating a model, you can specify:</p>
+<ul>
+<li>Options: Controls how many trees to build, how complex each tree can be, and how quickly the model learns</li>
+<li>Regularization: Helps prevent the model from becoming too specialized to the training data</li>
+</ul>
+<p>If you don't specify these parameters, the model will use reasonable default settings.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create a Gradient Boosting model with default settings
+var gbr = new GradientBoostingRegression&lt;double&gt;();
+
+// Create a model with custom options
+var options = new GradientBoostingRegressionOptions { 
+    NumberOfTrees = 100,
+    LearningRate = 0.1,
+    MaxDepth = 3
+};
+var customGbr = new GradientBoostingRegression&lt;double&gt;(options);
+</code></pre>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_NumberOfTrees_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.NumberOfTrees*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_NumberOfTrees" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.NumberOfTrees">
+  NumberOfTrees
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of trees in the ensemble model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int NumberOfTrees { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of trees in the ensemble.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_NumberOfTrees_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the number of decision trees in the Gradient Boosting ensemble. This is an important
+characteristic of the model as it represents the number of boosting stages that have been performed.
+</p>
+<p><b>For Beginners:</b> This tells you how many individual decision trees are in your model.
+<p>In Gradient Boosting:</p>
+<ul>
+<li>Each tree corrects errors made by all previous trees</li>
+<li>More trees generally means better predictions (up to a point)</li>
+<li>However, too many trees can lead to overfitting</li>
+</ul>
+<p>Typical gradient boosting models might use anywhere from 50 to 1000 trees,
+depending on the complexity of the problem and the depth of each tree.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_SupportsJitCompilation_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_SupportsJitCompilation" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L556"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this Gradient Boosting model supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> when soft tree mode is enabled and trees have been trained;
+<code>false</code> otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Gradient Boosting supports JIT compilation when soft tree mode is enabled. In soft mode,
+each tree in the ensemble uses sigmoid-based soft gating instead of hard if-then splits,
+making the entire sequential ensemble differentiable.
+</p>
+<p>
+The computation graph follows the gradient boosting formula:
+<pre><code class="lang-csharp">prediction = initial_prediction + learning_rate × Σ tree_i(input)</code></pre>
+
+<p><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
+<p>In soft tree mode:</p>
+<ul>
+<li>Each tree in the boosted ensemble uses smooth transitions</li>
+<li>The sequential ensemble can be exported as a single computation graph</li>
+<li>The learning rate and initial prediction are embedded in the graph</li>
+</ul>
+<p>This gives you the benefits of gradient boosting with JIT-compiled speed.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_CalculateFeatureImportancesAsync_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.CalculateFeatureImportancesAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_CalculateFeatureImportancesAsync_System_Int32_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.CalculateFeatureImportancesAsync(System.Int32)">
+  CalculateFeatureImportancesAsync(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L281"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the importance scores for all features used in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task CalculateFeatureImportancesAsync(int featureCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of features in the model.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task representing the asynchronous calculation operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_CalculateFeatureImportancesAsync_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the importance of each feature in the Gradient Boosting model by aggregating
+the importance scores across all trees in the ensemble. The importance scores are normalized to sum to 1,
+making it easier to compare the relative importance of different features.
+</p>
+<p><b>For Beginners:</b> This method figures out which input features matter most for predictions.
+<p>Feature importance helps you understand:</p>
+<ul>
+<li>Which variables have the biggest impact on your predictions</li>
+<li>Which features might be redundant or irrelevant</li>
+<li>What the model is focusing on when making decisions</li>
+</ul>
+<p>The calculation works by:</p>
+<ol>
+<li>Getting the importance scores from each individual tree</li>
+<li>Adding up these scores across all trees for each feature</li>
+<li>Normalizing the scores so they sum to 1 (making them easier to compare)</li>
+</ol>
+<p>This information can help you interpret the model and potentially simplify future models
+by focusing on the most important features.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_CreateNewInstance_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_CreateNewInstance" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L521"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the gradient boosting regression model with the same configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of <a class="xref" href="AiDotNet.Regression.GradientBoostingRegression-1.html">GradientBoostingRegression&lt;T&gt;</a> with the same configuration as the current instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_CreateNewInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new gradient boosting regression model that has the same configuration 
+as the current instance. It's used for model persistence, cloning, and transferring the model's 
+configuration to new instances.
+</p>
+<p><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+<p>It's like creating a blueprint copy of your model that can be used to:</p>
+<ul>
+<li>Save your model's settings</li>
+<li>Create a new identical model</li>
+<li>Transfer your model's configuration to another system</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Create multiple similar models</li>
+<li>Save a model's configuration for later use</li>
+<li>Reset a model while keeping its settings</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_Deserialize_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L468"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized Gradient Boosting Regression model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] modelData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs a Gradient Boosting Regression model from a byte array that was previously created
+using the Serialize method. It restores the base class data, model-specific options, the initial prediction,
+and all the trees in the ensemble, allowing the model to be used for predictions without retraining.
+</p>
+<p><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+<p>Deserialization allows you to:</p>
+<ul>
+<li>Load a model that was saved earlier</li>
+<li>Use a model without having to retrain it</li>
+<li>Share models between different applications</li>
+</ul>
+<p>When you deserialize a model:</p>
+<ul>
+<li>All settings are restored</li>
+<li>The initial prediction is recovered</li>
+<li>All the individual trees are reconstructed</li>
+<li>The model is ready to make predictions immediately</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Load from a file
+byte[] modelData = File.ReadAllBytes(&quot;gradientBoosting.model&quot;);
+
+// Deserialize the model
+var gbr = new GradientBoostingRegression&lt;double&gt;();
+gbr.Deserialize(modelData);
+
+// Now you can use the model for predictions
+var predictions = await gbr.PredictAsync(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_ExportComputationGraph_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L587"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the Gradient Boosting model's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The root node of the exported computation graph.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When soft tree mode is enabled, this exports the entire Gradient Boosting ensemble as a
+differentiable computation graph. The graph follows the formula:
+<pre><code class="lang-csharp">output = initial_prediction + learning_rate × (tree1 + tree2 + ... + treeN)</code></pre>
+where each tree uses soft split operations.
+
+<p><b>For Beginners:</b> This exports the gradient boosted ensemble as a computation graph.
+<p>Unlike Random Forest (which averages tree outputs), Gradient Boosting:</p>
+<ul>
+<li>Starts with an initial prediction (mean of training targets)</li>
+<li>Adds contributions from each tree scaled by the learning rate</li>
+<li>Each tree predicts &quot;residuals&quot; (errors from previous trees)</li>
+</ul>
+<p>The exported graph combines all these elements into optimized code.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when soft tree mode is not enabled.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained (no trees).</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_GetModelMetadata_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_GetModelMetadata" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L351"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the Gradient Boosting Regression model and its configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the model, including its type and configuration options such as
+the number of trees, maximum tree depth, learning rate, and subsampling ratio. This information can be
+useful for model management, comparison, and documentation purposes.
+</p>
+<p><b>For Beginners:</b> This method provides information about your Gradient Boosting model.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (Gradient Boosting)</li>
+<li>How many trees are in the ensemble</li>
+<li>How deep each tree is allowed to grow</li>
+<li>The learning rate (how quickly the model incorporates new trees)</li>
+<li>Subsampling ratio (what fraction of the data is used for each tree)</li>
+<li>Other configuration settings</li>
+</ul>
+<p>This information is helpful when:</p>
+<ul>
+<li>Comparing different models</li>
+<li>Documenting your model's configuration</li>
+<li>Troubleshooting model performance</li>
+<li>Replicating your results</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var metadata = gbr.GetModelMetadata();
+Console.WriteLine($&quot;Model type: {metadata.ModelType}&quot;);
+Console.WriteLine($&quot;Number of trees: {metadata.AdditionalInfo[&quot;NumberOfTrees&quot;]}&quot;);
+Console.WriteLine($&quot;Learning rate: {metadata.AdditionalInfo[&quot;LearningRate&quot;]}&quot;);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_PredictAsync_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.PredictAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_PredictAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.PredictAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PredictAsync(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously predicts target values for the provided input features using the trained Gradient Boosting model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;Vector&lt;T&gt;&gt; PredictAsync(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample to predict and each column represents a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A task that returns a vector of predicted values corresponding to each input sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_PredictAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method predicts target values for new input data by combining the initial prediction with the
+weighted contributions of all trees in the ensemble. The predictions from each tree are scaled by the
+learning rate before being added to the ensemble prediction. The method uses parallel processing to
+generate tree predictions efficiently.
+</p>
+<p><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+<p>The prediction process works like this:</p>
+<ol>
+<li>Start with the initial prediction (the average of all target values in the training data)</li>
+<li>For each tree in the model:
+<ul>
+<li>Get the tree's prediction</li>
+<li>Scale it by the learning rate (to control how much influence each tree has)</li>
+<li>Add it to the running total</li>
+</ul>
+</li>
+<li>The final prediction is the sum of the initial prediction plus all the scaled tree predictions</li>
+</ol>
+<p>The &quot;Async&quot; in the name means this method returns a Task, allowing your program to do other things
+while waiting for predictions to complete. It also uses parallel processing to get predictions from
+multiple trees simultaneously, making it faster.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Make predictions
+var predictions = await gbr.PredictAsync(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_Serialize_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_Serialize" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L404"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the Gradient Boosting Regression model to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the Gradient Boosting Regression model into a byte array that can be stored in a file,
+database, or transmitted over a network. The serialized data includes the base class data, model-specific
+options, the initial prediction, and all the trees in the ensemble.
+</p>
+<p><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+<p>Serialization allows you to:</p>
+<ul>
+<li>Save your model to a file</li>
+<li>Store your model in a database</li>
+<li>Send your model over a network</li>
+<li>Keep your model for later use without having to retrain it</li>
+</ul>
+<p>The serialized data includes:</p>
+<ul>
+<li>All the model's settings (like number of trees and learning rate)</li>
+<li>The initial prediction (the starting point for all predictions)</li>
+<li>Every individual decision tree in the ensemble</li>
+</ul>
+<p>Because Gradient Boosting models contain multiple trees, the serialized data
+can be quite large for complex models.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Serialize the model
+byte[] modelData = gbr.Serialize();
+
+// Save to a file
+File.WriteAllBytes(&quot;gradientBoosting.model&quot;, modelData);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_GradientBoostingRegression_1_TrainAsync_" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.TrainAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_GradientBoostingRegression_1_TrainAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.GradientBoostingRegression`1.TrainAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainAsync(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously trains the Gradient Boosting Regression model using the provided input features and target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task TrainAsync(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample and each column represents a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of target values corresponding to each sample in x.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task representing the asynchronous training operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_GradientBoostingRegression_1_TrainAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method trains the Gradient Boosting Regression model by first calculating an initial prediction (typically
+the mean of the target values), and then sequentially building decision trees that predict the residuals
+(errors) of the current ensemble. The trees are built in parallel to improve training efficiency, but the
+sequential nature of the algorithm is maintained by updating the residuals after each tree is built.
+</p>
+<p><b>For Beginners:</b> This method teaches the model how to make predictions using your data.
+<p>The training process works like this:</p>
+<ol>
+<li>Start with a simple prediction (the average of all target values)</li>
+<li>Calculate how wrong this prediction is for each training example (the &quot;residuals&quot;)</li>
+<li>Build a decision tree that tries to predict these residuals</li>
+<li>Add this tree's predictions (scaled by the learning rate) to the current model</li>
+<li>Update the residuals based on the new predictions</li>
+<li>Repeat steps 3-5 until you've built the desired number of trees</li>
+</ol>
+<p>The &quot;Async&quot; in the name means this method can run without blocking other operations in your program,
+and it uses parallel processing to build trees more quickly when possible.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Train the model
+await gbr.TrainAsync(features, targets);
+</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/GradientBoostingRegression.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

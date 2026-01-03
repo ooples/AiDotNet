@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum SSLMethodType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum SSLMethodType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies the type of self-supervised learning method to use for representation learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_SSLMethodType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.SSLMethodType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.SSLMethodType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_SSLMethodType" data-uid="AiDotNet.Enums.SSLMethodType" class="text-break">
+Enum SSLMethodType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/SSLMethodType.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies the type of self-supervised learning method to use for representation learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum SSLMethodType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_SSLMethodType_BYOL"><code>BYOL = 4</code></dt>
+  <dd><p>BYOL: Bootstrap Your Own Latent (Grill et al., 2020).
+Non-contrastive method using momentum encoder without negative samples.</p>
+<p><b>Best for:</b> Avoiding negative sample mining, asymmetric networks.</p>
+<p><b>Key Parameters:</b> Momentum (0.99-0.999), predictor MLP.</p>
+<p><b>Pros:</b> No negative samples needed, robust to batch size.</p>
+<p><b>Cons:</b> Requires careful design to prevent collapse.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SSLMethodType_BarlowTwins"><code>BarlowTwins = 6</code></dt>
+  <dd><p>Barlow Twins: Self-Supervised Learning via Redundancy Reduction (Zbontar et al., 2021).
+Reduces redundancy in embeddings by making cross-correlation close to identity.</p>
+<p><b>Best for:</b> Interpretable approach, avoiding collapse naturally.</p>
+<p><b>Key Parameters:</b> Lambda (redundancy reduction weight), projection dimension.</p>
+<p><b>Pros:</b> Interpretable loss, naturally avoids collapse, no negative samples.</p>
+<p><b>Cons:</b> Requires careful scaling of loss terms.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SSLMethodType_DINO"><code>DINO = 7</code></dt>
+  <dd><p>DINO: Emerging Properties in Self-Supervised Vision Transformers (Caron et al., 2021).
+Self-distillation with no labels using centering and sharpening.</p>
+<p><b>Best for:</b> Vision Transformers, emergent attention properties.</p>
+<p><b>Key Parameters:</b> Teacher temperature (0.04-0.07), centering momentum.</p>
+<p><b>Pros:</b> Emergent attention maps, strong ViT performance.</p>
+<p><b>Cons:</b> Primarily designed for Vision Transformers.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SSLMethodType_MAE"><code>MAE = 9</code></dt>
+  <dd><p>MAE: Masked Autoencoders Are Scalable Vision Learners (He et al., 2022).
+Generative approach that reconstructs masked image patches.</p>
+<p><b>Best for:</b> Efficient pretraining, generative understanding.</p>
+<p><b>Key Parameters:</b> Mask ratio (0.75), decoder depth.</p>
+<p><b>Pros:</b> Efficient (only encode visible patches), scalable.</p>
+<p><b>Cons:</b> May require fine-tuning for best downstream performance.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SSLMethodType_MoCo"><code>MoCo = 1</code></dt>
+  <dd><p>MoCo: Momentum Contrast for Unsupervised Visual Representation Learning (He et al., 2020).
+Uses a momentum encoder and memory queue for efficient contrastive learning.</p>
+<p><b>Best for:</b> Limited GPU memory, consistent negative samples.</p>
+<p><b>Key Parameters:</b> Queue size (65536), momentum (0.999), temperature (0.07).</p>
+<p><b>Pros:</b> Memory efficient, consistent negative samples, good performance.</p>
+<p><b>Cons:</b> More complex than SimCLR, requires momentum encoder.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SSLMethodType_MoCoV2"><code>MoCoV2 = 2</code></dt>
+  <dd><p>MoCo v2: Improved Baselines with Momentum Contrastive Learning (Chen et al., 2020).
+Adds MLP projection head and stronger augmentations to MoCo.</p>
+<p><b>Best for:</b> Better performance than MoCo v1 with similar efficiency.</p>
+<p><b>Key Parameters:</b> Same as MoCo plus MLP projection head.</p>
+<p><b>Pros:</b> Combines MoCo efficiency with SimCLR improvements.</p>
+<p><b>Cons:</b> Slightly more complex than MoCo v1.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SSLMethodType_MoCoV3"><code>MoCoV3 = 3</code></dt>
+  <dd><p>MoCo v3: An Empirical Study of Training Self-Supervised Vision Transformers (Chen et al., 2021).
+Adapted for Vision Transformers without memory queue.</p>
+<p><b>Best for:</b> Vision Transformers (ViT), modern architectures.</p>
+<p><b>Key Parameters:</b> Momentum (0.99-0.999), symmetric loss.</p>
+<p><b>Pros:</b> Optimized for ViT, simpler than MoCo v1/v2.</p>
+<p><b>Cons:</b> Best suited for transformer architectures.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SSLMethodType_SimCLR"><code>SimCLR = 0</code></dt>
+  <dd><p>SimCLR: A Simple Framework for Contrastive Learning of Visual Representations (Chen et al., 2020).
+Uses large batch contrastive learning with strong augmentations.</p>
+<p><b>Best for:</b> Simple setup, strong performance, research baselines.</p>
+<p><b>Key Parameters:</b> Temperature (0.1-0.5), batch size (256-8192), projection dimension (128).</p>
+<p><b>Pros:</b> Simple architecture, strong performance, well-understood.</p>
+<p><b>Cons:</b> Requires large batch sizes for best performance.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_SSLMethodType_SimSiam"><code>SimSiam = 5</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_SSLMethodType_iBOT"><code>iBOT = 8</code></dt>
+  <dd><p>iBOT: Image BERT Pre-Training with Online Tokenizer (Zhou et al., 2022).
+Combines masked image modeling with self-distillation.</p>
+<p><b>Best for:</b> Combining generative and discriminative approaches.</p>
+<p><b>Key Parameters:</b> Mask ratio (0.4), patch tokenizer.</p>
+<p><b>Pros:</b> Best of both worlds (DINO + MAE-like objectives).</p>
+<p><b>Cons:</b> More complex than pure DINO or MAE.</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_SSLMethodType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Self-supervised learning (SSL) methods learn useful representations
+from unlabeled data by creating "pretext tasks" - artificial tasks that force the model to learn
+meaningful features. Different methods use different strategies to achieve this.</p>
+<p><b>Choosing a Method:</b>
+<ul><li>Use <b>SimCLR</b> for simplicity and good performance (no memory bank needed)</li><li>Use <b>MoCo</b> variants for large batch sizes or limited GPU memory</li><li>Use <b>BYOL</b> or <b>SimSiam</b> to avoid negative sample mining</li><li>Use <b>BarlowTwins</b> for interpretable redundancy-reduction approach</li><li>Use <b>DINO</b> for Vision Transformers with self-distillation</li><li>Use <b>MAE</b> for generative masked autoencoding approach</li></ul>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/SSLMethodType.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

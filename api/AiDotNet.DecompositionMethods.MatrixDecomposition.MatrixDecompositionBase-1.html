@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MatrixDecompositionBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MatrixDecompositionBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for matrix decomposition algorithms that break down matrices into simpler components.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1">
+
+
+
+  <h1 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1" class="text-break">
+Class MatrixDecompositionBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DecompositionMethods.html">DecompositionMethods</a>.<a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.html">MatrixDecomposition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for matrix decomposition algorithms that break down matrices into simpler components.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class MatrixDecompositionBase&lt;T&gt; : IMatrixDecomposition&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MatrixDecompositionBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition-1.html">BidiagonalDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.CholeskyDecomposition-1.html">CholeskyDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition-1.html">ComplexMatrixDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.CramerDecomposition-1.html">CramerDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.EigenDecomposition-1.html">EigenDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.GramSchmidtDecomposition-1.html">GramSchmidtDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition-1.html">HessenbergDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition-1.html">IcaDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.LdlDecomposition-1.html">LdlDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.LqDecomposition-1.html">LqDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.LuDecomposition-1.html">LuDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.NmfDecomposition-1.html">NmfDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.NormalDecomposition-1.html">NormalDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.PolarDecomposition-1.html">PolarDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.QrDecomposition-1.html">QrDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition-1.html">SchurDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.SvdDecomposition-1.html">SvdDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.TakagiDecomposition-1.html">TakagiDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.TridiagonalDecomposition-1.html">TridiagonalDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.UduDecomposition-1.html">UduDecomposition&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixDecompositionExtensions.html#AiDotNet_Extensions_MatrixDecompositionExtensions_ToComplexDecomposition__1_AiDotNet_Interfaces_IMatrixDecomposition___0__">MatrixDecompositionExtensions.ToComplexDecomposition&lt;T&gt;(IMatrixDecomposition&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Matrix decomposition is like factoring a number, but for matrices.
+Just as we can break down 12 into 3 * 4, we can break down complex matrices into simpler
+matrices that are easier to work with. Different decomposition methods have different strengths
+and are used for different purposes in machine learning and numerical computing.
+</p>
+<p>
+This base class provides common functionality that all matrix decompositions need, such as:
+- Storing the original matrix
+- Providing numeric operations
+- Implementing matrix inversion
+- Solving linear systems
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1__ctor_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  MatrixDecompositionBase(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the matrix decomposition class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected MatrixDecompositionBase(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to decompose.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor sets up the common parts that all matrix
+decompositions need. It stores the original matrix and initializes the numeric
+operations helper.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_NumOps" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides mathematical operations for the numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_NumOps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This helper object knows how to perform math operations
+on the specific number type you're using (like float or double). It ensures
+that mathematical operations work correctly regardless of the numeric type.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.A*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.A">
+  A
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The original matrix that was decomposed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; A { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the matrix you started with before breaking it down
+into simpler components. It's kept here so you can refer back to it if needed.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Engine_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.Engine*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Engine" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global execution engine for vector operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.ApproximatelyEqual*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual__0__0__0_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.ApproximatelyEqual(`0,`0,`0)">
+  ApproximatelyEqual(T, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L267"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if two values are approximately equal within a tolerance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool ApproximatelyEqual(T a, T b, T tolerance)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value.</p>
+</dd>
+    <dt><code>tolerance</code> <span class="xref">T</span></dt>
+    <dd><p>The maximum acceptable difference.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the values are within tolerance; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual__0__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> In numerical computing, we rarely check if two floating-point
+numbers are exactly equal because of rounding errors. Instead, we check if they're
+"close enough" within some small tolerance.
+</p>
+<p>
+For example, if tolerance is 0.001, then 1.0001 and 1.0002 would be considered equal,
+but 1.0 and 1.002 would not.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Decompose" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.Decompose">
+  Decompose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the actual decomposition of the matrix into its components.
+This method must be implemented by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void Decompose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Decompose_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is where the actual "work" of breaking down the matrix happens.
+Each specific decomposition method (LU, QR, SVD, NMF, ICA, etc.) has its own unique
+algorithm, which is why each derived class implements this method differently.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.FrobeniusNorm*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.FrobeniusNorm(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  FrobeniusNorm(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the Frobenius norm of a matrix (square root of sum of squared elements).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T FrobeniusNorm(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to compute the norm for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The Frobenius norm of the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The Frobenius norm is a way to measure the "size" or "magnitude"
+of a matrix. It's like measuring the length of a vector, but for a matrix.
+</p>
+<p>
+It's calculated by:
+1. Squaring every element in the matrix
+2. Adding all those squares together
+3. Taking the square root of that sum
+</p>
+<p>
+This is useful for measuring how different two matrices are (by computing the norm
+of their difference) or for checking convergence in iterative algorithms.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Invert_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.Invert*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Invert" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.Invert">
+  Invert()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the inverse of the original matrix A using the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Matrix&lt;T&gt; Invert()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The inverse of the matrix A.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Invert_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number.
+Just as 5 * (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix
+(which is like the number 1 in matrix form).
+</p>
+<p>
+For example, if matrix A represents a transformation (like rotating or scaling),
+then A-¹ represents the opposite transformation that "undoes" the original:
+- If A rotates data clockwise, A-¹ rotates it counterclockwise
+- If A scales data up by 2x, A-¹ scales it down by 1/2
+</p>
+<p>
+This default implementation uses the decomposition to compute the inverse efficiently.
+Some derived classes may override this method if they have a more efficient
+algorithm specific to their decomposition type.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Solve_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.Solve*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.Solve(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Solve(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Solves a linear system of equations Ax = b, where A is the decomposed matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Vector&lt;T&gt; Solve(Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The right-hand side vector of the equation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The solution vector x that satisfies Ax = b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method solves equations of the form "Ax = b" where:
+- A is your matrix (the one that was decomposed)
+- b is a known vector (like a set of results or outcomes)
+- x is what you're trying to find (like the unknown variables)
+</p>
+<p>
+Real-world example: If you're calculating the best mix of ingredients for a recipe:
+- Matrix A represents how each ingredient affects taste, texture, and nutrition
+- Vector b represents your desired taste, texture, and nutrition targets
+- Vector x (the solution) tells you how much of each ingredient to use
+</p>
+<p>
+Using the decomposition to solve the system is much faster and more accurate
+than directly calculating the inverse of A.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.ValidateMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Boolean_System_Boolean_System_Boolean_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase`1.ValidateMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Boolean,System.Boolean,System.Boolean)">
+  ValidateMatrix(Matrix&lt;T&gt;, bool, bool, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the matrix meets the requirements for this decomposition method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateMatrix(Matrix&lt;T&gt; matrix, bool requireSquare = false, bool requireNonNegative = false, bool requireSymmetric = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to validate.</p>
+</dd>
+    <dt><code>requireSquare</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the matrix must be square.</p>
+</dd>
+    <dt><code>requireNonNegative</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether all elements must be non-negative.</p>
+</dd>
+    <dt><code>requireSymmetric</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the matrix must be symmetric.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Boolean_System_Boolean_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Different decomposition methods have different requirements.
+For example:
+- Some methods only work on square matrices (same number of rows and columns)
+- Some require all values to be non-negative (zero or positive)
+- Some require the matrix to be symmetric (mirror image across the diagonal)
+</p>
+<p>
+This helper method checks these requirements and gives a clear error message
+if something is wrong, rather than producing incorrect results.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the matrix doesn't meet the requirements.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/MatrixDecompositionBase.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GradientTape&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GradientTape&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Records operations for automatic differentiation (autodiff).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Autodiff_GradientTape_1.md&amp;value=---%0Auid%3A%20AiDotNet.Autodiff.GradientTape%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Autodiff.GradientTape`1">
+
+
+
+  <h1 id="AiDotNet_Autodiff_GradientTape_1" data-uid="AiDotNet.Autodiff.GradientTape`1" class="text-break">
+Class GradientTape&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Autodiff.html">Autodiff</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Records operations for automatic differentiation (autodiff).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GradientTape&lt;T&gt; : IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GradientTape&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Autodiff_GradientTape_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+GradientTape implements automatic differentiation using the tape-based approach
+popularized by TensorFlow. It records operations performed within its context and
+builds a computation graph. When Gradient() is called, it performs reverse-mode
+automatic differentiation (backpropagation) to compute gradients.
+</p>
+<p>
+This implementation follows industry-standard patterns:
+- Opt-in recording via using statement (like TensorFlow's GradientTape)
+- Memory-efficient as tapes can be disposed after gradient computation
+- Supports watching specific tensors/variables
+- Thread-safe with ThreadStatic tape stack
+</p>
+<p><b>For Beginners:</b> This automatically tracks calculations so gradients can be computed.
+<p>Think of it as a recording device:</p>
+<ul>
+<li>You start recording by creating a GradientTape (use using statement)</li>
+<li>All mathematical operations within the scope are recorded</li>
+<li>When you're done, you can play it backwards to get gradients</li>
+<li>This is how neural networks learn - by computing gradients automatically</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">using (var tape = new GradientTape&lt;double&gt;())
+{
+    tape.Watch(parameters);
+    var loss = ComputeLoss(parameters);
+    var gradients = tape.Gradient(loss, parameters);
+    // Use gradients to update parameters
+}</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1__ctor_" data-uid="AiDotNet.Autodiff.GradientTape`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1__ctor_System_Boolean_" data-uid="AiDotNet.Autodiff.GradientTape`1.#ctor(System.Boolean)">
+  GradientTape(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Autodiff.GradientTape-1.html">GradientTape&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GradientTape(bool persistent = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>persistent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the tape should persist after first use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1__ctor_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates a new gradient tape and pushes it onto the thread-local tape stack,
+making it the active tape for this thread. All operations performed within
+the scope of this tape will be recorded for automatic differentiation.
+</p>
+<p>
+Graph caching is automatically enabled for persistent tapes to optimize
+performance when computing gradients multiple times.
+</p>
+<p><b>For Beginners:</b> This creates a new recording session.
+<p>When you create a tape:</p>
+<ul>
+<li>It starts recording all operations</li>
+<li>Use 'using' statement to ensure cleanup: using (var tape = new GradientTape&lt;T&gt;())</li>
+<li>Operations inside the using block are tracked</li>
+<li>When the block ends, recording stops and resources are cleaned up</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_Current_" data-uid="AiDotNet.Autodiff.GradientTape`1.Current*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_Current" data-uid="AiDotNet.Autodiff.GradientTape`1.Current">
+  Current
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the currently active tape for this thread, or null if no tape is active.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static GradientTape&lt;T&gt;? Current { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.GradientTape-1.html">GradientTape</a>&lt;T&gt;</dt>
+    <dd><p>The active GradientTape, or null if none exists.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_IsRecording_" data-uid="AiDotNet.Autodiff.GradientTape`1.IsRecording*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_IsRecording" data-uid="AiDotNet.Autodiff.GradientTape`1.IsRecording">
+  IsRecording
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether this tape is actively recording.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsRecording { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the tape is recording operations; false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_Persistent_" data-uid="AiDotNet.Autodiff.GradientTape`1.Persistent*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_Persistent" data-uid="AiDotNet.Autodiff.GradientTape`1.Persistent">
+  Persistent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether gradients should persist after first use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Persistent { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If false, the tape can only compute gradients once.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1_Persistent_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+By default (false), tapes are single-use for memory efficiency. Set to true if you
+need to compute gradients multiple times from the same tape.
+</p>
+<p><b>For Beginners:</b> Controls whether you can reuse this tape.
+<ul>
+<li>False (default): Can only compute gradients once, then tape is used up (more efficient)</li>
+<li>True: Can compute gradients multiple times (uses more memory)</li>
+</ul>
+<p>Most of the time, false is fine since you create a new tape for each training step.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_Dispose_" data-uid="AiDotNet.Autodiff.GradientTape`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_Dispose" data-uid="AiDotNet.Autodiff.GradientTape`1.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L640"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes the gradient tape, stopping recording and popping it from the tape stack.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1_Dispose_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is automatically called when exiting a using block. It stops recording,
+pops the tape from the thread-local stack, and cleans up resources if the tape
+is not persistent.
+</p>
+<p><b>For Beginners:</b> This cleans up the tape when you're done.
+<p>When you use 'using' statement:</p>
+<pre><code class="lang-csharp">using (var tape = new GradientTape&lt;T&gt;())
+{
+    // your code
+} // Dispose is automatically called here</code></pre>
+<p>Dispose:</p>
+<ul>
+<li>Stops recording</li>
+<li>Removes the tape from the active stack</li>
+<li>Frees up memory if not persistent</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_Gradient_" data-uid="AiDotNet.Autodiff.GradientTape`1.Gradient*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_Gradient_AiDotNet_Autodiff_ComputationNode__0__System_Collections_Generic_IEnumerable_AiDotNet_Autodiff_ComputationNode__0___System_Boolean_" data-uid="AiDotNet.Autodiff.GradientTape`1.Gradient(AiDotNet.Autodiff.ComputationNode{`0},System.Collections.Generic.IEnumerable{AiDotNet.Autodiff.ComputationNode{`0}},System.Boolean)">
+  Gradient(ComputationNode&lt;T&gt;, IEnumerable&lt;ComputationNode&lt;T&gt;&gt;?, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L408"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the gradient of a target node with respect to watched variables.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;ComputationNode&lt;T&gt;, Tensor&lt;T&gt;&gt; Gradient(ComputationNode&lt;T&gt; target, IEnumerable&lt;ComputationNode&lt;T&gt;&gt;? sources = null, bool createGraph = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The target node (typically the loss).</p>
+</dd>
+    <dt><code>sources</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source nodes to compute gradients for (if null, uses all watched nodes).</p>
+</dd>
+    <dt><code>createGraph</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If true, the gradient computation itself will be recorded, enabling higher-order derivatives.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A dictionary mapping each source node to its gradient.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1_Gradient_AiDotNet_Autodiff_ComputationNode__0__System_Collections_Generic_IEnumerable_AiDotNet_Autodiff_ComputationNode__0___System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs reverse-mode automatic differentiation (backpropagation)
+to compute gradients. It builds the computation graph, performs topological
+sorting, and executes the backward pass.
+</p>
+<p>
+After calling this method, the tape is marked as used. If Persistent is false,
+calling Gradient again will throw an exception.
+</p>
+<p>
+**Higher-Order Gradients**:
+When createGraph=true, the gradient computation itself is recorded to an active tape.
+This enables computing gradients of gradients (second derivatives, Hessians, etc.).
+</p>
+<p><b>For Beginners:</b> This computes how the output changes with respect to inputs.
+<p>The process:</p>
+<ol>
+<li>You give it a target (like the loss you want to minimize)</li>
+<li>It computes how much each watched variable affects that target</li>
+<li>Returns gradients showing which direction to adjust each variable</li>
+</ol>
+<p>These gradients are what you use to update neural network weights during training.</p>
+<p><strong>Higher-Order Derivatives (createGraph=true)</strong>:
+Sometimes you need the gradient of a gradient (like computing curvature).
+When createGraph=true, the gradient calculation itself is tracked, so you can
+differentiate it again. This is used in:</p>
+<ul>
+<li>Second-order optimization methods</li>
+<li>Physics simulations</li>
+<li>Some adversarial training techniques</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// First-order gradient (normal)
+var gradients = tape.Gradient(loss, parameters);
+
+// Second-order gradient (gradient of gradient)
+using (var tape1 = new GradientTape&lt;T&gt;())
+{
+    tape1.Watch(parameters);
+    using (var tape2 = new GradientTape&lt;T&gt;())
+    {
+        tape2.Watch(parameters);
+        var loss = ComputeLoss(parameters);
+        var firstGrad = tape2.Gradient(loss, parameters, createGraph: true);
+    }
+    var secondGrad = tape1.Gradient(firstGrad, parameters);
+}</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_RecordOperation_" data-uid="AiDotNet.Autodiff.GradientTape`1.RecordOperation*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_RecordOperation_AiDotNet_Autodiff_ComputationNode__0__" data-uid="AiDotNet.Autodiff.GradientTape`1.RecordOperation(AiDotNet.Autodiff.ComputationNode{`0})">
+  RecordOperation(ComputationNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Records a computation node in the tape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void RecordOperation(ComputationNode&lt;T&gt; node)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>node</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The computation node to record.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1_RecordOperation_AiDotNet_Autodiff_ComputationNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is called automatically by operations that support autodiff.
+It adds the node to the tape's operation list so it can be included
+in gradient computation.
+</p>
+<p><b>For Beginners:</b> This adds an operation to the recording.
+<p>Usually you don't call this directly - operations call it automatically.
+Each mathematical operation records itself on the active tape.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_Reset_" data-uid="AiDotNet.Autodiff.GradientTape`1.Reset*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_Reset" data-uid="AiDotNet.Autodiff.GradientTape`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L606"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the tape, clearing all recorded operations and watched variables.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method clears all state from the tape, allowing it to be reused.
+It's useful when you want to reuse a persistent tape for a new computation.
+</p>
+<p><b>For Beginners:</b> This clears the tape to start fresh.
+<p>After reset:</p>
+<ul>
+<li>All recorded operations are forgotten</li>
+<li>Watched variables are cleared</li>
+<li>The tape can be used for a new calculation</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_ResumeRecording_" data-uid="AiDotNet.Autodiff.GradientTape`1.ResumeRecording*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_ResumeRecording" data-uid="AiDotNet.Autodiff.GradientTape`1.ResumeRecording">
+  ResumeRecording()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L585"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resumes recording operations on this tape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ResumeRecording()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1_ResumeRecording_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This re-enables recording after it was stopped with StopRecording().</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_StopRecording_" data-uid="AiDotNet.Autodiff.GradientTape`1.StopRecording*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_StopRecording" data-uid="AiDotNet.Autodiff.GradientTape`1.StopRecording">
+  StopRecording()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L574"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stops recording operations on this tape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void StopRecording()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1_StopRecording_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+After calling this method, operations will no longer be recorded on this tape.
+This can be useful for inference or when you want to temporarily disable recording.
+</p>
+<p><b>For Beginners:</b> This pauses the recording.
+<p>Use this when:</p>
+<ul>
+<li>You want to do calculations without tracking them</li>
+<li>Running inference (not training)</li>
+<li>Computing metrics that don't need gradients</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_Watch_" data-uid="AiDotNet.Autodiff.GradientTape`1.Watch*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_Watch_AiDotNet_Autodiff_ComputationNode__0__" data-uid="AiDotNet.Autodiff.GradientTape`1.Watch(AiDotNet.Autodiff.ComputationNode{`0})">
+  Watch(ComputationNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Watches a computation node so its gradient will be computed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Watch(ComputationNode&lt;T&gt; node)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>node</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The computation node to watch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientTape_1_Watch_AiDotNet_Autodiff_ComputationNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Only watched nodes will have their gradients computed during backpropagation.
+Typically, you watch model parameters or other variables you want to optimize.
+</p>
+<p><b>For Beginners:</b> This marks a value to track gradients for.
+<p>Watch variables you want to:</p>
+<ul>
+<li>Train (like neural network weights)</li>
+<li>Optimize</li>
+<li>Compute gradients for</li>
+</ul>
+<p>Think of it like saying &quot;I care about how the output changes when THIS value changes.&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientTape_1_Watch_" data-uid="AiDotNet.Autodiff.GradientTape`1.Watch*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientTape_1_Watch_System_Collections_Generic_IEnumerable_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Autodiff.GradientTape`1.Watch(System.Collections.Generic.IEnumerable{AiDotNet.Autodiff.ComputationNode{`0}})">
+  Watch(IEnumerable&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Watches multiple computation nodes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Watch(IEnumerable&lt;ComputationNode&lt;T&gt;&gt; nodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The computation nodes to watch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientTape.cs/#L44" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>PR676 Direct GPU Backends Plan | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="PR676 Direct GPU Backends Plan | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/PR676_GPU_BACKEND_PLAN.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="pr676-direct-gpu-backends-plan">PR676 Direct GPU Backends Plan</h1>
+
+<h2 id="goals">Goals</h2>
+<ul>
+<li>Add a NVIDIA direct GPU backend that mirrors the OpenCL direct-kernel path.</li>
+<li>Remove ILGPU and replace all GPU execution with direct GPU backends.</li>
+<li>Keep CLBlast as a fallback option when direct kernels are unavailable or fail.</li>
+<li>Preserve tuning + diagnostics so we can beat CLBlast on end-to-end performance.</li>
+<li>Establish a CLBlast-identical OpenCL engine (kernels + selection + packing) as the primary baseline, then improve it surgically with benchmarks after each change.</li>
+</ul>
+<h2 id="progress">Progress</h2>
+<ul>
+<li>CUDA backend scaffolded with cuBLAS GEMM + NVRTC kernels.</li>
+<li>NVRTC fallback probing added for multiple DLL/SO names.</li>
+<li>Elementwise/unary kernel coverage expanded for CUDA + OpenCL (HIP uses CPU fallback).</li>
+<li>OpenCL/CUDA sum/max reductions now use GPU partial reduction kernels.</li>
+<li>DirectGpu backend order is configurable via <code>AIDOTNET_DIRECTGPU_BACKENDS</code>.</li>
+<li>CUDA sum-axis reduction now uses a direct kernel.</li>
+<li>CUDA AllocateByteBuffer implemented; Cuda activation kernel source + CLBlast raw strings fixed for build.</li>
+<li>GpuEngine memory pool returns corrected in matmul/cached-weight paths; DirectGpuEngine buffer lookup now skips null buffers.</li>
+<li>RX 5500 XT benchmarks captured (see &quot;Latest Benchmarks&quot; below).</li>
+<li>Tuning/benchmark output now shows progress indicators + bottleneck color-coding.</li>
+<li>CLBlast OpenCL databases (xgemm/pad/padtranspose/gemm_routine) ported via generator script.</li>
+<li>CLBlast baseline selection + packing path wired in OpenClBackend (pad/transpose kernels + correct padding rules).</li>
+<li>CLBlast copy/transpose databases ported + fast copy/transpose kernels wired.</li>
+<li>CLBlast XgemmDirect kernel ported; small-size routing now uses direct kernel.</li>
+<li>Bayesian tuning diagnostics + CSV/log output verified (artifacts captured in <code>artifacts/gpu_tuning</code>); long-running trials suggest adding a per-trial timeout/skip policy.</li>
+<li>DirectGpuTensorEngine (IEngine adapter) added; Engine/AiDotNetEngine now prefer DirectGpu over CPU when available.</li>
+<li>ILGPU package references removed from <code>src/AiDotNet.csproj</code> and <code>src/AiDotNet.Tensors/AiDotNet.Tensors.csproj</code>.</li>
+<li>ILGPU detection removed from Engine selection; GpuEngine now wraps DirectGpuTensorEngine.</li>
+<li>ILGPU-specific data structures (GpuTensorHandle/GpuMemoryPool) removed.</li>
+</ul>
+<h2 id="non-goals">Non-goals</h2>
+<ul>
+<li>Multi-node/distributed GPU execution.</li>
+<li>Full coverage of every kernel outside GEMM unless explicitly requested.</li>
+<li>Automatic driver/toolkit installation.</li>
+</ul>
+<h2 id="decisions">Decisions</h2>
+<ul>
+<li>NVIDIA API: CUDA Driver API (P/Invoke) + PTX (NVRTC for runtime codegen).</li>
+<li>NVIDIA GEMM fallback: cuBLAS.</li>
+<li>NVIDIA non-GEMM fallback: cuDNN (custom CUDA kernels remain primary).</li>
+<li>cuDNN fallback scope: convolution, pooling, normalization (activations/custom elementwise stay custom).</li>
+<li>OpenCL GEMM fallback: CLBlast.</li>
+<li>Kernel coverage: replace all ILGPU kernels with direct backends.</li>
+<li>Removal: delete ILGPU packages/types after parity + tests are in place.</li>
+<li>Type conversion: convert to float at GPU boundary, convert back via INumericOperations.</li>
+<li>NVRTC: add fallback probing for multiple DLL versions.</li>
+<li>CLBlast baseline: implement CLBlast kernels, packing, selection heuristics, and search space in C# exactly (OpenCL path), and use this as the primary GPU engine.</li>
+<li>Optimization method: apply one change at a time on top of CLBlast baseline, run fixed benchmarks, and keep only improvements (no regressions).</li>
+<li>Search space policy: start with CLBlast exact search space and expand gradually only after stable wins.</li>
+</ul>
+<h2 id="decisions-tbd">Decisions (TBD)</h2>
+<ul>
+<li>cuDNN version support list (8/9 and platform-specific names).</li>
+<li>NVRTC DLL name list to probe (Windows + Linux).</li>
+<li>CI strategy for CUDA (env-gated tests or no CUDA in CI)?</li>
+</ul>
+<h2 id="latest-benchmarks-rx-5500-xt-gfx1012xnack-">Latest Benchmarks (RX 5500 XT, gfx1012:xnack-)</h2>
+<p>Run: 2026-01-01, sizes=1024/2048/4096 (AIDOTNET_CLBLAST_SIZES)
+OpenCL vs CLBlast (end-to-end, untuned):</p>
+<ul>
+<li>1024^2: CLBlast 2113.2 GFLOPS, AiDotNet 630.6 GFLOPS (CLBlast 3.35x)</li>
+<li>2048^2: CLBlast 2347.8 GFLOPS, AiDotNet 981.0 GFLOPS (CLBlast 2.39x)</li>
+<li>4096^2: CLBlast 435.3 GFLOPS, AiDotNet 400.0 GFLOPS (CLBlast 1.09x)</li>
+<li>DenseLayer (64x768x3072): CLBlast 1165.9 GFLOPS, AiDotNet 121.1 GFLOPS (CLBlast 9.63x)</li>
+<li>Large (128x4096x4096): CLBlast 2495.2 GFLOPS, AiDotNet 388.1 GFLOPS (CLBlast 6.43x)</li>
+</ul>
+<p>DirectGpu TUNED (OpenClBackend) vs CLBlast:</p>
+<ul>
+<li>1024^2: CLBlast 2020.3 GFLOPS, AiDotNet 1070.6 GFLOPS (CLBlast 1.89x)</li>
+<li>2048^2: CLBlast 2336.6 GFLOPS, AiDotNet 1016.5 GFLOPS (CLBlast 2.30x)</li>
+<li>4096^2: CLBlast 434.4 GFLOPS, AiDotNet 414.5 GFLOPS (CLBlast 1.05x)</li>
+<li>DenseLayer (64x768x3072): CLBlast 1122.1 GFLOPS, AiDotNet 1692.2 GFLOPS (AiDotNet 1.51x)</li>
+<li>Large (128x4096x4096): CLBlast 2518.8 GFLOPS, AiDotNet 2656.8 GFLOPS (AiDotNet 1.05x)</li>
+</ul>
+<p>Previous sweep (sizes 256..4096):
+OpenCL vs CLBlast (end-to-end, untuned):</p>
+<ul>
+<li>256^2: CLBlast 236.3 GFLOPS, AiDotNet 44.2 GFLOPS (CLBlast 5.35x)</li>
+<li>512^2: CLBlast 1110.9 GFLOPS, AiDotNet 266.9 GFLOPS (CLBlast 4.16x)</li>
+<li>1024^2: CLBlast 1965.0 GFLOPS, AiDotNet 655.8 GFLOPS (CLBlast 3.00x)</li>
+<li>2048^2: CLBlast 2276.8 GFLOPS, AiDotNet 946.3 GFLOPS (CLBlast 2.41x)</li>
+<li>4096^2: CLBlast 435.1 GFLOPS, AiDotNet 397.3 GFLOPS (CLBlast 1.09x)</li>
+<li>DenseLayer (64x768x3072): CLBlast 1078.7 GFLOPS, AiDotNet 123.1 GFLOPS (CLBlast 8.76x)</li>
+<li>Large (128x4096x4096): CLBlast 2502.1 GFLOPS, AiDotNet 391.3 GFLOPS (CLBlast 6.39x)</li>
+</ul>
+<p>DirectGpu TUNED (OpenClBackend) vs CLBlast:</p>
+<ul>
+<li>256^2: CLBlast 242.4 GFLOPS, AiDotNet 466.0 GFLOPS (AiDotNet 1.93x)</li>
+<li>512^2: CLBlast 1071.2 GFLOPS, AiDotNet 173.2 GFLOPS (CLBlast 6.18x)</li>
+<li>1024^2: CLBlast 2061.0 GFLOPS, AiDotNet 349.9 GFLOPS (CLBlast 5.89x)</li>
+<li>2048^2: CLBlast 2265.5 GFLOPS, AiDotNet 518.6 GFLOPS (CLBlast 4.37x)</li>
+<li>4096^2: CLBlast 435.2 GFLOPS, AiDotNet 542.5 GFLOPS (AiDotNet 1.25x)</li>
+<li>DenseLayer (64x768x3072): CLBlast 1034.4 GFLOPS, AiDotNet 54.8 GFLOPS (CLBlast 18.89x)</li>
+<li>Large (128x4096x4096): CLBlast 2452.7 GFLOPS, AiDotNet 484.6 GFLOPS (CLBlast 5.06x)</li>
+</ul>
+<h2 id="architecture-outline">Architecture Outline</h2>
+<ul>
+<li>Engine selection:
+<ul>
+<li>NVIDIA GPU -&gt; DirectCudaBackend (custom kernels) -&gt; cuDNN/cuBLAS fallback -&gt; CPU</li>
+<li>Non-NVIDIA GPU -&gt; CLBlast-equivalent DirectOpenClBackend (primary) -&gt; CLBlast library fallback -&gt; CPU</li>
+</ul>
+</li>
+<li>Shared abstractions:
+<ul>
+<li>IGpuBackend, IGpuAllocator, IGpuKernel, IGpuStream, IGpuTuner</li>
+<li>Unified diagnostics + CSV logging across backends</li>
+</ul>
+</li>
+</ul>
+<h2 id="implementation-phases">Implementation Phases</h2>
+<ol>
+<li>Inventory + design
+<ul>
+<li>Map ILGPU usage and entry points to replace.</li>
+<li>Define backend selection logic and configuration knobs.</li>
+<li>Identify CLBlast kernel files, packing routines, and selection/tuning logic to port 1:1.</li>
+</ul>
+</li>
+<li>NVIDIA backend
+<ul>
+<li>Device discovery, context, stream, memory, kernel launch.</li>
+<li>GEMM baseline + tuned kernels; packing and layout parity with OpenCL.</li>
+<li>NVRTC-based kernel compile for tuned kernels and elementwise ops.</li>
+<li>Custom CUDA kernels are primary; cuDNN is fallback for non-GEMM primitives.</li>
+<li>Add NVRTC DLL fallback probing.</li>
+<li>Hook Bayesian tuning pipeline + diagnostics.</li>
+</ul>
+</li>
+<li>Remove ILGPU
+<ul>
+<li>Delete ILGPU package refs and types.</li>
+<li>Replace all ILGPU-specific code paths in engines and layers.</li>
+</ul>
+</li>
+<li>Fallbacks + tests
+<ul>
+<li>Wire CLBlast fallback for OpenCL path.</li>
+<li>Add cuBLAS fallback for CUDA path.</li>
+<li>Add integration tests for correctness and perf gating.</li>
+</ul>
+</li>
+<li>Docs + benchmarks
+<ul>
+<li>Update GPU docs and benchmarks to include CUDA path.</li>
+<li>Capture tuning runs and performance deltas.</li>
+</ul>
+</li>
+<li>CLBlast baseline adoption (OpenCL primary)
+<ul>
+<li>Port CLBlast kernels + packing + selectors into C# and validate bitwise/close parity.</li>
+<li>Keep the current DirectOpenClBackend path archived as an alternate for comparison only.</li>
+<li>Switch primary OpenCL engine to the CLBlast-equivalent path once parity holds.</li>
+<li>Remaining: validate direct kernel parity/perf and lock in the baseline selection thresholds.</li>
+</ul>
+</li>
+</ol>
+<h2 id="ilgpu-replacement-checklist">ILGPU Replacement Checklist</h2>
+<ul>
+<li>[ ] Complete ILGPU usage inventory and keep it current (see <code>docs/PR676_ILGPU_KERNEL_AUDIT.md</code>).</li>
+<li>[ ] Build a parity matrix mapping each ILGPU kernel family to DirectOpenCl/DirectCuda/cuBLAS/cuDNN/CPU.</li>
+<li>[ ] Implement missing OpenCL kernels (elementwise, reductions, indexing, softmax, conv/pool/norm, resampling, misc).</li>
+<li>[ ] Implement missing CUDA kernels (NVRTC for elementwise/reduction/indexing; custom GEMM; cuDNN/cuBLAS fallbacks).</li>
+<li>[ ] Wire fallback chain and logging: DirectOpenCL -&gt; CLBlast -&gt; CPU; DirectCUDA -&gt; cuBLAS/cuDNN -&gt; CPU.</li>
+<li>[x] Replace ILGPU-specific data structures (GpuTensorHandle/GpuMemoryPool) or retire them after backend parity.</li>
+<li>[x] Update Engine selection to remove ILGPU from the runtime path once parity is verified.</li>
+<li>[x] Remove ILGPU package references in <code>src/AiDotNet.csproj</code> and <code>src/AiDotNet.Tensors/AiDotNet.Tensors.csproj</code>.</li>
+<li>[ ] Delete ILGPU engine + helpers (<code>GpuEngine</code>, ILGPU kernels) after tests/perf baselines pass.</li>
+<li>[x] Update docs/benchmarks/tests that reference ILGPU baselines or behaviors.</li>
+<li>[ ] Add/expand integration tests to cover every replacement kernel family with CPU comparison.</li>
+<li>[ ] Validate performance vs CLBlast/cuBLAS for target sizes and store tuning DB + CSV diagnostics.</li>
+</ul>
+<h2 id="100-confidence-checklist">100% Confidence Checklist</h2>
+<ul>
+<li>Build a kernel parity matrix mapping ILGPU ops to DirectOpenCL/DirectCUDA/cuDNN/CLBlast/CPU and track per-op test coverage.</li>
+<li>Implement missing kernels per matrix (elementwise, reductions, softmax variants, indexing, conv/pool/norm, sparse) on OpenCL/CUDA or via fallback.</li>
+<li>Wire explicit fallback chain logging + failure recording (tuning DB logs failed configs; overwrite only when global best improves).</li>
+<li>Add integration tests that compare GPU outputs to CPU for every kernel family with deterministic seeds and tolerance targets.</li>
+<li>Validate performance vs CLBlast/cuBLAS across target sizes; run offline tuning on RX 5500 XT and store best configs + CSV diagnostics.</li>
+<li>Remove ILGPU packages/types only after parity + tests + perf baselines pass; update Engine.Default to DirectGpu-first.</li>
+<li>Document CI/manual GPU validation steps (AMD + NVIDIA) and required env vars for tuning/diagnostics.</li>
+<li>Adopt CLBlast-equivalent OpenCL baseline as primary engine and freeze it as the performance baseline.</li>
+<li>Add A/B benchmark harness: CLBlast-equivalent baseline vs baseline+1 change, with regression gates per size and end-to-end shapes.</li>
+<li>Expand search space only after 2-3 consecutive non-regressing wins on the baseline benchmark suite.</li>
+</ul>
+<h2 id="open-questions">Open Questions</h2>
+<ul>
+<li>Scope of kernels beyond GEMM (convs, activations, etc.)?</li>
+<li>Required OS/driver baseline for CUDA on target machines?</li>
+<li>Expected behavior when both OpenCL and CUDA are available?</li>
+</ul>
+<h2 id="cibuild-todo">CI/Build TODO</h2>
+<ul>
+<li>Add env-gated GPU test job(s) for OpenCL + CUDA benchmarks.</li>
+<li>Document required driver/toolkit versions for GPU runners.</li>
+<li>Define CI switches for tuning runs vs correctness-only runs.</li>
+<li>Add artifact capture for tuning CSVs and benchmark outputs.</li>
+<li>Add smoke tests for backend selection/fallback chain on CPU-only runners.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/PR676_GPU_BACKEND_PLAN.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

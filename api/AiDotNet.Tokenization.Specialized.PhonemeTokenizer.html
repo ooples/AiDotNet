@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PhonemeTokenizer | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PhonemeTokenizer | AiDotNet Documentation ">
+      
+      <meta name="description" content="Phoneme-based tokenizer for speech synthesis (TTS) applications.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tokenization_Specialized_PhonemeTokenizer.md&amp;value=---%0Auid%3A%20AiDotNet.Tokenization.Specialized.PhonemeTokenizer%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer">
+
+
+
+  <h1 id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer" class="text-break">
+Class PhonemeTokenizer  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Specialized/PhonemeTokenizer.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tokenization.html">Tokenization</a>.<a class="xref" href="AiDotNet.Tokenization.Specialized.html">Specialized</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Phoneme-based tokenizer for speech synthesis (TTS) applications.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PhonemeTokenizer : TokenizerBase, ITokenizer</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html">TokenizerBase</a></div>
+      <div><span class="xref">PhonemeTokenizer</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tokenization.Interfaces.ITokenizer.html">ITokenizer</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_Vocabulary">TokenizerBase.Vocabulary</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_SpecialTokens">TokenizerBase.SpecialTokens</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_VocabularySize">TokenizerBase.VocabularySize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_Encode_System_String_AiDotNet_Tokenization_Models_EncodingOptions_">TokenizerBase.Encode(string, EncodingOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_EncodeBatch_System_Collections_Generic_List_System_String__AiDotNet_Tokenization_Models_EncodingOptions_">TokenizerBase.EncodeBatch(List&lt;string&gt;, EncodingOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_Decode_System_Collections_Generic_List_System_Int32__System_Boolean_">TokenizerBase.Decode(List&lt;int&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_DecodeBatch_System_Collections_Generic_List_System_Collections_Generic_List_System_Int32___System_Boolean_">TokenizerBase.DecodeBatch(List&lt;List&lt;int&gt;&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_ConvertTokensToIds_System_Collections_Generic_List_System_String__">TokenizerBase.ConvertTokensToIds(List&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_ConvertIdsToTokens_System_Collections_Generic_List_System_Int32__">TokenizerBase.ConvertIdsToTokens(List&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_AddSpecialTokensToSequence_System_Collections_Generic_List_System_String__">TokenizerBase.AddSpecialTokensToSequence(List&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tokenization.Core.TokenizerBase.html#AiDotNet_Tokenization_Core_TokenizerBase_TruncateSequence_System_Collections_Generic_List_System_String__System_Int32_System_String_">TokenizerBase.TruncateSequence(List&lt;string&gt;, int, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer__ctor_" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer__ctor_AiDotNet_Tokenization_Interfaces_IVocabulary_System_Collections_Generic_Dictionary_System_String_System_String__AiDotNet_Tokenization_Models_SpecialTokens_AiDotNet_Tokenization_Specialized_PhonemeTokenizer_PhonemeSet_" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.#ctor(AiDotNet.Tokenization.Interfaces.IVocabulary,System.Collections.Generic.Dictionary{System.String,System.String},AiDotNet.Tokenization.Models.SpecialTokens,AiDotNet.Tokenization.Specialized.PhonemeTokenizer.PhonemeSet)">
+  PhonemeTokenizer(IVocabulary, Dictionary&lt;string, string&gt;, SpecialTokens, PhonemeSet)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Specialized/PhonemeTokenizer.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new phoneme tokenizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PhonemeTokenizer(IVocabulary vocabulary, Dictionary&lt;string, string&gt; g2pRules, SpecialTokens specialTokens, PhonemeTokenizer.PhonemeSet phonemeSet = PhonemeSet.IPA)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vocabulary</code> <a class="xref" href="AiDotNet.Tokenization.Interfaces.IVocabulary.html">IVocabulary</a></dt>
+    <dd></dd>
+    <dt><code>g2pRules</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>specialTokens</code> <a class="xref" href="AiDotNet.Tokenization.Models.SpecialTokens.html">SpecialTokens</a></dt>
+    <dd></dd>
+    <dt><code>phonemeSet</code> <a class="xref" href="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.html">PhonemeTokenizer</a>.<a class="xref" href="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.PhonemeSet.html">PhonemeSet</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer_CleanupTokens_" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.CleanupTokens*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer_CleanupTokens_System_Collections_Generic_List_System_String__" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.CleanupTokens(System.Collections.Generic.List{System.String})">
+  CleanupTokens(List&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Specialized/PhonemeTokenizer.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Cleans up tokens and converts them back to text (must be implemented by derived classes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override string CleanupTokens(List&lt;string&gt; tokens)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer_CreateARPAbet_" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.CreateARPAbet*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer_CreateARPAbet_AiDotNet_Tokenization_Models_SpecialTokens_" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.CreateARPAbet(AiDotNet.Tokenization.Models.SpecialTokens)">
+  CreateARPAbet(SpecialTokens?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Specialized/PhonemeTokenizer.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a phoneme tokenizer with ARPAbet phonemes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static PhonemeTokenizer CreateARPAbet(SpecialTokens? specialTokens = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>specialTokens</code> <a class="xref" href="AiDotNet.Tokenization.Models.SpecialTokens.html">SpecialTokens</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.html">PhonemeTokenizer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer_Tokenize_" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.Tokenize*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Specialized_PhonemeTokenizer_Tokenize_System_String_" data-uid="AiDotNet.Tokenization.Specialized.PhonemeTokenizer.Tokenize(System.String)">
+  Tokenize(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Specialized/PhonemeTokenizer.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Tokenizes text into phonemes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override List&lt;string&gt; Tokenize(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Specialized/PhonemeTokenizer.cs/#L14" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

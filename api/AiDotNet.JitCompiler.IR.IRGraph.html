@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class IRGraph | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class IRGraph | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a computation graph in intermediate representation form.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_IR_IRGraph.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.IR.IRGraph%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.IR.IRGraph">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_IR_IRGraph" data-uid="AiDotNet.JitCompiler.IR.IRGraph" class="text-break">
+Class IRGraph  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a>.<a class="xref" href="AiDotNet.JitCompiler.IR.html">IR</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a computation graph in intermediate representation form.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class IRGraph</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">IRGraph</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_IR_IRGraph_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+An IRGraph is a structured representation of a sequence of tensor operations
+that have been recorded during autodiff execution. It serves as an intermediate
+format between the high-level ComputationNode graph and the low-level compiled code.
+</p>
+<p><b>For Beginners:</b> Think of an IRGraph as a recipe for computations.
+<p>Just like a recipe lists ingredients and steps:</p>
+<ul>
+<li>InputIds are the ingredients (input tensors)</li>
+<li>Operations are the cooking steps (add, multiply, etc.)</li>
+<li>OutputIds are the final dishes (output tensors)</li>
+<li>TensorShapes tells us the &quot;size&quot; of each intermediate result</li>
+</ul>
+<p>The IR graph makes it easier to optimize the computation (like combining steps)
+and then compile it to fast executable code.</p>
+<p>Example:
+If your model does: result = ReLU(MatMul(input, weights) + bias)
+The IR graph would have 3 operations: MatMul, Add, ReLU
+Each operation knows its inputs and produces an output.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_IR_IRGraph_InputIds_" data-uid="AiDotNet.JitCompiler.IR.IRGraph.InputIds*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IRGraph_InputIds" data-uid="AiDotNet.JitCompiler.IR.IRGraph.InputIds">
+  InputIds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the IDs of input tensors to this graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; InputIds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IRGraph_InputIds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Input tensors are provided by the caller and are not computed within the graph.
+They serve as the starting point for all computations.
+</p>
+<p><b>For Beginners:</b> These are the "ingredients" that you provide to start the computation.
+<p>For a neural network, inputs might be:</p>
+<ul>
+<li>The input data (like an image)</li>
+<li>Model parameters (weights and biases)</li>
+</ul>
+<p>The graph will process these inputs through all its operations to produce outputs.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IRGraph_Metadata_" data-uid="AiDotNet.JitCompiler.IR.IRGraph.Metadata*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IRGraph_Metadata" data-uid="AiDotNet.JitCompiler.IR.IRGraph.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets optional metadata about the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metadata { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IRGraph_Operations_" data-uid="AiDotNet.JitCompiler.IR.IRGraph.Operations*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IRGraph_Operations" data-uid="AiDotNet.JitCompiler.IR.IRGraph.Operations">
+  Operations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the list of operations in this graph, in execution order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;IROp&gt; Operations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html">IROp</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IRGraph_Operations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Operations are stored in topological order, meaning each operation appears
+after all operations that produce its inputs. This ensures correct execution order.
+</p>
+<p><b>For Beginners:</b> This is the ordered list of computation steps.
+<p>The order matters! You can't add two numbers before you've computed them.
+Each operation in the list uses results from earlier operations.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IRGraph_OutputIds_" data-uid="AiDotNet.JitCompiler.IR.IRGraph.OutputIds*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IRGraph_OutputIds" data-uid="AiDotNet.JitCompiler.IR.IRGraph.OutputIds">
+  OutputIds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the IDs of output tensors produced by this graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; OutputIds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IRGraph_OutputIds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Output tensors are the final results of the graph computation and are
+returned to the caller.
+</p>
+<p><b>For Beginners:</b> These are the "final dishes" - the results you care about.
+<p>For a neural network, outputs might be:</p>
+<ul>
+<li>Predictions (class probabilities)</li>
+<li>Loss value</li>
+<li>Intermediate features (for visualization)</li>
+</ul>
+<p>Everything else in the graph is just intermediate calculations to get to these outputs.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IRGraph_TensorShapes_" data-uid="AiDotNet.JitCompiler.IR.IRGraph.TensorShapes*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IRGraph_TensorShapes" data-uid="AiDotNet.JitCompiler.IR.IRGraph.TensorShapes">
+  TensorShapes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mapping from tensor IDs to their shapes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;int, int[]&gt; TensorShapes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IRGraph_TensorShapes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Every tensor in the graph (inputs, outputs, and intermediates) has a unique ID
+and a known shape (represented as int[] matching Tensor&lt;T&gt;.Shape).
+This dictionary provides that mapping.
+</p>
+<p><b>For Beginners:</b> This is like a table that tells us the size of each value.
+<p>For example:</p>
+<ul>
+<li>Tensor 0 might be [32, 784] (a batch of 32 images, each with 784 pixels)</li>
+<li>Tensor 1 might be [784, 128] (weights connecting 784 inputs to 128 outputs)</li>
+<li>Tensor 2 might be [32, 128] (the result of multiplying tensor 0 and 1)</li>
+</ul>
+<p>Knowing shapes helps us:</p>
+<ul>
+<li>Allocate the right amount of memory</li>
+<li>Check that operations are valid (can't multiply incompatible shapes)</li>
+<li>Optimize operations for specific sizes</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_IR_IRGraph_ComputeStructureHash_" data-uid="AiDotNet.JitCompiler.IR.IRGraph.ComputeStructureHash*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IRGraph_ComputeStructureHash" data-uid="AiDotNet.JitCompiler.IR.IRGraph.ComputeStructureHash">
+  ComputeStructureHash()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes a hash code for this graph structure (ignoring tensor values).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ComputeStructureHash()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IRGraph_ComputeStructureHash_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The hash is based on the graph structure: operation types, shapes, and connectivity.
+This is used for caching compiled graphs - graphs with the same structure can reuse
+the same compiled code even if the actual tensor values are different.
+</p>
+<p><b>For Beginners:</b> This creates a "fingerprint" for the graph structure.
+<p>Two graphs with the same fingerprint have the same structure (same operations,
+same shapes) even if the actual numbers in the tensors are different.</p>
+<p>This lets us reuse compiled code:</p>
+<ul>
+<li>First time: Compile the graph (slow)</li>
+<li>Next time with same structure: Reuse compiled code (fast!)</li>
+</ul>
+<p>It's like having a pre-cooked recipe that you can use with different ingredients.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IRGraph_ToString_" data-uid="AiDotNet.JitCompiler.IR.IRGraph.ToString*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IRGraph_ToString" data-uid="AiDotNet.JitCompiler.IR.IRGraph.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a string representation of the graph for debugging and visualization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IRGraph_Validate_" data-uid="AiDotNet.JitCompiler.IR.IRGraph.Validate*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IRGraph_Validate" data-uid="AiDotNet.JitCompiler.IR.IRGraph.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the graph structure for correctness.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Validate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the graph is valid, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IRGraph_Validate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Validation checks include:
+- All input tensor IDs are defined in TensorShapes
+- All operation inputs reference valid tensor IDs
+- No cycles in the graph (it's a DAG)
+- All output IDs are produced by operations or are inputs
+</p>
+<p><b>For Beginners:</b> This checks that the "recipe" makes sense.
+<p>It verifies:</p>
+<ul>
+<li>You're not using an ingredient that doesn't exist</li>
+<li>Steps are in the right order (don't use results before computing them)</li>
+<li>The final outputs are actually produced by the recipe</li>
+</ul>
+<p>If validation fails, something is wrong with how the graph was constructed.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IRGraph.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

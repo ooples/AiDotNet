@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AutoMLOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AutoMLOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for running AutoML through the AiDotNet facade.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Configuration_AutoMLOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Configuration.AutoMLOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Configuration.AutoMLOptions`3">
+
+
+
+  <h1 id="AiDotNet_Configuration_AutoMLOptions_3" data-uid="AiDotNet.Configuration.AutoMLOptions`3" class="text-break">
+Class AutoMLOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Configuration.html">Configuration</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for running AutoML through the AiDotNet facade.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AutoMLOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The model input type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The model output type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AutoMLOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Configuration_AutoMLOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This options class is designed for use with <code>PredictionModelBuilder</code>.
+It follows the AiDotNet facade pattern: users provide minimal configuration, and the library supplies
+industry-standard defaults internally.
+</p>
+<p>
+<b>For Beginners:</b> AutoML is an automatic "model picker + tuner".
+You choose a budget, and AutoML tries different models/settings to find a strong performer.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_Budget_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.Budget*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_Budget" data-uid="AiDotNet.Configuration.AutoMLOptions`3.Budget">
+  Budget
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the compute budget for the AutoML run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AutoMLBudgetOptions Budget { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.AutoMLBudgetOptions.html">AutoMLBudgetOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_CrossValidation_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.CrossValidation*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_CrossValidation" data-uid="AiDotNet.Configuration.AutoMLOptions`3.CrossValidation">
+  CrossValidation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets cross-validation options for trial evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CrossValidationOptions? CrossValidation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.CrossValidationOptions.html">CrossValidationOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_AutoMLOptions_3_CrossValidation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, each trial is evaluated using k-fold cross-validation instead of a single
+train/validation split. This provides more robust performance estimates but increases
+computation time by a factor of k (the number of folds).
+</p>
+<p>
+<b>For Beginners:</b> Cross-validation splits your data into k parts ("folds"). The model
+is trained k times, each time using a different fold for validation. The final score is
+the average across all folds, giving a more reliable estimate of how well the model
+generalizes to unseen data.
+</p>
+<p>
+If null, cross-validation is disabled and trials use a single train/validation split.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_Ensembling_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.Ensembling*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_Ensembling" data-uid="AiDotNet.Configuration.AutoMLOptions`3.Ensembling">
+  Ensembling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets optional ensembling options applied after the AutoML search completes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AutoMLEnsembleOptions? Ensembling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.AutoMLEnsembleOptions.html">AutoMLEnsembleOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_AutoMLOptions_3_Ensembling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If null, the facade uses sensible defaults based on the selected budget preset.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_MultiFidelity_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.MultiFidelity*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_MultiFidelity" data-uid="AiDotNet.Configuration.AutoMLOptions`3.MultiFidelity">
+  MultiFidelity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets multi-fidelity options used when <a class="xref" href="AiDotNet.Configuration.AutoMLOptions-3.html#AiDotNet_Configuration_AutoMLOptions_3_SearchStrategy">SearchStrategy</a> is <a class="xref" href="AiDotNet.Enums.AutoMLSearchStrategy.html#AiDotNet_Enums_AutoMLSearchStrategy_MultiFidelity">MultiFidelity</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AutoMLMultiFidelityOptions? MultiFidelity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.AutoMLMultiFidelityOptions.html">AutoMLMultiFidelityOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_AutoMLOptions_3_MultiFidelity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If null, sensible defaults are used.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_NAS_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.NAS*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_NAS" data-uid="AiDotNet.Configuration.AutoMLOptions`3.NAS">
+  NAS
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets Neural Architecture Search (NAS) specific AutoML options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NASOptions&lt;T&gt;? NAS { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.NASOptions-1.html">NASOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_AutoMLOptions_3_NAS_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is used when <a class="xref" href="AiDotNet.Configuration.AutoMLOptions-3.html#AiDotNet_Configuration_AutoMLOptions_3_SearchStrategy">SearchStrategy</a> is set to one of the NAS strategies:
+<a class="xref" href="AiDotNet.Enums.AutoMLSearchStrategy.html#AiDotNet_Enums_AutoMLSearchStrategy_NeuralArchitectureSearch">NeuralArchitectureSearch</a>, <a class="xref" href="AiDotNet.Enums.AutoMLSearchStrategy.html#AiDotNet_Enums_AutoMLSearchStrategy_DARTS">DARTS</a>,
+<a class="xref" href="AiDotNet.Enums.AutoMLSearchStrategy.html#AiDotNet_Enums_AutoMLSearchStrategy_GDAS">GDAS</a>, or <a class="xref" href="AiDotNet.Enums.AutoMLSearchStrategy.html#AiDotNet_Enums_AutoMLSearchStrategy_OnceForAll">OnceForAll</a>.
+</p>
+<p>
+<b>For Beginners:</b> NAS automatically discovers optimal neural network architectures.
+Instead of manually designing layers, NAS explores different designs to find the best one
+for your data and hardware constraints.
+</p>
+<p>
+If null, sensible defaults are used based on the selected NAS strategy.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_OptimizationMetricOverride_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.OptimizationMetricOverride*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_OptimizationMetricOverride" data-uid="AiDotNet.Configuration.AutoMLOptions`3.OptimizationMetricOverride">
+  OptimizationMetricOverride
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets an optional optimization metric override.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetricType? OptimizationMetricOverride { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_AutoMLOptions_3_OptimizationMetricOverride_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If null, AutoML chooses an industry-standard default metric for the inferred task family.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_ReinforcementLearning_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.ReinforcementLearning*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_ReinforcementLearning" data-uid="AiDotNet.Configuration.AutoMLOptions`3.ReinforcementLearning">
+  ReinforcementLearning
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets reinforcement-learning specific AutoML options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RLAutoMLOptions&lt;T&gt;? ReinforcementLearning { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.RLAutoMLOptions-1.html">RLAutoMLOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_AutoMLOptions_3_ReinforcementLearning_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is used when <a class="xref" href="AiDotNet.Configuration.AutoMLOptions-3.html#AiDotNet_Configuration_AutoMLOptions_3_TaskFamilyOverride">TaskFamilyOverride</a> is set to <a class="xref" href="AiDotNet.Enums.AutoMLTaskFamily.html#AiDotNet_Enums_AutoMLTaskFamily_ReinforcementLearning">ReinforcementLearning</a>.
+If null, sensible defaults are used.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_SearchStrategy_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.SearchStrategy*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_SearchStrategy" data-uid="AiDotNet.Configuration.AutoMLOptions`3.SearchStrategy">
+  SearchStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the search strategy used for hyperparameter/model exploration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AutoMLSearchStrategy SearchStrategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.AutoMLSearchStrategy.html">AutoMLSearchStrategy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Configuration_AutoMLOptions_3_TaskFamilyOverride_" data-uid="AiDotNet.Configuration.AutoMLOptions`3.TaskFamilyOverride*"></a>
+
+  <h3 id="AiDotNet_Configuration_AutoMLOptions_3_TaskFamilyOverride" data-uid="AiDotNet.Configuration.AutoMLOptions`3.TaskFamilyOverride">
+  TaskFamilyOverride
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets an optional task family override.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AutoMLTaskFamily? TaskFamilyOverride { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.AutoMLTaskFamily.html">AutoMLTaskFamily</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_AutoMLOptions_3_TaskFamilyOverride_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If null, AutoML infers the task family from the training labels and model/task configuration.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/AutoMLOptions.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

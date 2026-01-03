@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Struct ModelResult&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct ModelResult&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the complete results of a model-building process, including the model solution, fitness metrics, fit detection results, evaluation data, and selected features.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_ModelResult_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.ModelResult%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.ModelResult`3">
+
+
+
+  <h1 id="AiDotNet_Models_Results_ModelResult_3" data-uid="AiDotNet.Models.Results.ModelResult`3" class="text-break">
+Struct ModelResult&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ModelResult.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the complete results of a model-building process, including the model solution, fitness metrics,
+fit detection results, evaluation data, and selected features.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public struct ModelResult&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.equals">ValueType.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.gethashcode">ValueType.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.tostring">ValueType.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_ModelResult_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This struct encapsulates all the important information produced during the model-building and evaluation process. 
+It includes the symbolic model itself, a fitness score indicating how well the model performs, detailed fit 
+detection results that analyze potential issues like overfitting or underfitting, comprehensive evaluation data 
+with various performance metrics, and information about which features were selected for the model. This 
+comprehensive package of information allows for thorough analysis and comparison of different models.
+</p>
+<p><b>For Beginners:</b> This struct is like a container that holds everything about a model's performance.
+<p>When building machine learning or statistical models:</p>
+<ul>
+<li>You need to track many different aspects of model performance</li>
+<li>You want to compare different models to choose the best one</li>
+<li>You need to understand not just how well a model performs, but why</li>
+</ul>
+<p>This struct stores:</p>
+<ul>
+<li>The actual model solution (the equation or algorithm)</li>
+<li>How well the model fits the data (fitness score)</li>
+<li>Analysis of potential issues like overfitting or underfitting</li>
+<li>Detailed performance metrics on different datasets</li>
+<li>Which input features were used in the model</li>
+</ul>
+<p>Having all this information in one place makes it easier to evaluate, compare,
+and document your models.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_ModelResult_3_EvaluationData_" data-uid="AiDotNet.Models.Results.ModelResult`3.EvaluationData*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ModelResult_3_EvaluationData" data-uid="AiDotNet.Models.Results.ModelResult`3.EvaluationData">
+  EvaluationData
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ModelResult.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the detailed evaluation data for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelEvaluationData&lt;T, TInput, TOutput&gt; EvaluationData { readonly get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A ModelEvaluationData&lt;T&gt; object containing comprehensive performance metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ModelResult_3_EvaluationData_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains detailed evaluation data for the model, including various performance metrics calculated 
+on different datasets (typically training, validation, and test sets). The evaluation data provides a more 
+comprehensive view of model performance than the single fitness score. It may include metrics such as R-squared, 
+mean squared error, mean absolute error, and others, calculated for each dataset. This detailed information 
+helps in understanding how well the model generalizes to unseen data and in identifying potential issues with 
+the model.
+</p>
+<p><b>For Beginners:</b> This contains detailed performance metrics for your model.
+<p>The evaluation data:</p>
+<ul>
+<li>Provides multiple performance metrics (not just the fitness score)</li>
+<li>Shows how the model performs on different datasets (training, validation, test)</li>
+<li>Gives a more complete picture of model performance</li>
+</ul>
+<p>Common metrics included might be:</p>
+<ul>
+<li>R² (R-squared): How much variance is explained</li>
+<li>MSE (Mean Squared Error): Average squared difference between predictions and actual values</li>
+<li>MAE (Mean Absolute Error): Average absolute difference between predictions and actual values</li>
+<li>RMSE (Root Mean Squared Error): Square root of MSE, in the same units as the target variable</li>
+</ul>
+<p>This detailed information helps you:</p>
+<ul>
+<li>Better understand model strengths and weaknesses</li>
+<li>Compare models using different metrics</li>
+<li>Assess how well the model will generalize to new data</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ModelResult_3_FitDetectionResult_" data-uid="AiDotNet.Models.Results.ModelResult`3.FitDetectionResult*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ModelResult_3_FitDetectionResult" data-uid="AiDotNet.Models.Results.ModelResult`3.FitDetectionResult">
+  FitDetectionResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ModelResult.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the results of fit detection analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FitDetectorResult&lt;T&gt; FitDetectionResult { readonly get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.FitDetectorResult-1.html">FitDetectorResult</a>&lt;T&gt;</dt>
+    <dd><p>A FitDetectorResult&lt;T&gt; object containing detailed fit analysis.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ModelResult_3_FitDetectionResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the results of fit detection analysis, which evaluates how well the model fits the data 
+and identifies potential issues such as underfitting or overfitting. Underfitting occurs when the model is too 
+simple to capture the underlying patterns in the data, resulting in poor performance on both training and test 
+data. Overfitting occurs when the model is too complex and captures noise in the training data, resulting in 
+good performance on training data but poor performance on test data. The FitDetectorResult includes the type 
+of fit detected, a confidence level for that assessment, and recommendations for improving the model.
+</p>
+<p><b>For Beginners:</b> This contains an analysis of how well your model fits the data.
+<p>The fit detection result:</p>
+<ul>
+<li>Identifies if your model is underfitting, overfitting, or has a good fit</li>
+<li>Provides a confidence level for this assessment</li>
+<li>Offers specific recommendations to improve your model</li>
+</ul>
+<p>This analysis helps you understand:</p>
+<ul>
+<li>If your model is too simple (underfitting)</li>
+<li>If your model is too complex (overfitting)</li>
+<li>What steps you should take to improve it</li>
+</ul>
+<p>For example, if your model is overfitting, the fit detection might recommend
+adding regularization or reducing model complexity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ModelResult_3_Fitness_" data-uid="AiDotNet.Models.Results.ModelResult`3.Fitness*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ModelResult_3_Fitness" data-uid="AiDotNet.Models.Results.ModelResult`3.Fitness">
+  Fitness
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ModelResult.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fitness score of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Fitness { readonly get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A numeric value representing the model's fitness or performance.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ModelResult_3_Fitness_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the fitness or performance score of the model. The fitness score is a single numeric 
+value that quantifies how well the model performs, typically on the training data. Higher values usually 
+indicate better performance, though the exact interpretation depends on the specific fitness function used. 
+Common fitness metrics include R-squared (coefficient of determination), negative mean squared error, or 
+accuracy. The fitness score is often used as the primary criterion for comparing and selecting models during 
+the model-building process, especially in evolutionary algorithms or other optimization approaches.
+</p>
+<p><b>For Beginners:</b> This value tells you how well the model performs overall.
+<p>The fitness score:</p>
+<ul>
+<li>Measures how well the model fits the data</li>
+<li>Is typically a single number that summarizes performance</li>
+<li>Higher values usually indicate better performance</li>
+</ul>
+<p>Common fitness metrics include:</p>
+<ul>
+<li>R² (R-squared): Measures the proportion of variance explained (higher is better)</li>
+<li>Negative MSE (Mean Squared Error): Measures prediction error (closer to zero is better)</li>
+<li>Accuracy: For classification problems, the percentage of correct predictions</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It allows you to quickly compare different models</li>
+<li>It's often used to guide the model selection process</li>
+<li>It provides a simple summary of model performance</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ModelResult_3_SelectedFeatures_" data-uid="AiDotNet.Models.Results.ModelResult`3.SelectedFeatures*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ModelResult_3_SelectedFeatures" data-uid="AiDotNet.Models.Results.ModelResult`3.SelectedFeatures">
+  SelectedFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ModelResult.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the list of feature vectors selected for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Vector&lt;T&gt;&gt; SelectedFeatures { readonly get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A list of Vector&lt;T&gt; objects representing the selected features.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ModelResult_3_SelectedFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the list of feature vectors that were selected for use in the model. Feature selection 
+is the process of identifying and selecting the most relevant features (input variables) for the model, which 
+can improve model performance, reduce overfitting, and enhance interpretability. The selected features are 
+represented as vectors, where each vector corresponds to a feature and contains the values of that feature 
+across all observations in the dataset. This information is useful for understanding which input variables 
+the model considers important and for reproducing the model with new data.
+</p>
+<p><b>For Beginners:</b> This list shows which input variables were used in the model.
+<p>The selected features:</p>
+<ul>
+<li>Represent the input variables that were chosen for the model</li>
+<li>Are stored as vectors (arrays) of values</li>
+<li>May be a subset of all available features if feature selection was performed</li>
+</ul>
+<p>Feature selection is important because:</p>
+<ul>
+<li>Using too many features can lead to overfitting</li>
+<li>Some features may be irrelevant or redundant</li>
+<li>Models with fewer features are often more interpretable</li>
+</ul>
+<p>For example, if you started with 20 potential input variables but the model
+only uses 5 of them, this list would contain those 5 selected features.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ModelResult_3_Solution_" data-uid="AiDotNet.Models.Results.ModelResult`3.Solution*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ModelResult_3_Solution" data-uid="AiDotNet.Models.Results.ModelResult`3.Solution">
+  Solution
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ModelResult.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; Solution { readonly get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ModelResult.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

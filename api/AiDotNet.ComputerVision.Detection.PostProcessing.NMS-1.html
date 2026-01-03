@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NMS&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NMS&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Non-Maximum Suppression (NMS) algorithms for removing duplicate detections.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.Detection.PostProcessing.NMS%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1" class="text-break">
+Class NMS&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.html">Detection</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.PostProcessing.html">PostProcessing</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Non-Maximum Suppression (NMS) algorithms for removing duplicate detections.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NMS&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NMS&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> When an object detector runs, it often produces multiple
+overlapping bounding boxes for the same object. NMS removes these duplicates by:
+1. Keeping the detection with highest confidence
+2. Removing other detections that overlap too much with it
+3. Repeating until all duplicates are removed
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1__ctor_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1__ctor" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.#ctor">
+  NMS()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new NMS instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NMS()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_Apply_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.Apply*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_Apply_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.Apply(System.Collections.Generic.List{AiDotNet.ComputerVision.Detection.ObjectDetection.Detection{`0}},System.Double)">
+  Apply(List&lt;Detection&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs standard NMS on a list of detections.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Detection&lt;T&gt;&gt; Apply(List&lt;Detection&lt;T&gt;&gt; detections, double iouThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>detections</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of detections to filter.</p>
+</dd>
+    <dt><code>iouThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>IoU threshold above which boxes are considered duplicates.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Filtered list of detections.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_Apply_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the classic NMS algorithm:
+1. Sort detections by confidence (highest first)
+2. Take the top detection, add to results
+3. Remove all detections that overlap with it by more than iouThreshold
+4. Repeat until no detections remain
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ApplyBatched_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ApplyBatched*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ApplyBatched_System_Collections_Generic_List_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0____System_Double_System_Boolean_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ApplyBatched(System.Collections.Generic.List{System.Collections.Generic.List{AiDotNet.ComputerVision.Detection.ObjectDetection.Detection{`0}}},System.Double,System.Boolean)">
+  ApplyBatched(List&lt;List&lt;Detection&lt;T&gt;&gt;&gt;, double, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs batched NMS for efficient processing of multiple images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;List&lt;Detection&lt;T&gt;&gt;&gt; ApplyBatched(List&lt;List&lt;Detection&lt;T&gt;&gt;&gt; batchDetections, double iouThreshold, bool classAware = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchDetections</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>Detections grouped by image index.</p>
+</dd>
+    <dt><code>iouThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>IoU threshold for suppression.</p>
+</dd>
+    <dt><code>classAware</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to apply class-aware NMS.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>Filtered detections for each image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ApplyClassAware_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ApplyClassAware*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ApplyClassAware_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ApplyClassAware(System.Collections.Generic.List{AiDotNet.ComputerVision.Detection.ObjectDetection.Detection{`0}},System.Double)">
+  ApplyClassAware(List&lt;Detection&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs class-aware NMS (applies NMS separately per class).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Detection&lt;T&gt;&gt; ApplyClassAware(List&lt;Detection&lt;T&gt;&gt; detections, double iouThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>detections</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of detections to filter.</p>
+</dd>
+    <dt><code>iouThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>IoU threshold for suppression.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Filtered list of detections.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ApplyClassAware_System_Collections_Generic_List_AiDotNet_ComputerVision_Detection_ObjectDetection_Detection__0___System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Class-aware NMS only suppresses boxes of the same class.
+This allows a "person" detection to overlap with a "car" detection without either
+being suppressed.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeCIoU_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ComputeCIoU*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeCIoU_AiDotNet_Augmentation_Image_BoundingBox__0__AiDotNet_Augmentation_Image_BoundingBox__0__" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ComputeCIoU(AiDotNet.Augmentation.Image.BoundingBox{`0},AiDotNet.Augmentation.Image.BoundingBox{`0})">
+  ComputeCIoU(BoundingBox&lt;T&gt;, BoundingBox&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Complete IoU (CIoU) between two bounding boxes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeCIoU(BoundingBox&lt;T&gt; box1, BoundingBox&lt;T&gt; box2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>box1</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd><p>First bounding box.</p>
+</dd>
+    <dt><code>box2</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd><p>Second bounding box.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>CIoU value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeCIoU_AiDotNet_Augmentation_Image_BoundingBox__0__AiDotNet_Augmentation_Image_BoundingBox__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> CIoU extends DIoU by also considering aspect ratio.
+This provides the best localization accuracy and is used in modern YOLO versions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeDIoU_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ComputeDIoU*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeDIoU_AiDotNet_Augmentation_Image_BoundingBox__0__AiDotNet_Augmentation_Image_BoundingBox__0__" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ComputeDIoU(AiDotNet.Augmentation.Image.BoundingBox{`0},AiDotNet.Augmentation.Image.BoundingBox{`0})">
+  ComputeDIoU(BoundingBox&lt;T&gt;, BoundingBox&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Distance IoU (DIoU) between two bounding boxes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeDIoU(BoundingBox&lt;T&gt; box1, BoundingBox&lt;T&gt; box2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>box1</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd><p>First bounding box.</p>
+</dd>
+    <dt><code>box2</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd><p>Second bounding box.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>DIoU value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeDIoU_AiDotNet_Augmentation_Image_BoundingBox__0__AiDotNet_Augmentation_Image_BoundingBox__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> DIoU adds a penalty based on the distance between
+box centers. This helps with faster convergence during training and better
+localization.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeGIoU_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ComputeGIoU*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeGIoU_AiDotNet_Augmentation_Image_BoundingBox__0__AiDotNet_Augmentation_Image_BoundingBox__0__" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ComputeGIoU(AiDotNet.Augmentation.Image.BoundingBox{`0},AiDotNet.Augmentation.Image.BoundingBox{`0})">
+  ComputeGIoU(BoundingBox&lt;T&gt;, BoundingBox&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Generalized IoU (GIoU) between two bounding boxes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeGIoU(BoundingBox&lt;T&gt; box1, BoundingBox&lt;T&gt; box2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>box1</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd><p>First bounding box.</p>
+</dd>
+    <dt><code>box2</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd><p>Second bounding box.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>GIoU value between -1 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeGIoU_AiDotNet_Augmentation_Image_BoundingBox__0__AiDotNet_Augmentation_Image_BoundingBox__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> GIoU is an improved version of IoU that also considers
+the smallest enclosing box. Unlike IoU, GIoU can be negative when boxes don't overlap
+but provides gradients even for non-overlapping boxes.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeIoU_" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ComputeIoU*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeIoU_AiDotNet_Augmentation_Image_BoundingBox__0__AiDotNet_Augmentation_Image_BoundingBox__0__" data-uid="AiDotNet.ComputerVision.Detection.PostProcessing.NMS`1.ComputeIoU(AiDotNet.Augmentation.Image.BoundingBox{`0},AiDotNet.Augmentation.Image.BoundingBox{`0})">
+  ComputeIoU(BoundingBox&lt;T&gt;, BoundingBox&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Intersection over Union (IoU) between two bounding boxes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeIoU(BoundingBox&lt;T&gt; box1, BoundingBox&lt;T&gt; box2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>box1</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd><p>First bounding box.</p>
+</dd>
+    <dt><code>box2</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd><p>Second bounding box.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>IoU value between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_PostProcessing_NMS_1_ComputeIoU_AiDotNet_Augmentation_Image_BoundingBox__0__AiDotNet_Augmentation_Image_BoundingBox__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> IoU measures how much two boxes overlap:
+- IoU = 0: No overlap
+- IoU = 1: Boxes are identical
+- IoU = 0.5: About 50% overlap
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/PostProcessing/NMS.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

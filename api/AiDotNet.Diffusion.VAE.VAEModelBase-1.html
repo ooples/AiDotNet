@@ -1,0 +1,2300 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class VAEModelBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class VAEModelBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for Variational Autoencoder (VAE) models used in latent diffusion.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Diffusion_VAE_VAEModelBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Diffusion.VAE.VAEModelBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1">
+
+
+
+  <h1 id="AiDotNet_Diffusion_VAE_VAEModelBase_1" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1" class="text-break">
+Class VAEModelBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.Diffusion.VAE.html">VAE</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for Variational Autoencoder (VAE) models used in latent diffusion.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class VAEModelBase&lt;T&gt; : IVAEModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">VAEModelBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Diffusion.VAE.AudioVAE-1.html">AudioVAE&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Diffusion.VAE.AutoencoderKL-1.html">AutoencoderKL&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Diffusion.VAE.StandardVAE-1.html">StandardVAE&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Diffusion.VAE.TemporalVAE-1.html">TemporalVAE&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract base class provides common functionality for all VAE implementations,
+including encoding, decoding, sampling, and latent scaling operations.
+</p>
+<p>
+<b>For Beginners:</b> This is the foundation for all VAE models in the library.
+VAEs compress images to a small latent representation and decompress them back.
+They are essential for efficient latent diffusion models like Stable Diffusion.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1__ctor_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1__ctor_AiDotNet_Interfaces_ILossFunction__0__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.#ctor(AiDotNet.Interfaces.ILossFunction{`0},System.Nullable{System.Int32})">
+  VAEModelBase(ILossFunction&lt;T&gt;?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the VAEModelBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected VAEModelBase(ILossFunction&lt;T&gt;? lossFunction = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom loss function. Defaults to MSE.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LossFunction" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The loss function used for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly ILossFunction&lt;T&gt; LossFunction</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_NumOps" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides numeric operations for the specific type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_RandomGenerator" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.RandomGenerator">
+  RandomGenerator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random number generator for sampling operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Random RandomGenerator</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SlicingEnabled" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SlicingEnabled">
+  SlicingEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether slicing mode is enabled for sequential processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool SlicingEnabled</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_TilingEnabled" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.TilingEnabled">
+  TilingEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether tiling mode is enabled for memory-efficient processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool TilingEnabled</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_DefaultLossFunction_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.DefaultLossFunction*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_DefaultLossFunction" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.DefaultLossFunction">
+  DefaultLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default loss function used by this model for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt; DefaultLossFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_DefaultLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This loss function is used when calling <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;?)</a>
+without explicitly providing a loss function. It represents the model's primary training objective.
+</p>
+<p><b>For Beginners:</b>
+The loss function tells the model "what counts as a mistake". For example:
+- For regression (predicting numbers): Mean Squared Error measures how far predictions are from actual values
+- For classification (predicting categories): Cross Entropy measures how confident the model is in the right category
+<p>This property provides a sensible default so you don't have to specify the loss function every time,
+but you can still override it if needed for special cases.</p>
+
+<p><b>Distributed Training:</b>
+In distributed training, all workers use the same loss function to ensure consistent gradient computation.
+The default loss function is automatically used when workers compute local gradients.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if accessed before the model has been configured with a loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_DownsampleFactor_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.DownsampleFactor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_DownsampleFactor" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.DownsampleFactor">
+  DownsampleFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the spatial downsampling factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int DownsampleFactor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_DownsampleFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The factor by which the VAE reduces spatial dimensions.
+Stable Diffusion uses 8x downsampling, so a 512x512 image becomes 64x64 latents.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_InputChannels_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.InputChannels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_InputChannels" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.InputChannels">
+  InputChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of input channels (image channels).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int InputChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_InputChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Typically 3 for RGB images. Could be 1 for grayscale or 4 for RGBA.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LatentChannels_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LatentChannels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LatentChannels" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LatentChannels">
+  LatentChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of latent channels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int LatentChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LatentChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Standard Stable Diffusion VAEs use 4 latent channels.
+Some newer VAEs may use different values (e.g., 16 for certain architectures).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LatentScaleFactor_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LatentScaleFactor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LatentScaleFactor" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LatentScaleFactor">
+  LatentScaleFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scale factor for latent values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract double LatentScaleFactor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LatentScaleFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A normalization factor applied to latent values. For Stable Diffusion,
+this is 0.18215, which normalizes the latent distribution to unit variance.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ParameterCount_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ParameterCount" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsJitCompilation_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsJitCompilation" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model currently supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the model can be JIT compiled, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Some models may not support JIT compilation due to:
+- Dynamic graph structure (changes based on input)
+- Lack of computation graph representation
+- Use of operations not yet supported by the JIT compiler
+</p>
+<p><b>For Beginners:</b> This tells you whether this specific model can benefit from JIT compilation.
+<p>Models return false if they:</p>
+<ul>
+<li>Use layer-based architecture without graph export (e.g., current neural networks)</li>
+<li>Have control flow that changes based on input data</li>
+<li>Use operations the JIT compiler doesn't understand yet</li>
+</ul>
+<p>In these cases, the model will still work normally, just without JIT acceleration.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsSlicing_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SupportsSlicing*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsSlicing" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SupportsSlicing">
+  SupportsSlicing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this VAE uses slicing for sequential processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool SupportsSlicing { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsSlicing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Slicing processes the batch one sample at a time to reduce memory.
+Trades speed for memory efficiency.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsTiling_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SupportsTiling*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsTiling" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SupportsTiling">
+  SupportsTiling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this VAE uses tiling for memory-efficient encoding/decoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool SupportsTiling { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsTiling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Tiling processes the image in overlapping patches to reduce memory usage
+when handling large images. Useful for high-resolution generation.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ApplyGradients_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L459"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to update the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for the update.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Updates parameters using: θ = θ - learningRate * gradients
+</p>
+<p><b>For Beginners:</b>
+After computing gradients (seeing which direction to move),
+this method actually moves the model in that direction.
+The learning rate controls how big of a step to take.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, this applies the synchronized (averaged) gradients after
+communication across workers. Each worker applies the same averaged gradients
+to keep parameters consistent.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Clone_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Clone" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L404"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the VAE model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract IVAEModel&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</dt>
+    <dd><p>A new instance with the same parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ComputeGradients_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ComputeGradients(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L411"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss function with respect to model parameters for the given data,
+WITHOUT updating the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; ComputeGradients(Tensor&lt;T&gt; input, Tensor&lt;T&gt; target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The target/expected output.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use for gradient computation. If null, uses the model's default loss function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing gradients with respect to all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a forward pass, computes the loss, and back-propagates to compute gradients,
+but does NOT update the model's parameters. The parameters remain unchanged after this call.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, each worker calls this to compute local gradients on its data batch.
+These gradients are then synchronized (averaged) across workers before applying updates.
+This ensures all workers compute the same parameter updates despite having different data.
+</p>
+<p><b>For Meta-Learning:</b>
+After adapting a model on a support set, you can use this method to compute gradients
+on the query set. These gradients become the meta-gradients for updating the meta-parameters.
+</p>
+<p><b>For Beginners:</b>
+Think of this as "dry run" training:
+- The model sees what direction it should move (the gradients)
+- But it doesn't actually move (parameters stay the same)
+- You get to decide what to do with this information (average with others, inspect, modify, etc.)
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>If lossFunction is null and the model has no default loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ComputeKLDivergence_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ComputeKLDivergence*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ComputeKLDivergence_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ComputeKLDivergence(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeKLDivergence(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L515"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the KL divergence loss for VAE training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T ComputeKLDivergence(Tensor&lt;T&gt; mean, Tensor&lt;T&gt; logVariance)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mean</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The mean of the latent distribution.</p>
+</dd>
+    <dt><code>logVariance</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The log variance of the latent distribution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The KL divergence loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ComputeKLDivergence_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>KL(N(mu, sigma) || N(0, 1)) = -0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Decode_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Decode*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Decode_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Decode(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Decode(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decodes a latent representation back to image space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Tensor&lt;T&gt; Decode(Tensor&lt;T&gt; latent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>latent</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The latent tensor [batch, latentChannels, latentHeight, latentWidth].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The decoded image [batch, channels, height<em>downFactor, width</em>downFactor].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Decode_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This decompresses the latent back to an image:
+- Input: Small latent (64x64x4)
+- Output: Full-size image (512x512x3)
+- The image looks like the original but with minor differences due to compression
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_DeepCopy_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_DeepCopy" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Deserialize_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Deserialize_System_Byte___" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized model from binary data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes binary data created by the Serialize method and uses it to
+restore a model to its previous state.</p>
+<p><b>For Beginners:</b> This is like opening a saved file to continue your work.</p>
+<p>When you call this method:</p>
+<ul>
+<li>You provide the binary data (bytes) that was previously created by Serialize</li>
+<li>The model rebuilds itself using this data</li>
+<li>After deserializing, the model is exactly as it was when serialized</li>
+<li>It's ready to make predictions without needing to be trained again</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You download a pre-trained model file for detecting spam emails</li>
+<li>You deserialize this file into your application</li>
+<li>Immediately, your application can detect spam without any training</li>
+<li>The model has all the knowledge that was built into it by its original creator</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>You want to use a model that took days to train</li>
+<li>You need to deploy the same model across multiple devices</li>
+<li>You're creating an application that non-technical users will use</li>
+</ul>
+<p>Think of it like installing the brain of a trained expert directly into your application.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Encode_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Encode*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Encode_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Encode(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Boolean)">
+  Encode(Tensor&lt;T&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes an image into the latent space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Tensor&lt;T&gt; Encode(Tensor&lt;T&gt; image, bool sampleMode = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor [batch, channels, height, width].</p>
+</dd>
+    <dt><code>sampleMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If true, samples from the latent distribution. If false, returns the mean.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The latent representation [batch, latentChannels, height/downFactor, width/downFactor].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Encode_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The VAE encoder outputs a distribution (mean and log variance). When sampleMode is true,
+we sample from this distribution using the reparameterization trick. When false, we just
+return the mean for deterministic encoding.
+</p>
+<p>
+<b>For Beginners:</b> This compresses the image:
+- Input: Full-size image (512x512x3)
+- Output: Small latent representation (64x64x4)
+- The latent contains all the important information in a compressed form
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_EncodeWithDistribution_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.EncodeWithDistribution*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_EncodeWithDistribution_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.EncodeWithDistribution(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  EncodeWithDistribution(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes and returns both mean and log variance (for training).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract (Tensor&lt;T&gt; Mean, Tensor&lt;T&gt; LogVariance) EncodeWithDistribution(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad1">grad1</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad2">grad2</a>)</dt>
+    <dd><p>Tuple of (mean, logVariance) tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_EncodeWithDistribution_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Used during VAE training where we need both the mean and variance for
+computing the KL divergence loss.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ExportComputationGraph_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L477"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the model's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes (parameters).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the model's prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method should construct a computation graph representing the model's forward pass.
+The graph should use placeholder input nodes that will be filled with actual data during execution.
+</p>
+<p><b>For Beginners:</b> This method creates a "recipe" of your model's calculations
+that the JIT compiler can optimize.
+<p>The method should:</p>
+<ol>
+<li>Create placeholder nodes for inputs (features, parameters)</li>
+<li>Build the computation graph using TensorOperations</li>
+<li>Return the final output node</li>
+<li>Add all input nodes to the inputNodes list (in order)</li>
+</ol>
+<p>Example for a simple linear model (y = Wx + b):</p>
+<pre><code class="lang-csharp">public ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+{
+    // Create placeholder inputs
+    var x = TensorOperations&lt;T&gt;.Variable(new Tensor&lt;T&gt;(InputShape), "x");
+    var W = TensorOperations&lt;T&gt;.Variable(Weights, "W");
+    var b = TensorOperations&lt;T&gt;.Variable(Bias, "b");
+
+    // Add inputs in order
+    inputNodes.Add(x);
+    inputNodes.Add(W);
+    inputNodes.Add(b);
+
+    // Build graph: y = Wx + b
+    var matmul = TensorOperations&lt;T&gt;.MatMul(x, W);
+    var output = TensorOperations&lt;T&gt;.Add(matmul, b);
+
+    return output;
+}</code></pre>
+<p>The JIT compiler will then:</p>
+<ul>
+<li>Optimize the graph (fuse operations, eliminate dead code)</li>
+<li>Compile it to fast native code</li>
+<li>Cache the compiled version for reuse</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetActiveFeatureIndices_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.GetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetActiveFeatureIndices" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.GetActiveFeatureIndices">
+  GetActiveFeatureIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L350"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of features that are actively used by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IEnumerable&lt;int&gt; GetActiveFeatureIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetFeatureImportance_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetFeatureImportance" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.GetFeatureImportance">
+  GetFeatureImportance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L374"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, T&gt; GetFeatureImportance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetModelMetadata_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetModelMetadata" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves metadata and performance metrics about the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>An object containing metadata and performance metrics about the trained model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides information about the model's structure, parameters, and performance metrics.</p>
+<p><b>For Beginners:</b> Model metadata is like a report card for your machine learning model.</p>
+<p>Just as a report card shows how well a student is performing in different subjects,
+model metadata shows how well your model is performing and provides details about its structure.</p>
+<p>This information typically includes:</p>
+<ul>
+<li>Accuracy measures: How well does the model's predictions match actual values?</li>
+<li>Error metrics: How far off are the model's predictions on average?</li>
+<li>Model parameters: What patterns did the model learn from the data?</li>
+<li>Training information: How long did training take? How many iterations were needed?</li>
+</ul>
+<p>For example, in a house price prediction model, metadata might include:</p>
+<ul>
+<li>Average prediction error (e.g., off by $15,000 on average)</li>
+<li>How strongly each feature (bedrooms, location) influences the prediction</li>
+<li>How well the model fits the training data</li>
+</ul>
+<p>This information helps you understand your model's strengths and weaknesses,
+and decide if it's ready to use or needs more training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetParameters_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_GetParameters" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters that can be optimized.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_IsFeatureUsed_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.IsFeatureUsed*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_IsFeatureUsed_System_Int32_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.IsFeatureUsed(System.Int32)">
+  IsFeatureUsed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific feature is used by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool IsFeatureUsed(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LoadModel_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LoadModel*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LoadModel_System_String_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the file containing the saved model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to load a model directly from disk.
+It combines file I/O operations with deserialization.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Open&quot; in a document editor.
+Instead of manually reading from a file and then calling Deserialize(), this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when the specified file does not exist.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while reading from the file or when the file contains corrupted or invalid model data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LoadState_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LoadState*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LoadState_System_IO_Stream_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model's state (parameters and configuration) from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to read the model state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_LoadState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes model state that was previously saved with SaveState,
+restoring all parameters and configuration to recreate the saved model state.
+</p>
+<p>
+<b>For Beginners:</b> This is like loading a saved game.
+<p>When you call LoadState:</p>
+<ul>
+<li>All the parameters are read from the stream</li>
+<li>The model is configured to match the saved architecture</li>
+<li>The model becomes identical to when SaveState was called</li>
+</ul>
+<p>After loading, the model can make predictions using the restored parameters.</p>
+
+<p>
+<b>Stream Handling:</b>
+- The stream position will be advanced by the number of bytes read
+- The stream is not closed (caller must dispose)
+- Stream data must match the format written by SaveState
+</p>
+<p>
+<b>Versioning:</b>
+Implementations should consider:
+- Including format version number in serialized data
+- Validating compatibility before deserialization
+- Providing migration paths for old formats when possible
+</p>
+<p>
+<b>Usage:</b>
+<pre><code class="lang-csharp">// Load from file
+using var stream = File.OpenRead("model.bin");
+model.LoadState(stream);</code></pre>
+
+<p>
+<b>Important:</b> The stream must contain state data saved by SaveState from a
+compatible model (same architecture and numeric type).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when stream is not readable or contains invalid data.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when deserialization fails or data is incompatible with model architecture.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Predict_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Predict(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Predict(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Uses the trained model to make predictions for new input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Tensor&lt;T&gt; Predict(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a new example to predict and each column represents a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the predicted values for each input example.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>After training, this method applies the learned patterns to new data to predict outcomes.</p>
+<p><b>For Beginners:</b> Prediction is when the model uses what it learned to make educated guesses about new information.</p>
+<p>Continuing the fruit identification example:</p>
+<ul>
+<li>After learning from many examples, the child (model) can now identify new fruits they haven't seen before</li>
+<li>They look at the color, shape, and size to make their best guess</li>
+</ul>
+<p>In machine learning:</p>
+<ul>
+<li>You give the model new data it hasn't seen during training</li>
+<li>The model applies the patterns it learned to make predictions</li>
+<li>The output is the model's best estimate based on its training</li>
+</ul>
+<p>For example, in a house price prediction model:</p>
+<ul>
+<li>You provide features of a new house (square footage, bedrooms, location)</li>
+<li>The model predicts what price that house might sell for</li>
+</ul>
+<p>This method is used after training is complete, when you want to apply your model to real-world data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Sample_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Sample*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Sample_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Sample(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Nullable{System.Int32})">
+  Sample(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Samples from the latent distribution using the reparameterization trick.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Tensor&lt;T&gt; Sample(Tensor&lt;T&gt; mean, Tensor&lt;T&gt; logVariance, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mean</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The mean of the latent distribution.</p>
+</dd>
+    <dt><code>logVariance</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The log variance of the latent distribution.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A sample from the distribution: mean + std * epsilon.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Sample_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The reparameterization trick allows gradients to flow through the sampling operation:
+z = mean + exp(0.5 * logVariance) * epsilon, where epsilon ~ N(0, 1)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SampleNoise_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SampleNoise*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SampleNoise_System_Int32___System_Random_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SampleNoise(System.Int32[],System.Random)">
+  SampleNoise(int[], Random?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L492"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Samples random noise from a standard normal distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Tensor&lt;T&gt; SampleNoise(int[] shape, Random? rng = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape of the noise tensor.</p>
+</dd>
+    <dt><code>rng</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd><p>Optional random number generator.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor of random noise values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SaveModel_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SaveModel*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SaveModel_System_String_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to save the model directly to disk.
+It combines serialization with file I/O operations.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Save As&quot; in a document editor.
+Instead of manually calling Serialize() and then writing to a file, this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while writing to the file.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.unauthorizedaccessexception">UnauthorizedAccessException</a></dt>
+    <dd><p>Thrown when the caller does not have the required permission to write to the specified file path.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SaveState_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SaveState*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SaveState_System_IO_Stream_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model's current state (parameters and configuration) to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to write the model state to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SaveState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes all the information needed to recreate the model's current state,
+including trained parameters, layer configurations, and any internal state variables.
+</p>
+<p>
+<b>For Beginners:</b> This is like creating a snapshot of your trained model.
+<p>When you call SaveState:</p>
+<ul>
+<li>All the learned parameters (weights and biases) are written to the stream</li>
+<li>The model's architecture information is saved</li>
+<li>Any other internal state (like normalization statistics) is preserved</li>
+</ul>
+<p>You can later use LoadState to restore the model to this exact state.</p>
+
+<p>
+<b>Stream Handling:</b>
+- The stream position will be advanced by the number of bytes written
+- The stream is flushed but not closed (caller must dispose)
+- For file-based persistence, wrap in File.Create/FileStream
+</p>
+<p>
+<b>Usage:</b>
+<pre><code class="lang-csharp">// Save to file
+using var stream = File.Create("model.bin");
+model.SaveState(stream);</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when stream is not writable.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when model state cannot be serialized (e.g., uninitialized model).</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ScaleLatent_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ScaleLatent*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ScaleLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.ScaleLatent(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ScaleLatent(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scales latent values for use in diffusion (applies LatentScaleFactor).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Tensor&lt;T&gt; ScaleLatent(Tensor&lt;T&gt; latent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>latent</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The raw latent from encoding.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Scaled latent values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_ScaleLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Multiplies by LatentScaleFactor to normalize the latent distribution.
+This is necessary because VAE latents have a specific variance that
+diffusion models expect to be normalized.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Serialize_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Serialize" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the current state of a machine learning model into a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method captures all the essential information about a trained model and converts it
+into a sequence of bytes that can be stored or transmitted.</p>
+<p><b>For Beginners:</b> This is like exporting your work to a file.</p>
+<p>When you call this method:</p>
+<ul>
+<li>The model's current state (all its learned patterns and parameters) is captured</li>
+<li>This information is converted into a compact binary format (bytes)</li>
+<li>You can then save these bytes to a file, database, or send them over a network</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>After training a model to recognize cats vs. dogs in images</li>
+<li>You can serialize the model to save all its learned knowledge</li>
+<li>Later, you can use this saved data to recreate the model exactly as it was</li>
+<li>The recreated model will make the same predictions as the original</li>
+</ul>
+<p>Think of it like taking a snapshot of your model's brain at a specific moment in time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetActiveFeatureIndices_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SetActiveFeatureIndices(System.Collections.Generic.IEnumerable{System.Int32})">
+  SetActiveFeatureIndices(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L357"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active feature indices for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetParameters_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method allows direct modification of the model's internal parameters.
+This is useful for optimization algorithms that need to update parameters iteratively.
+If the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>,
+an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a> should be thrown.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetSlicingEnabled_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SetSlicingEnabled*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetSlicingEnabled_System_Boolean_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SetSlicingEnabled(System.Boolean)">
+  SetSlicingEnabled(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables or disables slicing mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetSlicingEnabled(bool enabled)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>enabled</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to enable slicing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetTilingEnabled_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SetTilingEnabled*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_SetTilingEnabled_System_Boolean_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.SetTilingEnabled(System.Boolean)">
+  SetTilingEnabled(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables or disables tiling mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetTilingEnabled(bool enabled)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>enabled</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to enable tiling.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Train_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Train*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.Train(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the model using input features and their corresponding target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>expectedOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes training data and adjusts the model's internal parameters to learn patterns in the data.</p>
+<p><b>For Beginners:</b> Training is like teaching the model by showing it examples.</p>
+<p>Imagine teaching a child to identify fruits:</p>
+<ul>
+<li>You show them many examples of apples, oranges, and bananas (input features x)</li>
+<li>You tell them the correct name for each fruit (target values y)</li>
+<li>Over time, they learn to recognize the patterns that distinguish each fruit</li>
+</ul>
+<p>In machine learning:</p>
+<ul>
+<li>The x parameter contains features (characteristics) of your data</li>
+<li>The y parameter contains the correct answers you want the model to learn</li>
+<li>During training, the model adjusts its internal calculations to get better at predicting y from x</li>
+</ul>
+<p>For example, in a house price prediction model:</p>
+<ul>
+<li>x would contain features like square footage, number of bedrooms, location</li>
+<li>y would contain the actual sale prices of those houses</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_UnscaleLatent_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.UnscaleLatent*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_UnscaleLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.UnscaleLatent(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  UnscaleLatent(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Unscales latent values before decoding (inverts LatentScaleFactor).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Tensor&lt;T&gt; UnscaleLatent(Tensor&lt;T&gt; latent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>latent</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The scaled latent from diffusion.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Unscaled latent values ready for decoding.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_VAEModelBase_1_UnscaleLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Divides by LatentScaleFactor to reverse the scaling before decoding.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_VAEModelBase_1_WithParameters_" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.WithParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_VAEModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Diffusion.VAE.VAEModelBase`1.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/VAEModelBase.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

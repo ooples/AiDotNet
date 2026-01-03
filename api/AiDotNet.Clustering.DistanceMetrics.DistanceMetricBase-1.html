@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DistanceMetricBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DistanceMetricBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Abstract base class for distance metrics providing common functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1">
+
+
+
+  <h1 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1" class="text-break">
+Class DistanceMetricBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Clustering.html">Clustering</a>.<a class="xref" href="AiDotNet.Clustering.DistanceMetrics.html">DistanceMetrics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Abstract base class for distance metrics providing common functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class DistanceMetricBase&lt;T&gt; : IDistanceMetric&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DistanceMetricBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Clustering.Interfaces.IDistanceMetric-1.html">IDistanceMetric</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Clustering.DistanceMetrics.ChebyshevDistance-1.html">ChebyshevDistance&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.DistanceMetrics.CosineDistance-1.html">CosineDistance&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.DistanceMetrics.EuclideanDistance-1.html">EuclideanDistance&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.DistanceMetrics.MahalanobisDistance-1.html">MahalanobisDistance&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.DistanceMetrics.ManhattanDistance-1.html">ManhattanDistance&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.DistanceMetrics.MinkowskiDistance-1.html">MinkowskiDistance&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This base class provides default implementations for batch distance computations
+that can be overridden by derived classes for optimized implementations.
+</p>
+<p><b>For Beginners:</b> This is the foundation for all distance metrics.
+It provides common code so each specific distance metric only needs to
+define how to compute the distance between two points.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1__ctor_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1__ctor" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.#ctor">
+  DistanceMetricBase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the distance metric base class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected DistanceMetricBase()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_NumOps" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The numeric operations provider for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Name_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Name*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Name" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this distance metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A human-readable name like &quot;Euclidean&quot; or &quot;Manhattan&quot;.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Abs_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Abs*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Abs__0_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Abs(`0)">
+  Abs(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the absolute value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T Abs(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to compute absolute value of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The absolute value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Compute_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Compute*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Compute_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Compute(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Compute(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the distance between two vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract T Compute(Vector&lt;T&gt; a, Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first vector.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The computed distance. Always non-negative for valid metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Compute_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates how far apart two points are.
+<p>For example, with Euclidean distance:</p>
+<ul>
+<li>Points [0, 0] and [3, 4] have distance 5 (Pythagorean theorem)</li>
+<li>Points [1, 1] and [1, 1] have distance 0 (same point)</li>
+</ul>
+<p>Different metrics will give different values for the same pair of points.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown if vectors have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_ComputePairwise_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.ComputePairwise*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_ComputePairwise_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.ComputePairwise(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputePairwise(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the full pairwise distance matrix between all rows.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Matrix&lt;T&gt; ComputePairwise(Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row is a data point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A symmetric matrix where element [i, j] is the distance between row i and row j.
+The diagonal is always zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_ComputePairwise_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This operation has O(n^2) complexity where n is the number of rows.
+For large datasets, consider using spatial indexing structures like KD-Trees.
+</p>
+<p><b>For Beginners:</b> This creates a table showing the distance between
+every pair of points. It's like a mileage chart showing distances between cities.
+<p>The result is symmetric (distance A to B equals distance B to A) and the
+diagonal is all zeros (distance from a point to itself is zero).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_ComputePairwise_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.ComputePairwise*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_ComputePairwise_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.ComputePairwise(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputePairwise(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes pairwise distances between rows of two different matrices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Matrix&lt;T&gt; ComputePairwise(Matrix&lt;T&gt; x, Matrix&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>First matrix where each row is a data point.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Second matrix where each row is a data point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where element [i, j] is the distance between row i of x and row j of y.
+Shape is [x.Rows, y.Rows].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_ComputeToAll_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.ComputeToAll*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_ComputeToAll_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.ComputeToAll(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputeToAll(Vector&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes distances from a single point to all rows in a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; ComputeToAll(Vector&lt;T&gt; point, Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>point</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The reference point.</p>
+</dd>
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row is a data point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of distances from the point to each row in data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_ComputeToAll_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This batch operation can be optimized by implementations for better performance
+compared to calling Compute repeatedly.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_GetRow_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.GetRow*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_GetRow_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.GetRow(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Int32)">
+  GetRow(Matrix&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a row from a matrix as a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; GetRow(Matrix&lt;T&gt; matrix, int rowIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The source matrix.</p>
+</dd>
+    <dt><code>rowIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The row index to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the row data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Max_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Max*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Max__0__0_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Max(`0,`0)">
+  Max(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the maximum of two values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T Max(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>First value.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>Second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The larger of the two values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Pow_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Pow*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Pow__0_System_Double_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Pow(`0,System.Double)">
+  Pow(T, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the power of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T Pow(T baseValue, double exponent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseValue</code> <span class="xref">T</span></dt>
+    <dd><p>The base value.</p>
+</dd>
+    <dt><code>exponent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The exponent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The result of base raised to exponent.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Sqrt_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Sqrt__0_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Sqrt(`0)">
+  Sqrt(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the square root of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T Sqrt(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to compute square root of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The square root.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Sum_" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Sum*"></a>
+
+  <h3 id="AiDotNet_Clustering_DistanceMetrics_DistanceMetricBase_1_Sum_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase`1.Sum(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Sum(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sum of elements in a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T Sum(Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to sum.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The sum of all elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/DistanceMetrics/DistanceMetricBase.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

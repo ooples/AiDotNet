@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class WeightedRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class WeightedRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for weighted regression models, which assign different importance to different observations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_WeightedRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.WeightedRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.WeightedRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_WeightedRegressionOptions_1" data-uid="AiDotNet.Models.Options.WeightedRegressionOptions`1" class="text-break">
+Class WeightedRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/WeightedRegressionOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for weighted regression models, which assign different importance to different observations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class WeightedRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">WeightedRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_WeightedRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Weighted regression is an extension of standard regression techniques that allows different observations to have 
+different levels of influence on the model. By assigning weights to each observation, you can control how much 
+each data point contributes to the parameter estimation process. This approach is particularly useful when 
+dealing with heteroscedasticity (non-constant variance in errors), outliers, or when some observations are known 
+to be more reliable or important than others. Common applications include time series analysis where recent 
+observations may be weighted more heavily than older ones, or situations where observations have different 
+measurement precision. This class inherits from RegressionOptions and adds parameters specific to weighted 
+regression.
+</p>
+<p><b>For Beginners:</b> Weighted regression lets you give some data points more influence than others.
+<p>In standard regression:</p>
+<ul>
+<li>All observations have equal influence on the model</li>
+<li>This assumes all data points are equally important and reliable</li>
+</ul>
+<p>Weighted regression solves this by:</p>
+<ul>
+<li>Allowing you to assign different weights to different observations</li>
+<li>Giving more influence to observations with higher weights</li>
+<li>Reducing the impact of less reliable or less important data points</li>
+</ul>
+<p>This approach is useful when:</p>
+<ul>
+<li>Some observations are more reliable than others</li>
+<li>Recent data is more relevant than older data</li>
+<li>Certain observations are known to be outliers</li>
+<li>Data points have different levels of measurement precision</li>
+</ul>
+<p>For example, in time series forecasting, you might assign higher weights to
+recent observations to make your model more responsive to recent trends.</p>
+<p>This class lets you configure how the weighted regression model is structured.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_WeightedRegressionOptions_1_Order_" data-uid="AiDotNet.Models.Options.WeightedRegressionOptions`1.Order*"></a>
+
+  <h3 id="AiDotNet_Models_Options_WeightedRegressionOptions_1_Order" data-uid="AiDotNet.Models.Options.WeightedRegressionOptions`1.Order">
+  Order
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/WeightedRegressionOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Order { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_WeightedRegressionOptions_1_Order_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the order of the regression model, which determines the highest power of the 
+independent variable included in the model. For example, an order of 1 corresponds to a linear regression 
+(y = a + bx), an order of 2 corresponds to a quadratic regression (y = a + bx + cx²), and so on. A higher 
+order allows the model to capture more complex nonlinear relationships but increases the risk of overfitting. 
+The default value of 1 provides a simple linear model suitable for many applications. The optimal order 
+depends on the underlying relationship between the variables and can be determined using techniques such as 
+cross-validation or information criteria.
+</p>
+<p><b>For Beginners:</b> This setting determines the complexity of the relationship between variables.
+<p>The regression order:</p>
+<ul>
+<li>Defines the highest power of the independent variable in the equation</li>
+<li>Determines the shape of the curve that can be fitted to your data</li>
+<li>Higher orders can model more complex, nonlinear relationships</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model is a straight line (linear regression): y = a + bx</li>
+<li>This is appropriate for many relationships that are approximately linear</li>
+</ul>
+<p>Common values and their equations:</p>
+<ul>
+<li>1: Linear (y = a + bx)</li>
+<li>2: Quadratic (y = a + bx + cx²)</li>
+<li>3: Cubic (y = a + bx + cx² + dx³)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when the relationship between variables is clearly nonlinear</li>
+<li>Keep at 1 for simple linear relationships</li>
+<li>Be cautious with high orders as they can lead to overfitting</li>
+</ul>
+<p>For example, if plotting your data shows a clear curved relationship,
+you might increase this to 2 to fit a quadratic curve.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_WeightedRegressionOptions_1_Weights_" data-uid="AiDotNet.Models.Options.WeightedRegressionOptions`1.Weights*"></a>
+
+  <h3 id="AiDotNet_Models_Options_WeightedRegressionOptions_1_Weights" data-uid="AiDotNet.Models.Options.WeightedRegressionOptions`1.Weights">
+  Weights
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/WeightedRegressionOptions.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weights assigned to each observation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Weights { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of weights, defaulting to an empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_WeightedRegressionOptions_1_Weights_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the weights assigned to each observation in the regression model. Each weight 
+determines the relative influence of the corresponding observation on the parameter estimation process. 
+Higher weights give more influence to the corresponding observations, while lower weights reduce their 
+influence. The weights should be non-negative, with zero weights effectively excluding the corresponding 
+observations from the model. The default value is an empty vector, which means that weights must be 
+explicitly provided before fitting the model. The length of the weights vector should match the number of 
+observations in the dataset. Common weighting schemes include equal weights (standard regression), inverse 
+variance weights (to account for heteroscedasticity), exponential decay weights (for time series), and 
+robust weights (to reduce the influence of outliers).
+</p>
+<p><b>For Beginners:</b> This setting specifies how much influence each data point has on the model.
+<p>The weights vector:</p>
+<ul>
+<li>Contains a weight value for each observation in your dataset</li>
+<li>Higher weights give that observation more influence on the model</li>
+<li>Lower weights reduce an observation's influence</li>
+<li>Zero weights effectively remove observations from consideration</li>
+</ul>
+<p>The default value is an empty vector, which means:</p>
+<ul>
+<li>You must provide weights before fitting the model</li>
+<li>If you don't set weights, all observations will have equal influence</li>
+</ul>
+<p>Common weighting approaches:</p>
+<ul>
+<li>Equal weights (1, 1, 1, ...): Standard regression with equal influence</li>
+<li>Time-based weights (e.g., 0.2, 0.4, 0.7, 1.0): More recent data has more influence</li>
+<li>Reliability weights: More reliable measurements get higher weights</li>
+<li>Robust weights: Automatically reduce weights for potential outliers</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Set specific weights when some observations should have more influence than others</li>
+<li>Use time-based weights for time series where recency matters</li>
+<li>Use inverse variance weights when observations have different precision</li>
+</ul>
+<p>For example, in a time series model of monthly sales, you might use weights like
+[0.5, 0.6, 0.7, 0.8, 0.9, 1.0] to give more recent months more influence.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/WeightedRegressionOptions.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

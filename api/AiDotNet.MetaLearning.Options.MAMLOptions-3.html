@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MAMLOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MAMLOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for MAML (Model-Agnostic Meta-Learning) algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_Options_MAMLOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.Options.MAMLOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_Options_MAMLOptions_3" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3" class="text-break">
+Class MAMLOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a>.<a class="xref" href="AiDotNet.MetaLearning.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for MAML (Model-Agnostic Meta-Learning) algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MAMLOptions&lt;T, TInput, TOutput&gt; : IMetaLearnerOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MAMLOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+MAML learns an initialization that can be quickly fine-tuned to new tasks.
+These options control both the inner loop (task adaptation) and outer loop (meta-optimization).
+</p>
+<p><b>For Beginners:</b> MAML has two learning loops:
+- Inner loop: Fast adaptation to a specific task (uses InnerLearningRate, AdaptationSteps)
+- Outer loop: Slow learning of good initialization (uses OuterLearningRate)
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3__ctor_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  MAMLOptions(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MAMLOptions class with the required meta-model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MAMLOptions(IFullModel&lt;T, TInput, TOutput&gt; metaModel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metaModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The meta-model to be trained (required).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_AdaptationSteps_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.AdaptationSteps*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_AdaptationSteps" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.AdaptationSteps">
+  AdaptationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of gradient steps to take during inner loop adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AdaptationSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of adaptation steps. Default is 5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_AdaptationSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the K in "K-shot learning." MAML performs K gradient descent steps on the
+support set of each task during the inner loop. The original MAML paper uses 1-10 steps.
+More steps allow better adaptation but increase computation and memory usage.
+</p>
+<p>
+<b>For Beginners:</b> How many times the model updates itself when learning a new task.
+1 step = very fast but rough adaptation; 10 steps = slower but more refined.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_CheckpointFrequency_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.CheckpointFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_CheckpointFrequency" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.CheckpointFrequency">
+  CheckpointFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often (in meta-iterations) to save checkpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The checkpoint frequency. Default is 500.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_CheckpointFrequency_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When checkpointing is enabled, MAML saves the meta-parameters every
+CheckpointFrequency iterations. More frequent saves use more disk space
+but reduce potential data loss on interruption.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_DataLoader_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.DataLoader*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_DataLoader" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.DataLoader">
+  DataLoader
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the episodic data loader for sampling tasks.
+Default: null (tasks must be provided manually to MetaTrain).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEpisodicDataLoader&lt;T, TInput, TOutput&gt;? DataLoader { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IEpisodicDataLoader-3.html">IEpisodicDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EnableCheckpointing_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.EnableCheckpointing*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EnableCheckpointing" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.EnableCheckpointing">
+  EnableCheckpointing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to save model checkpoints during meta-training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableCheckpointing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable checkpointing; false to disable. Default is false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EnableCheckpointing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, MAML will save the meta-parameters at regular intervals.
+This allows resuming training after interruption and keeping the best model.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EvaluationFrequency_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.EvaluationFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EvaluationFrequency" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.EvaluationFrequency">
+  EvaluationFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often (in meta-iterations) to evaluate the meta-learner.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The evaluation frequency. Default is 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EvaluationFrequency_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Every EvaluationFrequency meta-iterations, MAML will evaluate on EvaluationTasks
+tasks to track training progress. More frequent evaluation provides better
+visibility but slows down training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EvaluationTasks_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.EvaluationTasks*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EvaluationTasks" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.EvaluationTasks">
+  EvaluationTasks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tasks to use for evaluation during meta-training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationTasks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of evaluation tasks. Default is 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_EvaluationTasks_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Periodically, MAML evaluates its generalization by adapting to and evaluating
+on this many held-out tasks. More tasks provide more reliable evaluation metrics.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_GradientClipThreshold_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.GradientClipThreshold*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_GradientClipThreshold" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.GradientClipThreshold">
+  GradientClipThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum gradient norm for gradient clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? GradientClipThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>The gradient clip threshold, or null to disable. Default is 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_GradientClipThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Gradient clipping prevents training instability by limiting the magnitude of gradients.
+In MAML, gradients can become large due to the nested optimization structure,
+making clipping especially important.
+</p>
+<p>
+<b>For Beginners:</b> Prevents the model from taking steps that are too large,
+which could break training. Set to null to disable.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_InnerLearningRate_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.InnerLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_InnerLearningRate" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.InnerLearningRate">
+  InnerLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the inner loop (task adaptation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InnerLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The inner learning rate. Default is 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_InnerLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In MAML, the inner learning rate controls how quickly the model adapts to a specific task
+during the K gradient steps of the inner loop. This rate is typically larger than the
+outer learning rate because adaptation needs to happen quickly with few examples.
+</p>
+<p>
+<b>For Beginners:</b> This is how fast the model learns when it sees a new task.
+A higher value means faster but potentially less stable adaptation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_InnerOptimizer_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.InnerOptimizer*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_InnerOptimizer" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.InnerOptimizer">
+  InnerOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer for inner-loop adaptation.
+Default: null (uses built-in SGD optimizer with InnerLearningRate).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? InnerOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_LossFunction_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.LossFunction*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_LossFunction" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss function for training.
+Default: null (uses model's default loss function if available).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_MetaBatchSize_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.MetaBatchSize*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_MetaBatchSize" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.MetaBatchSize">
+  MetaBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tasks to sample per meta-training iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MetaBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The meta-batch size. Default is 4.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_MetaBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Each meta-training step samples this many tasks, adapts to each one, and averages
+the meta-gradients. Larger batch sizes provide more stable gradient estimates but
+require more memory and computation per iteration.
+</p>
+<p>
+<b>For Beginners:</b> How many different practice tasks to learn from before
+updating the model's "learning strategy."
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_MetaModel_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.MetaModel*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_MetaModel" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.MetaModel">
+  MetaModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the meta-model to be trained. This is the only required property.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; MetaModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_MetaOptimizer_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.MetaOptimizer*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_MetaOptimizer" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.MetaOptimizer">
+  MetaOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer for meta-parameter updates (outer loop).
+Default: null (uses built-in Adam optimizer with OuterLearningRate).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? MetaOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_NumMetaIterations_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.NumMetaIterations*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_NumMetaIterations" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.NumMetaIterations">
+  NumMetaIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total number of meta-training iterations to perform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMetaIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of meta-iterations. Default is 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_NumMetaIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The total number of outer loop updates. Each iteration processes MetaBatchSize tasks.
+The original MAML paper uses 60,000 iterations for Omniglot and 15,000 for MiniImageNet.
+</p>
+<p>
+<b>For Beginners:</b> How long to train the meta-learner. More iterations = better
+learning but longer training time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_OuterLearningRate_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.OuterLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_OuterLearningRate" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.OuterLearningRate">
+  OuterLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the outer loop (meta-optimization).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OuterLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The outer learning rate. Default is 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_OuterLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The outer learning rate controls how the meta-parameters (initial weights) are updated
+after evaluating adaptation performance across a batch of tasks. This rate is typically
+10x smaller than the inner rate because meta-learning requires careful, gradual updates.
+</p>
+<p>
+<b>For Beginners:</b> This is how fast the model learns "how to learn."
+Too high can cause instability; too low means slow meta-training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_RandomSeed_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_RandomSeed" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>The random seed, or null for non-deterministic behavior. Default is null.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_RandomSeed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Setting a seed ensures reproducible task sampling and weight initialization in MAML.
+This is useful for debugging and comparing experiments.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_UseFirstOrder_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.UseFirstOrder*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_UseFirstOrder" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.UseFirstOrder">
+  UseFirstOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use first-order approximation (FOMAML) instead of full MAML.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseFirstOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use FOMAML; false for full second-order MAML. Default is false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_UseFirstOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+First-order MAML (FOMAML) ignores the second-order derivatives that arise from
+differentiating through the inner loop adaptation. This dramatically reduces
+memory usage and computation time while maintaining competitive performance.
+</p>
+<p>
+<b>For Beginners:</b> A simpler, faster version of MAML that works almost as well.
+Set to true if you're running out of memory or training is too slow.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_UseFirstOrderApproximation_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.UseFirstOrderApproximation*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_UseFirstOrderApproximation" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.UseFirstOrderApproximation">
+  UseFirstOrderApproximation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use first-order approximation (FOMAML).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseFirstOrderApproximation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_UseFirstOrderApproximation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When true, ignores second-order derivatives during meta-gradient computation.
+This is faster and uses less memory, with minimal performance impact.
+</p>
+<p>Default: false (alias for UseFirstOrder property)</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_Clone_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.Clone*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_Clone" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the MAML options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMetaLearnerOptions&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd><p>A new MAMLOptions instance with the same configuration values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Note: The MetaModel reference is shared (not deep-cloned) because models are
+typically expensive to copy and MAML manages its own model cloning internally
+during the meta-training process.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MAMLOptions_3_IsValid_" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.IsValid*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MAMLOptions_3_IsValid" data-uid="AiDotNet.MetaLearning.Options.MAMLOptions`3.IsValid">
+  IsValid()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that all MAML configuration options are properly set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsValid()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the configuration is valid for MAML training; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MAMLOptions_3_IsValid_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method checks all critical hyperparameters required for MAML to function correctly:
+- MetaModel must be set (the neural network to meta-train)
+- Learning rates must be positive (both inner and outer loops)
+- Adaptation steps must be at least 1 (K gradient steps in inner loop)
+- Batch sizes and iteration counts must be positive
+</p>
+<p>
+<b>For Beginners:</b> Call this before training to ensure your settings make sense.
+If it returns false, check that all required values are set and positive.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MAMLOptions.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

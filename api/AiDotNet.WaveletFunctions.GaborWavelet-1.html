@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GaborWavelet&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GaborWavelet&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a Gabor wavelet function implementation for time-frequency analysis and signal processing.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_WaveletFunctions_GaborWavelet_1.md&amp;value=---%0Auid%3A%20AiDotNet.WaveletFunctions.GaborWavelet%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1">
+
+
+
+  <h1 id="AiDotNet_WaveletFunctions_GaborWavelet_1" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1" class="text-break">
+Class GaborWavelet&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/GaborWavelet.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.WaveletFunctions.html">WaveletFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a Gabor wavelet function implementation for time-frequency analysis and signal processing.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GaborWavelet&lt;T&gt; : WaveletFunctionBase&lt;T&gt;, IWaveletFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html">WaveletFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">GaborWavelet&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWaveletFunction-1.html">IWaveletFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html#AiDotNet_WaveletFunctions_WaveletFunctionBase_1_NumOps">WaveletFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_WaveletFunctions_GaborWavelet_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Gabor wavelet is a complex wavelet defined as a sinusoidal function multiplied by a Gaussian window.
+It provides excellent time-frequency localization and is widely used in image processing, computer vision, 
+texture analysis, and various signal processing applications. This implementation supports
+customization of frequency, bandwidth, and phase parameters.
+</p>
+<p><b>For Beginners:</b> A Gabor wavelet is a special mathematical tool that helps analyze patterns in data.
+<p>Think of it like a musical note with a specific pitch and duration:</p>
+<ul>
+<li>It can detect specific patterns (like frequencies) in your data</li>
+<li>It's especially good at finding where in your data a certain pattern occurs</li>
+<li>It's widely used in image processing to detect edges and textures</li>
+</ul>
+<p>For example, in image recognition, Gabor wavelets can help detect specific features like edges
+oriented in particular directions, making them useful for tasks like fingerprint recognition,
+face detection, and texture classification.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_GaborWavelet_1__ctor_" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_GaborWavelet_1__ctor_System_Double_System_Double_System_Double_System_Double_" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.#ctor(System.Double,System.Double,System.Double,System.Double)">
+  GaborWavelet(double, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/GaborWavelet.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.WaveletFunctions.GaborWavelet-1.html">GaborWavelet&lt;T&gt;</a> class with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GaborWavelet(double omega = 5, double sigma = 1, double lambda = 4, double psi = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>omega</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The central frequency of the wavelet. Defaults to 5.</p>
+</dd>
+    <dt><code>sigma</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The standard deviation of the Gaussian envelope. Defaults to 1.</p>
+</dd>
+    <dt><code>lambda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The wavelength parameter. Defaults to 4.</p>
+</dd>
+    <dt><code>psi</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The phase offset of the sinusoidal component. Defaults to 0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_GaborWavelet_1__ctor_System_Double_System_Double_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor initializes the Gabor wavelet with the specified parameters, which control
+the shape, frequency, and localization properties of the wavelet. The default values provide
+a balanced wavelet suitable for general-purpose analysis, but they can be adjusted to target
+specific characteristics in the signal being analyzed.
+</p>
+<p><b>For Beginners:</b> This sets up the Gabor wavelet with your chosen settings.
+<p>When creating a Gabor wavelet:</p>
+<ul>
+<li>You can customize it for different types of pattern detection</li>
+<li>The default values work well for many common applications</li>
+<li>You can experiment with different values to optimize for your specific needs</li>
+</ul>
+<p>For example, if you're looking for rapid changes in your data, you might increase omega,
+while if you need to precisely locate where changes occur, you might decrease sigma.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_GaborWavelet_1_Calculate_" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_GaborWavelet_1_Calculate__0_" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.Calculate(`0)">
+  Calculate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/GaborWavelet.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the wavelet function value at the specified point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Calculate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input point at which to calculate the wavelet value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated wavelet function value at the specified point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_GaborWavelet_1_Calculate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the value of the Gabor wavelet function at the given input point.
+It combines a Gaussian envelope with a cosine wave to create the wavelet. The result
+represents how much the signal at that point contributes to the frequency band
+represented by this wavelet.
+</p>
+<p><b>For Beginners:</b> This method measures how strongly your data at a specific point
+matches the Gabor wavelet pattern.
+<p>When you use this method:</p>
+<ul>
+<li>You provide a point (x) in your data</li>
+<li>The method returns a value showing how well the wavelet matches your data at that point</li>
+<li>The calculation combines a bell-shaped curve (Gaussian) with a wave pattern (cosine)</li>
+</ul>
+<p>This is like asking: &quot;How much does my data at this point look like this specific
+oscillation pattern with this specific width?&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_GaborWavelet_1_Decompose_" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_GaborWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.Decompose(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Decompose(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/GaborWavelet.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposes an input signal into approximation and detail coefficients using the Gabor transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail) Decompose(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input signal to decompose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.mean">mean</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.logvar">logVar</a>)</dt>
+    <dd><p>A tuple containing the approximation and detail coefficients of the decomposed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_GaborWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the Gabor transform, which decomposes the input signal into two components:
+real (approximation) and imaginary (detail) parts. The real part uses the cosine component of the 
+Gabor function, while the imaginary part uses the sine component. This complex representation
+captures both amplitude and phase information in the signal.
+</p>
+<p><b>For Beginners:</b> This method breaks down your data into two complementary parts using
+the Gabor wavelet.
+<p>When decomposing a signal:</p>
+<ul>
+<li>The approximation coefficients (real part) capture the parts of your data that match the cosine wave</li>
+<li>The detail coefficients (imaginary part) capture the parts that match the sine wave</li>
+<li>Together, they provide a complete representation of the signal at this specific frequency and scale</li>
+</ul>
+<p>This is similar to describing the motion of a swing using both its position (real part)
+and its velocity (imaginary part) - together they give you complete information about the swing.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_GaborWavelet_1_GetScalingCoefficients_" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.GetScalingCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_GaborWavelet_1_GetScalingCoefficients" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.GetScalingCoefficients">
+  GetScalingCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/GaborWavelet.cs/#L239"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scaling coefficients (real part of the Gabor function) used in the wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetScalingCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the scaling coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_GaborWavelet_1_GetScalingCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the real part (cosine component) of the Gabor function sampled at 100 points.
+These coefficients represent the real part of the complex Gabor wavelet and are used to calculate
+the approximation coefficients during signal decomposition.
+</p>
+<p><b>For Beginners:</b> This method gives you the "cosine-based" part of the Gabor wavelet.
+<p>The scaling coefficients:</p>
+<ul>
+<li>Represent the real part of the complex Gabor function</li>
+<li>Are based on cosine waves modified by a Gaussian envelope</li>
+<li>Help capture how much your data matches this specific pattern</li>
+</ul>
+<p>These coefficients are one half of the complete Gabor wavelet representation.
+They're sampled at 100 points to provide a discrete approximation of the continuous wavelet.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_GaborWavelet_1_GetWaveletCoefficients_" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.GetWaveletCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_GaborWavelet_1_GetWaveletCoefficients" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.GetWaveletCoefficients">
+  GetWaveletCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/GaborWavelet.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the wavelet coefficients (imaginary part of the Gabor function) used in the wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetWaveletCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the wavelet coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_GaborWavelet_1_GetWaveletCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the imaginary part (sine component) of the Gabor function sampled at 100 points.
+These coefficients represent the imaginary part of the complex Gabor wavelet and are used to calculate
+the detail coefficients during signal decomposition.
+</p>
+<p><b>For Beginners:</b> This method gives you the "sine-based" part of the Gabor wavelet.
+<p>The wavelet coefficients:</p>
+<ul>
+<li>Represent the imaginary part of the complex Gabor function</li>
+<li>Are based on sine waves modified by a Gaussian envelope</li>
+<li>Capture the phase information in your data</li>
+</ul>
+<p>These coefficients are the other half of the complete Gabor wavelet representation.
+Together with the scaling coefficients, they provide a complete description of how
+your data matches the Gabor pattern, including both amplitude and phase information.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_GaborWavelet_1_Reconstruct_" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.Reconstruct*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_GaborWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.GaborWavelet`1.Reconstruct(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Reconstruct(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/GaborWavelet.cs/#L337"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reconstructs the original signal from approximation and detail coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Reconstruct(Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>approximation</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The approximation coefficients from decomposition.</p>
+</dd>
+    <dt><code>detail</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The detail coefficients from decomposition.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The reconstructed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_GaborWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method reverses the decomposition process to get back the original signal.
+<p>For Gabor wavelets, decomposition uses real and imaginary Gabor functions,
+so reconstruction uses a weighted combination of the coefficients based on
+the original Gabor values at each position.</p>
+<p>This is the inverse of the Decompose method, so:
+Reconstruct(Decompose(signal)) should approximate the original signal.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/GaborWavelet.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

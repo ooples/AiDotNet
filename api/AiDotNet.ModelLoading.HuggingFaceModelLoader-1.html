@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HuggingFaceModelLoader&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HuggingFaceModelLoader&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Downloads and caches models from HuggingFace Hub.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ModelLoading_HuggingFaceModelLoader_1.md&amp;value=---%0Auid%3A%20AiDotNet.ModelLoading.HuggingFaceModelLoader%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1">
+
+
+
+  <h1 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1" class="text-break">
+Class HuggingFaceModelLoader&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ModelLoading.html">ModelLoading</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Downloads and caches models from HuggingFace Hub.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HuggingFaceModelLoader&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">HuggingFaceModelLoader&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> HuggingFace Hub is like a library of pretrained AI models.
+<p>Instead of training models yourself (which requires huge amounts of data and compute),
+you can download models that others have already trained. This class handles:</p>
+<ol>
+<li>Downloading model files from HuggingFace</li>
+<li>Caching them locally so you don't re-download every time</li>
+<li>Loading the weights into your model</li>
+</ol>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">var loader = new HuggingFaceModelLoader&lt;float&gt;();
+
+// Download and cache a pretrained VAE
+var files = await loader.DownloadModelAsync(&quot;stabilityai/sd-vae-ft-mse&quot;);
+
+// Load weights into your model
+var vae = new VAEEncoder&lt;float&gt;();
+loader.LoadWeights(vae, files[&quot;diffusion_pytorch_model.safetensors&quot;]);
+</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1__ctor_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1__ctor_System_String_System_String_System_Boolean_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.#ctor(System.String,System.String,System.Boolean)">
+  HuggingFaceModelLoader(string?, string?, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the HuggingFaceModelLoader class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HuggingFaceModelLoader(string? cacheDir = null, string? apiToken = null, bool verbose = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cacheDir</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Directory to cache downloaded models. Uses ~/.cache/huggingface/hub by default.</p>
+</dd>
+    <dt><code>apiToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional HuggingFace API token for private models.</p>
+</dd>
+    <dt><code>verbose</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to log download progress.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_ClearAllCache_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.ClearAllCache*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_ClearAllCache" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.ClearAllCache">
+  ClearAllCache()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all cached models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ClearAllCache()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_ClearCache_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.ClearCache*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_ClearCache_System_String_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.ClearCache(System.String)">
+  ClearCache(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L393"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears the cache for a specific model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ClearCache(string repoId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>repoId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Repository ID.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_DownloadAndLoadAsync_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.DownloadAndLoadAsync*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_DownloadAndLoadAsync_AiDotNet_Interfaces_IWeightLoadable__0__System_String_System_String_System_Func_System_String_System_String__System_String_System_Boolean_System_Threading_CancellationToken_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.DownloadAndLoadAsync(AiDotNet.Interfaces.IWeightLoadable{`0},System.String,System.String,System.Func{System.String,System.String},System.String,System.Boolean,System.Threading.CancellationToken)">
+  DownloadAndLoadAsync(IWeightLoadable&lt;T&gt;, string, string, Func&lt;string, string?&gt;?, string, bool, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L351"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Downloads a model and loads its weights in one operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;LoadResult&gt; DownloadAndLoadAsync(IWeightLoadable&lt;T&gt; model, string repoId, string weightsFile = &quot;diffusion_pytorch_model.safetensors&quot;, Func&lt;string, string?&gt;? mapping = null, string revision = &quot;main&quot;, bool strict = false, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</dt>
+    <dd><p>The model to load weights into.</p>
+</dd>
+    <dt><code>repoId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>HuggingFace repository ID.</p>
+</dd>
+    <dt><code>weightsFile</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name of the weights file (e.g., &quot;diffusion_pytorch_model.safetensors&quot;).</p>
+</dd>
+    <dt><code>mapping</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional weight mapping.</p>
+</dd>
+    <dt><code>revision</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Git revision (default: &quot;main&quot;).</p>
+</dd>
+    <dt><code>strict</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If true, fails when weights can't be loaded.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.ModelLoading.LoadResult.html">LoadResult</a>&gt;</dt>
+    <dd><p>Load result with statistics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_DownloadFileAsync_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.DownloadFileAsync*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_DownloadFileAsync_System_String_System_String_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.DownloadFileAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
+  DownloadFileAsync(string, string, string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Downloads a single file from HuggingFace Hub.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;string&gt; DownloadFileAsync(string repoId, string revision, string fileName, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>repoId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Repository ID.</p>
+</dd>
+    <dt><code>revision</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Git revision.</p>
+</dd>
+    <dt><code>fileName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>File name within the repository.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Local path to the downloaded file.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_DownloadModelAsync_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.DownloadModelAsync*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_DownloadModelAsync_System_String_System_String_System_Collections_Generic_IEnumerable_System_String__System_Threading_CancellationToken_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.DownloadModelAsync(System.String,System.String,System.Collections.Generic.IEnumerable{System.String},System.Threading.CancellationToken)">
+  DownloadModelAsync(string, string, IEnumerable&lt;string&gt;?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Downloads a model from HuggingFace Hub.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;Dictionary&lt;string, string&gt;&gt; DownloadModelAsync(string repoId, string revision = &quot;main&quot;, IEnumerable&lt;string&gt;? filePatterns = null, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>repoId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Repository ID (e.g., &quot;stabilityai/sd-vae-ft-mse&quot;).</p>
+</dd>
+    <dt><code>revision</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Git revision/branch (default: &quot;main&quot;).</p>
+</dd>
+    <dt><code>filePatterns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional patterns to filter files (e.g., &quot;*.safetensors&quot;).</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;&gt;</dt>
+    <dd><p>Dictionary mapping file names to local paths.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_GetCachePath_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.GetCachePath*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_GetCachePath_System_String_System_String_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.GetCachePath(System.String,System.String)">
+  GetCachePath(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L370"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the local cache path for a repository.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetCachePath(string repoId, string revision = &quot;main&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>repoId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Repository ID.</p>
+</dd>
+    <dt><code>revision</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Git revision.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Local cache directory path.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_IsCached_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.IsCached*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_IsCached_System_String_System_String_System_String_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.IsCached(System.String,System.String,System.String)">
+  IsCached(string, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a model is already cached locally.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsCached(string repoId, string weightsFile, string revision = &quot;main&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>repoId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Repository ID.</p>
+</dd>
+    <dt><code>weightsFile</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name of the weights file to check.</p>
+</dd>
+    <dt><code>revision</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Git revision.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the weights file exists in cache.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_LoadWeights_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.LoadWeights*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_LoadWeights_AiDotNet_Interfaces_IWeightLoadable__0__System_String_AiDotNet_ModelLoading_WeightMapping_System_Boolean_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.LoadWeights(AiDotNet.Interfaces.IWeightLoadable{`0},System.String,AiDotNet.ModelLoading.WeightMapping,System.Boolean)">
+  LoadWeights(IWeightLoadable&lt;T&gt;, string, WeightMapping, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads weights using a WeightMapping instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LoadResult LoadWeights(IWeightLoadable&lt;T&gt; model, string weightsPath, WeightMapping mapping, bool strict = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>weightsPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>mapping</code> <a class="xref" href="AiDotNet.ModelLoading.WeightMapping.html">WeightMapping</a></dt>
+    <dd></dd>
+    <dt><code>strict</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ModelLoading.LoadResult.html">LoadResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_LoadWeights_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.LoadWeights*"></a>
+
+  <h3 id="AiDotNet_ModelLoading_HuggingFaceModelLoader_1_LoadWeights_AiDotNet_Interfaces_IWeightLoadable__0__System_String_System_Func_System_String_System_String__System_Boolean_" data-uid="AiDotNet.ModelLoading.HuggingFaceModelLoader`1.LoadWeights(AiDotNet.Interfaces.IWeightLoadable{`0},System.String,System.Func{System.String,System.String},System.Boolean)">
+  LoadWeights(IWeightLoadable&lt;T&gt;, string, Func&lt;string, string?&gt;?, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L319"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads weights from a downloaded SafeTensors file into a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LoadResult LoadWeights(IWeightLoadable&lt;T&gt; model, string weightsPath, Func&lt;string, string?&gt;? mapping = null, bool strict = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</dt>
+    <dd><p>The model to load weights into.</p>
+</dd>
+    <dt><code>weightsPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the .safetensors file.</p>
+</dd>
+    <dt><code>mapping</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional weight mapping.</p>
+</dd>
+    <dt><code>strict</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If true, fails when weights can't be loaded.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ModelLoading.LoadResult.html">LoadResult</a></dt>
+    <dd><p>Load result with statistics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ModelLoading/HuggingFaceModelLoader.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

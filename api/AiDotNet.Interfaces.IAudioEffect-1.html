@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IAudioEffect&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IAudioEffect&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for audio effects processors.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IAudioEffect_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IAudioEffect%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IAudioEffect`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IAudioEffect_1" data-uid="AiDotNet.Interfaces.IAudioEffect`1" class="text-break">
+Interface IAudioEffect&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for audio effects processors.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IAudioEffect&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IAudioEffect_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Audio effects modify sound in creative or corrective ways:
+<ul><li>Dynamics: Compressor, Limiter, Gate, Expander</li><li>EQ: Parametric EQ, Graphic EQ, Filters</li><li>Time-based: Reverb, Delay, Echo</li><li>Modulation: Chorus, Flanger, Phaser, Tremolo</li><li>Pitch: Pitch Shifter, Auto-Tune, Harmonizer</li><li>Distortion: Overdrive, Fuzz, Saturation</li></ul>
+
+<p><b>For Beginners:</b> Audio effects are like Instagram filters for sound!
+<p>Common effects explained:</p>
+<ul>
+<li>Reverb: Adds room ambience (makes it sound like you're in a hall)</li>
+<li>Delay: Creates echoes of the sound</li>
+<li>Compressor: Evens out loud and quiet parts (used in podcasts)</li>
+<li>EQ: Boosts or cuts certain frequencies (more bass, less treble)</li>
+<li>Pitch Shift: Makes voice higher or lower</li>
+</ul>
+<p>Effects can be:</p>
+<ul>
+<li>Chained: One after another (guitar -&gt; distortion -&gt; reverb -&gt; amp)</li>
+<li>Real-time: Process audio live as it plays</li>
+<li>Offline: Process entire files for best quality</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_Bypass_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Bypass*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_Bypass" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Bypass">
+  Bypass
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether the effect is bypassed (disabled).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool Bypass { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_LatencySamples_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.LatencySamples*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_LatencySamples" data-uid="AiDotNet.Interfaces.IAudioEffect`1.LatencySamples">
+  LatencySamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the processing latency in samples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int LatencySamples { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_Mix_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Mix*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_Mix" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Mix">
+  Mix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the dry/wet mix (0.0 = dry only, 1.0 = wet only).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double Mix { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioEffect_1_Mix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+- Dry = original unprocessed sound
+- Wet = fully processed sound
+- Mix 0.5 = 50% original + 50% processed (parallel processing)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_Name_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Name*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_Name" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this effect.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_Parameters_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Parameters*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_Parameters" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Parameters">
+  Parameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all adjustable parameters for this effect.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyDictionary&lt;string, AudioEffectParameter&lt;T&gt;&gt; Parameters { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.Interfaces.AudioEffectParameter-1.html">AudioEffectParameter</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_SampleRate_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_SampleRate" data-uid="AiDotNet.Interfaces.IAudioEffect`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sample rate this effect operates at.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_TailSamples_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.TailSamples*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_TailSamples" data-uid="AiDotNet.Interfaces.IAudioEffect`1.TailSamples">
+  TailSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the tail length in samples (how long the effect rings out after input stops).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int TailSamples { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioEffect_1_TailSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Important for reverb/delay. When input stops, you need to continue
+processing for this many samples to capture the tail.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_GetParameter_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.GetParameter*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_GetParameter_System_String_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.GetParameter(System.String)">
+  GetParameter(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a parameter value by name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T GetParameter(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Parameter name.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Current value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_Process_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Process*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_Process_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Process(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Process(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Processes audio through the effect.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Process(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Processed audio tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_ProcessInPlace_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.ProcessInPlace*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_ProcessInPlace_System_Span__0__" data-uid="AiDotNet.Interfaces.IAudioEffect`1.ProcessInPlace(System.Span{`0})">
+  ProcessInPlace(Span&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Processes audio in-place for efficiency.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ProcessInPlace(Span&lt;T&gt; buffer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>buffer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd><p>Audio buffer to process in-place.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_ProcessSample_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.ProcessSample*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_ProcessSample__0_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.ProcessSample(`0)">
+  ProcessSample(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Processes a single sample (for real-time use).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ProcessSample(T sample)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sample</code> <span class="xref">T</span></dt>
+    <dd><p>Input sample value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Processed sample value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_Reset_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Reset*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_Reset" data-uid="AiDotNet.Interfaces.IAudioEffect`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the effect's internal state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioEffect_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Call this when starting a new audio stream to prevent artifacts
+from previous audio bleeding through.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioEffect_1_SetParameter_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.SetParameter*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioEffect_1_SetParameter_System_String__0_" data-uid="AiDotNet.Interfaces.IAudioEffect`1.SetParameter(System.String,`0)">
+  SetParameter(string, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a parameter value by name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetParameter(string name, T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Parameter name.</p>
+</dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>New value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioEffect.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

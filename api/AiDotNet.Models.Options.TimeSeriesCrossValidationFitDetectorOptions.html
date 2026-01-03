@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TimeSeriesCrossValidationFitDetectorOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TimeSeriesCrossValidationFitDetectorOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for detecting overfitting, underfitting, and model stability in time series models using cross-validation techniques.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions" class="text-break">
+Class TimeSeriesCrossValidationFitDetectorOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesCrossValidationFitDetectorOptions.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for detecting overfitting, underfitting, and model stability in time series models
+using cross-validation techniques.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TimeSeriesCrossValidationFitDetectorOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TimeSeriesCrossValidationFitDetectorOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Time series cross-validation is a technique for evaluating the performance and generalization ability of time 
+series forecasting models. Unlike standard cross-validation used for non-time series data, time series 
+cross-validation respects the temporal order of observations, typically using a rolling window or expanding 
+window approach. This class provides configuration options for thresholds used to detect common modeling 
+issues such as overfitting (where the model performs well on training data but poorly on validation data), 
+underfitting (where the model performs poorly on both training and validation data), and high variance 
+(where model performance varies significantly across different validation periods). These thresholds help 
+automate the process of model evaluation and selection for time series forecasting tasks.
+</p>
+<p><b>For Beginners:</b> This class helps you detect common problems when training time series forecasting models.
+<p>When building time series forecasting models:</p>
+<ul>
+<li>Overfitting: Model learns patterns specific to historical data that don't generalize to future data</li>
+<li>Underfitting: Model is too simple to capture important patterns in the data</li>
+<li>High variance: Model performance changes dramatically across different time periods</li>
+</ul>
+<p>Time series cross-validation:</p>
+<ul>
+<li>Tests your model on multiple time periods</li>
+<li>Respects the temporal nature of the data (unlike regular cross-validation)</li>
+<li>Usually involves training on earlier data and testing on later data</li>
+<li>Helps assess how well your model will perform on future, unseen data</li>
+</ul>
+<p>This class provides thresholds to automatically detect these issues based on
+cross-validation results, helping you diagnose and fix model training problems.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_GoodFitThreshold_" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions.GoodFitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_GoodFitThreshold" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions.GoodFitThreshold">
+  GoodFitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesCrossValidationFitDetectorOptions.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for determining a good fit.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GoodFitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.8.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_GoodFitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum acceptable improvement over a naive benchmark model for the model to be 
+considered a good fit. The improvement is typically measured as 1 minus the ratio of the model's error to 
+the benchmark model's error, so higher values indicate better performance. If this improvement is below the 
+threshold, the model is not considered a good fit, even if it doesn't exhibit overfitting, underfitting, or 
+high variance. For example, with the default value of 0.8, the model's error must be at most 20% of the 
+benchmark error (an 80% improvement) to be considered a good fit. A higher threshold is more strict, requiring 
+better performance relative to the benchmark, while a lower threshold is more lenient. The appropriate value 
+depends on the specific application and the minimum acceptable improvement over the benchmark for the model 
+to be considered useful.
+</p>
+<p><b>For Beginners:</b> This setting determines how much better than a benchmark a model must perform to be considered a good fit.
+<p>A good fit in time series means:</p>
+<ul>
+<li>The model significantly outperforms simple benchmark methods</li>
+<li>It captures the important patterns in the data</li>
+<li>It generalizes well to validation periods</li>
+</ul>
+<p>The default value of 0.8 means:</p>
+<ul>
+<li>The model must achieve at least an 80% improvement over the benchmark</li>
+<li>For example, if benchmark RMSE is 100, model RMSE must be 20 or less</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.9): More strict, requires excellent performance compared to benchmark</li>
+<li>Lower values (e.g., 0.6): More lenient, accepts more modest improvements over benchmark</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for applications where high forecast accuracy is critical</li>
+<li>Decrease it for difficult forecasting problems where even modest improvements are valuable</li>
+</ul>
+<p>For example, in inventory optimization where forecast accuracy directly impacts costs,
+you might increase this to 0.85-0.9 to ensure your model provides substantial
+improvement over simple methods.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_HighVarianceThreshold_" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions.HighVarianceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_HighVarianceThreshold" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions.HighVarianceThreshold">
+  HighVarianceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesCrossValidationFitDetectorOptions.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting high variance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HighVarianceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_HighVarianceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum acceptable coefficient of variation (standard deviation divided by mean) 
+of the model's performance across different validation periods. If the coefficient of variation exceeds this 
+threshold, the model is considered to have high variance. For example, with the default value of 1.1, if the 
+mean error across validation periods is 10 and the standard deviation is greater than 11, the model would be 
+flagged as having high variance. A smaller threshold is more strict, requiring more consistent performance 
+across different periods, while a larger threshold is more lenient. The appropriate value depends on the 
+specific application and the expected stability of the time series across different periods. For highly 
+volatile or non-stationary time series, a larger threshold might be appropriate, while for more stable series, 
+a smaller threshold might be preferred.
+</p>
+<p><b>For Beginners:</b> This setting determines how consistent a model's performance must be across different time periods.
+<p>High variance in time series models occurs when:</p>
+<ul>
+<li>Performance varies significantly across different validation periods</li>
+<li>The model is too sensitive to specific time periods</li>
+<li>It can't maintain consistent performance across the entire time range</li>
+</ul>
+<p>The default value of 1.1 means:</p>
+<ul>
+<li>If the coefficient of variation (standard deviation ÷ mean) of errors exceeds 1.1, the model has high variance</li>
+<li>This indicates the model's performance is too inconsistent across different periods</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 0.8): More strict, requires more consistent performance across periods</li>
+<li>Higher values (e.g., 1.5): More lenient, allows more variation across periods</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when consistent performance across time periods is critical</li>
+<li>Increase it for highly volatile time series where some variation in performance is expected</li>
+</ul>
+<p>For example, in utility load forecasting where consistent reliability is essential,
+you might decrease this to 0.9 to ensure the model performs consistently
+across different seasons and conditions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_OverfitThreshold_" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions.OverfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_OverfitThreshold" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions.OverfitThreshold">
+  OverfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesCrossValidationFitDetectorOptions.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting overfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OverfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1.2.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_OverfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum acceptable ratio of training error to validation error. If the validation 
+error is more than this threshold times the training error, the model is considered to be overfitting. For 
+example, with the default value of 1.2, if the training error is 10 and the validation error is greater than 
+12, the model would be flagged as overfitting. This threshold is expressed as a ratio rather than an absolute 
+difference because the scale of errors can vary widely across different time series. A smaller threshold is 
+more strict, flagging smaller differences as overfitting, while a larger threshold is more lenient. The 
+appropriate value depends on the specific application and the expected difference between in-sample and 
+out-of-sample performance for a well-fitted model.
+</p>
+<p><b>For Beginners:</b> This setting determines how much worse a model can perform on validation data versus training data before it's considered overfitting.
+<p>Overfitting in time series occurs when:</p>
+<ul>
+<li>A model performs significantly worse on validation periods than on training periods</li>
+<li>It has essentially &quot;memorized&quot; the training data rather than learning general patterns</li>
+</ul>
+<p>The default value of 1.2 means:</p>
+<ul>
+<li>If validation error is more than 20% higher than training error, the model is overfitting</li>
+<li>For example, if training RMSE is 10 and validation RMSE is 13, that's overfitting</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 1.1): More strict, flags smaller differences as overfitting</li>
+<li>Higher values (e.g., 1.5): More lenient, allows larger differences before flagging overfitting</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when working with stable time series where training and validation should be very close</li>
+<li>Increase it for volatile time series where some gap is expected and acceptable</li>
+</ul>
+<p>For example, in financial time series that are known to be volatile,
+you might increase this to 1.3-1.5 since some gap between training and
+validation performance is normal.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_UnderfitThreshold_" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions.UnderfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_UnderfitThreshold" data-uid="AiDotNet.Models.Options.TimeSeriesCrossValidationFitDetectorOptions.UnderfitThreshold">
+  UnderfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesCrossValidationFitDetectorOptions.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting underfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UnderfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesCrossValidationFitDetectorOptions_UnderfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum acceptable performance relative to a naive benchmark model. The 
+performance is typically measured as the ratio of the model's error to the benchmark model's error, so 
+lower values indicate better performance. If this ratio exceeds the threshold, the model is considered 
+to be underfitting. For example, with the default value of 0.5, if the benchmark model has an error of 
+100 and the evaluated model has an error greater than 50, the model would be flagged as underfitting. 
+Common benchmark models for time series include the naive forecast (using the last observed value) or 
+seasonal naive forecast (using the value from the same season in the previous period). A lower threshold 
+is more strict, requiring better performance relative to the benchmark, while a higher threshold is more 
+lenient. The appropriate value depends on the specific application and the minimum acceptable improvement 
+over the benchmark for the model to be considered useful.
+</p>
+<p><b>For Beginners:</b> This setting determines how well a model must perform compared to a simple benchmark to avoid being considered underfitting.
+<p>Underfitting in time series occurs when:</p>
+<ul>
+<li>A model doesn't perform much better than simple benchmark methods</li>
+<li>It's too simple to capture the underlying patterns in the data</li>
+</ul>
+<p>The default value of 0.5 means:</p>
+<ul>
+<li>The model's error should be at most 50% of the benchmark error</li>
+<li>For example, if a naive forecast has RMSE of 100, your model should have RMSE of 50 or less</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 0.3): More strict, requires better performance compared to benchmark</li>
+<li>Higher values (e.g., 0.7): More lenient, allows performance closer to benchmark</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it for problems where sophisticated models should significantly outperform benchmarks</li>
+<li>Increase it for difficult forecasting problems where even modest improvements are valuable</li>
+</ul>
+<p>For example, in retail demand forecasting where patterns are clear,
+you might decrease this to 0.4 to ensure your model provides substantial
+improvement over simple methods.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesCrossValidationFitDetectorOptions.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

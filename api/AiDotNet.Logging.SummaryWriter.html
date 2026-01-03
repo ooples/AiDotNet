@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SummaryWriter | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SummaryWriter | AiDotNet Documentation ">
+      
+      <meta name="description" content="PyTorch-compatible SummaryWriter for TensorBoard logging.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Logging_SummaryWriter.md&amp;value=---%0Auid%3A%20AiDotNet.Logging.SummaryWriter%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Logging.SummaryWriter">
+
+
+
+  <h1 id="AiDotNet_Logging_SummaryWriter" data-uid="AiDotNet.Logging.SummaryWriter" class="text-break">
+Class SummaryWriter  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Logging.html">Logging</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>PyTorch-compatible SummaryWriter for TensorBoard logging.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SummaryWriter : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SummaryWriter</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Logging.TensorBoardExtensions.html#AiDotNet_Logging_TensorBoardExtensions_LogMetrics_AiDotNet_Logging_SummaryWriter_System_Collections_Generic_Dictionary_System_String_System_Single__System_Int64_System_String_">TensorBoardExtensions.LogMetrics(SummaryWriter, Dictionary&lt;string, float&gt;, long, string?)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Logging_SummaryWriter_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides an API similar to PyTorch's torch.utils.tensorboard.SummaryWriter,
+making it easy to log training metrics, model weights, images, and more.
+</p>
+<p><b>For Beginners:</b> This is your interface to TensorBoard visualization.
+<p>During training, you use this writer to record:</p>
+<ul>
+<li>Loss values at each step (add_scalar)</li>
+<li>Model weight distributions (add_histogram)</li>
+<li>Sample outputs or feature maps (add_image)</li>
+<li>Model structure (add_graph)</li>
+</ul>
+<p>Then you can visualize all this in TensorBoard by running:
+tensorboard --logdir=your_log_directory</p>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">using var writer = new SummaryWriter("runs/experiment_1");
+for (int epoch = 0; epoch &lt; 100; epoch++)
+{
+    float loss = Train();
+    writer.AddScalar("loss/train", loss, epoch);
+    writer.AddHistogram("layer1/weights", model.Layer1.Weights, epoch);
+}</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Logging_SummaryWriter__ctor_" data-uid="AiDotNet.Logging.SummaryWriter.#ctor*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter__ctor_System_String_System_String_System_Int32_System_Int32_System_Int32_System_String_" data-uid="AiDotNet.Logging.SummaryWriter.#ctor(System.String,System.String,System.Int32,System.Int32,System.Int32,System.String)">
+  SummaryWriter(string?, string?, int, int, int, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new SummaryWriter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SummaryWriter(string? logDir = null, string? comment = null, int purgeStep = 0, int maxQueue = 10, int flushSecs = 120, string? filename = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>logDir</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Directory to save event files. If null, uses 'runs/DATETIME_HOSTNAME'.</p>
+</dd>
+    <dt><code>comment</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional comment to append to the auto-generated logdir name.</p>
+</dd>
+    <dt><code>purgeStep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Step at which to purge old data (not implemented yet).</p>
+</dd>
+    <dt><code>maxQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of pending events (not implemented yet).</p>
+</dd>
+    <dt><code>flushSecs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How often to flush (not implemented yet).</p>
+</dd>
+    <dt><code>filename</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional filename suffix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_DefaultStep_" data-uid="AiDotNet.Logging.SummaryWriter.DefaultStep*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_DefaultStep" data-uid="AiDotNet.Logging.SummaryWriter.DefaultStep">
+  DefaultStep
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current default step number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long DefaultStep { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_LogDir_" data-uid="AiDotNet.Logging.SummaryWriter.LogDir*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_LogDir" data-uid="AiDotNet.Logging.SummaryWriter.LogDir">
+  LogDir
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the log directory path.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string LogDir { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddCustomScalar_" data-uid="AiDotNet.Logging.SummaryWriter.AddCustomScalar*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddCustomScalar_System_String_System_Single_System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.AddCustomScalar(System.String,System.Single,System.Nullable{System.Int64})">
+  AddCustomScalar(string, float, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L391"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a custom scalar with layout.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddCustomScalar(string tag, float value, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Scalar value.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddEmbedding_" data-uid="AiDotNet.Logging.SummaryWriter.AddEmbedding*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddEmbedding_System_String_System_Single_0__0___System_String___System_Single_0__0__0__0___System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.AddEmbedding(System.String,System.Single[0:,0:],System.String[],System.Single[0:,0:,0:,0:],System.Nullable{System.Int64})">
+  AddEmbedding(string, float[,], string[]?, float[,,,]?, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an embedding with optional metadata and labels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddEmbedding(string tag, float[,] embeddings, string[]? metadata = null, float[,,,]? labelImg = null, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier.</p>
+</dd>
+    <dt><code>embeddings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[,]</dt>
+    <dd><p>Embedding vectors (N x D).</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Optional labels for each embedding point.</p>
+</dd>
+    <dt><code>labelImg</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[,,,]</dt>
+    <dd><p>Optional image for each point (N x C x H x W).</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddHistogram_" data-uid="AiDotNet.Logging.SummaryWriter.AddHistogram*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddHistogram_System_String_System_ReadOnlySpan_System_Single__System_Nullable_System_Int64__System_Int32_" data-uid="AiDotNet.Logging.SummaryWriter.AddHistogram(System.String,System.ReadOnlySpan{System.Single},System.Nullable{System.Int64},System.Int32)">
+  AddHistogram(string, ReadOnlySpan&lt;float&gt;, long?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a histogram from a span of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddHistogram(string tag, ReadOnlySpan&lt;float&gt; values, long? step = null, int bins = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+    <dt><code>bins</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddHistogram_" data-uid="AiDotNet.Logging.SummaryWriter.AddHistogram*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddHistogram_System_String_System_Single_0__0___System_Nullable_System_Int64__System_Int32_" data-uid="AiDotNet.Logging.SummaryWriter.AddHistogram(System.String,System.Single[0:,0:],System.Nullable{System.Int64},System.Int32)">
+  AddHistogram(string, float[,], long?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a histogram from a 2D array (flattened).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddHistogram(string tag, float[,] values, long? step = null, int bins = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[,]</dt>
+    <dd></dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+    <dt><code>bins</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddHistogram_" data-uid="AiDotNet.Logging.SummaryWriter.AddHistogram*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddHistogram_System_String_System_Single___System_Nullable_System_Int64__System_Int32_" data-uid="AiDotNet.Logging.SummaryWriter.AddHistogram(System.String,System.Single[],System.Nullable{System.Int64},System.Int32)">
+  AddHistogram(string, float[], long?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a histogram of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddHistogram(string tag, float[] values, long? step = null, int bins = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier.</p>
+</dd>
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Array of values to build histogram from.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+    <dt><code>bins</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of bins (not implemented, uses auto).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddHparams_" data-uid="AiDotNet.Logging.SummaryWriter.AddHparams*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddHparams_System_Collections_Generic_Dictionary_System_String_System_Object__System_Collections_Generic_Dictionary_System_String_System_Single__System_Collections_Generic_Dictionary_System_String_System_Object____" data-uid="AiDotNet.Logging.SummaryWriter.AddHparams(System.Collections.Generic.Dictionary{System.String,System.Object},System.Collections.Generic.Dictionary{System.String,System.Single},System.Collections.Generic.Dictionary{System.String,System.Object[]})">
+  AddHparams(Dictionary&lt;string, object&gt;, Dictionary&lt;string, float&gt;, Dictionary&lt;string, object[]&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L306"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds hyperparameters and associated metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddHparams(Dictionary&lt;string, object&gt; hparams, Dictionary&lt;string, float&gt; metrics, Dictionary&lt;string, object[]&gt;? hparamDomainDiscrete = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>hparams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Dictionary of hyperparameter names to values.</p>
+</dd>
+    <dt><code>metrics</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Dictionary of metric names to values.</p>
+</dd>
+    <dt><code>hparamDomainDiscrete</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>[]&gt;</dt>
+    <dd><p>Optional discrete domains for hyperparameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddImage_" data-uid="AiDotNet.Logging.SummaryWriter.AddImage*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddImage_System_String_System_Single_0__0__0___System_Nullable_System_Int64__System_String_" data-uid="AiDotNet.Logging.SummaryWriter.AddImage(System.String,System.Single[0:,0:,0:],System.Nullable{System.Int64},System.String)">
+  AddImage(string, float[,,], long?, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an image to the summary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddImage(string tag, float[,,] imageData, long? step = null, string dataformats = &quot;CHW&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier.</p>
+</dd>
+    <dt><code>imageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[,,]</dt>
+    <dd><p>Image data in CHW format (channels, height, width) normalized to [0, 1].</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+    <dt><code>dataformats</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Format of the image data: 'CHW' or 'HWC'. Default is 'CHW'.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddImageRaw_" data-uid="AiDotNet.Logging.SummaryWriter.AddImageRaw*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddImageRaw_System_String_System_Byte___System_Int32_System_Int32_System_Int32_System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.AddImageRaw(System.String,System.Byte[],System.Int32,System.Int32,System.Int32,System.Nullable{System.Int64})">
+  AddImageRaw(string, byte[], int, int, int, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an image from raw pixel data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddImageRaw(string tag, byte[] pixels, int height, int width, int channels, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier.</p>
+</dd>
+    <dt><code>pixels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>Raw pixel data in HWC format, values in [0, 255].</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image height.</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image width.</p>
+</dd>
+    <dt><code>channels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of channels (1, 3, or 4).</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddImages_" data-uid="AiDotNet.Logging.SummaryWriter.AddImages*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddImages_System_String_System_Single_0__0__0__0___System_Nullable_System_Int64__System_Int32_System_Int32_System_Boolean_" data-uid="AiDotNet.Logging.SummaryWriter.AddImages(System.String,System.Single[0:,0:,0:,0:],System.Nullable{System.Int64},System.Int32,System.Int32,System.Boolean)">
+  AddImages(string, float[,,,], long?, int, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a grid of images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddImages(string tag, float[,,,] images, long? step = null, int nrow = 8, int padding = 2, bool normalize = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier.</p>
+</dd>
+    <dt><code>images</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[,,,]</dt>
+    <dd><p>4D tensor of images in NCHW format.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+    <dt><code>nrow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of images per row in the grid.</p>
+</dd>
+    <dt><code>padding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Padding between images.</p>
+</dd>
+    <dt><code>normalize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to normalize images to [0, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddPrCurve_" data-uid="AiDotNet.Logging.SummaryWriter.AddPrCurve*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddPrCurve_System_String_System_Int32___System_Single___System_Nullable_System_Int64__System_Int32_" data-uid="AiDotNet.Logging.SummaryWriter.AddPrCurve(System.String,System.Int32[],System.Single[],System.Nullable{System.Int64},System.Int32)">
+  AddPrCurve(string, int[], float[], long?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L348"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a PR curve for binary classification evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddPrCurve(string tag, int[] labels, float[] predictions, long? step = null, int numThresholds = 127)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Ground truth labels (0 or 1).</p>
+</dd>
+    <dt><code>predictions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Prediction scores.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+    <dt><code>numThresholds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of thresholds for the curve.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddScalar_" data-uid="AiDotNet.Logging.SummaryWriter.AddScalar*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddScalar_System_String_System_Double_System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.AddScalar(System.String,System.Double,System.Nullable{System.Int64})">
+  AddScalar(string, double, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a scalar value (double precision).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddScalar(string tag, double value, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddScalar_" data-uid="AiDotNet.Logging.SummaryWriter.AddScalar*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddScalar_System_String_System_Single_System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.AddScalar(System.String,System.Single,System.Nullable{System.Int64})">
+  AddScalar(string, float, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a scalar value to the summary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddScalar(string tag, float value, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier (e.g., &quot;loss/train&quot;, &quot;accuracy/val&quot;).</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Scalar value to record.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value. Uses auto-incremented default if not specified.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddScalars_" data-uid="AiDotNet.Logging.SummaryWriter.AddScalars*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddScalars_System_String_System_Collections_Generic_Dictionary_System_String_System_Single__System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.AddScalars(System.String,System.Collections.Generic.Dictionary{System.String,System.Single},System.Nullable{System.Int64})">
+  AddScalars(string, Dictionary&lt;string, float&gt;, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds multiple scalars under a main tag.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddScalars(string mainTag, Dictionary&lt;string, float&gt; tagScalarDict, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mainTag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Main tag prefix.</p>
+</dd>
+    <dt><code>tagScalarDict</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Dictionary mapping tag suffixes to values.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Logging_SummaryWriter_AddScalars_System_String_System_Collections_Generic_Dictionary_System_String_System_Single__System_Nullable_System_Int64___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Useful for comparing multiple runs. All scalars will be grouped together
+in TensorBoard under the main tag.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_AddText_" data-uid="AiDotNet.Logging.SummaryWriter.AddText*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_AddText_System_String_System_String_System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.AddText(System.String,System.String,System.Nullable{System.Int64})">
+  AddText(string, string, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds text to the summary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddText(string tag, string text, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Data identifier.</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text string to record.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_Close_" data-uid="AiDotNet.Logging.SummaryWriter.Close*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_Close" data-uid="AiDotNet.Logging.SummaryWriter.Close">
+  Close()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L476"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Closes the writer (alias for Dispose).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Close()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_Dispose_" data-uid="AiDotNet.Logging.SummaryWriter.Dispose*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_Dispose" data-uid="AiDotNet.Logging.SummaryWriter.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L466"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases resources and closes the writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_Flush_" data-uid="AiDotNet.Logging.SummaryWriter.Flush*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_Flush" data-uid="AiDotNet.Logging.SummaryWriter.Flush">
+  Flush()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L458"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Flushes pending writes to disk.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Flush()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_LogTrainingStep_" data-uid="AiDotNet.Logging.SummaryWriter.LogTrainingStep*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_LogTrainingStep_System_Single_System_Nullable_System_Single__System_Nullable_System_Single__System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.LogTrainingStep(System.Single,System.Nullable{System.Single},System.Nullable{System.Single},System.Nullable{System.Int64})">
+  LogTrainingStep(float, float?, float?, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs training metrics at the current step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogTrainingStep(float loss, float? accuracy = null, float? learningRate = null, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>loss</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Training loss.</p>
+</dd>
+    <dt><code>accuracy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>?</dt>
+    <dd><p>Training accuracy (optional).</p>
+</dd>
+    <dt><code>learningRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>?</dt>
+    <dd><p>Current learning rate (optional).</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_LogValidationStep_" data-uid="AiDotNet.Logging.SummaryWriter.LogValidationStep*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_LogValidationStep_System_Single_System_Nullable_System_Single__System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.LogValidationStep(System.Single,System.Nullable{System.Single},System.Nullable{System.Int64})">
+  LogValidationStep(float, float?, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L419"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs validation metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogValidationStep(float loss, float? accuracy = null, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>loss</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Validation loss.</p>
+</dd>
+    <dt><code>accuracy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>?</dt>
+    <dd><p>Validation accuracy (optional).</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Logging_SummaryWriter_LogWeights_" data-uid="AiDotNet.Logging.SummaryWriter.LogWeights*"></a>
+
+  <h3 id="AiDotNet_Logging_SummaryWriter_LogWeights_System_String_System_Single___System_Single___System_Nullable_System_Int64__" data-uid="AiDotNet.Logging.SummaryWriter.LogWeights(System.String,System.Single[],System.Single[],System.Nullable{System.Int64})">
+  LogWeights(string, float[], float[]?, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L434"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs model weight statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogWeights(string layerName, float[] weights, float[]? gradients = null, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>layerName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name of the layer.</p>
+</dd>
+    <dt><code>weights</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Weight array.</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Gradient array (optional).</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Global step.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Logging/SummaryWriter.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

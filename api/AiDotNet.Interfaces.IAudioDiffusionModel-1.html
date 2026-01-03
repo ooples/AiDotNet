@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IAudioDiffusionModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IAudioDiffusionModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for audio diffusion models that generate sound and music.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IAudioDiffusionModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IAudioDiffusionModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IAudioDiffusionModel_1" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1" class="text-break">
+Interface IAudioDiffusionModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for audio diffusion models that generate sound and music.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IAudioDiffusionModel&lt;T&gt; : IDiffusionModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_Scheduler">IDiffusionModel&lt;T&gt;.Scheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_Generate_System_Int32___System_Int32_System_Nullable_System_Int32__">IDiffusionModel&lt;T&gt;.Generate(int[], int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_PredictNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">IDiffusionModel&lt;T&gt;.PredictNoise(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">IDiffusionModel&lt;T&gt;.ComputeLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html#AiDotNet_Interfaces_IFullModel_3_DefaultLossFunction">IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Train__0__1_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Predict__0_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_GetModelMetadata">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_">ICheckpointableModel.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_">ICheckpointableModel.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_GetParameters">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_GetActiveFeatureIndices">IFeatureAware.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">IFeatureAware.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_IsFeatureUsed_System_Int32_">IFeatureAware.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html#AiDotNet_Interfaces_IFeatureImportance_1_GetFeatureImportance">IFeatureImportance&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_DeepCopy">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_Clone">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Audio diffusion models apply diffusion processes to generate audio content,
+including music, speech, sound effects, and more. They typically operate on
+audio spectrograms or mel-spectrograms in latent space.
+</p>
+<p>
+<b>For Beginners:</b> Audio diffusion models work similarly to image diffusion,
+but instead of generating pictures, they create sounds.
+<p>How audio diffusion works:</p>
+<ol>
+<li>Audio is converted to a spectrogram (visual representation of sound)</li>
+<li>Diffusion happens on this spectrogram (just like image diffusion)</li>
+<li>The spectrogram is converted back to audio</li>
+</ol>
+<p>Types of audio generation:</p>
+<ul>
+<li>Text-to-Audio: &quot;A dog barking in a park&quot; → audio clip</li>
+<li>Text-to-Music: &quot;Upbeat jazz piano&quot; → music track</li>
+<li>Text-to-Speech: Text → spoken voice</li>
+<li>Audio-to-Audio: Transform existing audio (voice conversion, style transfer)</li>
+</ul>
+<p>Key challenges:</p>
+<ul>
+<li>Temporal coherence (sounds must flow naturally)</li>
+<li>Frequency relationships (harmonics, rhythm)</li>
+<li>Long-range dependencies (verse-chorus structure in music)</li>
+</ul>
+
+<p>
+This interface extends <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel&lt;T&gt;</a> with audio-specific operations.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_DefaultDurationSeconds_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.DefaultDurationSeconds*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_DefaultDurationSeconds" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.DefaultDurationSeconds">
+  DefaultDurationSeconds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default duration of generated audio in seconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double DefaultDurationSeconds { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_MelChannels_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.MelChannels*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_MelChannels" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.MelChannels">
+  MelChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of mel spectrogram channels used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MelChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioDiffusionModel_1_MelChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Mel spectrograms divide the frequency range into perceptual bands.
+Common values: 64, 80, or 128 mel bins.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SampleRate_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SampleRate" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sample rate of generated audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SampleRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Common values: 16000 Hz (speech), 22050 Hz (music), 44100 Hz (high quality).
+Higher sample rates = better quality but more computation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SupportsAudioToAudio_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SupportsAudioToAudio*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SupportsAudioToAudio" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SupportsAudioToAudio">
+  SupportsAudioToAudio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports audio-to-audio transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsAudioToAudio { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SupportsTextToAudio_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SupportsTextToAudio*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SupportsTextToAudio" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SupportsTextToAudio">
+  SupportsTextToAudio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports text-to-audio generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsTextToAudio { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SupportsTextToMusic_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SupportsTextToMusic*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SupportsTextToMusic" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SupportsTextToMusic">
+  SupportsTextToMusic
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports text-to-music generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsTextToMusic { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SupportsTextToSpeech_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SupportsTextToSpeech*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_SupportsTextToSpeech" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.SupportsTextToSpeech">
+  SupportsTextToSpeech
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports text-to-speech generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsTextToSpeech { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_AudioToAudio_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.AudioToAudio*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_AudioToAudio_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Double_System_Int32_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.AudioToAudio(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String,System.Double,System.Int32,System.Double,System.Nullable{System.Int32})">
+  AudioToAudio(Tensor&lt;T&gt;, string, string?, double, int, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms existing audio based on a text prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; AudioToAudio(Tensor&lt;T&gt; inputAudio, string prompt, string? negativePrompt = null, double strength = 0.5, int numInferenceSteps = 100, double guidanceScale = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputAudio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input audio waveform.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the transformation.</p>
+</dd>
+    <dt><code>negativePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>What to avoid.</p>
+</dd>
+    <dt><code>strength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Transformation strength (0.0-1.0).</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Transformed audio waveform.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioDiffusionModel_1_AudioToAudio_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Double_System_Int32_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This changes existing audio:
+- "Make it sound like it's underwater"
+- "Add reverb like a large hall"
+- "Change the voice to sound younger"
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_ContinueAudio_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.ContinueAudio*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_ContinueAudio_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Double_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.ContinueAudio(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Double,System.Int32,System.Nullable{System.Int32})">
+  ContinueAudio(Tensor&lt;T&gt;, string?, double, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Continues/extends audio from a given clip.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ContinueAudio(Tensor&lt;T&gt; inputAudio, string? prompt = null, double extensionSeconds = 5, int numInferenceSteps = 100, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputAudio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The audio to continue from.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional text guidance for continuation.</p>
+</dd>
+    <dt><code>extensionSeconds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>How many seconds to add.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Extended audio waveform (original + continuation).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioDiffusionModel_1_ContinueAudio_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Double_System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This extends audio by generating more that follows:
+- Input: 5 seconds of a song
+- Output: Original 5 seconds + 10 more seconds that fit naturally
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_ExtractSpeakerEmbedding_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.ExtractSpeakerEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_ExtractSpeakerEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.ExtractSpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ExtractSpeakerEmbedding(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets speaker embeddings from a reference audio clip (for voice cloning).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ExtractSpeakerEmbedding(Tensor&lt;T&gt; referenceAudio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>referenceAudio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Reference audio waveform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Speaker embedding tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_GenerateFromText_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.GenerateFromText*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_GenerateFromText_System_String_System_String_System_Nullable_System_Double__System_Int32_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.GenerateFromText(System.String,System.String,System.Nullable{System.Double},System.Int32,System.Double,System.Nullable{System.Int32})">
+  GenerateFromText(string, string?, double?, int, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates audio from a text description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateFromText(string prompt, string? negativePrompt = null, double? durationSeconds = null, int numInferenceSteps = 100, double guidanceScale = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the desired audio.</p>
+</dd>
+    <dt><code>negativePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>What to avoid in the audio.</p>
+</dd>
+    <dt><code>durationSeconds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Length of audio to generate.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [batch, samples] or [batch, channels, samples] for stereo.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioDiffusionModel_1_GenerateFromText_System_String_System_String_System_Nullable_System_Double__System_Int32_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This creates sound from a description:
+- prompt: "A thunderstorm with rain" → Thunder and rain sounds
+- prompt: "Acoustic guitar strumming" → Guitar music
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_GenerateMusic_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.GenerateMusic*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_GenerateMusic_System_String_System_String_System_Nullable_System_Double__System_Int32_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.GenerateMusic(System.String,System.String,System.Nullable{System.Double},System.Int32,System.Double,System.Nullable{System.Int32})">
+  GenerateMusic(string, string?, double?, int, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates music from a text description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateMusic(string prompt, string? negativePrompt = null, double? durationSeconds = null, int numInferenceSteps = 100, double guidanceScale = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the desired music.</p>
+</dd>
+    <dt><code>negativePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>What to avoid in the music.</p>
+</dd>
+    <dt><code>durationSeconds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Length of music to generate.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioDiffusionModel_1_GenerateMusic_System_String_System_String_System_Nullable_System_Double__System_Int32_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Music generation may use specialized models tuned for musical content,
+with better handling of melody, harmony, and rhythm.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_MelSpectrogramToWaveform_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.MelSpectrogramToWaveform*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_MelSpectrogramToWaveform_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.MelSpectrogramToWaveform(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  MelSpectrogramToWaveform(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts mel spectrogram back to audio waveform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; MelSpectrogramToWaveform(Tensor&lt;T&gt; melSpectrogram)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>melSpectrogram</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Mel spectrogram [batch, channels, melBins, timeFrames].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform [batch, samples].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_TextToSpeech_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.TextToSpeech*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_TextToSpeech_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.TextToSpeech(System.String,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double,System.Int32,System.Nullable{System.Int32})">
+  TextToSpeech(string, Tensor&lt;T&gt;?, double, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synthesizes speech from text (text-to-speech).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; TextToSpeech(string text, Tensor&lt;T&gt;? speakerEmbedding = null, double speakingRate = 1, int numInferenceSteps = 50, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to speak.</p>
+</dd>
+    <dt><code>speakerEmbedding</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Optional speaker embedding for voice cloning.</p>
+</dd>
+    <dt><code>speakingRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Speed multiplier (1.0 = normal).</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IAudioDiffusionModel_1_TextToSpeech_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This makes the computer "read" text out loud:
+- Input: "Hello, how are you today?"
+- Output: Audio of someone saying those words
+- speakerEmbedding: Makes it sound like a specific person
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAudioDiffusionModel_1_WaveformToMelSpectrogram_" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.WaveformToMelSpectrogram*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAudioDiffusionModel_1_WaveformToMelSpectrogram_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IAudioDiffusionModel`1.WaveformToMelSpectrogram(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  WaveformToMelSpectrogram(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts audio waveform to mel spectrogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; WaveformToMelSpectrogram(Tensor&lt;T&gt; waveform)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>waveform</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform [batch, samples].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Mel spectrogram [batch, channels, melBins, timeFrames].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAudioDiffusionModel.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

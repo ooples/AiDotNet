@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>AiDotNet Architecture: Training Infrastructure vs Serving Infrastructure | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="AiDotNet Architecture: Training Infrastructure vs Serving Infrastructure | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/TRAINING_VS_SERVING_ARCHITECTURE.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="aidotnet-architecture-training-infrastructure-vs-serving-infrastructure">AiDotNet Architecture: Training Infrastructure vs Serving Infrastructure</h1>
+
+<h2 id="overview">Overview</h2>
+<p>AiDotNet has two distinct but complementary infrastructure layers:</p>
+<ol>
+<li><strong>Training Infrastructure</strong> (in <code>src/</code>) - For model development, experimentation, and MLOps</li>
+<li><strong>Serving Infrastructure</strong> (in <code>src/AiDotNet.Serving/</code>) - For production inference deployment</li>
+</ol>
+<hr>
+<h2 id="layer-comparison">Layer Comparison</h2>
+<h3 id="aidotnetserving-inferenceproduction-layer">AiDotNet.Serving (Inference/Production Layer)</h3>
+<p>Located in: <code>src/AiDotNet.Serving/</code></p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IModelRepository</code> / <code>ModelRepository</code></td>
+<td>Runtime model loading - loads trained models into memory for serving</td>
+</tr>
+<tr>
+<td><code>IRequestBatcher</code> / <code>RequestBatcher</code></td>
+<td>Batches concurrent inference requests for throughput optimization</td>
+</tr>
+<tr>
+<td><code>PerformanceMetrics</code></td>
+<td>Tracks inference latency (P50, P95, P99), throughput, batch utilization</td>
+</tr>
+<tr>
+<td><code>IServableModel&lt;T&gt;</code></td>
+<td>Interface for models that can be served via REST API</td>
+</tr>
+<tr>
+<td><code>InferenceController</code></td>
+<td>REST endpoint for predictions (<code>POST /api/inference/predict/{modelName}</code>)</td>
+</tr>
+<tr>
+<td><code>ModelsController</code></td>
+<td>REST endpoint for model management (load, list, unload)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Focus</strong>: Production deployment, real-time inference, request batching, latency optimization</p>
+<hr>
+<h3 id="aidotnet-training-infrastructure-developmentmlops-layer">AiDotNet Training Infrastructure (Development/MLOps Layer)</h3>
+<p>Located in: <code>src/</code> (various folders)</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IExperimentTracker</code> / <code>ExperimentTrackerBase</code></td>
+<td>Organizes ML experiments and training runs (like MLflow)</td>
+</tr>
+<tr>
+<td><code>IHyperparameterOptimizer</code> / <code>HyperparameterOptimizerBase</code></td>
+<td>Searches for optimal hyperparameters (Grid, Random, Bayesian)</td>
+</tr>
+<tr>
+<td><code>ICheckpointManager</code> / <code>CheckpointManagerBase</code></td>
+<td>Saves/restores training state, manages best model checkpoints</td>
+</tr>
+<tr>
+<td><code>ITrainingMonitor</code> / <code>TrainingMonitorBase</code></td>
+<td>Tracks training metrics (loss curves, accuracy) during model development</td>
+</tr>
+<tr>
+<td><code>IModelRegistry</code> / <code>ModelRegistryBase</code></td>
+<td>Model versioning and lifecycle (Development -&gt; Staging -&gt; Production -&gt; Archived)</td>
+</tr>
+<tr>
+<td><code>IDataVersionControl</code> / <code>DataVersionControlBase</code></td>
+<td>Dataset versioning for reproducibility</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Focus</strong>: Model development, experimentation, reproducibility, MLOps lifecycle</p>
+<hr>
+<h2 id="key-differences">Key Differences</h2>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Training Infrastructure</th>
+<th>Serving Infrastructure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>When Used</strong></td>
+<td>During model development</td>
+<td>After model is trained and deployed</td>
+</tr>
+<tr>
+<td><strong>Primary Goal</strong></td>
+<td>Train and version models</td>
+<td>Serve predictions efficiently</td>
+</tr>
+<tr>
+<td><strong>Model Storage</strong></td>
+<td>Persistent (disk-based versioning)</td>
+<td>Runtime (in-memory for inference)</td>
+</tr>
+<tr>
+<td><strong>Metrics Tracked</strong></td>
+<td>Training loss, validation accuracy, epochs</td>
+<td>Inference latency, throughput, batch size</td>
+</tr>
+<tr>
+<td><strong>Lifecycle Stage</strong></td>
+<td>Development, experimentation</td>
+<td>Production deployment</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="integration-flow">Integration Flow</h2>
+<pre><code>+-------------------+     +------------------+     +----------------------+
+|  Training Layer   | --&gt; |  Model Registry  | --&gt; |   Serving Layer      |
++-------------------+     +------------------+     +----------------------+
+                          |                        |
+| ExperimentTracker |     | Version 1 (Dev)  |     | ModelRepository      |
+| CheckpointManager |     | Version 2 (Stage)|     | (loads v3 into RAM)  |
+| TrainingMonitor   |     | Version 3 (Prod) | --&gt; |                      |
+| HyperparamOptim   |     | Version 4 (Arch) |     | RequestBatcher       |
+| DataVersionControl|     +------------------+     | PerformanceMetrics   |
++-------------------+                              +----------------------+
+</code></pre>
+<h3 id="workflow-example">Workflow Example</h3>
+<ol>
+<li><p><strong>Experiment Phase</strong> (Training Infrastructure)</p>
+<ul>
+<li>Create experiment with <code>ExperimentTracker</code></li>
+<li>Track training with <code>TrainingMonitor</code></li>
+<li>Save checkpoints with <code>CheckpointManager</code></li>
+<li>Optimize hyperparameters with <code>HyperparameterOptimizer</code></li>
+<li>Version datasets with <code>DataVersionControl</code></li>
+</ul>
+</li>
+<li><p><strong>Registration Phase</strong> (Model Registry)</p>
+<ul>
+<li>Register trained model: <code>ModelRegistry.RegisterModel()</code></li>
+<li>Create versions: <code>ModelRegistry.CreateModelVersion()</code></li>
+<li>Promote through stages: Development -&gt; Staging -&gt; Production</li>
+</ul>
+</li>
+<li><p><strong>Deployment Phase</strong> (Serving Infrastructure)</p>
+<ul>
+<li>Load from registry: <code>ModelRepository.LoadModel()</code></li>
+<li>Serve predictions via REST API</li>
+<li>Monitor inference with <code>PerformanceMetrics</code></li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="why-both-layers-are-needed">Why Both Layers Are Needed</h2>
+<h3 id="model-registry-training-vs-model-repository-serving">Model Registry (Training) vs Model Repository (Serving)</h3>
+<table>
+<thead>
+<tr>
+<th>ModelRegistry (Training)</th>
+<th>ModelRepository (Serving)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Persistent storage on disk</td>
+<td>In-memory for fast inference</td>
+</tr>
+<tr>
+<td>Multiple versions per model</td>
+<td>Single loaded instance per name</td>
+</tr>
+<tr>
+<td>Lifecycle stages (Dev/Staging/Prod)</td>
+<td>Just &quot;loaded&quot; or &quot;not loaded&quot;</td>
+</tr>
+<tr>
+<td>Metadata, lineage, comparison</td>
+<td>Runtime info (when loaded, dimensions)</td>
+</tr>
+<tr>
+<td>Used during development</td>
+<td>Used in production</td>
+</tr>
+</tbody>
+</table>
+<h3 id="training-monitor-vs-performance-metrics">Training Monitor vs Performance Metrics</h3>
+<table>
+<thead>
+<tr>
+<th>TrainingMonitor (Training)</th>
+<th>PerformanceMetrics (Serving)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Loss curves over epochs</td>
+<td>Latency percentiles (P50, P95, P99)</td>
+</tr>
+<tr>
+<td>Validation metrics</td>
+<td>Throughput (requests/second)</td>
+</tr>
+<tr>
+<td>Resource usage during training</td>
+<td>Batch utilization efficiency</td>
+</tr>
+<tr>
+<td>Epoch start/end events</td>
+<td>Queue depth monitoring</td>
+</tr>
+<tr>
+<td>Used during model training</td>
+<td>Used during production inference</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="folder-structure">Folder Structure</h2>
+<pre><code>src/
+├── ExperimentTracking/
+│   ├── ExperimentTrackerBase.cs      # Base class
+│   └── ExperimentTracker.cs          # Implementation
+├── HyperparameterOptimization/
+│   ├── HyperparameterOptimizerBase.cs
+│   ├── RandomSearchOptimizer.cs
+│   └── GridSearchOptimizer.cs
+├── CheckpointManagement/
+│   ├── CheckpointManagerBase.cs
+│   └── CheckpointManager.cs
+├── TrainingMonitoring/
+│   ├── TrainingMonitorBase.cs
+│   └── TrainingMonitor.cs            # To be implemented
+├── ModelRegistry/
+│   ├── ModelRegistryBase.cs
+│   └── ModelRegistry.cs              # To be implemented
+├── DataVersionControl/
+│   ├── DataVersionControlBase.cs
+│   └── DataVersionControl.cs         # To be implemented
+│
+└── AiDotNet.Serving/                 # Separate project for serving
+    ├── Services/
+    │   ├── IModelRepository.cs
+    │   ├── ModelRepository.cs
+    │   ├── IRequestBatcher.cs
+    │   └── RequestBatcher.cs
+    ├── Monitoring/
+    │   └── PerformanceMetrics.cs
+    └── Controllers/
+        ├── InferenceController.cs
+        └── ModelsController.cs
+</code></pre>
+<hr>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>Training Infrastructure</strong>: Build, experiment, version, and manage models during development</li>
+<li><strong>Serving Infrastructure</strong>: Deploy and serve models efficiently in production</li>
+<li><strong>Integration Point</strong>: <code>ModelRegistry</code> stores versioned models that <code>ModelRepository</code> loads for serving</li>
+<li><strong>No Overlap</strong>: Each layer serves a distinct phase of the ML lifecycle</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/TRAINING_VS_SERVING_ARCHITECTURE.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

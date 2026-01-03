@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for genetic algorithm optimization, which uses principles inspired by natural selection to find optimal solutions to complex problems.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3" class="text-break">
+Class GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for genetic algorithm optimization, which uses principles inspired by natural selection
+to find optimal solutions to complex problems.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt; : OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Models.Options.CMAESOptimizerOptions-3.html">CMAESOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DifferentialEvolutionOptions-3.html">DifferentialEvolutionOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TabuSearchOptions-3.html">TabuSearchOptions&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Genetic algorithms simulate the process of natural selection where the fittest individuals are selected for
+reproduction to produce offspring for the next generation. This approach is particularly effective for
+optimization problems with large search spaces or complex constraints.
+</p>
+<p><b>For Beginners:</b> A genetic algorithm works like breeding animals or plants to get desired traits.
+You start with a diverse group of potential solutions (the "population"), evaluate how good each one is,
+let the best ones "reproduce" by combining their characteristics, occasionally introduce random changes
+("mutations"), and repeat this process over multiple "generations" until you find an excellent solution.
+It's a way to solve problems by mimicking how nature evolves species over time.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRate_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.CrossoverRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRate" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.CrossoverRate">
+  CrossoverRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the rate at which solutions are combined to create new ones in genetic algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CrossoverRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The crossover rate, defaulting to 0.7.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The crossover rate determines the probability that two parent solutions will exchange genetic material
+to produce offspring. Higher rates promote more exploration of the solution space.
+</p>
+<p><b>For Beginners:</b> Crossover is like breeding two good solutions to create a new one that
+hopefully has the best qualities of both parents. A rate of 0.7 means there's a 70% chance that
+crossover will occur between two selected solutions. Higher rates encourage more mixing of solutions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateDecay_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.CrossoverRateDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateDecay" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.CrossoverRateDecay">
+  CrossoverRateDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the crossover rate decreases when progress stalls or reverses.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CrossoverRateDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The crossover rate decay factor, defaulting to 0.95 (5% decrease).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the optimization encounters difficulties or starts to converge, the crossover rate is multiplied
+by this factor to focus more on exploiting existing good solutions rather than exploring new ones.
+A value less than 1.0 ensures the crossover rate decreases.
+</p>
+<p><b>For Beginners:</b> This controls how quickly the algorithm reduces the amount of solution mixing
+(crossover) when progress slows down. With the default value of 0.95, the crossover rate decreases by 5%
+when the algorithm isn't finding better solutions. It's like focusing more on refining the best ideas you
+already have rather than trying completely new combinations when your current approach is working well.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateIncrease_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.CrossoverRateIncrease*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateIncrease" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.CrossoverRateIncrease">
+  CrossoverRateIncrease
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the crossover rate increases when progress is being made.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CrossoverRateIncrease { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The crossover rate increase factor, defaulting to 1.05 (5% increase).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateIncrease_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the optimization is making good progress, the crossover rate is multiplied by this factor
+to encourage more exploration of the solution space. A value greater than 1.0 ensures the crossover rate increases.
+</p>
+<p><b>For Beginners:</b> This controls how quickly the algorithm increases the amount of solution mixing
+(crossover) when it's making good progress. With the default value of 1.05, the crossover rate increases by 5%
+when better solutions are being found. It's like encouraging more experimentation with new combinations
+when your current approach is yielding improvements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxCrossoverRate_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MaxCrossoverRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxCrossoverRate" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MaxCrossoverRate">
+  MaxCrossoverRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed crossover rate for genetic algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxCrossoverRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum crossover rate, defaulting to 0.9.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxCrossoverRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value sets an upper bound on how large the crossover rate can become during adaptive adjustments.
+It ensures that some solutions are preserved without recombination, maintaining good genetic material.
+</p>
+<p><b>For Beginners:</b> This limits how often solutions are combined (crossover). With the default
+value of 0.9, there's at most a 90% chance that two selected solutions will be combined. This ensures
+that some solutions are carried forward unchanged, preserving good qualities that might be lost in combining.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxGenerations_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MaxGenerations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxGenerations" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MaxGenerations">
+  MaxGenerations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of generations (iterations) the genetic algorithm will run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxGenerations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of generations, defaulting to 50.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxGenerations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value limits how many evolutionary cycles the algorithm will perform before stopping,
+even if an optimal solution hasn't been found. It prevents excessive computation time.
+</p>
+<p><b>For Beginners:</b> This is like setting a time limit for the evolution process.
+With the default value of 50, the algorithm will create up to 50 generations of solutions
+before stopping. Think of it as deciding how many rounds of breeding you'll try before
+picking the best result you've found so far. More generations give better results but
+take longer to compute.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxMutationRate_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MaxMutationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxMutationRate" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MaxMutationRate">
+  MaxMutationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed mutation rate for genetic algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxMutationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum mutation rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxMutationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value sets an upper bound on how large the mutation rate can become during adaptive adjustments.
+It prevents excessive randomness that could disrupt the optimization process.
+</p>
+<p><b>For Beginners:</b> This limits how many random changes (mutations) can occur. With the default
+value of 0.1, there's at most a 10% chance of each part of a solution being randomly changed. This
+prevents too much randomness from disrupting good solutions that have already been found.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxPopulationSize_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MaxPopulationSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxPopulationSize" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MaxPopulationSize">
+  MaxPopulationSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed population size for genetic algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxPopulationSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum population size, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxPopulationSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value sets an upper bound on how large the population can become during adaptive adjustments.
+It prevents excessive computational resource usage from extremely large populations.
+</p>
+<p><b>For Beginners:</b> This limits how many different solutions the algorithm works with at once.
+Having too many solutions can slow down the algorithm without providing much benefit. Think of it as
+avoiding having so many ideas that you can't properly evaluate them all.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinCrossoverRate_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MinCrossoverRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinCrossoverRate" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MinCrossoverRate">
+  MinCrossoverRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed crossover rate for genetic algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinCrossoverRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum crossover rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinCrossoverRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value sets a lower bound on how small the crossover rate can become during adaptive adjustments.
+It ensures that some level of genetic recombination always occurs, maintaining diversity.
+</p>
+<p><b>For Beginners:</b> This ensures that solutions are combined (crossover) at least some of the time.
+With the default value of 0.1, there's at least a 10% chance that two selected solutions will be combined.
+This helps ensure that good qualities from different solutions can be mixed together.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinMutationRate_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MinMutationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinMutationRate" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MinMutationRate">
+  MinMutationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed mutation rate for genetic algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinMutationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum mutation rate, defaulting to 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinMutationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value sets a lower bound on how small the mutation rate can become during adaptive adjustments.
+It ensures that some level of genetic mutation always occurs, preventing complete stagnation.
+</p>
+<p><b>For Beginners:</b> This ensures that at least some random changes (mutations) always occur,
+even if the algorithm is performing well. With the default value of 0.001, there's at least a 0.1%
+chance of each part of a solution being randomly changed. This helps maintain diversity and prevents
+the algorithm from getting stuck.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinPopulationSize_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MinPopulationSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinPopulationSize" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MinPopulationSize">
+  MinPopulationSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed population size for genetic algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinPopulationSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The minimum population size, defaulting to 10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinPopulationSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value sets a lower bound on how small the population can become during adaptive adjustments.
+It prevents the algorithm from losing genetic diversity due to extremely small populations.
+</p>
+<p><b>For Beginners:</b> This ensures the algorithm always works with at least this many different
+solutions at once. Having too few solutions can limit diversity and make it harder to find good answers.
+Think of it as making sure you have enough different ideas to consider.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRate_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MutationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRate" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MutationRate">
+  MutationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mutation rate for genetic and evolutionary algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MutationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The mutation rate, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The mutation rate determines the probability that each gene (component) of a solution will be
+randomly altered. Mutations help maintain genetic diversity and prevent premature convergence.
+</p>
+<p><b>For Beginners:</b> In genetic algorithms, mutation introduces random changes to solutions.
+A rate of 0.01 means there's a 1% chance of each part of a solution being randomly changed.
+This helps discover new possibilities that might not be found otherwise.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateDecay_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MutationRateDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateDecay" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MutationRateDecay">
+  MutationRateDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the mutation rate decreases when progress is being made.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MutationRateDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The mutation rate decay factor, defaulting to 0.95 (5% decrease).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the optimization is making good progress, the mutation rate is multiplied by this factor
+to focus more on exploiting existing good solutions rather than introducing random changes.
+A value less than 1.0 ensures the mutation rate decreases.
+</p>
+<p><b>For Beginners:</b> This controls how quickly the algorithm reduces random changes (mutations)
+when it's making good progress. With the default value of 0.95, the mutation rate decreases by 5%
+when better solutions are being found. It's like being more careful about changing things when your
+current approach is working well - you make fewer random adjustments to avoid disrupting success.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateIncrease_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MutationRateIncrease*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateIncrease" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.MutationRateIncrease">
+  MutationRateIncrease
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the mutation rate increases when progress stalls or reverses.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MutationRateIncrease { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The mutation rate increase factor, defaulting to 1.05 (5% increase).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateIncrease_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the optimization encounters difficulties or starts to converge prematurely, the mutation rate is multiplied
+by this factor to encourage more exploration of the solution space. A value greater than 1.0 ensures the 
+mutation rate increases.
+</p>
+<p><b>For Beginners:</b> This controls how quickly the algorithm increases random changes (mutations)
+when progress slows down. With the default value of 1.05, the mutation rate increases by 5%
+when the algorithm isn't finding better solutions. It's like shaking things up when you're stuck -
+introducing more randomness to help discover new possibilities that might lead to better solutions.
+Think of it as trying more experimental approaches when your current strategy isn't working well.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_PopulationSize_" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.PopulationSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_PopulationSize" data-uid="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions`3.PopulationSize">
+  PopulationSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the size of the population for genetic and evolutionary algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PopulationSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The population size, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_PopulationSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The population size determines how many individual solutions are maintained in each generation.
+A larger population provides more genetic diversity but requires more computational resources.
+</p>
+<p><b>For Beginners:</b> In genetic algorithms, a "population" is a collection of potential solutions.
+This setting controls how many different solutions the algorithm works with at once. A larger population
+provides more diversity but requires more computational resources. Think of it like having more people
+brainstorming solutions to a problem.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GeneticAlgorithmOptions.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

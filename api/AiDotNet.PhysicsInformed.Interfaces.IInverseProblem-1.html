@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IInverseProblem&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IInverseProblem&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the interface for inverse problems in physics-informed neural networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1.md&amp;value=---%0Auid%3A%20AiDotNet.PhysicsInformed.Interfaces.IInverseProblem%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1">
+
+
+
+  <h1 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1" class="text-break">
+Interface IInverseProblem&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PhysicsInformed.html">PhysicsInformed</a>.<a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the interface for inverse problems in physics-informed neural networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IInverseProblem&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.) used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+An inverse problem is about finding unknown causes from observed effects.</p>
+<p>Forward Problem (typical):</p>
+<ul>
+<li>Known: Initial conditions, boundary conditions, physical parameters</li>
+<li>Find: Solution at all points in space and time</li>
+<li>Example: Given thermal conductivity k, find temperature distribution T(x,t)</li>
+</ul>
+<p>Inverse Problem:</p>
+<ul>
+<li>Known: Some observations of the solution</li>
+<li>Find: Unknown physical parameters or hidden fields</li>
+<li>Example: Given temperature measurements, find thermal conductivity k</li>
+</ul>
+<p>Types of Inverse Problems:</p>
+<ol>
+<li><p>Parameter Identification:</p>
+<ul>
+<li>Find unknown constants in the PDE</li>
+<li>Example: Identify diffusion coefficient from concentration data</li>
+</ul>
+</li>
+<li><p>Source Identification:</p>
+<ul>
+<li>Find unknown source terms</li>
+<li>Example: Locate pollution source from downstream measurements</li>
+</ul>
+</li>
+<li><p>Boundary Identification:</p>
+<ul>
+<li>Determine unknown boundary conditions</li>
+<li>Example: Infer surface heat flux from internal temperature sensors</li>
+</ul>
+</li>
+<li><p>Geometry Identification:</p>
+<ul>
+<li>Find unknown shape of domain</li>
+<li>Example: Detect tumor location from external measurements</li>
+</ul>
+</li>
+</ol>
+<p>Challenges:</p>
+<ol>
+<li>Ill-posedness: Small noise in data → large errors in parameters</li>
+<li>Non-uniqueness: Multiple parameter values may fit the data</li>
+<li>Regularization: Need to impose constraints for stable solutions</li>
+</ol>
+<p>PINN Advantage for Inverse Problems:</p>
+<ul>
+<li>Learns solution AND parameters simultaneously</li>
+<li>Physics constraints act as regularization</li>
+<li>Can handle noisy and sparse data</li>
+<li>No need for iterative PDE solves</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_HasMeasurementNoiseLevel_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.HasMeasurementNoiseLevel*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_HasMeasurementNoiseLevel" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.HasMeasurementNoiseLevel">
+  HasMeasurementNoiseLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the measurement noise level is known.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool HasMeasurementNoiseLevel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_InitialParameterGuesses_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.InitialParameterGuesses*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_InitialParameterGuesses" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.InitialParameterGuesses">
+  InitialParameterGuesses
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets initial guesses for the unknown parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T[] InitialParameterGuesses { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_InitialParameterGuesses_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Initial guesses help the optimization start in a reasonable region.</p>
+<ul>
+<li>If you have prior knowledge, use it!</li>
+<li>Otherwise, use typical values for the problem type</li>
+<li>The PINN will refine these during training</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_MeasurementNoiseLevel_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.MeasurementNoiseLevel*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_MeasurementNoiseLevel" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.MeasurementNoiseLevel">
+  MeasurementNoiseLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the measurement noise level (if known).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T MeasurementNoiseLevel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_MeasurementNoiseLevel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Knowing the noise level helps with:</p>
+<ul>
+<li>Choosing appropriate regularization</li>
+<li>Estimating uncertainty in parameters</li>
+<li>Weighing data vs physics loss
+Check HasMeasurementNoiseLevel before accessing this property.
+Returns default(T) if unknown.</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_NumberOfParameters_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.NumberOfParameters*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_NumberOfParameters" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.NumberOfParameters">
+  NumberOfParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of unknown parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int NumberOfParameters { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_Observations_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.Observations*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_Observations" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.Observations">
+  Observations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the observation data points.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;(T[] location, T[] value)&gt; Observations { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;(T[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0[],-0[]-.location">location</a>, T[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0[],-0[]-.value">value</a>)&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_Observations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Observations are measurements of the solution at specific locations.
+More observations generally lead to better parameter estimates.
+The quality and distribution of observations matters!</p>
+<p>Returns a list of (location, observed_value) pairs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterLowerBounds_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.ParameterLowerBounds*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterLowerBounds" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.ParameterLowerBounds">
+  ParameterLowerBounds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets lower bounds for the parameters (for constrained optimization).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T[]? ParameterLowerBounds { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterLowerBounds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Physical constraints often impose bounds:</p>
+<ul>
+<li>Diffusion coefficient &gt; 0</li>
+<li>Density &gt; 0</li>
+<li>Some ratios between 0 and 1
+Null means no lower bound.</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterNames_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.ParameterNames*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterNames" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.ParameterNames">
+  ParameterNames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the names of the unknown parameters to identify.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string[] ParameterNames { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterNames_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Example parameter names:</p>
+<ul>
+<li>&quot;thermal_conductivity&quot;</li>
+<li>&quot;diffusion_coefficient&quot;</li>
+<li>&quot;wave_speed&quot;</li>
+<li>&quot;viscosity&quot;</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterUpperBounds_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.ParameterUpperBounds*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterUpperBounds" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.ParameterUpperBounds">
+  ParameterUpperBounds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets upper bounds for the parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T[]? ParameterUpperBounds { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ParameterUpperBounds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Upper bounds can prevent non-physical solutions:</p>
+<ul>
+<li>Speed of sound can't exceed material limit</li>
+<li>Concentration can't exceed saturation
+Null means no upper bound.</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_CreateParameterizedPDE_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.CreateParameterizedPDE*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_CreateParameterizedPDE__0___" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.CreateParameterizedPDE(`0[])">
+  CreateParameterizedPDE(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies parameters to the underlying PDE and returns the modified PDE specification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IPDESpecification&lt;T&gt; CreateParameterizedPDE(T[] parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> T[]</dt>
+    <dd><p>The parameter values to apply.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html">IPDESpecification</a>&lt;T&gt;</dt>
+    <dd><p>A PDE specification with the given parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_CreateParameterizedPDE__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This creates a &quot;configured&quot; version of the PDE with specific parameter values.
+During training:</p>
+<ol>
+<li>Parameters are updated</li>
+<li>This method creates a new PDE with those parameters</li>
+<li>The PINN evaluates residuals using the new PDE</li>
+<li>Gradients flow back to update parameters</li>
+</ol>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ValidateParameters_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.ValidateParameters*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ValidateParameters__0___" data-uid="AiDotNet.PhysicsInformed.Interfaces.IInverseProblem`1.ValidateParameters(`0[])">
+  ValidateParameters(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the parameter values are physically meaningful.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool ValidateParameters(T[] parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> T[]</dt>
+    <dd><p>The parameter values to validate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if parameters are valid, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IInverseProblem_1_ValidateParameters__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Beyond simple bounds, this can check:</p>
+<ul>
+<li>Parameter combinations (e.g., CFL condition)</li>
+<li>Physical consistency (e.g., energy conservation constraints)</li>
+<li>Material property relationships</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IInverseProblem.cs/#L53" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

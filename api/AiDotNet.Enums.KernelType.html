@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum KernelType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum KernelType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies different kernel functions used in machine learning algorithms like Support Vector Machines (SVMs).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_KernelType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.KernelType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.KernelType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_KernelType" data-uid="AiDotNet.Enums.KernelType" class="text-break">
+Enum KernelType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/KernelType.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies different kernel functions used in machine learning algorithms like Support Vector Machines (SVMs).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum KernelType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_KernelType_Laplacian"><code>Laplacian = 4</code></dt>
+  <dd><p>A kernel function that uses the negative exponential of the L1 distance between points.</p>
+<p>
+<b>For Beginners:</b> The Laplacian kernel is similar to RBF but uses a different way to 
+measure distance between points (Manhattan distance instead of Euclidean distance).
+<p>Think of it as:</p>
+<ul>
+<li>Like RBF but more tolerant of outliers</li>
+<li>Measuring distance as if you can only travel along grid lines</li>
+<li>Less sensitive to changes in parameters</li>
+<li>Good for certain types of sparse data</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Your data contains outliers</li>
+<li>You're working with features that naturally use Manhattan distance
+(like city block distances or certain types of molecular data)</li>
+<li>RBF isn't giving good results</li>
+<li>You're working with histogram features or sparse data</li>
+</ul>
+<p>The Laplacian kernel can be particularly effective for computer vision and text analysis tasks.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_KernelType_Linear"><code>Linear = 0</code></dt>
+  <dd><p>The simplest kernel function that represents the standard dot product in the input space.</p>
+<p>
+<b>For Beginners:</b> The Linear kernel is the simplest kernel - it doesn't actually transform your data.
+It works by measuring how similar two data points are by multiplying their features together.
+<p>Think of it as:</p>
+<ul>
+<li>The most basic and fastest kernel</li>
+<li>Like measuring similarity by how much two vectors point in the same direction</li>
+<li>No extra parameters to tune</li>
+<li>Works in the original data space without transformations</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Your data is already linearly separable (can be divided by a straight line/plane)</li>
+<li>You have a large number of features compared to samples</li>
+<li>You want a simple, interpretable model</li>
+<li>You need fast computation and low memory usage</li>
+<li>You're working with text classification or high-dimensional data</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_KernelType_Polynomial"><code>Polynomial = 2</code></dt>
+  <dd><p>A flexible kernel that raises the dot product of features to a specified power.</p>
+<p>
+<b>For Beginners:</b> The Polynomial kernel measures similarity by raising the dot product 
+of two data points to a certain power (degree).
+<p>Think of it as:</p>
+<ul>
+<li>Looking for more complex patterns than just straight lines</li>
+<li>Able to find curved boundaries between classes</li>
+<li>More flexible than Linear but less complex than RBF</li>
+<li>Creating new features that are combinations of original features</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Your data has non-linear relationships</li>
+<li>You want to capture interactions between features</li>
+<li>Working with image processing tasks</li>
+<li>You need a balance between the simplicity of Linear and flexibility of RBF</li>
+<li>You can tune the degree parameter effectively</li>
+</ul>
+<p>The degree parameter controls the flexibility - higher degrees can model more complex boundaries
+but risk overfitting.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_KernelType_Precomputed"><code>Precomputed = 5</code></dt>
+  <dd><p>Indicates that the kernel matrix is precomputed rather than being computed on-the-fly.</p>
+<p>
+<b>For Beginners:</b> When you use a Precomputed kernel, you calculate the similarity between
+all pairs of data points yourself before training the model.
+<p>Think of it as:</p>
+<ul>
+<li>You provide a matrix of pre-calculated similarities</li>
+<li>Useful when you have a custom similarity measure</li>
+<li>Allows using domain-specific kernels not built into the library</li>
+<li>Must compute kernel values between test and training data at prediction time</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>You need a custom kernel not available in the library</li>
+<li>You have pre-computed kernel values from another source</li>
+<li>You want to use specialized domain kernels (string kernels, graph kernels, etc.)</li>
+<li>You're working with structured data that requires special similarity measures</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_KernelType_RBF"><code>RBF = 1</code></dt>
+  <dd><p>Radial Basis Function kernel that measures similarity based on distance in a high-dimensional space.</p>
+<p>
+<b>For Beginners:</b> The RBF (Radial Basis Function) kernel, also known as the Gaussian kernel, 
+transforms data based on how far apart points are from each other.
+<p>Think of it as:</p>
+<ul>
+<li>Creating a &quot;bubble of influence&quot; around each data point</li>
+<li>Points that are close together are considered very similar</li>
+<li>Points far apart have little influence on each other</li>
+<li>Maps your data into an infinite-dimensional space</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Your data isn't linearly separable</li>
+<li>You don't have prior knowledge about the data structure</li>
+<li>You need a powerful, flexible kernel</li>
+<li>You have a reasonable amount of training data</li>
+<li>You're willing to tune parameters (particularly gamma)</li>
+</ul>
+<p>The RBF kernel is often the first kernel to try when you're not sure which to use.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_KernelType_Sigmoid"><code>Sigmoid = 3</code></dt>
+  <dd><p>A kernel function based on the hyperbolic tangent, similar to neural network activation functions.</p>
+<p>
+<b>For Beginners:</b> The Sigmoid kernel is inspired by neural networks and uses the same 
+S-shaped function (hyperbolic tangent) that's common in neural network layers.
+<p>Think of it as:</p>
+<ul>
+<li>Similar to having a simple neural network</li>
+<li>Creates an S-shaped decision boundary</li>
+<li>Can model some non-linear relationships</li>
+<li>Has connections to neural network theory</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>You're working with problems that might be suited to neural networks</li>
+<li>Your data has specific types of non-linear relationships</li>
+<li>You want to try an alternative to RBF and Polynomial</li>
+<li>You're experimenting with different kernel types</li>
+</ul>
+<p>The Sigmoid kernel is less commonly used than RBF or Linear but can be effective for
+specific types of problems.</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_KernelType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> A kernel is a special mathematical function that helps machine learning algorithms 
+work with complex data. Think of kernels as "similarity measures" between data points.
+<p>Imagine you have data that can't be easily separated by a straight line. Kernels help by
+transforming your data into a form where patterns become more obvious - like lifting a
+2D drawing into 3D space where you can see separations more clearly.</p>
+<p>Kernels are commonly used in:</p>
+<ul>
+<li>Support Vector Machines (SVMs)</li>
+<li>Kernel regression</li>
+<li>Principal Component Analysis (PCA)</li>
+<li>Clustering algorithms</li>
+</ul>
+<p>Different kernels work better for different types of data and problems. Choosing the right
+kernel can significantly improve your model's performance.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/KernelType.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LAMBOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LAMBOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the LAMB (Layer-wise Adaptive Moments for Batch training) optimization algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_LAMBOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.LAMBOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3" class="text-break">
+Class LAMBOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the LAMB (Layer-wise Adaptive Moments for Batch training) optimization algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LAMBOptimizerOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">LAMBOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_examples">Examples</h2>
+  <pre><code class="lang-csharp">var options = new LAMBOptimizerOptions&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;
+{
+    LearningRate = 0.00176 * Math.Sqrt(batchSize),  // Square root scaling for LAMB
+    Beta1 = 0.9,
+    Beta2 = 0.999,
+    WeightDecay = 0.01,
+    BatchSize = 8192
+};
+var optimizer = new LAMBOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);</code></pre>
+
+
+  <h2 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+LAMB combines Adam's adaptive learning rates (first and second moment estimates) with LARS's
+layer-wise trust ratio scaling. This enables training with extremely large batch sizes
+(up to 32K) while maintaining training stability and accuracy.
+</p>
+<p><b>For Beginners:</b> LAMB is designed for training large models (like BERT, transformers)
+with very large batch sizes. It combines:
+<ul><li><b>From Adam:</b> Adaptive learning rates that adjust per-parameter based on gradient history</li><li><b>From LARS:</b> Layer-wise scaling that stabilizes large batch training</li></ul>
+The result is an optimizer that can train at batch sizes of 16K-32K while achieving the same
+accuracy as training with small batches, just much faster.
+
+<p>
+Based on the paper "Large Batch Optimization for Deep Learning: Training BERT in 76 minutes"
+by You et al. (2019).
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for mini-batch gradient descent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 8192 for large batch training.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> LAMB is designed for very large batch sizes.
+The default of 8192 is typical for BERT/transformer pretraining. You can go up to 32768
+with proper learning rate scaling.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Beta1_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.Beta1*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Beta1" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.Beta1">
+  Beta1
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the exponential decay rate for the first moment estimates (momentum).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Beta1 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The beta1 value, defaulting to 0.9.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Beta1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Beta1 controls the momentum/smoothing of gradient estimates.
+A value of 0.9 is standard and works well for most applications.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Beta2_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.Beta2*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Beta2" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.Beta2">
+  Beta2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the exponential decay rate for the second moment estimates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Beta2 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The beta2 value, defaulting to 0.999.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Beta2_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Beta2 controls how the optimizer adapts the learning rate
+based on historical gradient magnitudes. The default of 0.999 works well for most cases.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_ClipTrustRatio_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.ClipTrustRatio*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_ClipTrustRatio" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.ClipTrustRatio">
+  ClipTrustRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to clip the trust ratio to prevent extreme scaling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ClipTrustRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable clipping (default), false to disable.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_ClipTrustRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The trust ratio ||w|| / ||r|| can sometimes become very large, causing instability.
+Clipping limits the ratio to [0, max_trust_ratio] for more stable training.
+</p>
+<p><b>For Beginners:</b> Keeping this enabled (default) prevents training from
+becoming unstable when layer weights are much larger than their updates.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Epsilon_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.Epsilon*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Epsilon" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.Epsilon">
+  Epsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a small constant added to denominators to prevent division by zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Epsilon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The epsilon value, defaulting to 1e-6.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_Epsilon_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a tiny safety value to prevent numerical issues.
+LAMB typically uses 1e-6 (slightly larger than Adam's 1e-8) for better stability.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_ExcludeBiasFromWeightDecay_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.ExcludeBiasFromWeightDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_ExcludeBiasFromWeightDecay" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.ExcludeBiasFromWeightDecay">
+  ExcludeBiasFromWeightDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to exclude bias and normalization parameters from weight decay.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ExcludeBiasFromWeightDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to exclude biases from weight decay (default), false to apply to all.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_ExcludeBiasFromWeightDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Following best practices for transformer training, bias terms and normalization layer
+parameters (BatchNorm, LayerNorm) are typically excluded from weight decay.
+</p>
+<p><b>For Beginners:</b> Bias terms are small and don't benefit from weight decay.
+Keeping this true (default) follows established best practices.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_InitialLearningRate_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.InitialLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_InitialLearningRate" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.InitialLearningRate">
+  InitialLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the base learning rate for the LAMB optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_InitialLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Unlike LARS which uses linear scaling, LAMB typically uses
+square root scaling: LR = base_lr * sqrt(batch_size / 256). The default of 0.001 is a
+good starting point for transformer models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_LayerBoundaries_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.LayerBoundaries*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_LayerBoundaries" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.LayerBoundaries">
+  LayerBoundaries
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the layer size boundaries for layer-wise scaling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[]? LayerBoundaries { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Array of layer sizes that define boundaries between layers for LAMB scaling.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_LayerBoundaries_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+LAMB applies different scaling factors to different layers. This array defines the
+cumulative sizes of parameters that belong to each layer.
+</p>
+<p><b>For Beginners:</b> This tells LAMB where one layer ends and another begins.
+If not set, all parameters are treated as one layer, which is less optimal.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_MaxTrustRatio_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.MaxTrustRatio*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_MaxTrustRatio" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.MaxTrustRatio">
+  MaxTrustRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum trust ratio when clipping is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxTrustRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum trust ratio, defaulting to 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_MaxTrustRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This limits how much the layer-wise scaling can amplify
+updates. The default of 10.0 is well-tested for transformer training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_SkipTrustRatioLayers_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.SkipTrustRatioLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_SkipTrustRatioLayers" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.SkipTrustRatioLayers">
+  SkipTrustRatioLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets which layers should skip trust ratio scaling and use only Adam updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[]? SkipTrustRatioLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Array of layer indices to skip trust ratio scaling for.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_SkipTrustRatioLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Some layers (particularly embedding layers) may work better without trust ratio scaling.
+These layers use only the Adam update without the layer-wise scaling factor.
+</p>
+<p><b>For Beginners:</b> Embedding layers in transformers often benefit from being
+excluded from trust ratio scaling. Set this to skip those layers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_UseBiasCorrection_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.UseBiasCorrection*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_UseBiasCorrection" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.UseBiasCorrection">
+  UseBiasCorrection
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use bias correction for the moment estimates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseBiasCorrection { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable bias correction (default), false to disable.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_UseBiasCorrection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Bias correction adjusts for the fact that moment estimates are initialized to zero,
+which would otherwise cause them to be biased toward zero early in training.
+</p>
+<p><b>For Beginners:</b> Always keep this enabled (default). It's essential for
+correct Adam-style moment estimates, especially at the start of training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_WarmupEpochs_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.WarmupEpochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_WarmupEpochs" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.WarmupEpochs">
+  WarmupEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of warmup epochs for learning rate warmup.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int WarmupEpochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of warmup epochs, defaulting to 1 epoch worth of steps.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_WarmupEpochs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Learning rate warmup gradually increases the learning rate from 0 to the target value.
+LAMB typically uses shorter warmup than LARS due to its adaptive nature.
+</p>
+<p><b>For Beginners:</b> LAMB is more stable than LARS, so it needs less warmup.
+1 epoch of warmup is typically sufficient for most cases.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_WeightDecay_" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.WeightDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_WeightDecay" data-uid="AiDotNet.Models.Options.LAMBOptimizerOptions`3.WeightDecay">
+  WeightDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight decay coefficient.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double WeightDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The weight decay coefficient, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LAMBOptimizerOptions_3_WeightDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Weight decay prevents model weights from growing too large.
+LAMB applies decoupled weight decay (like AdamW) for better regularization. A value of
+0.01 is typical for transformer training.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LAMBOptimizerOptions.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

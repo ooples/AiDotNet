@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class KernelRidgeRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class KernelRidgeRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Kernel Ridge Regression, a powerful nonlinear regression technique that combines ridge regression with the kernel trick to capture complex nonlinear relationships.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_KernelRidgeRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.KernelRidgeRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.KernelRidgeRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_KernelRidgeRegression_1" data-uid="AiDotNet.Regression.KernelRidgeRegression`1" class="text-break">
+Class KernelRidgeRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Kernel Ridge Regression, a powerful nonlinear regression technique that combines
+ridge regression with the kernel trick to capture complex nonlinear relationships.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class KernelRidgeRegression&lt;T&gt; : NonLinearRegressionBase&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html">NonLinearRegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">KernelRidgeRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_NumOps">NonLinearRegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Engine">NonLinearRegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Options">NonLinearRegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Regularization">NonLinearRegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SupportVectors">NonLinearRegressionBase&lt;T&gt;.SupportVectors</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Alphas">NonLinearRegressionBase&lt;T&gt;.Alphas</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_B">NonLinearRegressionBase&lt;T&gt;.B</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_FeatureNames">NonLinearRegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">NonLinearRegressionBase&lt;T&gt;.Predict(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ValidateInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.ValidateInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_InitializeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.InitializeModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ExtractModelParameters">NonLinearRegressionBase&lt;T&gt;.ExtractModelParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_KernelFunction_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.KernelFunction(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Clip__0__0__0_">NonLinearRegressionBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetParameters">NonLinearRegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetActiveFeatureIndices">NonLinearRegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_IsFeatureUsed_System_Int32_">NonLinearRegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">NonLinearRegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetFeatureImportance">NonLinearRegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_DeepCopy">NonLinearRegressionBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Clone">NonLinearRegressionBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ParameterCount">NonLinearRegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SaveModel_System_String_">NonLinearRegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_LoadModel_System_String_">NonLinearRegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_DefaultLossFunction">NonLinearRegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">NonLinearRegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">NonLinearRegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SaveState_System_IO_Stream_">NonLinearRegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_LoadState_System_IO_Stream_">NonLinearRegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SupportsJitCompilation">NonLinearRegressionBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">NonLinearRegressionBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_KernelRidgeRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Kernel Ridge Regression extends linear ridge regression by applying the "kernel trick" to implicitly
+map the input features to a higher-dimensional space without explicitly computing the transformation.
+This allows the model to capture complex nonlinear relationships while still maintaining the computational
+efficiency of ridge regression. The regularization parameter (lambda) helps prevent overfitting by
+penalizing large coefficients.
+</p>
+<p><b>For Beginners:</b> Kernel Ridge Regression is like using a special lens that helps see complex patterns in your data.
+<p>Regular linear models can only fit straight lines to data, but many real-world relationships aren't straight.
+Kernel Ridge Regression solves this by:</p>
+<ul>
+<li>Using &quot;kernels&quot; to transform your data into a format where complex relationships become simpler</li>
+<li>Finding patterns in this transformed space</li>
+<li>Adding &quot;ridge&quot; regularization to prevent the model from becoming too complex or overfitting</li>
+</ul>
+<p>Think of it like this: If you tried to separate red and blue dots on a sheet of paper with a single line,
+sometimes it's impossible. But if you could lift some dots off the page (into 3D space), you might be able
+to separate them with a flat plane. Kernels do something similar - they transform your data so that complex
+patterns become easier to find.</p>
+<p>This technique is particularly good for:</p>
+<ul>
+<li>Medium-sized datasets with complex relationships</li>
+<li>Problems where the relationship between inputs and outputs is highly nonlinear</li>
+<li>When you need both good prediction accuracy and the ability to adjust how much the model fits to noise</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_KernelRidgeRegression_1__ctor_" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_KernelRidgeRegression_1__ctor_AiDotNet_Models_Options_KernelRidgeRegressionOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.#ctor(AiDotNet.Models.Options.KernelRidgeRegressionOptions,AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  KernelRidgeRegression(KernelRidgeRegressionOptions, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Regression.KernelRidgeRegression-1.html">KernelRidgeRegression&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KernelRidgeRegression(KernelRidgeRegressionOptions options, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.KernelRidgeRegressionOptions.html">KernelRidgeRegressionOptions</a></dt>
+    <dd><p>Configuration options for the Kernel Ridge Regression algorithm.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization strategy to prevent overfitting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KernelRidgeRegression_1__ctor_AiDotNet_Models_Options_KernelRidgeRegressionOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new Kernel Ridge Regression model with the specified options and regularization
+strategy. The options control parameters such as the regularization strength (lambda) and the matrix
+decomposition type. If no regularization is specified, no regularization is applied beyond the ridge penalty.
+</p>
+<p><b>For Beginners:</b> This is how you create a new Kernel Ridge Regression model.
+<p>When creating a model, you need to specify:</p>
+<ul>
+<li>Options: Controls settings like the regularization strength (lambda), which determines how much the model
+balances between fitting the training data perfectly and keeping the model simple</li>
+<li>Regularization: Optional additional method to prevent overfitting</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create options for Kernel Ridge Regression
+var options = new KernelRidgeRegressionOptions { 
+    LambdaKRR = 0.1,
+    KernelType = KernelType.RBF
+};
+
+// Create the model
+var krr = new KernelRidgeRegression&lt;double&gt;(options);
+</code></pre>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_KernelRidgeRegression_1_CreateInstance_" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_KernelRidgeRegression_1_CreateInstance" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L412"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the KernelRidgeRegression with the same configuration as the current instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new KernelRidgeRegression instance with the same options and regularization as the current instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KernelRidgeRegression_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new instance of the KernelRidgeRegression model with the same configuration options
+and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
+cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+</p>
+<p><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+<p>When you need multiple versions of the same type of model with identical settings:</p>
+<ul>
+<li>This method creates a new, empty model with the same configuration</li>
+<li>It's like making a copy of a recipe before you start cooking</li>
+<li>The new model has the same settings but no trained data</li>
+<li>This is useful for techniques that need multiple models, like cross-validation</li>
+</ul>
+<p>For example, when testing your model on different subsets of data,
+you'd want each test to use a model with identical settings.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KernelRidgeRegression_1_Deserialize_" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_KernelRidgeRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized Kernel Ridge Regression model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] modelData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KernelRidgeRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs a Kernel Ridge Regression model from a byte array that was previously created using the
+Serialize method. It restores the base class data, model-specific options, the Gram matrix, and the dual
+coefficients, allowing the model to be used for predictions without retraining.
+</p>
+<p><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+<p>Deserialization allows you to:</p>
+<ul>
+<li>Load a model that was saved earlier</li>
+<li>Use a model without having to retrain it</li>
+<li>Share models between different applications</li>
+</ul>
+<p>When you deserialize a model:</p>
+<ul>
+<li>All settings are restored</li>
+<li>The Gram matrix is reconstructed</li>
+<li>The dual coefficients are recovered</li>
+<li>The model is ready to make predictions immediately</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Load from a file
+byte[] modelData = File.ReadAllBytes(&quot;kernelRidgeRegression.model&quot;);
+
+// Deserialize the model
+var options = new KernelRidgeRegressionOptions();
+var krr = new KernelRidgeRegression&lt;double&gt;(options);
+krr.Deserialize(modelData);
+
+// Now you can use the model for predictions
+var predictions = krr.Predict(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KernelRidgeRegression_1_GetModelMetadata_" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Regression_KernelRidgeRegression_1_GetModelMetadata" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the Kernel Ridge Regression model and its configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KernelRidgeRegression_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the model, including its type, the regularization parameter (lambda),
+and the regularization type. This information can be useful for model management, comparison, and documentation
+purposes.
+</p>
+<p><b>For Beginners:</b> This method provides information about your model configuration.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (Kernel Ridge Regression)</li>
+<li>The lambda value (regularization strength)</li>
+<li>The type of regularization applied</li>
+</ul>
+<p>This information is helpful when:</p>
+<ul>
+<li>Comparing different models</li>
+<li>Documenting your model's configuration</li>
+<li>Troubleshooting model performance</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var metadata = krr.GetModelMetadata();
+Console.WriteLine($&quot;Model type: {metadata.ModelType}&quot;);
+Console.WriteLine($&quot;Lambda: {metadata.AdditionalInfo[&quot;LambdaKRR&quot;]}&quot;);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KernelRidgeRegression_1_GetModelType_" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.GetModelType*"></a>
+
+  <h3 id="AiDotNet_Regression_KernelRidgeRegression_1_GetModelType" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.GetModelType">
+  GetModelType()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the model type of the Kernel Ridge Regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelType GetModelType()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd><p>The model type enumeration value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_KernelRidgeRegression_1_OptimizeModel_" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.OptimizeModel*"></a>
+
+  <h3 id="AiDotNet_Regression_KernelRidgeRegression_1_OptimizeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.OptimizeModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  OptimizeModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizes the Kernel Ridge Regression model based on the provided training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OptimizeModel(Matrix&lt;T&gt; X, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample and each column represents a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of target values corresponding to each sample in X.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KernelRidgeRegression_1_OptimizeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method builds the Kernel Ridge Regression model by computing the Gram (kernel) matrix, which represents
+the similarity between all pairs of training samples, adding a ridge penalty to the diagonal for regularization,
+and solving for the dual coefficients. These coefficients, along with the support vectors (training samples),
+are used for making predictions.
+</p>
+<p><b>For Beginners:</b> This method does the actual "learning" for the model.
+<p>Here's what happens during this process:</p>
+<ol>
+<li>The model calculates how similar each training example is to every other training example
+(this creates what's called the &quot;Gram matrix&quot; or &quot;kernel matrix&quot;)</li>
+<li>It adds the ridge penalty to the diagonal of this matrix (this is the regularization that helps
+prevent overfitting)</li>
+<li>It solves a mathematical equation to find the best &quot;dual coefficients&quot; - these determine
+how much each training example influences predictions</li>
+<li>It stores these coefficients and the training data (support vectors) for making predictions later</li>
+</ol>
+<p>This process allows the model to capture complex patterns in your data while still maintaining
+good generalization to new, unseen data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KernelRidgeRegression_1_PredictSingle_" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_Regression_KernelRidgeRegression_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts the target value for a single input feature vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The feature vector of the sample to predict.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value for the input sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KernelRidgeRegression_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method predicts the target value for a single input feature vector by computing the kernel function
+between the input and all support vectors (training samples), weighting the results by the dual coefficients,
+and summing them. This is the dual form of the prediction equation for kernel-based methods.
+</p>
+<p><b>For Beginners:</b> This method makes a prediction for a new data point.
+<p>To make a prediction:</p>
+<ol>
+<li>The model compares the new input to every training example (support vector)
+using the kernel function to measure similarity</li>
+<li>It multiplies each similarity value by the corresponding dual coefficient
+(which was learned during training)</li>
+<li>It adds up all these weighted similarity values to get the final prediction</li>
+</ol>
+<p>This approach allows the model to make predictions based on how similar the new input
+is to the training examples, with more influential examples (those with larger dual
+coefficients) having a greater impact on the prediction.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KernelRidgeRegression_1_Serialize_" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_KernelRidgeRegression_1_Serialize" data-uid="AiDotNet.Regression.KernelRidgeRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L282"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the Kernel Ridge Regression model to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KernelRidgeRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the Kernel Ridge Regression model into a byte array that can be stored in a file, database,
+or transmitted over a network. The serialized data includes the base class data, model-specific options like
+the regularization parameter (lambda), the Gram matrix, and the dual coefficients.
+</p>
+<p><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+<p>Serialization allows you to:</p>
+<ul>
+<li>Save your model to a file</li>
+<li>Store your model in a database</li>
+<li>Send your model over a network</li>
+<li>Keep your model for later use without having to retrain it</li>
+</ul>
+<p>The serialized data includes:</p>
+<ul>
+<li>The model's settings (like the lambda regularization parameter)</li>
+<li>The Gram matrix (similarities between training examples)</li>
+<li>The dual coefficients learned during training</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Serialize the model
+byte[] modelData = krr.Serialize();
+
+// Save to a file
+File.WriteAllBytes(&quot;kernelRidgeRegression.model&quot;, modelData);
+</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KernelRidgeRegression.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

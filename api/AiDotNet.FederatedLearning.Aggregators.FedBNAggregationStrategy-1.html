@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FedBNAggregationStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FedBNAggregationStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Federated Batch Normalization (FedBN) aggregation strategy.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1">
+
+
+
+  <h1 id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1" class="text-break">
+Class FedBNAggregationStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedBNAggregationStrategy.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FederatedLearning.html">FederatedLearning</a>.<a class="xref" href="AiDotNet.FederatedLearning.Aggregators.html">Aggregators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Federated Batch Normalization (FedBN) aggregation strategy.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FedBNAggregationStrategy&lt;T&gt; : ParameterDictionaryAggregationStrategyBase&lt;T&gt;, IAggregationStrategy&lt;Dictionary&lt;string, T[]&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for model parameters (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase-1.html">FederatedLearningComponentBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html">AggregationStrategyBase</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;, T&gt;</div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.ParameterDictionaryAggregationStrategyBase-1.html">ParameterDictionaryAggregationStrategyBase</a>&lt;T&gt;</div>
+      <div><span class="xref">FedBNAggregationStrategy&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAggregationStrategy-1.html">IAggregationStrategy</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.ParameterDictionaryAggregationStrategyBase-1.html#AiDotNet_FederatedLearning_Aggregators_ParameterDictionaryAggregationStrategyBase_1_AggregateWeightedAverage_System_Collections_Generic_Dictionary_System_Int32_System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_Int32_System_Double__">ParameterDictionaryAggregationStrategyBase&lt;T&gt;.AggregateWeightedAverage(Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt;, Dictionary&lt;int, double&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.ParameterDictionaryAggregationStrategyBase-1.html#AiDotNet_FederatedLearning_Aggregators_ParameterDictionaryAggregationStrategyBase_1_AggregateLayerWeightedAverageInto_System_String_System_Collections_Generic_Dictionary_System_Int32_System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_Int32_System_Double__System_Double__0___">ParameterDictionaryAggregationStrategyBase&lt;T&gt;.AggregateLayerWeightedAverageInto(string, Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt;, Dictionary&lt;int, double&gt;, double, T[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.ParameterDictionaryAggregationStrategyBase-1.html#AiDotNet_FederatedLearning_Aggregators_ParameterDictionaryAggregationStrategyBase_1_CreateZeroInitializedLayer_System_Int32_">ParameterDictionaryAggregationStrategyBase&lt;T&gt;.CreateZeroInitializedLayer(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_Aggregate_System_Collections_Generic_Dictionary_System_Int32__0__System_Collections_Generic_Dictionary_System_Int32_System_Double__">AggregationStrategyBase&lt;Dictionary&lt;string, T[]&gt;, T&gt;.Aggregate(Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt;, Dictionary&lt;int, double&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_GetStrategyName">AggregationStrategyBase&lt;Dictionary&lt;string, T[]&gt;, T&gt;.GetStrategyName()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_GetTotalWeightOrThrow_System_Collections_Generic_Dictionary_System_Int32_System_Double__System_Collections_Generic_IEnumerable_System_Int32__System_String_">AggregationStrategyBase&lt;Dictionary&lt;string, T[]&gt;, T&gt;.GetTotalWeightOrThrow(Dictionary&lt;int, double&gt;, IEnumerable&lt;int&gt;, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase-1.html#AiDotNet_FederatedLearning_Infrastructure_FederatedLearningComponentBase_1_NumOps">FederatedLearningComponentBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>FedBN is a specialized aggregation strategy that handles batch normalization layers
+differently from other layers in neural networks. Proposed by Li et al. in 2021,
+it addresses the challenge of non-IID data by keeping batch normalization parameters local.</p>
+<p><b>For Beginners:</b> FedBN recognizes that some parts of a neural network should remain
+personalized to each client rather than being averaged globally.</p>
+<p>The key insight:</p>
+<ul>
+<li>Batch Normalization (BN) layers learn statistics specific to each client's data</li>
+<li>Averaging BN parameters across clients with different data distributions hurts performance</li>
+<li>Solution: Keep BN layers local, only aggregate other layers (Conv, FC, etc.)</li>
+</ul>
+<p>How FedBN works:</p>
+<ol>
+<li>During aggregation, identify batch normalization layers</li>
+<li>Aggregate only non-BN layers using weighted averaging</li>
+<li>Keep each client's BN layers unchanged (personalized)</li>
+<li>Send back global model with client-specific BN layers</li>
+</ol>
+<p>For example, in a CNN with layers:</p>
+<ul>
+<li>Conv1 (filters) → BN1 (normalization) → ReLU → Conv2 → BN2 → FC (classification)</li>
+</ul>
+<p>FedBN aggregates:</p>
+<ul>
+<li>✓ Conv1 filters: Averaged across clients</li>
+<li>✗ BN1 params: Kept local to each client</li>
+<li>✓ Conv2 filters: Averaged across clients</li>
+<li>✗ BN2 params: Kept local to each client</li>
+<li>✓ FC weights: Averaged across clients</li>
+</ul>
+<p>Why this matters:</p>
+<ul>
+<li>Different clients may have different data ranges, distributions</li>
+<li>Hospital A images: brightness range [0, 100]</li>
+<li>Hospital B images: brightness range [50, 200]</li>
+<li>Each needs different normalization parameters</li>
+<li>Shared feature extractors (Conv layers) + personalized normalization works better</li>
+</ul>
+<p>When to use FedBN:</p>
+<ul>
+<li>Training deep neural networks (especially CNNs)</li>
+<li>Non-IID data with distribution shift</li>
+<li>Batch normalization or layer normalization in architecture</li>
+<li>Want to improve accuracy without changing training much</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>Significantly improves accuracy on non-IID data</li>
+<li>Simple modification to FedAvg</li>
+<li>No additional communication cost</li>
+<li>Each client keeps personalized normalization</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Only helps when using batch normalization</li>
+<li>Doesn't address other heterogeneity challenges</li>
+<li>Requires identifying BN layers in model structure</li>
+</ul>
+<p>Reference: Li, X., et al. (2021). &quot;Federated Learning on Non-IID Data Silos: An Experimental Study.&quot;
+ICDE 2021.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1__ctor_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1__ctor_System_Collections_Generic_HashSet_System_String__" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1.#ctor(System.Collections.Generic.HashSet{System.String})">
+  FedBNAggregationStrategy(HashSet&lt;string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedBNAggregationStrategy.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy-1.html">FedBNAggregationStrategy&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FedBNAggregationStrategy(HashSet&lt;string&gt;? batchNormLayerPatterns = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchNormLayerPatterns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.hashset-1">HashSet</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Patterns to identify batch normalization layers. If null, uses default patterns.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1__ctor_System_Collections_Generic_HashSet_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Creates a FedBN aggregator that knows how to identify
+batch normalization layers in your model.</p>
+<p>Common BN layer naming patterns:</p>
+<ul>
+<li>&quot;bn&quot;, &quot;batchnorm&quot;, &quot;batch_norm&quot;: Explicit BN layers</li>
+<li>&quot;gamma&quot;, &quot;beta&quot;: BN trainable parameters</li>
+<li>&quot;running_mean&quot;, &quot;running_var&quot;: BN statistics</li>
+</ul>
+<p>The strategy will exclude these from aggregation, keeping them client-specific.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_Aggregate_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1.Aggregate*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_Aggregate_System_Collections_Generic_Dictionary_System_Int32_System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_Int32_System_Double__" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1.Aggregate(System.Collections.Generic.Dictionary{System.Int32,System.Collections.Generic.Dictionary{System.String,`0[]}},System.Collections.Generic.Dictionary{System.Int32,System.Double})">
+  Aggregate(Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt;, Dictionary&lt;int, double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedBNAggregationStrategy.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Aggregates client models while keeping batch normalization layers local.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, T[]&gt; Aggregate(Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt; clientModels, Dictionary&lt;int, double&gt; clientWeights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>clientModels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;&gt;</dt>
+    <dd><p>Dictionary mapping client IDs to their model parameters.</p>
+</dd>
+    <dt><code>clientWeights</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary mapping client IDs to their sample counts (weights).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>The aggregated global model parameters with BN layers excluded from aggregation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_Aggregate_System_Collections_Generic_Dictionary_System_Int32_System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_Int32_System_Double___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method implements selective aggregation:</p>
+<p><b>For Beginners:</b> Think of this as a smart averaging that knows some parameters
+should stay personal (like BN layers) while others should be shared (like Conv layers).</p>
+<p>Step-by-step process:</p>
+<ol>
+<li>For each layer in the model:
+<ul>
+<li>Check if it's a batch normalization layer (by name matching)</li>
+<li>If BN: Keep first client's values (could be any client's, they stay local)</li>
+<li>If not BN: Compute weighted average across all clients</li>
+</ul>
+</li>
+<li>Return aggregated model</li>
+</ol>
+<p>Mathematical formulation:
+For non-BN layers:
+w_global[layer] = Σ(n_k / n_total) × w_k[layer]</p>
+<p>For BN layers:
+w_global[layer] = w_client[layer]  (keeps local values)</p>
+<p>For example, with 3 clients and a model with:</p>
+<ul>
+<li>&quot;conv1&quot;: [0.5, 0.6, 0.7] at clients → Average these</li>
+<li>&quot;bn1_gamma&quot;: [1.0, 1.2, 0.9] at clients → Keep local (don't average)</li>
+<li>&quot;conv2&quot;: [0.3, 0.4, 0.5] at clients → Average these</li>
+<li>&quot;bn2_beta&quot;: [0.1, 0.2, 0.15] at clients → Keep local (don't average)</li>
+</ul>
+<p>Note: In practice, each client would maintain their own BN parameters.
+The &quot;global&quot; model returned includes BN params that each client will replace
+with their local version upon receiving the update.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_GetBatchNormPatterns_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1.GetBatchNormPatterns*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_GetBatchNormPatterns" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1.GetBatchNormPatterns">
+  GetBatchNormPatterns()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedBNAggregationStrategy.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the batch normalization layer patterns used for identification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyCollection&lt;string&gt; GetBatchNormPatterns()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlycollection-1">IReadOnlyCollection</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A set of BN layer patterns.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_GetBatchNormPatterns_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Returns the list of patterns used to recognize which
+layers are batch normalization layers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_GetStrategyName_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1.GetStrategyName*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_FedBNAggregationStrategy_1_GetStrategyName" data-uid="AiDotNet.FederatedLearning.Aggregators.FedBNAggregationStrategy`1.GetStrategyName">
+  GetStrategyName()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedBNAggregationStrategy.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the aggregation strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string GetStrategyName()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The string &quot;FedBN&quot;.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedBNAggregationStrategy.cs/#L63" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

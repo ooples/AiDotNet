@@ -1,0 +1,1698 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ModelStats&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ModelStats&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a collection of statistical metrics for evaluating and analyzing machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Statistics_ModelStats_3.md&amp;value=---%0Auid%3A%20AiDotNet.Statistics.ModelStats%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Statistics.ModelStats`3">
+
+
+
+  <h1 id="AiDotNet_Statistics_ModelStats_3" data-uid="AiDotNet.Statistics.ModelStats`3" class="text-break">
+Class ModelStats&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Statistics.html">Statistics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a collection of statistical metrics for evaluating and analyzing machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ModelStats&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically float or double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ModelStats&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Statistics_ModelStats_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class calculates and stores various statistical measures that help assess the performance,
+fit, and characteristics of a machine learning model. It includes metrics for model accuracy,
+feature importance, model complexity, and various distance and similarity measures.
+</p>
+<p><b>For Beginners:</b> Think of ModelStats as a report card for your AI model.
+<p>Just like a school report card shows how well a student is doing in different subjects,
+ModelStats shows how well your AI model is performing in different areas. It helps you:</p>
+<ul>
+<li>Understand how accurate your model's predictions are</li>
+<li>See which features (inputs) are most important</li>
+<li>Check if your model is too simple or too complex</li>
+<li>Compare your model's performance to simpler alternatives</li>
+</ul>
+<p>This information helps you improve your model and decide if it's ready to use in real-world situations.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_Actual_" data-uid="AiDotNet.Statistics.ModelStats`3.Actual*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_Actual" data-uid="AiDotNet.Statistics.ModelStats`3.Actual">
+  Actual
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the actual (observed) values from the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Actual { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_AutoCorrelationFunction_" data-uid="AiDotNet.Statistics.ModelStats`3.AutoCorrelationFunction*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_AutoCorrelationFunction" data-uid="AiDotNet.Statistics.ModelStats`3.AutoCorrelationFunction">
+  AutoCorrelationFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L365"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Auto-Correlation Function, which measures the correlation between a time series and a lagged version of itself.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; AutoCorrelationFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_AutoCorrelationFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This function helps you understand patterns in time-based data.
+It shows how similar your data is to itself at different time delays. This can reveal:
+- Repeating patterns (like seasonal effects)
+- How long effects last in your data
+- If your model is missing important time-based patterns
+It's particularly useful for time series data, like stock prices or weather patterns.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_CalinskiHarabaszIndex_" data-uid="AiDotNet.Statistics.ModelStats`3.CalinskiHarabaszIndex*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_CalinskiHarabaszIndex" data-uid="AiDotNet.Statistics.ModelStats`3.CalinskiHarabaszIndex">
+  CalinskiHarabaszIndex
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Calinski-Harabasz index, a measure of cluster separation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CalinskiHarabaszIndex { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_CalinskiHarabaszIndex_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This index tells you how well-separated your groups (clusters) are.
+Higher values mean your groups are more distinct from each other, which is generally better.
+It's useful when comparing different ways of grouping your data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_ConditionNumber_" data-uid="AiDotNet.Statistics.ModelStats`3.ConditionNumber*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_ConditionNumber" data-uid="AiDotNet.Statistics.ModelStats`3.ConditionNumber">
+  ConditionNumber
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the condition number, a measure of the model's numerical stability.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ConditionNumber { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_ConditionNumber_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The condition number tells you if small changes in your data
+might cause big changes in your model's predictions. A high condition number
+(typically above 30) suggests that your model might be unstable and sensitive to small data changes.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_CorrelationMatrix_" data-uid="AiDotNet.Statistics.ModelStats`3.CorrelationMatrix*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_CorrelationMatrix" data-uid="AiDotNet.Statistics.ModelStats`3.CorrelationMatrix">
+  CorrelationMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the correlation matrix showing relationships between features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; CorrelationMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_CorrelationMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This matrix shows how closely related your features are to each other.
+Values close to 1 or -1 mean strong relationships, while values near 0 mean weak relationships.
+This helps you understand which features might be providing similar information.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_CosineSimilarity_" data-uid="AiDotNet.Statistics.ModelStats`3.CosineSimilarity*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_CosineSimilarity" data-uid="AiDotNet.Statistics.ModelStats`3.CosineSimilarity">
+  CosineSimilarity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the cosine similarity between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CosineSimilarity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_CosineSimilarity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how similar the direction of your predictions is to the actual values,
+ignoring their magnitude. Values closer to 1 indicate more similar directions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_CovarianceMatrix_" data-uid="AiDotNet.Statistics.ModelStats`3.CovarianceMatrix*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_CovarianceMatrix" data-uid="AiDotNet.Statistics.ModelStats`3.CovarianceMatrix">
+  CovarianceMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the covariance matrix showing how features vary together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; CovarianceMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_CovarianceMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This matrix shows how features change together.
+It's similar to the correlation matrix but uses a different scale.
+It helps identify patterns in how your features behave together.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_DaviesBouldinIndex_" data-uid="AiDotNet.Statistics.ModelStats`3.DaviesBouldinIndex*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_DaviesBouldinIndex" data-uid="AiDotNet.Statistics.ModelStats`3.DaviesBouldinIndex">
+  DaviesBouldinIndex
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L319"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Davies-Bouldin index, a measure of the average similarity between each cluster and its most similar cluster.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DaviesBouldinIndex { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_DaviesBouldinIndex_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This index helps you understand how well-separated your groups (clusters) are.
+Lower values are better, meaning your groups are more distinct from each other.
+It's particularly useful when you're not sure how many groups to divide your data into.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_EffectiveNumberOfParameters_" data-uid="AiDotNet.Statistics.ModelStats`3.EffectiveNumberOfParameters*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_EffectiveNumberOfParameters" data-uid="AiDotNet.Statistics.ModelStats`3.EffectiveNumberOfParameters">
+  EffectiveNumberOfParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T EffectiveNumberOfParameters { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_EffectiveNumberOfParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This estimates how complex your model is in practice.
+It might be different from the actual number of parameters and helps identify if your model is overfitting
+(using more complexity than needed to explain the data).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_EuclideanDistance_" data-uid="AiDotNet.Statistics.ModelStats`3.EuclideanDistance*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_EuclideanDistance" data-uid="AiDotNet.Statistics.ModelStats`3.EuclideanDistance">
+  EuclideanDistance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Euclidean distance between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T EuclideanDistance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_EuclideanDistance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures the straight-line distance between your actual and predicted values.
+Lower values indicate predictions that are closer to the actual values.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_FeatureCount_" data-uid="AiDotNet.Statistics.ModelStats`3.FeatureCount*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_FeatureCount" data-uid="AiDotNet.Statistics.ModelStats`3.FeatureCount">
+  FeatureCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of features (input variables) used in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_FeatureCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the number of different pieces of information your model uses to make predictions.
+For example, if you're predicting house prices, features might include size, number of bedrooms, location, etc.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_FeatureNames_" data-uid="AiDotNet.Statistics.ModelStats`3.FeatureNames*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_FeatureNames" data-uid="AiDotNet.Statistics.ModelStats`3.FeatureNames">
+  FeatureNames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the names of the features used in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; FeatureNames { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_FeatureValues_" data-uid="AiDotNet.Statistics.ModelStats`3.FeatureValues*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_FeatureValues" data-uid="AiDotNet.Statistics.ModelStats`3.FeatureValues">
+  FeatureValues
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a dictionary mapping feature names to their values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, TOutput&gt; FeatureValues { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_Features_" data-uid="AiDotNet.Statistics.ModelStats`3.Features*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_Features" data-uid="AiDotNet.Statistics.ModelStats`3.Features">
+  Features
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature values used in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput Features { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_HammingDistance_" data-uid="AiDotNet.Statistics.ModelStats`3.HammingDistance*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_HammingDistance" data-uid="AiDotNet.Statistics.ModelStats`3.HammingDistance">
+  HammingDistance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Hamming distance between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T HammingDistance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_HammingDistance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This counts how many predictions are different from the actual values.
+It's most useful for categorical predictions. Lower values indicate fewer differences.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_JaccardSimilarity_" data-uid="AiDotNet.Statistics.ModelStats`3.JaccardSimilarity*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_JaccardSimilarity" data-uid="AiDotNet.Statistics.ModelStats`3.JaccardSimilarity">
+  JaccardSimilarity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Jaccard similarity between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T JaccardSimilarity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_JaccardSimilarity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures the overlap between your actual and predicted values.
+It's especially useful for binary (yes/no) predictions. Values closer to 1 indicate more overlap.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_LeaveOneOutPredictiveDensities_" data-uid="AiDotNet.Statistics.ModelStats`3.LeaveOneOutPredictiveDensities*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_LeaveOneOutPredictiveDensities" data-uid="AiDotNet.Statistics.ModelStats`3.LeaveOneOutPredictiveDensities">
+  LeaveOneOutPredictiveDensities
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the leave-one-out predictive densities for each data point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; LeaveOneOutPredictiveDensities { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_LeaveOneOutPredictiveDensities_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This shows how well the model predicts each data point when it's trained without that point.
+It helps identify which data points might be harder for the model to predict accurately.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_LogLikelihood_" data-uid="AiDotNet.Statistics.ModelStats`3.LogLikelihood*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_LogLikelihood" data-uid="AiDotNet.Statistics.ModelStats`3.LogLikelihood">
+  LogLikelihood
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the log-likelihood of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T LogLikelihood { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_LogLikelihood_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how probable your data is under your model.
+Higher values mean your model fits the data better. It's often used in more advanced statistical techniques.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_LogPointwisePredictiveDensity_" data-uid="AiDotNet.Statistics.ModelStats`3.LogPointwisePredictiveDensity*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_LogPointwisePredictiveDensity" data-uid="AiDotNet.Statistics.ModelStats`3.LogPointwisePredictiveDensity">
+  LogPointwisePredictiveDensity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the log pointwise predictive density, a measure of prediction accuracy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T LogPointwisePredictiveDensity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_LogPointwisePredictiveDensity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a way to measure how well your model's predictions match the actual data.
+Higher values generally indicate better predictions. It's particularly useful when comparing different models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_MahalanobisDistance_" data-uid="AiDotNet.Statistics.ModelStats`3.MahalanobisDistance*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_MahalanobisDistance" data-uid="AiDotNet.Statistics.ModelStats`3.MahalanobisDistance">
+  MahalanobisDistance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Mahalanobis distance between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MahalanobisDistance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_MahalanobisDistance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is an advanced distance measure that takes into account how your features
+are related to each other. It can be more meaningful than simpler distances when your features are correlated.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_ManhattanDistance_" data-uid="AiDotNet.Statistics.ModelStats`3.ManhattanDistance*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_ManhattanDistance" data-uid="AiDotNet.Statistics.ModelStats`3.ManhattanDistance">
+  ManhattanDistance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Manhattan distance between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ManhattanDistance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_ManhattanDistance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures the distance between actual and predicted values as if you could only move
+horizontally or vertically (like navigating city blocks). Lower values indicate better predictions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_MarginalLikelihood_" data-uid="AiDotNet.Statistics.ModelStats`3.MarginalLikelihood*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_MarginalLikelihood" data-uid="AiDotNet.Statistics.ModelStats`3.MarginalLikelihood">
+  MarginalLikelihood
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the marginal likelihood of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MarginalLikelihood { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_MarginalLikelihood_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a measure of how well your model fits the data, taking into account its complexity.
+It helps in comparing different models, with higher values generally indicating better models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_MeanAveragePrecision_" data-uid="AiDotNet.Statistics.ModelStats`3.MeanAveragePrecision*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_MeanAveragePrecision" data-uid="AiDotNet.Statistics.ModelStats`3.MeanAveragePrecision">
+  MeanAveragePrecision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Mean Average Precision, a measure of ranking quality.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MeanAveragePrecision { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_MeanAveragePrecision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how well your model ranks items, especially in search or recommendation systems.
+It ranges from 0 to 1, where 1 is perfect. It considers both the order of your predictions and their accuracy.
+For example, in a search engine, it would measure how well the most relevant results are placed at the top.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_MeanReciprocalRank_" data-uid="AiDotNet.Statistics.ModelStats`3.MeanReciprocalRank*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_MeanReciprocalRank" data-uid="AiDotNet.Statistics.ModelStats`3.MeanReciprocalRank">
+  MeanReciprocalRank
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L351"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Mean Reciprocal Rank, a statistic measuring the performance of a system that produces a list of possible responses to a query.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MeanReciprocalRank { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_MeanReciprocalRank_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how well your model places the first correct answer in a list of predictions.
+It ranges from 0 to 1, where 1 means the correct answer is always first. It's often used in question-answering systems
+or search engines to measure how quickly a user might find the right answer.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_Model_" data-uid="AiDotNet.Statistics.ModelStats`3.Model*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_Model" data-uid="AiDotNet.Statistics.ModelStats`3.Model">
+  Model
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the full model being evaluated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? Model { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_MutualInformation_" data-uid="AiDotNet.Statistics.ModelStats`3.MutualInformation*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_MutualInformation" data-uid="AiDotNet.Statistics.ModelStats`3.MutualInformation">
+  MutualInformation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the mutual information between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MutualInformation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_MutualInformation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how much information your predictions provide about the actual values.
+Higher values mean your predictions are more informative and closely related to the actual values.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_NormalizedDiscountedCumulativeGain_" data-uid="AiDotNet.Statistics.ModelStats`3.NormalizedDiscountedCumulativeGain*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_NormalizedDiscountedCumulativeGain" data-uid="AiDotNet.Statistics.ModelStats`3.NormalizedDiscountedCumulativeGain">
+  NormalizedDiscountedCumulativeGain
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L340"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Normalized Discounted Cumulative Gain, a measure of ranking quality that takes the position of correct items into account.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T NormalizedDiscountedCumulativeGain { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_NormalizedDiscountedCumulativeGain_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how well your model ranks items, giving more importance to correct predictions at the top of the list.
+It ranges from 0 to 1, where 1 is perfect. It's often used in search engines or recommendation systems to ensure the most relevant items appear first.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_NormalizedMutualInformation_" data-uid="AiDotNet.Statistics.ModelStats`3.NormalizedMutualInformation*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_NormalizedMutualInformation" data-uid="AiDotNet.Statistics.ModelStats`3.NormalizedMutualInformation">
+  NormalizedMutualInformation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the normalized mutual information between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T NormalizedMutualInformation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_NormalizedMutualInformation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is similar to mutual information, but scaled to be between 0 and 1.
+It's easier to interpret across different datasets. Values closer to 1 indicate better predictions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_ObservedTestStatistic_" data-uid="AiDotNet.Statistics.ModelStats`3.ObservedTestStatistic*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_ObservedTestStatistic" data-uid="AiDotNet.Statistics.ModelStats`3.ObservedTestStatistic">
+  ObservedTestStatistic
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the observed test statistic for model evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ObservedTestStatistic { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_ObservedTestStatistic_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a single number that summarizes how well your model fits the data.
+It's used in statistical tests to determine if your model is significantly better than a simpler alternative.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_PartialAutoCorrelationFunction_" data-uid="AiDotNet.Statistics.ModelStats`3.PartialAutoCorrelationFunction*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_PartialAutoCorrelationFunction" data-uid="AiDotNet.Statistics.ModelStats`3.PartialAutoCorrelationFunction">
+  PartialAutoCorrelationFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L379"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Partial Auto-Correlation Function, which measures the direct relationship between an observation and its lag.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PartialAutoCorrelationFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_PartialAutoCorrelationFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This function is similar to the Auto-Correlation Function, but it focuses on the direct relationship between data points at different time delays.
+It helps you:
+- Identify how many past time points directly influence the current point
+- Decide how many past observations to use in time series models
+- Understand the "memory" of your time series data
+It's often used in more advanced time series analysis and forecasting.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_PosteriorPredictiveSamples_" data-uid="AiDotNet.Statistics.ModelStats`3.PosteriorPredictiveSamples*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_PosteriorPredictiveSamples" data-uid="AiDotNet.Statistics.ModelStats`3.PosteriorPredictiveSamples">
+  PosteriorPredictiveSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets samples from the posterior predictive distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; PosteriorPredictiveSamples { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_PosteriorPredictiveSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These are possible predictions your model might make if you ran it multiple times.
+They help you understand the range and uncertainty of your model's predictions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_Predicted_" data-uid="AiDotNet.Statistics.ModelStats`3.Predicted*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_Predicted" data-uid="AiDotNet.Statistics.ModelStats`3.Predicted">
+  Predicted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the predicted values from the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Predicted { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_ReferenceModelMarginalLikelihood_" data-uid="AiDotNet.Statistics.ModelStats`3.ReferenceModelMarginalLikelihood*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_ReferenceModelMarginalLikelihood" data-uid="AiDotNet.Statistics.ModelStats`3.ReferenceModelMarginalLikelihood">
+  ReferenceModelMarginalLikelihood
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the marginal likelihood of a reference (simpler) model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ReferenceModelMarginalLikelihood { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_ReferenceModelMarginalLikelihood_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the marginal likelihood for a basic, simple model.
+It's used as a comparison point to see how much better your more complex model performs.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_SilhouetteScore_" data-uid="AiDotNet.Statistics.ModelStats`3.SilhouetteScore*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_SilhouetteScore" data-uid="AiDotNet.Statistics.ModelStats`3.SilhouetteScore">
+  SilhouetteScore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the silhouette score, a measure of how similar an object is to its own cluster compared to other clusters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SilhouetteScore { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_SilhouetteScore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This score helps you understand if your model is grouping similar things together well.
+It ranges from -1 to 1, where:
+- Values close to 1 mean your groups (clusters) are well-defined
+- Values close to 0 mean your groups overlap a lot
+- Values close to -1 mean some data points might be in the wrong group
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_VIFList_" data-uid="AiDotNet.Statistics.ModelStats`3.VIFList*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_VIFList" data-uid="AiDotNet.Statistics.ModelStats`3.VIFList">
+  VIFList
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Variance Inflation Factor (VIF) for each feature.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; VIFList { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_VIFList_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> VIF helps identify if some features are too similar to others.
+High VIF values (usually above 5 or 10) suggest that a feature might be redundant,
+as its information is already captured by other features.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_VariationOfInformation_" data-uid="AiDotNet.Statistics.ModelStats`3.VariationOfInformation*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_VariationOfInformation" data-uid="AiDotNet.Statistics.ModelStats`3.VariationOfInformation">
+  VariationOfInformation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the variation of information between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T VariationOfInformation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_VariationOfInformation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how different your predictions are from the actual values.
+Lower values indicate that your predictions are more similar to the actual values.
+It's particularly useful when comparing different clustering results.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_Empty_" data-uid="AiDotNet.Statistics.ModelStats`3.Empty*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_Empty" data-uid="AiDotNet.Statistics.ModelStats`3.Empty">
+  Empty()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L487"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty instance of the ModelStats&lt;T&gt; class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ModelStats&lt;T, TInput, TOutput&gt; Empty()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.ModelStats-3.html">ModelStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>An empty ModelStats object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_Empty_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a ModelStats object with all measures initialized to their default values.
+It's useful when you need a placeholder or when initializing a ModelStats object before populating it with data.
+</p>
+<p><b>For Beginners:</b> This is like getting a blank report card.
+You might use this when:
+- You're just starting to set up your model evaluation
+- You want to compare an actual model's stats to a "blank slate"
+- You're creating a template for future model evaluations
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_GetMetric_" data-uid="AiDotNet.Statistics.ModelStats`3.GetMetric*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_GetMetric_AiDotNet_Enums_MetricType_" data-uid="AiDotNet.Statistics.ModelStats`3.GetMetric(AiDotNet.Enums.MetricType)">
+  GetMetric(MetricType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L610"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the value of a specific metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMetric(MetricType metricType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricType</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The type of metric to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the specified metric.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_GetMetric_AiDotNet_Enums_MetricType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method allows you to get the value of any metric calculated by ModelStats.
+You specify which metric you want using the MetricType enum, and the method returns its value.
+</p>
+<p>
+For example, if you want to get the Euclidean Distance, you would call:
+<pre><code class="lang-csharp">T euclideanDistance = modelStats.GetMetric(MetricType.EuclideanDistance);</code></pre>
+
+<p>
+This is useful when you want to programmatically access different metrics without
+needing to know the specific property names for each one.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when an unsupported metric type is requested.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Statistics_ModelStats_3_HasMetric_" data-uid="AiDotNet.Statistics.ModelStats`3.HasMetric*"></a>
+
+  <h3 id="AiDotNet_Statistics_ModelStats_3_HasMetric_AiDotNet_Enums_MetricType_" data-uid="AiDotNet.Statistics.ModelStats`3.HasMetric(AiDotNet.Enums.MetricType)">
+  HasMetric(MetricType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L666"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific metric is available in this ModelStats instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasMetric(MetricType metricType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricType</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The type of metric to check for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the metric is available, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ModelStats_3_HasMetric_AiDotNet_Enums_MetricType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method lets you check if a particular metric has been calculated 
+for your model. It's useful when you're not sure if a specific metric is available, 
+especially when working with different types of models or datasets.
+</p>
+<p>
+For example, if you want to check if the Euclidean Distance is available, you would call:
+<pre><code class="lang-csharp">if (modelStats.HasMetric(MetricType.EuclideanDistance))
+{
+    var distance = modelStats.GetMetric(MetricType.EuclideanDistance);
+    // Use the distance...
+}</code></pre>
+
+<p>
+This prevents errors that might occur if you try to access a metric that wasn't calculated
+for your particular model or dataset.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ModelStats.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

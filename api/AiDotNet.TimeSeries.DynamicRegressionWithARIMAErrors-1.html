@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DynamicRegressionWithARIMAErrors&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DynamicRegressionWithARIMAErrors&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Dynamic Regression model with ARIMA errors for time series forecasting.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1.md&amp;value=---%0Auid%3A%20AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1">
+
+
+
+  <h1 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1" class="text-break">
+Class DynamicRegressionWithARIMAErrors&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TimeSeries.html">TimeSeries</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Dynamic Regression model with ARIMA errors for time series forecasting.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DynamicRegressionWithARIMAErrors&lt;T&gt; : TimeSeriesModelBase&lt;T&gt;, ITimeSeriesModel&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double, decimal).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html">TimeSeriesModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">DynamicRegressionWithARIMAErrors&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesModel-1.html">ITimeSeriesModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options">TimeSeriesModelBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps">TimeSeriesModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine">TimeSeriesModelBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters">TimeSeriesModelBase&lt;T&gt;.ModelParameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained">TimeSeriesModelBase&lt;T&gt;.IsTrained</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics">TimeSeriesModelBase&lt;T&gt;.LastEvaluationMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0__">TimeSeriesModelBase&lt;T&gt;.ValidateOptions(TimeSeriesRegressionOptions&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ValidateTrainingInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">TimeSeriesModelBase&lt;T&gt;.ValidatePredictionInput(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.CalculateErrorMetrics(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize">TimeSeriesModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_System_Byte___">TimeSeriesModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters">TimeSeriesModelBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ApplyParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices">TimeSeriesModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_System_Int32_">TimeSeriesModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_System_Int32_">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">TimeSeriesModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy">TimeSeriesModelBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip__0__0__0_">TimeSeriesModelBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.Forecast(Vector&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_System_Collections_Generic_List__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.PrepareForecastFeatures(List&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount">TimeSeriesModelBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_System_String_">TimeSeriesModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_System_String_">TimeSeriesModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction">TimeSeriesModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">TimeSeriesModelBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">TimeSeriesModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SupportsJitCompilation">TimeSeriesModelBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">TimeSeriesModelBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This model combines regression analysis with ARIMA (AutoRegressive Integrated Moving Average) error modeling.
+It first models the relationship between the target variable and external predictors using regression,
+then applies ARIMA modeling to the residuals to capture temporal patterns in the error terms.
+</p>
+<p>
+For Beginners:
+Dynamic Regression with ARIMA Errors is like having two powerful forecasting tools working together:
+<ol>
+<li><p>Regression Component: This part captures how external factors (like temperature, price changes,
+or marketing campaigns) affect what you're trying to predict. For example, if you're forecasting
+ice cream sales, this component would measure how much each degree of temperature increases sales.</p>
+</li>
+<li><p>ARIMA Error Component: After accounting for external factors, there are often still patterns
+in the data that the regression alone can't explain. The ARIMA component captures these patterns
+by looking at:</p>
+<ul>
+<li>Past values (AR - AutoRegressive)</li>
+<li>Trends removed through differencing (I - Integrated)</li>
+<li>Past prediction errors (MA - Moving Average)</li>
+</ul>
+</li>
+</ol>
+<p>When combined, these components create a powerful forecasting model that can:</p>
+<ul>
+<li>Account for the impact of known external factors</li>
+<li>Capture complex temporal patterns in the data</li>
+<li>Handle both stationary and non-stationary time series</li>
+<li>Provide more accurate forecasts than either approach alone</li>
+</ul>
+<p>This model is particularly useful when you have both:</p>
+<ul>
+<li>External variables that influence your target variable</li>
+<li>Temporal patterns that persist in the data after accounting for these external influences</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1__ctor_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1__ctor_AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions__0__" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.#ctor(AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions{`0})">
+  DynamicRegressionWithARIMAErrors(DynamicRegressionWithARIMAErrorsOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new Dynamic Regression with ARIMA Errors model with the specified options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DynamicRegressionWithARIMAErrors(DynamicRegressionWithARIMAErrorsOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions-1.html">DynamicRegressionWithARIMAErrorsOptions</a>&lt;T&gt;</dt>
+    <dd><p>Options for configuring the model, including AR order, MA order,
+differencing order, and external regressors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1__ctor_AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This constructor creates a new instance of the model with the specified settings.</p>
+<p>The options include:</p>
+<ul>
+<li>AROrder: How many past values to consider (like using yesterday and the day before to predict today)</li>
+<li>MAOrder: How many past prediction errors to consider</li>
+<li>DifferenceOrder: How many times to difference the data to remove trends</li>
+<li>ExternalRegressors: How many external variables to include in the model</li>
+<li>Regularization: What method to use to prevent the model from becoming too complex</li>
+</ul>
+<p>These settings should be chosen based on your specific data and forecasting needs.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Clone_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.Clone*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Clone" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the current model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the model with the same state and parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a complete copy of the model, including its configuration and trained parameters.
+</p>
+<p><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
+<p>Unlike CreateInstance(), which creates a blank model with the same settings,
+Clone() creates a complete copy including:</p>
+<ul>
+<li>The model configuration (AR order, MA order, etc.)</li>
+<li>All trained regression coefficients</li>
+<li>All trained AR and MA coefficients</li>
+<li>Differencing information and intercept value</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Creating a backup before experimenting with a model</li>
+<li>Using the same trained model in multiple scenarios</li>
+<li>Creating ensemble models that use variations of the same base model</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_CreateInstance_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_CreateInstance" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the model with the same options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the model with the same configuration options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new, uninitialized instance of the model with the same options.
+</p>
+<p><b>For Beginners:</b> This method creates a fresh copy of the model with the same settings.
+<p>Think of this like creating a new blank notebook with the same paper quality, size, and number of pages
+as another notebook, but without copying any of the written content.</p>
+<p>This is used internally by the framework to create new model instances when needed,
+such as when cloning a model or creating ensemble models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_DeserializeCore_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.DeserializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_DeserializeCore_System_IO_BinaryReader_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.DeserializeCore(System.IO.BinaryReader)">
+  DeserializeCore(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model's state from a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeCore(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_DeserializeCore_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This protected method loads a previously saved model from a file or stream.</p>
+<p>Deserialization allows you to:</p>
+<ol>
+<li>Load a previously trained model</li>
+<li>Use it immediately without retraining</li>
+<li>Apply the exact same model to new data</li>
+</ol>
+<p>The method loads all essential components that were saved during serialization:</p>
+<ul>
+<li>Regression coefficients</li>
+<li>AR coefficients</li>
+<li>MA coefficients</li>
+<li>Differencing information</li>
+<li>Intercept value</li>
+<li>Model options</li>
+</ul>
+<p>After deserialization, the model is ready to make predictions as if it had just been trained.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_EvaluateModel_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.EvaluateModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.EvaluateModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1045"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the model's performance on test data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, T&gt; EvaluateModel(Matrix&lt;T&gt; xTest, Vector&lt;T&gt; yTest)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of external regressors for testing.</p>
+</dd>
+    <dt><code>yTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Actual target values for testing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary of evaluation metrics (MSE, RMSE, MAE, MAPE).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method measures how well the model performs by comparing its predictions
+against actual values from a test dataset.</p>
+<p>It calculates several common error metrics:</p>
+<ul>
+<li><p>MSE (Mean Squared Error): Average of squared differences between predictions and actual values.
+Lower is better, but squaring emphasizes large errors.</p>
+</li>
+<li><p>RMSE (Root Mean Squared Error): Square root of MSE, which gives errors in the same units
+as your original data. For example, if forecasting sales in dollars, RMSE is also in dollars.</p>
+</li>
+<li><p>MAE (Mean Absolute Error): Average of absolute differences between predictions and actual values.
+Easier to interpret than MSE and treats all error sizes equally.</p>
+</li>
+<li><p>MAPE (Mean Absolute Percentage Error): Average of percentage differences between predictions
+and actual values. Useful for understanding relative size of errors. For example, MAPE = 5%
+means predictions are off by 5% on average.</p>
+</li>
+</ul>
+<p>Lower values for all these metrics indicate better performance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Forecast_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.Forecast*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.Forecast(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Forecast(Vector&lt;T&gt;, int, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1317"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Forecasts future values based on a history of time series data and exogenous variables.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Forecast(Vector&lt;T&gt; history, int horizon, Matrix&lt;T&gt; exogenousVariables)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>history</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The historical time series data.</p>
+</dd>
+    <dt><code>horizon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of future periods to predict.</p>
+</dd>
+    <dt><code>exogenousVariables</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of external regressors for future periods.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predicted values for future periods.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates forecasts for future time periods based on the trained model, historical data,
+and external variables.
+</p>
+<p><b>For Beginners:</b> This method predicts future values based on past data.
+<p>Given:</p>
+<ul>
+<li>A series of past observations (the &quot;history&quot;)</li>
+<li>The number of future periods to predict (the &quot;horizon&quot;)</li>
+<li>External factors that might affect predictions (exogenous variables)</li>
+</ul>
+<p>This method:</p>
+<ol>
+<li>Uses the regression component to capture the effects of external factors</li>
+<li>Uses the ARIMA component to capture time-dependent patterns</li>
+<li>Combines these components to generate comprehensive forecasts</li>
+<li>If differencing was used, it properly undoes the differencing to get results in the original scale</li>
+</ol>
+<p>For example, if you have sales data for Jan-Jun and want to predict Jul-Sep,
+this method will use both the external factors (like promotions, holidays) and
+the historical patterns to create accurate forecasts.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_GetModelMetadata_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_GetModelMetadata" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1457"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides comprehensive information about the model, including its type, parameters, and configuration.
+</p>
+<p><b>For Beginners:</b> This method returns a complete description of your trained model.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (Dynamic Regression with ARIMA Errors)</li>
+<li>The coefficients for external factors (regression component)</li>
+<li>The coefficients for time-dependent patterns (AR and MA components)</li>
+<li>The configuration options you specified when creating the model</li>
+<li>A serialized version of the entire model that can be saved</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Understanding what patterns the model has learned</li>
+<li>Documenting how the model was configured</li>
+<li>Saving the model's state for later analysis</li>
+<li>Comparing different models to choose the best one</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Predict_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.Predict*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes predictions using the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; xNew)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xNew</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of external regressors for the periods to be predicted.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of predicted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method uses the trained model to forecast future values.</p>
+<p>For each future time point:</p>
+<ol>
+<li>It starts with the intercept (baseline value)</li>
+<li>Adds the effects of external factors (regression component)</li>
+<li>Adds the effects of past observations (AR component)</li>
+<li>Adds the effects of past prediction errors (MA component)</li>
+<li>If differencing was used in training, it &quot;undoes&quot; the differencing to get predictions in the original scale</li>
+</ol>
+<p>The combination of regression and ARIMA components allows the model to make forecasts
+that account for both external influences and internal time-dependent patterns.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_PredictSingle_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1551"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts a single value based on a single input vector of external regressors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of external regressors for a single time point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value for that time point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides a convenient way to get a prediction for a single time point without
+having to create a matrix with a single row.
+</p>
+<p><b>For Beginners:</b> This is a shortcut for getting just one prediction.
+<p>Instead of providing a table of inputs for multiple time periods, you can provide
+just one set of external factors and get back a single prediction.</p>
+<p>For example, if you want to predict tomorrow's sales based on tomorrow's promotions,
+weather forecast, and other factors, this method lets you do that directly.</p>
+<p>Under the hood, it:</p>
+<ol>
+<li>Takes your single set of inputs</li>
+<li>Creates a small table with just one row</li>
+<li>Gets a prediction using the main prediction engine</li>
+<li>Returns that single prediction to you</li>
+</ol>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Reset_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.Reset*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Reset" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the model to its untrained state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method clears all trained parameters, effectively resetting the model to its initial state.
+</p>
+<p><b>For Beginners:</b> This method erases all the learned patterns from your model.
+<p>After calling this method:</p>
+<ul>
+<li>All regression coefficients are reset to zero</li>
+<li>All AR coefficients are reset to zero</li>
+<li>All MA coefficients are reset to zero</li>
+<li>The differencing information is cleared</li>
+<li>The intercept is reset to zero</li>
+</ul>
+<p>The model behaves as if it was never trained, and you would need to train it again before
+making predictions. This is useful when you want to:</p>
+<ul>
+<li>Experiment with different training data on the same model</li>
+<li>Retrain a model from scratch with new parameters</li>
+<li>Reset a model that might have been trained incorrectly</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_SerializeCore_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.SerializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_SerializeCore_System_IO_BinaryWriter_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.SerializeCore(System.IO.BinaryWriter)">
+  SerializeCore(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1082"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model's state to a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void SerializeCore(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_SerializeCore_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This protected method saves the model's internal state to a file or stream.</p>
+<p>Serialization allows you to:</p>
+<ol>
+<li>Save a trained model to disk</li>
+<li>Load it later without having to retrain</li>
+<li>Share the model with others</li>
+</ol>
+<p>The method saves all essential components of the model:</p>
+<ul>
+<li>Regression coefficients</li>
+<li>AR coefficients</li>
+<li>MA coefficients</li>
+<li>Differencing information</li>
+<li>Intercept value</li>
+<li>Model options</li>
+</ul>
+<p>This allows the model to be fully reconstructed later.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_TrainCore_" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.TrainCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors`1.TrainCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainCore(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L1508"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Implements the core training algorithm for the Dynamic Regression with ARIMA Errors model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void TrainCore(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Feature matrix of external regressors.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Target vector of time series values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_DynamicRegressionWithARIMAErrors_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method contains the implementation details of the training process, handling differencing,
+regression modeling, and ARIMA parameter estimation.
+</p>
+<p><b>For Beginners:</b> This is the engine room of the training process.
+<p>While the public Train method provides a high-level interface, this method does the actual work:</p>
+<ol>
+<li>Performs differencing to remove trends (if specified)</li>
+<li>Fits the regression model to capture external factor effects</li>
+<li>Calculates residuals (what the regression couldn't explain)</li>
+<li>Fits the ARIMA model to these residuals</li>
+<li>Finalizes all model parameters</li>
+</ol>
+<p>Think of it as the detailed step-by-step recipe that the chef follows when you order a meal.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/DynamicRegressionWithARIMAErrors.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

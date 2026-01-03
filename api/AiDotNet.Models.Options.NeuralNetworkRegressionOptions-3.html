@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NeuralNetworkRegressionOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NeuralNetworkRegressionOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for neural network regression models, providing fine-grained control over network architecture, training parameters, activation functions, and optimization strategies.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.NeuralNetworkRegressionOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3" class="text-break">
+Class NeuralNetworkRegressionOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for neural network regression models, providing fine-grained control over
+network architecture, training parameters, activation functions, and optimization strategies.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NeuralNetworkRegressionOptions&lt;T, TInput, TOutput&gt; : NonLinearRegressionOptions</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html">NonLinearRegressionOptions</a></div>
+      <div><span class="xref">NeuralNetworkRegressionOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations">NonLinearRegressionOptions.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance">NonLinearRegressionOptions.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType">NonLinearRegressionOptions.KernelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma">NonLinearRegressionOptions.Gamma</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0">NonLinearRegressionOptions.Coef0</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree">NonLinearRegressionOptions.PolynomialDegree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Neural network regression is a powerful approach for modeling complex nonlinear relationships between
+input features and continuous output variables. This class encapsulates the full range of parameters
+needed to define and train a neural network for regression tasks. It allows for customization of
+network depth and width, training duration and batch size, activation functions, loss functions, and
+optimization algorithms. These options collectively determine the network's capacity, learning behavior,
+and computational requirements, making them crucial for achieving optimal predictive performance while
+managing training time and resource usage.
+</p>
+<p><b>For Beginners:</b> Neural networks are AI models inspired by the human brain that can learn complex patterns.
+<p>Imagine building a system to predict house prices based on features like size, location, and age:</p>
+<ul>
+<li>Traditional methods might use simple formulas (like linear regression)</li>
+<li>Neural networks can discover complicated relationships that simple formulas miss</li>
+</ul>
+<p>A neural network consists of layers of interconnected &quot;neurons&quot;:</p>
+<ul>
+<li>Input layer: Receives your data (like house size, number of bedrooms)</li>
+<li>Hidden layers: Process the information and discover patterns</li>
+<li>Output layer: Produces the prediction (like the estimated house price)</li>
+</ul>
+<p>The network &quot;learns&quot; by:</p>
+<ul>
+<li>Making predictions on training data</li>
+<li>Comparing those predictions to the actual values</li>
+<li>Adjusting its internal connections to reduce the errors</li>
+<li>Repeating this process many times</li>
+</ul>
+<p>This class lets you configure every aspect of a neural network designed specifically for regression
+(predicting continuous values like prices, temperatures, or scores), from its structure to how it learns.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of training examples used in one iteration of model training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The batch size, defaulting to 32.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Batch size determines how many training examples the network processes before updating its weights.
+Smaller batch sizes provide more frequent weight updates and often lead to faster initial convergence,
+while larger batch sizes offer better gradient estimates and can utilize hardware acceleration more
+efficiently. The choice of batch size impacts both training speed and the quality of the learned model.
+Extremely small batch sizes may lead to noisy updates and slow convergence, while extremely large batch
+sizes may cause the network to converge to suboptimal solutions and require more memory.
+</p>
+<p><b>For Beginners:</b> This setting controls how many training examples
+the network processes before making adjustments to its internal connections.
+<p>The default value of 32 means:</p>
+<ul>
+<li>The network looks at 32 examples (like houses in our price prediction example)</li>
+<li>Then updates its understanding based on the average error across those examples</li>
+</ul>
+<p>Think of it like a teacher who might:</p>
+<ul>
+<li>Grade all 32 assignments at once</li>
+<li>Look for patterns in the mistakes</li>
+<li>Then adjust their teaching approach based on those patterns</li>
+</ul>
+<p>You might want a larger batch size (like 64 or 128) if:</p>
+<ul>
+<li>You have lots of training data</li>
+<li>You want more stable (but slower) learning</li>
+<li>You want to utilize GPU acceleration</li>
+</ul>
+<p>You might want a smaller batch size (like 8 or 16) if:</p>
+<ul>
+<li>You have limited memory</li>
+<li>You want the network to learn more quickly (though more noisily)</li>
+<li>You have a small dataset</li>
+</ul>
+<p>The best batch size often requires experimentation, as it affects both
+learning quality and training speed.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_Epochs_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.Epochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_Epochs" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.Epochs">
+  Epochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of complete passes through the training dataset during model training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Epochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of training epochs, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_Epochs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+An epoch represents one complete pass through the entire training dataset. This parameter determines
+how many times the neural network will see each training example during the learning process. More
+epochs generally allow for better learning but increase training time and may lead to overfitting if
+the number is too high. The optimal number of epochs varies widely depending on dataset size, problem
+complexity, and other factors such as learning rate and batch size. Early stopping based on validation
+performance is often used in practice to determine the actual number of epochs.
+</p>
+<p><b>For Beginners:</b> This setting determines how many times the neural network
+will process the entire training dataset during learning.
+<p>The default value of 1000 means:</p>
+<ul>
+<li>The network will see each training example 1000 times</li>
+<li>It gets 1000 opportunities to refine its understanding</li>
+</ul>
+<p>Think of it like studying for an exam:</p>
+<ul>
+<li>Each epoch is like reviewing all your study materials once</li>
+<li>More reviews generally lead to better understanding, up to a point</li>
+</ul>
+<p>You might want more epochs (like 2000) if:</p>
+<ul>
+<li>Your network is still improving at the end of training</li>
+<li>You have a complex problem requiring more learning time</li>
+<li>You're using a small learning rate</li>
+</ul>
+<p>You might want fewer epochs (like 500) if:</p>
+<ul>
+<li>Your network starts overfitting (performing worse on new data)</li>
+<li>Training takes too long</li>
+<li>You're using a large learning rate</li>
+</ul>
+<p>In practice, it's common to use &quot;early stopping&quot; - monitoring performance on validation data
+and stopping training when it stops improving, regardless of the maximum epochs setting.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_HiddenActivationFunction_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.HiddenActivationFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_HiddenActivationFunction" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.HiddenActivationFunction">
+  HiddenActivationFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the activation function applied to the outputs of hidden layer neurons.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IActivationFunction&lt;T&gt;? HiddenActivationFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The hidden layer activation function, defaulting to ReLU (Rectified Linear Unit).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_HiddenActivationFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The activation function introduces non-linearity into the network, enabling it to learn complex patterns.
+The default ReLU function (f(x) = max(0, x)) is widely used because it combats the vanishing gradient
+problem and promotes sparse activation, leading to efficient learning in deep networks. Other common
+choices include sigmoid, tanh, and leaky ReLU, each with different properties regarding the range of
+outputs, gradient behavior, and computational efficiency. The choice of activation function can
+significantly impact learning dynamics and the network's ability to model certain types of relationships.
+</p>
+<p><b>For Production Scenarios:</b> ReLU is generally recommended for hidden layers in regression tasks because:
+<ul>
+<li>It's computationally efficient, making training and inference faster</li>
+<li>It helps mitigate the vanishing gradient problem in deeper networks</li>
+<li>It tends to converge faster than sigmoid or tanh</li>
+<li>It works well with a wide range of regression problems</li>
+</ul>
+<p>However, if you encounter &quot;dying ReLU&quot; issues (where neurons become inactive and stop learning),
+consider using Leaky ReLU instead, which allows a small gradient when the input is negative.
+For very deep networks, variants like ELU (Exponential Linear Unit) or SELU (Scaled Exponential
+Linear Unit) may provide better performance due to their self-normalizing properties.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_HiddenVectorActivation_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.HiddenVectorActivation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_HiddenVectorActivation" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.HiddenVectorActivation">
+  HiddenVectorActivation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the vector activation function applied to the outputs of hidden layer neurons.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IVectorActivationFunction&lt;T&gt;? HiddenVectorActivation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The hidden layer vector activation function, defaulting to null.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_HiddenVectorActivation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property allows you to specify a vector-based activation function for hidden layers, which can
+operate directly on vectors or tensors rather than individual scalar values. Vector activation functions
+can be more computationally efficient as they can leverage optimized vector operations. If both this
+property and HiddenActivationFunction are set, this vector implementation takes precedence.
+</p>
+<p><b>For Beginners:</b> This is an advanced setting that provides a more efficient way
+to apply activation functions to entire layers at once.
+<p>The default value of null means:</p>
+<ul>
+<li>The system will use the scalar HiddenActivationFunction instead</li>
+<li>Each neuron's output will be processed individually</li>
+</ul>
+<p>You might want to set this if:</p>
+<ul>
+<li>You're working with very large networks where performance is critical</li>
+<li>You have a custom vector-optimized activation function</li>
+<li>You're using hardware acceleration that benefits from vectorized operations</li>
+</ul>
+<p>In most cases, you can leave this as null and just use the HiddenActivationFunction property,
+which is more intuitive and works for all scenarios.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LayerSizes_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.LayerSizes*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LayerSizes" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.LayerSizes">
+  LayerSizes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sizes of each layer in the neural network, including input, hidden, and output layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; LayerSizes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A list of integers representing the number of neurons in each layer, defaulting to [1, 10, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LayerSizes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter defines the architecture of the neural network by specifying the number of neurons in each layer.
+The first number represents the input dimension, the last number represents the output dimension, and
+all numbers in between represent the hidden layers. The default [1, 10, 1] creates a network with one
+input feature, one hidden layer containing 10 neurons, and one output. The depth (number of layers) and
+width (neurons per layer) of the network determine its capacity to model complex relationships. Deeper
+and wider networks can capture more complex patterns but require more data and computational resources
+to train effectively.
+</p>
+<p><b>For Beginners:</b> This setting determines the structure of your neural network -
+how many layers it has and how many neurons are in each layer.
+<p>The default value of [1, 10, 1] means:</p>
+<ul>
+<li>1 input neuron (for a single feature like house size)</li>
+<li>10 neurons in one hidden layer (where the pattern recognition happens)</li>
+<li>1 output neuron (for a single prediction like price)</li>
+</ul>
+<p>You might want more inputs if:</p>
+<ul>
+<li>You have multiple features (e.g., [4, 10, 1] for size, bedrooms, bathrooms, and age)</li>
+</ul>
+<p>You might want more or larger hidden layers if:</p>
+<ul>
+<li>Your problem is complex (e.g., [4, 20, 20, 1] adds a second hidden layer with 20 neurons each)</li>
+<li>You have lots of training data to support a bigger network</li>
+</ul>
+<p>You might want more outputs if:</p>
+<ul>
+<li>You're predicting multiple values simultaneously (e.g., [4, 20, 3] to predict price, maintenance cost, and energy efficiency)</li>
+</ul>
+<p>Larger networks can learn more complex patterns but need more data and computing power.
+It's often best to start small and increase size if needed.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LearningRate_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LearningRate" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the step size used for updating model weights during gradient descent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate is a critical hyperparameter that controls how much the model's weights are adjusted
+in response to the estimated error each time they are updated. A higher learning rate means larger steps
+in the weight space, which can lead to faster convergence but might overshoot the optimal solution or
+cause instability. A lower learning rate means smaller, more cautious steps, which can lead to more
+precise convergence but might require many more iterations or get stuck in local minima. The ideal
+learning rate often varies by problem, network architecture, and optimizer choice.
+</p>
+<p><b>For Beginners:</b> This setting controls how big of adjustments the network
+makes when it's learning from its mistakes.
+<p>The default value of 0.01 means:</p>
+<ul>
+<li>Each time the network updates its connections, it makes relatively small adjustments</li>
+<li>These adjustments are proportional to how wrong its predictions were</li>
+</ul>
+<p>Think of it like turning a steering wheel:</p>
+<ul>
+<li>A high learning rate is like making big turns - you'll change direction quickly but might overshoot</li>
+<li>A low learning rate is like making tiny adjustments - more precise but slower to respond</li>
+</ul>
+<p>You might want a higher learning rate (like 0.1) if:</p>
+<ul>
+<li>Training is progressing too slowly</li>
+<li>You're early in the training process</li>
+<li>You're using an adaptive optimizer that handles large rates well</li>
+</ul>
+<p>You might want a lower learning rate (like 0.001) if:</p>
+<ul>
+<li>Training is unstable with predictions jumping around</li>
+<li>You're fine-tuning an already trained network</li>
+<li>You need very precise final predictions</li>
+</ul>
+<p>Finding the right learning rate is one of the most important parts of training
+neural networks. Too high and training becomes unstable; too low and training
+becomes impractically slow.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LossFunction_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.LossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LossFunction" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L362"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the function used to calculate the error between predicted and actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt; LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function, defaulting to Mean Squared Error (MSE).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_LossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The loss function quantifies the difference between the network's predictions and the actual target values,
+providing a measure of model performance that is minimized during training. Mean Squared Error (MSE) is
+the default choice for regression tasks as it heavily penalizes large errors and has favorable mathematical
+properties for optimization. Alternative loss functions include Mean Absolute Error (less sensitive to
+outliers), Huber loss (combines MSE and MAE properties), and custom domain-specific loss functions. The
+choice of loss function should align with what constitutes a "good" prediction in the specific application.
+</p>
+<p><b>For Production Scenarios:</b> The choice of loss function should be guided by your specific
+requirements and data characteristics:
+<ul>
+<li><p>Mean Squared Error (MSE): Best general-purpose choice when:</p>
+<ul>
+<li>Large errors are significantly more important to minimize than small errors</li>
+<li>Your data doesn't contain extreme outliers</li>
+<li>You want faster convergence due to larger gradients for larger errors</li>
+</ul>
+</li>
+<li><p>Mean Absolute Error (MAE): Consider when:</p>
+<ul>
+<li>Your data contains outliers that would disproportionately influence MSE</li>
+<li>All error magnitudes should be treated more equally</li>
+<li>You care about the median prediction rather than the mean</li>
+</ul>
+</li>
+<li><p>Huber Loss: Excellent compromise when:</p>
+<ul>
+<li>You want MSE's sensitivity to error for smaller errors</li>
+<li>You want MAE's robustness to outliers for larger errors</li>
+<li>You need a differentiable loss function with controlled sensitivity</li>
+</ul>
+</li>
+<li><p>Root Mean Squared Error (RMSE): Consider when:</p>
+<ul>
+<li>You want the error in the same units as your target variable</li>
+<li>You still want to penalize larger errors more heavily</li>
+</ul>
+</li>
+<li><p>Mean Squared Logarithmic Error (MSLE): Useful when:</p>
+<ul>
+<li>Your target values have a wide range (e.g., house prices)</li>
+<li>Relative errors are more important than absolute errors</li>
+<li>Underprediction should be penalized more than overprediction</li>
+</ul>
+</li>
+</ul>
+<p>For most production regression tasks, MSE or Huber Loss provide the best balance of
+mathematical properties and practical performance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_Optimizer_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.Optimizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_Optimizer" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.Optimizer">
+  Optimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimization algorithm used to update the network weights during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IOptimizer&lt;T, TInput, TOutput&gt;? Optimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimizer instance, defaulting to null (in which case a default optimizer will be used).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_Optimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The optimizer determines how the network's weights are updated based on the calculated gradients during
+backpropagation. Different optimization algorithms have various properties regarding convergence speed,
+stability, and ability to navigate complex error surfaces. Common choices include Stochastic Gradient
+Descent (SGD), Adam, RMSProp, and AdaGrad. If this property is left null, a default optimizer
+(typically SGD with momentum) will be used. Advanced optimizers often adapt learning rates per-parameter
+or incorporate momentum to accelerate training and help escape local minima.
+</p>
+<p><b>For Beginners:</b> This setting determines the algorithm used to update the
+network's internal connections during training.
+<p>The default value of null means:</p>
+<ul>
+<li>The system will choose a standard optimizer for you</li>
+<li>This is usually basic Stochastic Gradient Descent (SGD) or SGD with momentum</li>
+</ul>
+<p>Think of the optimizer like a navigation strategy:</p>
+<ul>
+<li>Basic SGD is like always walking directly downhill</li>
+<li>Advanced optimizers (like Adam) are like having a smart GPS that considers terrain, momentum, and history</li>
+</ul>
+<p>You might want to specify an optimizer if:</p>
+<ul>
+<li>Training is slow or unstable with the default</li>
+<li>You're working with a challenging problem</li>
+<li>You have specific requirements for training speed or final accuracy</li>
+</ul>
+<p>Popular optimizer options include:</p>
+<ul>
+<li>Adam: Generally good performance across many problems</li>
+<li>RMSProp: Good for non-stationary problems</li>
+<li>SGD with momentum: Simple but effective with proper tuning</li>
+<li>Nesterov Accelerated Gradient: Helps avoid overshooting minima</li>
+</ul>
+<p>If you're new to neural networks, you can start with the default (null) and
+explore different optimizers as you gain experience.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_OutputActivationFunction_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.OutputActivationFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_OutputActivationFunction" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.OutputActivationFunction">
+  OutputActivationFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L258"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the activation function applied to the outputs of the final layer neurons.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IActivationFunction&lt;T&gt; OutputActivationFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The output layer activation function, defaulting to the identity function (f(x) = x).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_OutputActivationFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For regression tasks, the linear (identity) activation function is typically used in the output layer
+to allow the network to predict any numerical value within the range of the representable numbers.
+This contrasts with classification tasks, which might use sigmoid or softmax activations to produce
+probabilities. The linear activation is appropriate when the target variable is unbounded and can take
+any real value, which is common in many regression problems such as price prediction, time series
+forecasting, and physical measurements.
+</p>
+<p><b>For Production Scenarios:</b> The identity function (linear activation) is strongly recommended
+for the output layer in regression tasks because:
+<ul>
+<li>It allows the network to predict any value in the real number range</li>
+<li>It doesn't constrain the output, which is usually necessary for regression</li>
+<li>It works well with common regression loss functions like MSE</li>
+</ul>
+<p>However, if your regression target has known constraints, consider these alternatives:</p>
+<ul>
+<li>For strictly positive outputs (e.g., prices, counts): ReLU or Softplus</li>
+<li>For outputs bounded between 0 and 1 (e.g., percentages): Sigmoid</li>
+<li>For outputs bounded between -1 and 1: Tanh</li>
+</ul>
+<p>Matching your output activation to the natural range of your target variable can improve
+model performance and convergence speed.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_OutputVectorActivation_" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.OutputVectorActivation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_OutputVectorActivation" data-uid="AiDotNet.Models.Options.NeuralNetworkRegressionOptions`3.OutputVectorActivation">
+  OutputVectorActivation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the vector activation function applied to the outputs of the final layer neurons.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IVectorActivationFunction&lt;T&gt;? OutputVectorActivation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The output layer vector activation function, defaulting to null.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkRegressionOptions_3_OutputVectorActivation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property allows you to specify a vector-based activation function for the output layer, which can
+operate directly on vectors or tensors rather than individual scalar values. Vector activation functions
+can be more computationally efficient as they can leverage optimized vector operations. If both this
+property and OutputActivationFunction are set, this vector implementation takes precedence.
+</p>
+<p><b>For Beginners:</b> This is an advanced setting that provides a more efficient way
+to apply activation functions to the output layer all at once.
+<p>The default value of null means:</p>
+<ul>
+<li>The system will use the scalar OutputActivationFunction instead</li>
+<li>Each output neuron will be processed individually</li>
+</ul>
+<p>You might want to set this if:</p>
+<ul>
+<li>You're working with very large networks where performance is critical</li>
+<li>You have a custom vector-optimized activation function</li>
+<li>You're using hardware acceleration that benefits from vectorized operations</li>
+</ul>
+<p>In most cases, you can leave this as null and just use the OutputActivationFunction property,
+which is more intuitive and works for all scenarios.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkRegressionOptions.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

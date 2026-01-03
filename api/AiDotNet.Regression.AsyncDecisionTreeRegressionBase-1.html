@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AsyncDecisionTreeRegressionBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AsyncDecisionTreeRegressionBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents an abstract base class for asynchronous decision tree regression models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.AsyncDecisionTreeRegressionBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1">
+
+
+
+  <h1 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1" class="text-break">
+Class AsyncDecisionTreeRegressionBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents an abstract base class for asynchronous decision tree regression models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class AsyncDecisionTreeRegressionBase&lt;T&gt; : IAsyncTreeBasedModel&lt;T&gt;, ITreeBasedRegression&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AsyncDecisionTreeRegressionBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAsyncTreeBasedModel-1.html">IAsyncTreeBasedModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITreeBasedRegression-1.html">ITreeBasedRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Regression.AdaBoostR2Regression-1.html">AdaBoostR2Regression&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.ConditionalInferenceTreeRegression-1.html">ConditionalInferenceTreeRegression&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.ExtremelyRandomizedTreesRegression-1.html">ExtremelyRandomizedTreesRegression&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.GradientBoostingRegression-1.html">GradientBoostingRegression&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.M5ModelTree-1.html">M5ModelTree&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.QuantileRegressionForests-1.html">QuantileRegressionForests&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.RandomForestRegression-1.html">RandomForestRegression&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides a foundation for implementing decision tree regression models that can be trained
+and used for predictions asynchronously. It includes methods for training, prediction, serialization,
+and deserialization of the model.
+</p>
+<p><b>For Beginners:</b> A decision tree is a type of machine learning model that makes predictions
+by following a series of yes/no questions about the input data. It's like a flowchart that helps the
+computer decide what prediction to make.
+<p>For example, if you're trying to predict if it will rain:</p>
+<ul>
+<li>Is the humidity high? If yes, go to next question. If no, predict no rain.</li>
+<li>Are there clouds? If yes, predict rain. If no, predict no rain.</li>
+</ul>
+<p>This class provides the basic structure for building these types of models, but with more complex
+questions and answers based on numerical data.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1__ctor_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1__ctor_AiDotNet_Models_Options_DecisionTreeOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.#ctor(AiDotNet.Models.Options.DecisionTreeOptions,AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.Interfaces.ILossFunction{`0})">
+  AsyncDecisionTreeRegressionBase(DecisionTreeOptions?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the AsyncDecisionTreeRegressionBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html">DecisionTreeOptions</a></dt>
+    <dd><p>The options for configuring the decision tree.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The regularization method to use.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>Loss function for gradient computation. If null, defaults to Mean Squared Error.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_NumOps" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the numeric operations for the type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Root" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Root">
+  Root
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the root node of the decision tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected DecisionTreeNode&lt;T&gt;? Root</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LinearAlgebra.DecisionTreeNode-1.html">DecisionTreeNode</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DefaultLossFunction_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.DefaultLossFunction*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DefaultLossFunction" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.DefaultLossFunction">
+  DefaultLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L912"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default loss function used by this model for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ILossFunction&lt;T&gt; DefaultLossFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DefaultLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This loss function is used when calling <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;?)</a>
+without explicitly providing a loss function. It represents the model's primary training objective.
+</p>
+<p><b>For Beginners:</b>
+The loss function tells the model "what counts as a mistake". For example:
+- For regression (predicting numbers): Mean Squared Error measures how far predictions are from actual values
+- For classification (predicting categories): Cross Entropy measures how confident the model is in the right category
+<p>This property provides a sensible default so you don't have to specify the loss function every time,
+but you can still override it if needed for special cases.</p>
+
+<p><b>Distributed Training:</b>
+In distributed training, all workers use the same loss function to ensure consistent gradient computation.
+The default loss function is automatically used when workers compute local gradients.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if accessed before the model has been configured with a loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Engine_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Engine*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Engine" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global execution engine for vector operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureImportances_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.FeatureImportances*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureImportances" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.FeatureImportances">
+  FeatureImportances
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the importance of each feature in making predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; FeatureImportances { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureImportances_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Feature importance tells you how much each input variable (feature)
+contributes to the model's predictions. Higher values mean that feature is more important.
+<p>For example, if predicting house prices:</p>
+<ul>
+<li>Location might have high importance (big impact on price)</li>
+<li>Wall color might have low importance (small impact on price)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureNames_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.FeatureNames*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureNames" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.FeatureNames">
+  FeatureNames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the feature names.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[]? FeatureNames { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>An array of feature names. If not set, feature indices will be used as names.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_MaxDepth_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.MaxDepth*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_MaxDepth" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.MaxDepth">
+  MaxDepth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum depth of the decision tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int MaxDepth { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_MaxDepth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The maximum depth is the longest path from the root of the tree to a leaf.
+A deeper tree can capture more complex patterns but may also overfit to the training data.
+<p>Imagine a game of &quot;20 Questions&quot;:</p>
+<ul>
+<li>A shallow tree is like having only 5 questions (less detailed, but quicker).</li>
+<li>A deep tree is like having all 20 questions (more detailed, but might be too specific).</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_NumberOfTrees_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.NumberOfTrees*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_NumberOfTrees" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.NumberOfTrees">
+  NumberOfTrees
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of trees in the model. For a single decision tree, this is always 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int NumberOfTrees { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Options_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Options*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Options" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the options used to configure the decision tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected DecisionTreeOptions Options { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html">DecisionTreeOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ParameterCount_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ParameterCount" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L900"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Random_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Random*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Random" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Random">
+  Random
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random number generator used for tree building and sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Random Random { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Regularization_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Regularization*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Regularization" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Regularization">
+  Regularization
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the regularization method used to prevent overfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Regularization { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Regularization_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Regularization is a technique used to prevent the model from becoming
+too complex and fitting the training data too closely. This helps the model generalize better
+to new, unseen data.
+<p>Think of it like learning to ride a bike:</p>
+<ul>
+<li>Without regularization, you might only learn to ride on one specific path.</li>
+<li>With regularization, you learn general bike-riding skills that work on many different paths.</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SoftTreeTemperature_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SoftTreeTemperature*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SoftTreeTemperature" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SoftTreeTemperature">
+  SoftTreeTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L1088"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the temperature parameter for soft decision tree mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SoftTreeTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The temperature for sigmoid gating. Lower values produce sharper decisions.
+Default is 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SoftTreeTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Only used when <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree">UseSoftTree</a> is enabled. Controls the smoothness of
+the soft split operations:
+</p>
+<ul><li>Lower temperature (e.g., 0.1) = sharper, more discrete decisions</li><li>Higher temperature (e.g., 10.0) = softer, more blended decisions</li></ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SupportsJitCompilation_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SupportsJitCompilation" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L1123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model currently supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> when <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree">UseSoftTree</a> is enabled and the tree has been trained;
+<code>false</code> otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree">UseSoftTree</a> is enabled, the decision tree can be exported as a
+differentiable computation graph using soft (sigmoid-based) gating. This enables
+JIT compilation for optimized inference.
+</p>
+<p>
+When <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree">UseSoftTree</a> is disabled, JIT compilation is not supported because
+traditional hard decision trees use branching logic that cannot be represented as
+a static computation graph.
+</p>
+<p><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
+<p>In soft tree mode, the discrete if-then decisions are replaced with smooth sigmoid
+functions that can be compiled into an optimized computation graph. This gives you
+the interpretability of decision trees with the speed of JIT-compiled models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.UseSoftTree*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.UseSoftTree">
+  UseSoftTree
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L1065"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use soft (differentiable) tree mode for JIT compilation support.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseSoftTree { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> to enable soft tree mode; <code>false</code> (default) for traditional hard decision trees.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the decision tree uses sigmoid-based soft gating instead of hard if-then splits.
+This makes the tree differentiable and enables JIT compilation support.
+</p>
+<p>
+Formula at each split: output = σ((threshold - x[feature]) / temperature) * left + (1 - σ) * right
+where σ is the sigmoid function.
+</p>
+<p><b>For Beginners:</b> Soft tree mode allows the decision tree to be JIT compiled for faster inference.
+<p>Traditional decision trees make hard yes/no decisions:</p>
+<ul>
+<li>&quot;If feature &gt; 5, go LEFT, otherwise go RIGHT&quot;</li>
+</ul>
+<p>Soft trees use smooth transitions instead:</p>
+<ul>
+<li>Near the boundary, the output blends both left and right paths</li>
+<li>This creates a smooth, differentiable function that can be JIT compiled</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ApplyGradients_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L1003"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to update the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for the update.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Updates parameters using: θ = θ - learningRate * gradients
+</p>
+<p><b>For Beginners:</b>
+After computing gradients (seeing which direction to move),
+this method actually moves the model in that direction.
+The learning rate controls how big of a step to take.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, this applies the synchronized (averaged) gradients after
+communication across workers. Each worker applies the same averaged gradients
+to keep parameters consistent.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_CalculateFeatureImportancesAsync_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.CalculateFeatureImportancesAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_CalculateFeatureImportancesAsync_System_Int32_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.CalculateFeatureImportancesAsync(System.Int32)">
+  CalculateFeatureImportancesAsync(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously calculates the importance of each feature in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract Task CalculateFeatureImportancesAsync(int featureCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of features in the input data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task representing the asynchronous operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_CalculateFeatureImportancesAsync_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method figures out how much each input feature contributes
+to the model's predictions. It helps you understand which pieces of information are most
+useful for making accurate predictions.
+<p>For example, in predicting house prices:</p>
+<ul>
+<li>It might find that location is very important</li>
+<li>While the house's paint color is less important</li>
+</ul>
+<p>This can help you focus on collecting the most relevant data for future predictions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Clone_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Clone" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L667"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a clone of the decision tree model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the model with the same parameters and tree structure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a complete copy of the asynchronous decision tree model, including the entire tree structure
+and all learned parameters. Specific implementations should override this method to ensure all
+implementation-specific properties are properly copied.
+</p>
+<p><b>For Beginners:</b> This method creates an exact independent copy of your model.
+<p>Cloning a model means creating a new model that's exactly the same as the original,
+including all its learned parameters and settings. However, the clone is independent -
+changes to one model won't affect the other.</p>
+<p>Think of it like photocopying a document - the copy has all the same information,
+but you can mark up the copy without changing the original.</p>
+<p>Note: Specific decision tree algorithms will customize this method to ensure all their
+unique properties are properly copied.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ComputeGradients_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.ComputeGradients(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L935"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss function with respect to model parameters for the given data,
+WITHOUT updating the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; ComputeGradients(Matrix&lt;T&gt; input, Vector&lt;T&gt; target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target/expected output.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use for gradient computation. If null, uses the model's default loss function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing gradients with respect to all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a forward pass, computes the loss, and back-propagates to compute gradients,
+but does NOT update the model's parameters. The parameters remain unchanged after this call.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, each worker calls this to compute local gradients on its data batch.
+These gradients are then synchronized (averaged) across workers before applying updates.
+This ensures all workers compute the same parameter updates despite having different data.
+</p>
+<p><b>For Meta-Learning:</b>
+After adapting a model on a support set, you can use this method to compute gradients
+on the query set. These gradients become the meta-gradients for updating the meta-parameters.
+</p>
+<p><b>For Beginners:</b>
+Think of this as "dry run" training:
+- The model sees what direction it should move (the gradients)
+- But it doesn't actually move (parameters stay the same)
+- You get to decide what to do with this information (average with others, inspect, modify, etc.)
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>If lossFunction is null and the model has no default loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_CreateNewInstance_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_CreateNewInstance" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L712"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the async decision tree model with the same options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the model with the same configuration but no trained parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_CreateNewInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by derived classes to create a new instance of the specific
+decision tree model type with the same configuration options but without copying the trained parameters.
+</p>
+<p><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+any learned parameters.
+<p>Think of it like getting a blank notepad with the same paper quality and size,
+but without any writing on it yet. The new model has the same:</p>
+<ul>
+<li>Maximum depth setting</li>
+<li>Minimum samples split setting</li>
+<li>Split criterion (how nodes decide which feature to split on)</li>
+<li>Other configuration options</li>
+</ul>
+<p>But it doesn't have any of the actual tree structure that was learned from data.</p>
+<p>This is mainly used internally when doing things like cross-validation or
+creating ensembles of similar models with different training data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DeepCopy_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DeepCopy" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L639"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the decision tree model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the model with the same parameters and tree structure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DeepCopy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a complete copy of the asynchronous decision tree model, including all nodes, connections,
+and learned parameters. The copy is independent of the original model, so modifications to one
+don't affect the other.
+</p>
+<p><b>For Beginners:</b> This method creates an exact independent copy of your model.
+<p>The copy has the same:</p>
+<ul>
+<li>Tree structure (all nodes and their connections)</li>
+<li>Decision rules (which features to split on and at what values)</li>
+<li>Prediction values at leaf nodes</li>
+<li>Feature importance scores</li>
+</ul>
+<p>But it's completely separate from the original model - changes to one won't affect the other.</p>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Experiment with modifying a model without affecting the original</li>
+<li>Create multiple similar models to use in different contexts</li>
+<li>Save a &quot;checkpoint&quot; of your model before making changes</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Deserialize_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Deserialize(byte[] modelData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Deserialization is the process of reconstructing the model from
+saved data. It's like unpacking the model from the suitcase you packed it in earlier.
+<p>This method:</p>
+<ul>
+<li>Reads the saved settings and restores them</li>
+<li>Rebuilds the decision tree structure</li>
+<li>Sets up the feature importances</li>
+</ul>
+<p>After calling this method, your model will be ready to use for making predictions,
+just like it was before you serialized it.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ExportComputationGraph_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L1151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the model's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The root node of the exported computation graph.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When soft tree mode is enabled, this exports the tree as a differentiable computation
+graph using <a class="xref" href="AiDotNet.Autodiff.TensorOperations-1.html#AiDotNet_Autodiff_TensorOperations_1_SoftSplit_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0__System_Int32__0__0_">SoftSplit(ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;, int, T, T?)</a> operations. Each internal
+node becomes a soft split operation that computes sigmoid-weighted combinations of
+left and right subtree outputs.
+</p>
+<p><b>For Beginners:</b> This method converts the decision tree into a computation graph.
+<p>In soft tree mode, each decision node becomes a smooth blend:</p>
+<ul>
+<li>Instead of &quot;go left OR right&quot;, it computes &quot;X% left + Y% right&quot;</li>
+<li>The percentages are determined by the sigmoid function</li>
+<li>This creates a smooth, differentiable function that can be JIT compiled</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree">UseSoftTree</a> is false.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the tree has not been trained (Root is null).</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetActiveFeatureIndices_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.GetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetActiveFeatureIndices" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.GetActiveFeatureIndices">
+  GetActiveFeatureIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L516"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of all features that are used in the decision tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IEnumerable&lt;int&gt; GetActiveFeatureIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>An enumerable collection of indices for features used in the tree.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetActiveFeatureIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method identifies all features that are used as split criteria in the decision tree.
+Features that don't appear in any decision node are not considered active.
+</p>
+<p><b>For Beginners:</b> This method tells you which input features are actually used in the tree.
+<p>Decision trees often don't use all available features - they select the most informative ones
+during training. This method returns the positions (indices) of features that are actually
+used in decision nodes throughout the tree.</p>
+<p>For example, if your dataset has 10 features but the tree only uses features at positions
+2, 5, and 7, this method would return [2, 5, 7].</p>
+<p>This is useful for:</p>
+<ul>
+<li>Feature selection (identifying which features matter)</li>
+<li>Model simplification (removing unused features)</li>
+<li>Understanding which inputs actually affect the prediction</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetFeatureImportance_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetFeatureImportance" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.GetFeatureImportance">
+  GetFeatureImportance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L571"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores as a dictionary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, T&gt; GetFeatureImportance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary mapping feature names to their importance scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetModelMetadata_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetModelMetadata" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Model metadata is information about the trained model itself,
+not about the predictions it makes. This can include things like:
+<ul>
+<li>How well the model performs</li>
+<li>How complex the model is</li>
+<li>What settings were used to train it</li>
+</ul>
+<p>It's like getting a report card for your model, showing how well it learned and what it learned.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetParameters_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetParameters" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L400"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the model parameters as a vector representation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing a serialized representation of the decision tree structure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides a vector representation of the asynchronous decision tree model. Decision trees
+have a hierarchical structure that doesn't naturally fit into a flat vector format,
+so this representation is a simplified encoding of the tree structure suitable for
+certain optimization algorithms or model comparison techniques.
+</p>
+<p><b>For Beginners:</b> This method converts the tree structure into a flat list of numbers.
+<p>Decision trees are complex structures with branches and nodes, which don't naturally fit
+into a simple list of parameters like linear models do. This method creates a specialized
+representation of the tree that can be used by certain algorithms or for model comparison.</p>
+<p>The exact format of this representation depends on the specific implementation, but
+generally includes information about:</p>
+<ul>
+<li>Each node's feature index (which feature it splits on)</li>
+<li>Each node's split value (the threshold for the decision)</li>
+<li>Each node's prediction value (for leaf nodes)</li>
+<li>The tree structure (how nodes connect to each other)</li>
+</ul>
+<p>This is primarily used by advanced algorithms and not typically needed for regular use.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_IsFeatureUsed_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.IsFeatureUsed*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_IsFeatureUsed_System_Int32_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.IsFeatureUsed(System.Int32)">
+  IsFeatureUsed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L544"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether a specific feature is used in the decision tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool IsFeatureUsed(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index of the feature to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the feature is used in at least one decision node; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_IsFeatureUsed_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method checks whether a specific feature is used as a split criterion in any node of the decision tree.
+</p>
+<p><b>For Beginners:</b> This method checks if a specific input feature is used in the tree.
+<p>You provide the position (index) of a feature, and the method tells you whether that feature
+is used in any decision node throughout the tree.</p>
+<p>For example, if feature #3 is never used to make a decision in the tree, this method would
+return false because that feature doesn't affect the model's predictions.</p>
+<p>This is useful when you want to check a specific feature's importance rather than
+getting all important features at once.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadModel_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.LoadModel*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadModel_System_String_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L879"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path from which to load the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadState_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.LoadState*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadState_System_IO_Stream_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L1029"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model's state from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Predict_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes predictions using the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix to make predictions for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predictions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method is a synchronous wrapper around the asynchronous PredictAsync method.
+It does the same thing as PredictAsync, but it waits for the predictions to be made before moving on.
+<p>Use this method when you want to get predictions immediately and wait for them to be ready.
+It's like asking a question and waiting for the answer before you do anything else.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_PredictAsync_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.PredictAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_PredictAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.PredictAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PredictAsync(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously makes predictions using the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Task&lt;Vector&lt;T&gt;&gt; PredictAsync(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix to make predictions for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A task representing the asynchronous operation, which resolves to a vector of predictions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_PredictAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Prediction is using the trained model to estimate outcomes for new data.
+It's like using what the model learned to make educated guesses about new situations.
+<p>For example, if you trained a model on house features and prices:</p>
+<ul>
+<li>Input: Features of a new house (size, location, etc.)</li>
+<li>Output: The model's estimate of what that house might cost</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveModel_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SaveModel*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveModel_System_String_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L852"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveState_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SaveState*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveState_System_IO_Stream_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L1017"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model's current state to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Serialize_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Serialize" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array representing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Serialization is the process of converting the model into a format
+that can be easily stored or transmitted. It's like packing up the model into a suitcase so you
+can take it with you or save it for later.
+<p>This method saves:</p>
+<ul>
+<li>The model's settings (like max depth)</li>
+<li>The importance of each feature</li>
+<li>The structure of the decision tree</li>
+</ul>
+<p>You can use this to save your trained model and load it later without having to retrain.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetActiveFeatureIndices_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SetActiveFeatureIndices(System.Collections.Generic.IEnumerable{System.Int32})">
+  SetActiveFeatureIndices(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L562"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active feature indices for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The indices of features to activate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetParameters_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L553"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the parameters for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Train_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Train*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the decision tree model on the provided data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Train(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method is a synchronous wrapper around the asynchronous TrainAsync method.
+It does the same thing as TrainAsync, but it waits for the training to complete before moving on.
+<p>Use this method when you want to train the model and wait for it to finish before doing anything else.
+It's like waiting for a cake to finish baking before you start decorating it.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_TrainAsync_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.TrainAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_TrainAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.TrainAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainAsync(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously trains the decision tree model on the provided data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Task TrainAsync(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task representing the asynchronous operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_TrainAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Training is the process where the model learns from the data you provide.
+It's like teaching the model to recognize patterns in your data.
+<ul>
+<li>x: This is your input data, like the features of houses (size, location, etc.)</li>
+<li>y: This is what you're trying to predict, like house prices</li>
+</ul>
+<p>After training, the model will have learned how to use the features to predict the target values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_WithParameters_" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.WithParameters*"></a>
+
+  <h3 id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.AsyncDecisionTreeRegressionBase`1.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L452"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the model with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing a serialized representation of the decision tree structure.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new model instance with the reconstructed tree structure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs a decision tree model from a parameter vector that was previously
+created using the GetParameters method. Due to the complex nature of tree structures,
+this reconstruction is approximate and is primarily intended for use with optimization
+algorithms or model comparison techniques.
+</p>
+<p><b>For Beginners:</b> This method rebuilds a decision tree from a flat list of numbers.
+<p>It takes the specialized vector representation created by GetParameters() and attempts
+to reconstruct a decision tree from it. This is challenging because decision trees
+are complex structures that don't easily convert to and from simple lists of numbers.</p>
+<p>This method is primarily used by advanced algorithms and not typically needed for regular use.
+For most purposes, the Serialize and Deserialize methods provide a more reliable way to
+save and load tree models.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeAsyncRegressionBase.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

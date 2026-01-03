@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HLIRGraph&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HLIRGraph&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="High-Level Intermediate Representation Graph. Represents the complete computation graph at a semantic level.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1.md&amp;value=---%0Auid%3A%20AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1">
+
+
+
+  <h1 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1" class="text-break">
+Class HLIRGraph&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.InferenceOptimization.html">InferenceOptimization</a>.<a class="xref" href="AiDotNet.InferenceOptimization.IR.html">IR</a>.<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.html">HighLevel</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>High-Level Intermediate Representation Graph.
+Represents the complete computation graph at a semantic level.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HLIRGraph&lt;T&gt; where T : struct</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">HLIRGraph&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Design Philosophy:</b></p>
+<p>
+HLIRGraph provides a container for HLIRNodes with efficient traversal, validation,
+and transformation capabilities. It maintains both node-reference and ID-based
+representations for flexibility.
+</p>
+<p><b>Industry Comparison:</b></p>
+<ul><li>TVM Relay: Module with global functions - we add richer graph operations</li><li>MLIR: ModuleOp with nested regions - we simplify for ML workloads</li><li>XLA HLO: HloModule with computations - we add bidirectional edges</li><li>ONNX: GraphProto - we add dynamic modification support</li></ul>
+<p><b>Exceeds Standards By:</b></p>
+<ul><li>Incremental validation and repair</li><li>Built-in pattern matching for optimization passes</li><li>Automatic ID management with compaction</li><li>Comprehensive graph statistics and profiling</li><li>Subgraph extraction and splicing</li></ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_InputNodes_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.InputNodes*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_InputNodes" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.InputNodes">
+  InputNodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Input nodes (nodes with no inputs).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;HLIRNode&lt;T&gt;&gt; InputNodes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Metadata_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Metadata*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Metadata" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Graph-level metadata.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metadata { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Name_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Name*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Name" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Graph name for debugging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_NodeCount_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.NodeCount*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_NodeCount" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.NodeCount">
+  NodeCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NodeCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Nodes_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Nodes*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Nodes" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Nodes">
+  Nodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>All nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;HLIRNode&lt;T&gt;&gt; Nodes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_OutputNodes_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.OutputNodes*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_OutputNodes" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.OutputNodes">
+  OutputNodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Output nodes (nodes with no outputs, or explicitly marked).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;HLIRNode&lt;T&gt;&gt; OutputNodes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Version_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Version*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Version" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Version">
+  Version
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Version number, incremented on each modification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Version { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_AddNode_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.AddNode*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_AddNode_AiDotNet_InferenceOptimization_IR_HighLevel_HLIRNode__0__" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.AddNode(AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode{`0})">
+  AddNode(HLIRNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a new node to the graph, assigning it a unique ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HLIRNode&lt;T&gt; AddNode(HLIRNode&lt;T&gt; node)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>node</code> <a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_BreadthFirstFromInputs_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.BreadthFirstFromInputs*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_BreadthFirstFromInputs" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.BreadthFirstFromInputs">
+  BreadthFirstFromInputs()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Iterates over all nodes in BFS order from inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;HLIRNode&lt;T&gt;&gt; BreadthFirstFromInputs()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Clone_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Clone*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Clone" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L613"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HLIRGraph&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph-1.html">HLIRGraph</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_CompactNodeIds_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.CompactNodeIds*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_CompactNodeIds" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.CompactNodeIds">
+  CompactNodeIds()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L710"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compacts node IDs to be sequential starting from 0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CompactNodeIds()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_CreateNode_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.CreateNode*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_CreateNode_AiDotNet_Enums_OperationType_System_String_AiDotNet_InferenceOptimization_IR_HighLevel_HLIRNode__0____" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.CreateNode(AiDotNet.Enums.OperationType,System.String,AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode{`0}[])">
+  CreateNode(OperationType, string, params HLIRNode&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates and adds a new node with the specified operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HLIRNode&lt;T&gt; CreateNode(OperationType operation, string name, params HLIRNode&lt;T&gt;[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>operation</code> <a class="xref" href="AiDotNet.Enums.OperationType.html">OperationType</a></dt>
+    <dd></dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_ExtractSubgraph_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.ExtractSubgraph*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_ExtractSubgraph_System_Collections_Generic_IEnumerable_AiDotNet_InferenceOptimization_IR_HighLevel_HLIRNode__0___" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.ExtractSubgraph(System.Collections.Generic.IEnumerable{AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode{`0}})">
+  ExtractSubgraph(IEnumerable&lt;HLIRNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L660"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a subgraph containing specified nodes and their dependencies.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HLIRGraph&lt;T&gt; ExtractSubgraph(IEnumerable&lt;HLIRNode&lt;T&gt;&gt; nodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph-1.html">HLIRGraph</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindDiamondPatterns_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindDiamondPatterns*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindDiamondPatterns" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindDiamondPatterns">
+  FindDiamondPatterns()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L391"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds diamond patterns (fork-join).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;(HLIRNode&lt;T&gt; fork, List&lt;HLIRNode&lt;T&gt;&gt; branches, HLIRNode&lt;T&gt; join)&gt; FindDiamondPatterns()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;(<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0-,system.collections.generic.list-aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0--,aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0--.fork">fork</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0-,system.collections.generic.list-aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0--,aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0--.branches">branches</a>, <a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0-,system.collections.generic.list-aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0--,aidotnet.inferenceoptimization.ir.highlevel.hlirnode--0--.join">join</a>)&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindNode_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindNode*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindNode_System_Int32_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindNode(System.Int32)">
+  FindNode(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds a node by ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HLIRNode&lt;T&gt;? FindNode(int id)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>id</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindNodesByName_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindNodesByName*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindNodesByName_System_String_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindNodesByName(System.String)">
+  FindNodesByName(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds nodes by name (partial match).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;HLIRNode&lt;T&gt;&gt; FindNodesByName(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindNodesByOperation_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindNodesByOperation*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindNodesByOperation_AiDotNet_Enums_OperationType_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindNodesByOperation(AiDotNet.Enums.OperationType)">
+  FindNodesByOperation(OperationType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds nodes by operation type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;HLIRNode&lt;T&gt;&gt; FindNodesByOperation(OperationType operation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>operation</code> <a class="xref" href="AiDotNet.Enums.OperationType.html">OperationType</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindPatterns_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindPatterns*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_FindPatterns_AiDotNet_Enums_OperationType___" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.FindPatterns(AiDotNet.Enums.OperationType[])">
+  FindPatterns(params OperationType[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L340"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds sequences of nodes matching an operation pattern.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;List&lt;HLIRNode&lt;T&gt;&gt;&gt; FindPatterns(params OperationType[] pattern)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pattern</code> <a class="xref" href="AiDotNet.Enums.OperationType.html">OperationType</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_GetReverseTopologicalOrder_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.GetReverseTopologicalOrder*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_GetReverseTopologicalOrder" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.GetReverseTopologicalOrder">
+  GetReverseTopologicalOrder()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L296"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets nodes in reverse topological order (outputs before inputs).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;HLIRNode&lt;T&gt;&gt; GetReverseTopologicalOrder()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new list containing nodes in reverse topological order (does not modify cached order).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_GetStatistics_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.GetStatistics*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_GetStatistics" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.GetStatistics">
+  GetStatistics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L543"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets comprehensive graph statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HLIRGraphStatistics GetStatistics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraphStatistics.html">HLIRGraphStatistics</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_GetTopologicalOrder_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.GetTopologicalOrder*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_GetTopologicalOrder" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.GetTopologicalOrder">
+  GetTopologicalOrder()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L240"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets nodes in topological order (inputs before outputs).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;HLIRNode&lt;T&gt;&gt; GetTopologicalOrder()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_RemoveNode_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.RemoveNode*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_RemoveNode_AiDotNet_InferenceOptimization_IR_HighLevel_HLIRNode__0__" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.RemoveNode(AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode{`0})">
+  RemoveNode(HLIRNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes a node from the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RemoveNode(HLIRNode&lt;T&gt; node)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>node</code> <a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_ReplaceNode_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.ReplaceNode*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_ReplaceNode_AiDotNet_InferenceOptimization_IR_HighLevel_HLIRNode__0__AiDotNet_InferenceOptimization_IR_HighLevel_HLIRNode__0__" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.ReplaceNode(AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode{`0},AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode{`0})">
+  ReplaceNode(HLIRNode&lt;T&gt;, HLIRNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Replaces a node with another, updating all connections.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceNode(HLIRNode&lt;T&gt; oldNode, HLIRNode&lt;T&gt; newNode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>oldNode</code> <a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;</dt>
+    <dd><p>The existing node to replace.</p>
+</dd>
+    <dt><code>newNode</code> <a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRNode-1.html">HLIRNode</a>&lt;T&gt;</dt>
+    <dd><p>The new node to insert in its place.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_ReplaceNode_AiDotNet_InferenceOptimization_IR_HighLevel_HLIRNode__0__AiDotNet_InferenceOptimization_IR_HighLevel_HLIRNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a complete replacement by:
+<ol><li>Copying all input connections from oldNode to newNode</li><li>Redirecting all output connections from oldNode to newNode</li><li>Adding newNode to the graph</li><li>Removing oldNode from the graph</li></ol>
+
+<p>
+If newNode has the same ID as oldNode, a new ID will be automatically assigned
+to avoid conflicts during the replacement process.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when oldNode is not in the graph.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_ToString_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.ToString*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_ToString" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L745"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string that represents the current object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string that represents the current object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Validate_" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Validate*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph_1_Validate" data-uid="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph`1.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L457"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the graph structure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValidationResult Validate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.ValidationResult.html">ValidationResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/HighLevel/HLIRGraph.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

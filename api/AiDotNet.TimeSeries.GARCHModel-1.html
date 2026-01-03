@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GARCHModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GARCHModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a Generalized Autoregressive Conditional Heteroskedasticity (GARCH) model for time series with changing volatility.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TimeSeries_GARCHModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.TimeSeries.GARCHModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TimeSeries.GARCHModel`1">
+
+
+
+  <h1 id="AiDotNet_TimeSeries_GARCHModel_1" data-uid="AiDotNet.TimeSeries.GARCHModel`1" class="text-break">
+Class GARCHModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TimeSeries.html">TimeSeries</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a Generalized Autoregressive Conditional Heteroskedasticity (GARCH) model for time series with changing volatility.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GARCHModel&lt;T&gt; : TimeSeriesModelBase&lt;T&gt;, ITimeSeriesModel&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html">TimeSeriesModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">GARCHModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesModel-1.html">ITimeSeriesModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options">TimeSeriesModelBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps">TimeSeriesModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine">TimeSeriesModelBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters">TimeSeriesModelBase&lt;T&gt;.ModelParameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained">TimeSeriesModelBase&lt;T&gt;.IsTrained</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics">TimeSeriesModelBase&lt;T&gt;.LastEvaluationMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0__">TimeSeriesModelBase&lt;T&gt;.ValidateOptions(TimeSeriesRegressionOptions&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ValidateTrainingInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">TimeSeriesModelBase&lt;T&gt;.ValidatePredictionInput(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.CalculateErrorMetrics(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize">TimeSeriesModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_System_Byte___">TimeSeriesModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters">TimeSeriesModelBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ApplyParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices">TimeSeriesModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_System_Int32_">TimeSeriesModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_System_Int32_">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">TimeSeriesModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy">TimeSeriesModelBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clone">TimeSeriesModelBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip__0__0__0_">TimeSeriesModelBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.Forecast(Vector&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_System_Collections_Generic_List__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.PrepareForecastFeatures(List&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount">TimeSeriesModelBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_System_String_">TimeSeriesModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_System_String_">TimeSeriesModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction">TimeSeriesModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">TimeSeriesModelBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">TimeSeriesModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SupportsJitCompilation">TimeSeriesModelBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">TimeSeriesModelBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_TimeSeries_GARCHModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The GARCH model is specifically designed for time series data that exhibits volatility clustering, where periods of high 
+volatility are followed by periods of high volatility, and periods of low volatility are followed by periods of low volatility.
+It combines a mean model (typically an ARIMA model) with a variance model that captures the conditional heteroskedasticity.
+</p>
+<p><b>For Beginners:</b> GARCH models help predict both the value and the uncertainty of financial data.
+<p>Think of it like weather forecasting:</p>
+<ul>
+<li>Regular forecasting predicts the temperature (the mean value)</li>
+<li>GARCH also predicts how much the temperature might vary (the volatility)</li>
+</ul>
+<p>For example, with stock prices:</p>
+<ul>
+<li>Some days, prices barely change (low volatility)</li>
+<li>Other days, prices swing wildly up and down (high volatility)</li>
+<li>Often, volatile periods tend to cluster together (volatility clustering)</li>
+</ul>
+<p>GARCH helps model this behavior by:</p>
+<ul>
+<li>Using one model to predict the average price (mean model)</li>
+<li>Using another model to predict how much prices might fluctuate (volatility model)</li>
+</ul>
+<p>This is especially useful for financial risk management, option pricing, and trading strategies.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1__ctor_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1__ctor_AiDotNet_Models_Options_GARCHModelOptions__0__" data-uid="AiDotNet.TimeSeries.GARCHModel`1.#ctor(AiDotNet.Models.Options.GARCHModelOptions{`0})">
+  GARCHModel(GARCHModelOptions&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.TimeSeries.GARCHModel-1.html">GARCHModel&lt;T&gt;</a> class with the specified options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GARCHModel(GARCHModelOptions&lt;T&gt;? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.GARCHModelOptions-1.html">GARCHModelOptions</a>&lt;T&gt;</dt>
+    <dd><p>The configuration options for the GARCH model. If null, default options are used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1__ctor_AiDotNet_Models_Options_GARCHModelOptions__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor initializes the GARCH model with the provided configuration options or default options if none
+are specified. The options determine parameters such as the ARCH and GARCH orders, the mean model to use,
+and various other settings that control the model's behavior.
+</p>
+<p><b>For Beginners:</b> This sets up your GARCH model with your chosen settings.
+<p>When creating the model, you can specify:</p>
+<ul>
+<li>ARCHOrder: How many past squared errors to consider</li>
+<li>GARCHOrder: How many past volatilities to consider</li>
+<li>MeanModel: The model used to predict the average value</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>GARCH(1,1) is common, meaning 1 past error term and 1 past volatility term</li>
+<li>Higher orders (like GARCH(2,2)) capture more complex patterns but need more data</li>
+</ul>
+<p>If you don't provide options, the model uses sensible defaults.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_CreateInstance_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_CreateInstance" data-uid="AiDotNet.TimeSeries.GARCHModel`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L972"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the GARCH model with the same options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the GARCH model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new instance of the GARCH model with the same configuration options as the current instance.
+This is useful for creating copies or clones of the model for purposes like cross-validation or ensemble modeling.
+</p>
+<p><b>For Beginners:</b> This creates a new copy of the model with the same settings.
+<p>Creating a new instance:</p>
+<ul>
+<li>Makes a fresh copy of the model with the same configuration</li>
+<li>The new copy hasn't been trained yet</li>
+<li>You can train and use the copy independently from the original</li>
+</ul>
+<p>This is helpful when you want to:</p>
+<ul>
+<li>Train multiple versions of the same model on different data subsets</li>
+<li>Compare different training approaches while keeping the base configuration the same</li>
+<li>Create an ensemble of similar models</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_DeserializeCore_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.DeserializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_DeserializeCore_System_IO_BinaryReader_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.DeserializeCore(System.IO.BinaryReader)">
+  DeserializeCore(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L904"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model's core parameters from a binary reader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeCore(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_DeserializeCore_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reads the model's essential parameters from a binary stream, allowing a previously saved model
+to be loaded from a file or database. The deserialized parameters include the GARCH parameters (omega, alpha, beta),
+the residuals, the conditional variances, and the model options.
+</p>
+<p><b>For Beginners:</b> This loads a previously saved model.
+<p>The method:</p>
+<ul>
+<li>Reads the saved model data from a file or database</li>
+<li>Converts this data back into the model's parameters</li>
+<li>Reconstructs the model exactly as it was when saved</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>You want to use a model that took a long time to train</li>
+<li>You want to ensure consistent results across different runs</li>
+<li>You need to deploy the model in a production environment</li>
+</ul>
+<p>Think of it like opening a document you previously saved, allowing you
+to continue using the model without having to train it again.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_EvaluateModel_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.EvaluateModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.GARCHModel`1.EvaluateModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L827"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the model's performance on test data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, T&gt; EvaluateModel(Matrix&lt;T&gt; xTest, Vector&lt;T&gt; yTest)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The test input features matrix.</p>
+</dd>
+    <dt><code>yTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The test target values vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary containing various evaluation metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method evaluates the model's performance on test data by generating predictions and calculating
+various error metrics. The returned metrics include Mean Squared Error (MSE), Root Mean Squared Error (RMSE),
+Mean Absolute Error (MAE), and Mean Absolute Percentage Error (MAPE).
+</p>
+<p><b>For Beginners:</b> This measures how accurate the model's predictions are.
+<p>The evaluation:</p>
+<ul>
+<li>Makes predictions for data the model hasn't seen before</li>
+<li>Compares these predictions to the actual values</li>
+<li>Calculates different types of error measurements:
+<ul>
+<li>MSE (Mean Squared Error): Average of squared differences</li>
+<li>RMSE (Root Mean Squared Error): Square root of MSE, in the same units as your data</li>
+<li>MAE (Mean Absolute Error): Average of absolute differences</li>
+<li>MAPE (Mean Absolute Percentage Error): Average percentage difference</li>
+</ul>
+</li>
+</ul>
+<p>These metrics help you understand how well your model is likely to perform
+when forecasting new data. Lower values indicate better performance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_GetModelMetadata_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_GetModelMetadata" data-uid="AiDotNet.TimeSeries.GARCHModel`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L1003"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns metadata about the model, including its type, parameters, and configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns detailed metadata about the GARCH model, including its type, current parameters (omega, alpha, beta),
+and configuration options. This metadata can be used for model selection, comparison, documentation, and serialization purposes.
+</p>
+<p><b>For Beginners:</b> This provides information about your model's settings and state.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (GARCH)</li>
+<li>Current parameter values (omega, alpha, beta)</li>
+<li>Information about the mean model</li>
+<li>Configuration settings from when you created the model</li>
+<li>A serialized version of the entire model</li>
+</ul>
+<p>This information is useful for:</p>
+<ul>
+<li>Keeping track of different models you've created</li>
+<li>Comparing model configurations</li>
+<li>Documenting which settings worked best</li>
+<li>Sharing model information with others</li>
+<li>Storing model details in a database or registry</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_Predict_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.Predict*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.GARCHModel`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L247"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates predictions for the given input data, including both mean and volatility forecasts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; xNew)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xNew</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix for the forecast period.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the predicted values that incorporate both the mean forecast and volatility.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates forecasts for future time periods by first predicting the mean using the mean model,
+then forecasting the conditional variance using the GARCH parameters, and finally generating residuals
+based on the forecasted variance to create the final predictions.
+</p>
+<p><b>For Beginners:</b> This makes predictions that include both expected values and uncertainty.
+<p>The prediction process:</p>
+<ol>
+<li>Predicts the average value for each future period using the mean model</li>
+<li>Estimates how much uncertainty (volatility) to expect for each period</li>
+<li>Generates realistic random variations based on this volatility</li>
+<li>Combines the average prediction with these variations</li>
+</ol>
+<p>This gives you not just a prediction, but a realistic scenario that includes
+the natural randomness seen in volatile data.</p>
+<p>For example, instead of just predicting &quot;tomorrow's stock price will be $100,&quot;
+it might predict &quot;tomorrow's stock price will be $100 with a likely range of $95-$105.&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_PredictSingle_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.GARCHModel`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L1096"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts a single value based on the input vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector containing features for the prediction.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value for the given input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates a single prediction by combining the mean prediction from the mean model
+with a simulated residual based on the estimated volatility. It creates appropriate context
+for the prediction and ensures consistency with the model's learned patterns.
+</p>
+<p><b>For Beginners:</b> This generates a prediction for a single point in time.
+<p>The method:</p>
+<ol>
+<li>Creates a context for generating a single prediction</li>
+<li>Gets the mean prediction (expected value) from the mean model</li>
+<li>Estimates the volatility (uncertainty) for this time point</li>
+<li>Generates a realistic random variation based on this volatility</li>
+<li>Combines the mean prediction with the random variation</li>
+</ol>
+<p>This approach provides not just an expected value, but also incorporates
+the appropriate level of randomness based on current volatility conditions.
+It's like predicting that tomorrow's temperature will be 75Â°F, but with
+a range of Â±3Â° because weather conditions are currently stable.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_Reset_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.Reset*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_Reset" data-uid="AiDotNet.TimeSeries.GARCHModel`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L938"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the model to its initial state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method resets the GARCH model to its initial state, clearing any learned parameters and returning to the
+initial configuration provided in the options. This is useful when you want to retrain the model from scratch.
+</p>
+<p><b>For Beginners:</b> This resets the model to start fresh.
+<p>Resetting the model:</p>
+<ul>
+<li>Clears all learned parameters (omega, alpha, beta)</li>
+<li>Reinitializes the mean model</li>
+<li>Empties stored residuals and variances</li>
+<li>Returns the model to its original state before training</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Train the model on different data</li>
+<li>Try different settings or approaches</li>
+<li>Start with a clean slate after experimentation</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_SerializeCore_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.SerializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_SerializeCore_System_IO_BinaryWriter_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.SerializeCore(System.IO.BinaryWriter)">
+  SerializeCore(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L867"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model's core parameters to a binary writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void SerializeCore(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_SerializeCore_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method writes the model's essential parameters to a binary stream, allowing the model to be saved
+to a file or database. The serialized parameters include the GARCH parameters (omega, alpha, beta),
+the residuals, the conditional variances, and the model options.
+</p>
+<p><b>For Beginners:</b> This saves the model so you can use it later.
+<p>The method:</p>
+<ul>
+<li>Converts the model's parameters to a format that can be saved</li>
+<li>Writes these values to a file or database</li>
+<li>Includes all the information needed to recreate the model exactly</li>
+</ul>
+<p>This allows you to:</p>
+<ul>
+<li>Save a trained model for future use</li>
+<li>Share the model with others</li>
+<li>Use the model in other applications</li>
+</ul>
+<p>It's like saving a document so you can open it again later without
+having to start from scratch.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_GARCHModel_1_TrainCore_" data-uid="AiDotNet.TimeSeries.GARCHModel`1.TrainCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_GARCHModel_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.GARCHModel`1.TrainCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainCore(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L1051"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core implementation of the training logic for the GARCH model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void TrainCore(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector (the time series data to model).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_GARCHModel_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the core training mechanism for the GARCH model, which involves
+training the mean model first, then estimating the parameters of the variance equation
+based on the residuals. It follows a multi-step process that captures both the average
+behavior of the series and its changing volatility patterns.
+</p>
+<p><b>For Beginners:</b> This is the engine that powers the model's learning process.
+<p>This method:</p>
+<ol>
+<li>Trains the model that predicts the average values (mean model)</li>
+<li>Calculates the errors in these predictions (residuals)</li>
+<li>Sets up initial GARCH parameters to model the volatility</li>
+<li>Finds the optimal parameter values to best explain the volatility patterns</li>
+<li>Calculates the final volatility estimates for the historical data</li>
+</ol>
+<p>It's the actual &quot;learning&quot; part of the model, where it discovers patterns
+in both the values and the volatility of your time series data.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/GARCHModel.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

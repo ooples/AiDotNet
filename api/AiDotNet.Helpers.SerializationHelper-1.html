@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SerializationHelper&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SerializationHelper&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides methods for serializing and deserializing AI model components to and from binary formats.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Helpers_SerializationHelper_1.md&amp;value=---%0Auid%3A%20AiDotNet.Helpers.SerializationHelper%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Helpers.SerializationHelper`1">
+
+
+
+  <h1 id="AiDotNet_Helpers_SerializationHelper_1" data-uid="AiDotNet.Helpers.SerializationHelper`1" class="text-break">
+Class SerializationHelper&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Helpers.html">Helpers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides methods for serializing and deserializing AI model components to and from binary formats.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class SerializationHelper&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the AI models (e.g., double, float, int).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SerializationHelper&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Helpers_SerializationHelper_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Serialization is the process of converting complex data structures (like AI models)
+into a format that can be easily stored or transmitted. Think of it like saving your game progress
+so you can continue later. This helper makes it possible to save trained AI models to disk and
+load them back when needed.</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeMatrix*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_System_Byte___" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeMatrix(System.Byte[])">
+  DeserializeMatrix(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a matrix from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; DeserializeMatrix(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The deserialized matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts a compact byte representation (which might have been
+stored in a database or received over a network) back into a usable matrix for AI calculations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeMatrix*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_System_IO_BinaryReader_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeMatrix(System.IO.BinaryReader)">
+  DeserializeMatrix(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L321"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a matrix from a binary reader without specifying expected dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; DeserializeMatrix(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read the serialized data from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The deserialized matrix with dimensions read from the binary data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method loads a matrix (grid of numbers) from a file without needing to know
+its size in advance. The size information is stored in the file itself.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeMatrix*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_System_IO_BinaryReader_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeMatrix(System.IO.BinaryReader,System.Int32,System.Int32)">
+  DeserializeMatrix(BinaryReader, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a matrix from a binary format with expected dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; DeserializeMatrix(BinaryReader reader, int rows, int columns)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read the serialized data from.</p>
+</dd>
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The expected number of rows in the matrix.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The expected number of columns in the matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The deserialized matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_DeserializeMatrix_System_IO_BinaryReader_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method loads a previously saved matrix from a file, but checks that
+it has the size you expect. This is important because AI algorithms need matrices of specific sizes.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the stored matrix dimensions do not match the expected dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_DeserializeNode_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeNode*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_DeserializeNode_System_IO_BinaryReader_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeNode(System.IO.BinaryReader)">
+  DeserializeNode(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a decision tree node and its children from a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DecisionTreeNode&lt;T&gt;? DeserializeNode(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read the serialized data from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LinearAlgebra.DecisionTreeNode-1.html">DecisionTreeNode</a>&lt;T&gt;</dt>
+    <dd><p>The deserialized decision tree node.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_DeserializeNode_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method loads a previously saved decision tree from a file,
+reconstructing its structure so you can use it to make predictions without retraining.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_DeserializeTensor_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeTensor*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_DeserializeTensor_System_IO_BinaryReader_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeTensor(System.IO.BinaryReader)">
+  DeserializeTensor(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L471"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a tensor from a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; DeserializeTensor(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The deserialized tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_DeserializeTensor_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This helper method reads a tensor's shape and values from a binary stream. It first reads the rank (number
+of dimensions), then each dimension size, creates a tensor with that shape, and finally reads all the values.
+</p>
+<p><b>For Beginners:</b> This method loads a tensor's structure and values from a file.
+<p>When loading a tensor:</p>
+<ul>
+<li>First, it reads how many dimensions the tensor has</li>
+<li>Then, it reads the size of each dimension</li>
+<li>It creates a new tensor with that shape</li>
+<li>Finally, it reads all the values and fills the tensor</li>
+</ul>
+<p>This process reverses the serialization process, reconstructing the tensor
+exactly as it was when saved.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeVector*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_System_Byte___" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeVector(System.Byte[])">
+  DeserializeVector(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L544"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a vector from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; DeserializeVector(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The deserialized vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts a compact byte representation (which might have been
+stored in a database or received over a network) back into a usable vector for AI calculations.
+Vectors are essential in many AI algorithms for representing features, weights, or predictions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeVector*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_System_IO_BinaryReader_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeVector(System.IO.BinaryReader)">
+  DeserializeVector(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L498"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a vector from a binary reader without specifying expected length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; DeserializeVector(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read the serialized data from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The deserialized vector with length read from the binary data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method loads a vector (list of numbers) from a file without needing to know
+its length in advance. The length information is stored in the file itself.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeVector*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_System_IO_BinaryReader_System_Int32_" data-uid="AiDotNet.Helpers.SerializationHelper`1.DeserializeVector(System.IO.BinaryReader,System.Int32)">
+  DeserializeVector(BinaryReader, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L431"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a vector from a binary format with an expected length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; DeserializeVector(BinaryReader reader, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read the serialized data from.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The expected length of the vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The deserialized vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_DeserializeVector_System_IO_BinaryReader_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method loads a previously saved vector (list of numbers) from a file,
+but checks that it has the length you expect. This is important because AI algorithms often
+need vectors of specific lengths to work correctly.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the stored vector length does not match the expected length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_ReadValue_" data-uid="AiDotNet.Helpers.SerializationHelper`1.ReadValue*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_ReadValue_System_IO_BinaryReader_" data-uid="AiDotNet.Helpers.SerializationHelper`1.ReadValue(System.IO.BinaryReader)">
+  ReadValue(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a value of type T from a binary reader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T ReadValue(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value read from the binary reader.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_ReadValue_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method reads different types of numbers from a file and converts them
+back to their original form so they can be used in calculations.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when the type T is not supported for deserialization.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_SerializeInterface_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeInterface*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_SerializeInterface__1_System_IO_BinaryWriter___0_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeInterface``1(System.IO.BinaryWriter,``0)">
+  SerializeInterface&lt;TInterface&gt;(BinaryWriter, TInterface?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L579"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes an interface instance by writing its type name to a BinaryWriter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void SerializeInterface&lt;TInterface&gt;(BinaryWriter writer, TInterface? instance) where TInterface : class</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The BinaryWriter to write the type name to.</p>
+</dd>
+    <dt><code>instance</code> <span class="xref">TInterface</span></dt>
+    <dd><p>The interface instance to serialize.</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TInterface</code></dt>
+    <dd><p>The interface type to serialize.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_SerializeInterface__1_System_IO_BinaryWriter___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method writes the full name of the concrete type implementing the interface.
+If the instance is null, it writes an empty string.
+</p>
+<p><b>For Beginners:</b> This method saves information about a specific part of your network.
+<p>It writes:</p>
+<ul>
+<li>The name of the actual type used (if there is one)</li>
+<li>An empty string if no specific type is used</li>
+</ul>
+<p>This allows you to recreate the exact same setup when you load the network later.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_SerializeMatrix_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeMatrix*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_SerializeMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  SerializeMatrix(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes a matrix to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static byte[] SerializeMatrix(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to serialize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_SerializeMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts a matrix (grid of numbers) into a compact format
+that can be easily stored in memory or in a database.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_SerializeMatrix_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeMatrix*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_SerializeMatrix_System_IO_BinaryWriter_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeMatrix(System.IO.BinaryWriter,AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  SerializeMatrix(BinaryWriter, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes a matrix to a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void SerializeMatrix(BinaryWriter writer, Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write the serialized data to.</p>
+</dd>
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to serialize.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_SerializeMatrix_System_IO_BinaryWriter_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A matrix is a rectangular grid of numbers used in many AI algorithms.
+This method saves that grid to a file so you can use it later.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_SerializeNode_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeNode*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_SerializeNode_AiDotNet_LinearAlgebra_DecisionTreeNode__0__System_IO_BinaryWriter_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeNode(AiDotNet.LinearAlgebra.DecisionTreeNode{`0},System.IO.BinaryWriter)">
+  SerializeNode(DecisionTreeNode&lt;T&gt;?, BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes a decision tree node and its children to a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void SerializeNode(DecisionTreeNode&lt;T&gt;? node, BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>node</code> <a class="xref" href="AiDotNet.LinearAlgebra.DecisionTreeNode-1.html">DecisionTreeNode</a>&lt;T&gt;</dt>
+    <dd><p>The decision tree node to serialize.</p>
+</dd>
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write the serialized data to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_SerializeNode_AiDotNet_LinearAlgebra_DecisionTreeNode__0__System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method saves a decision tree (a flowchart-like model that makes decisions)
+to a file. Decision trees are used in AI for classification and regression tasks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_SerializeTensor_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeTensor*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_SerializeTensor_System_IO_BinaryWriter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeTensor(System.IO.BinaryWriter,AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SerializeTensor(BinaryWriter, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L386"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes a tensor to a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void SerializeTensor(BinaryWriter writer, Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to serialize.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_SerializeTensor_System_IO_BinaryWriter_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This helper method writes a tensor's shape and values to a binary stream. It first writes the rank (number
+of dimensions), then each dimension size, and finally all the tensor values as doubles.
+</p>
+<p><b>For Beginners:</b> This method saves a tensor's structure and values to a file.
+<p>When saving a tensor:</p>
+<ul>
+<li>First, it saves how many dimensions the tensor has (its rank)</li>
+<li>Then, it saves the size of each dimension</li>
+<li>Finally, it saves all the actual values</li>
+</ul>
+<p>This format ensures that when loading, the tensor can be reconstructed
+with exactly the same shape and values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_SerializeVector_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeVector*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_SerializeVector_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeVector(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SerializeVector(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L520"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes a vector to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static byte[] SerializeVector(Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to serialize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_SerializeVector_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts a vector (list of numbers) into a compact format
+that can be easily stored in memory or in a database. This is useful when you want to
+save trained model parameters for later use without retraining.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_SerializeVector_" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeVector*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_SerializeVector_System_IO_BinaryWriter_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Helpers.SerializationHelper`1.SerializeVector(System.IO.BinaryWriter,AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SerializeVector(BinaryWriter, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes a vector to a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void SerializeVector(BinaryWriter writer, Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write the serialized data to.</p>
+</dd>
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to serialize.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_SerializeVector_System_IO_BinaryWriter_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A vector is a one-dimensional array of numbers, like a single row or column
+of data. This method saves that list of numbers to a file so you can use it later.
+Vectors are commonly used in AI to represent features or weights.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_SerializationHelper_1_WriteValue_" data-uid="AiDotNet.Helpers.SerializationHelper`1.WriteValue*"></a>
+
+  <h3 id="AiDotNet_Helpers_SerializationHelper_1_WriteValue_System_IO_BinaryWriter__0_" data-uid="AiDotNet.Helpers.SerializationHelper`1.WriteValue(System.IO.BinaryWriter,`0)">
+  WriteValue(BinaryWriter, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a value of type T to a binary writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void WriteValue(BinaryWriter writer, T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to write.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_SerializationHelper_1_WriteValue_System_IO_BinaryWriter__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method handles writing different types of numbers (like integers or decimals)
+to a file in a way that preserves their exact values.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when the type T is not supported for serialization.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/SerializationHelper.cs/#L13" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

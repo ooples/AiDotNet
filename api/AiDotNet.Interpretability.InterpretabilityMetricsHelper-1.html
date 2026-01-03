@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class InterpretabilityMetricsHelper&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class InterpretabilityMetricsHelper&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides static utility methods for computing interpretability and fairness metrics.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interpretability_InterpretabilityMetricsHelper_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interpretability.InterpretabilityMetricsHelper%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1">
+
+
+
+  <h1 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1" class="text-break">
+Class InterpretabilityMetricsHelper&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interpretability.html">Interpretability</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides static utility methods for computing interpretability and fairness metrics.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class InterpretabilityMetricsHelper&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">InterpretabilityMetricsHelper&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This is a collection of reusable helper methods for fairness and bias analysis.
+<p>These methods handle common tasks like:</p>
+<ul>
+<li>Identifying unique groups in data (e.g., different age groups, genders)</li>
+<li>Computing metrics like positive rates, true positive rates, etc.</li>
+<li>Extracting subsets of data for specific groups</li>
+</ul>
+<p>By centralizing these methods here, we avoid code duplication and ensure consistent
+calculations across all bias detection and fairness evaluation tools.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputeFalsePositiveRate_" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.ComputeFalsePositiveRate*"></a>
+
+  <h3 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputeFalsePositiveRate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.ComputeFalsePositiveRate(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeFalsePositiveRate(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the False Positive Rate (FPR).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T ComputeFalsePositiveRate(Vector&lt;T&gt; predictions, Vector&lt;T&gt; actualLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The prediction vector (binary: 0 or 1).</p>
+</dd>
+    <dt><code>actualLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual label vector (binary: 0 or 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The proportion of actual negatives that were incorrectly predicted as positive.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputeFalsePositiveRate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how often the model incorrectly predicts positive.
+<p>FPR = (False Positives) / (False Positives + True Negatives)</p>
+<p>For example, if there are 10 actual negative cases and the model incorrectly called 2 of them positive,
+the FPR would be 2/10 = 0.2 (20%).</p>
+<p>In fairness analysis, we want the FPR to be similar across all groups. If the model makes more
+false positive errors for one group than another, that's a form of bias.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputePositiveRate_" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.ComputePositiveRate*"></a>
+
+  <h3 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputePositiveRate_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.ComputePositiveRate(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputePositiveRate(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the positive prediction rate (proportion of positive predictions).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T ComputePositiveRate(Vector&lt;T&gt; predictions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The prediction vector (binary: 0 or 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The proportion of positive predictions (predictions equal to 1).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputePositiveRate_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates what fraction of predictions are positive (1).
+<p>For example, if predictions are [1, 0, 1, 1, 0], the positive rate would be 3/5 = 0.6
+(60% of predictions are positive).</p>
+<p>This is a key metric for fairness - if one group has a much higher positive rate than
+another, it might indicate bias in the model.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputePrecision_" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.ComputePrecision*"></a>
+
+  <h3 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputePrecision_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.ComputePrecision(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputePrecision(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the Precision (Positive Predictive Value).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T ComputePrecision(Vector&lt;T&gt; predictions, Vector&lt;T&gt; actualLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The prediction vector (binary: 0 or 1).</p>
+</dd>
+    <dt><code>actualLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual label vector (binary: 0 or 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The proportion of positive predictions that were actually correct.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputePrecision_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how accurate the positive predictions are.
+<p>Precision = (True Positives) / (True Positives + False Positives)</p>
+<p>For example, if the model made 10 positive predictions and 8 of them were correct,
+the precision would be 8/10 = 0.8 (80%).</p>
+<p>In fairness analysis, we want precision to be similar across all groups. If positive
+predictions are more reliable for one group than another, that's a form of bias.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputeTruePositiveRate_" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.ComputeTruePositiveRate*"></a>
+
+  <h3 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputeTruePositiveRate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.ComputeTruePositiveRate(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeTruePositiveRate(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the True Positive Rate (TPR) or Recall.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T ComputeTruePositiveRate(Vector&lt;T&gt; predictions, Vector&lt;T&gt; actualLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The prediction vector (binary: 0 or 1).</p>
+</dd>
+    <dt><code>actualLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual label vector (binary: 0 or 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The proportion of actual positives that were correctly predicted as positive.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_ComputeTruePositiveRate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how good the model is at identifying positive cases.
+<p>TPR = (True Positives) / (True Positives + False Negatives)</p>
+<p>For example, if there are 10 actual positive cases and the model correctly identified 8 of them,
+the TPR would be 8/10 = 0.8 (80%).</p>
+<p>In fairness analysis, we want the TPR to be similar across all groups. If the model is better
+at identifying positive cases for one group than another, that's a form of bias.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetGroupIndices_" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.GetGroupIndices*"></a>
+
+  <h3 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetGroupIndices_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.GetGroupIndices(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  GetGroupIndices(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of all samples belonging to a specific group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static List&lt;int&gt; GetGroupIndices(Vector&lt;T&gt; sensitiveFeature, T groupValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sensitiveFeature</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The sensitive feature vector.</p>
+</dd>
+    <dt><code>groupValue</code> <span class="xref">T</span></dt>
+    <dd><p>The group value to search for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A list of indices where the sensitive feature matches the group value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetGroupIndices_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method finds the positions of all members of a specific group.
+<p>For example, if your sensitive feature is [1, 0, 1, 0, 1] and groupValue is 1,
+this method would return [0, 2, 4] (the positions where the value is 1).</p>
+<p>This allows us to isolate data for a specific group so we can analyze how
+the model treats that group separately.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetSubset_" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.GetSubset*"></a>
+
+  <h3 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetSubset_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Collections_Generic_List_System_Int32__" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.GetSubset(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Collections.Generic.List{System.Int32})">
+  GetSubset(Vector&lt;T&gt;, List&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a subset of a vector based on specified indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; GetSubset(Vector&lt;T&gt; vector, List&lt;int&gt; indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The source vector.</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The indices to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing only the elements at the specified indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetSubset_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Collections_Generic_List_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method creates a smaller vector containing only specific elements.
+<p>For example, if you have a vector [10, 20, 30, 40, 50] and indices [0, 2, 4],
+this method would return a new vector [10, 30, 50].</p>
+<p>This is useful for extracting predictions or labels for a specific group after
+you've identified which indices belong to that group.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetUniqueGroups_" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.GetUniqueGroups*"></a>
+
+  <h3 id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetUniqueGroups_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interpretability.InterpretabilityMetricsHelper`1.GetUniqueGroups(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  GetUniqueGroups(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Identifies all unique groups in the sensitive feature.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static List&lt;T&gt; GetUniqueGroups(Vector&lt;T&gt; sensitiveFeature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sensitiveFeature</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The sensitive feature vector (e.g., race, gender, age group).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd><p>A list of unique group values found in the sensitive feature.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpretability_InterpretabilityMetricsHelper_1_GetUniqueGroups_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method finds all the different categories in your sensitive feature.
+<p>For example, if your sensitive feature is gender with values [1, 0, 1, 0, 1],
+this method would return a list containing [0, 1] (the two unique groups).</p>
+<p>This is the first step in fairness analysis - we need to know which groups exist
+before we can compare how they're treated.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interpretability/InterpretabilityMetricsHelper.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

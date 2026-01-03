@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ChunkingStrategyBase | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ChunkingStrategyBase | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a base implementation for text chunking strategies with common functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase" class="text-break">
+Class ChunkingStrategyBase  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.html">ChunkingStrategies</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a base implementation for text chunking strategies with common functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class ChunkingStrategyBase : IChunkingStrategy</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ChunkingStrategyBase</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IChunkingStrategy.html">IChunkingStrategy</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.AgenticChunker.html">AgenticChunker</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.CodeAwareTextSplitter.html">CodeAwareTextSplitter</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.FixedSizeChunkingStrategy.html">FixedSizeChunkingStrategy</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.HeaderBasedTextSplitter.html">HeaderBasedTextSplitter</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.MarkdownTextSplitter.html">MarkdownTextSplitter</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.MultiModalTextSplitter.html">MultiModalTextSplitter</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy.html">RecursiveCharacterChunkingStrategy</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterTextSplitter.html">RecursiveCharacterTextSplitter</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.SemanticChunkingStrategy.html">SemanticChunkingStrategy</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.SentenceChunkingStrategy.html">SentenceChunkingStrategy</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.SlidingWindowChunkingStrategy.html">SlidingWindowChunkingStrategy</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.TableAwareTextSplitter.html">TableAwareTextSplitter</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract class implements the IChunkingStrategy interface and provides common functionality
+for text splitting strategies. It handles validation and provides utility methods for chunk overlap
+while allowing derived classes to focus on implementing the core chunking algorithm.
+</p>
+<p><b>For Beginners:</b> This is the foundation that all text splitting methods build upon.
+<p>Think of it like a template for dividing text:</p>
+<ul>
+<li>It handles common tasks (checking inputs, managing overlap)</li>
+<li>Specific chunking methods (fixed-size, sentence-based) just fill in how they split text</li>
+<li>This ensures all chunking strategies work consistently</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase__ctor_System_Int32_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.#ctor(System.Int32,System.Int32)">
+  ChunkingStrategyBase(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ChunkingStrategyBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ChunkingStrategyBase(int chunkSize, int chunkOverlap)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chunkSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The target size for each chunk in characters.</p>
+</dd>
+    <dt><code>chunkOverlap</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of characters that should overlap between consecutive chunks.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkOverlap_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ChunkOverlap*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkOverlap" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ChunkOverlap">
+  ChunkOverlap
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of characters that should overlap between consecutive chunks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ChunkOverlap { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkSize_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ChunkSize*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkSize" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ChunkSize">
+  ChunkSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the target size for each chunk in characters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ChunkSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_Chunk_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.Chunk*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_Chunk_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.Chunk(System.String)">
+  Chunk(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Splits a text string into chunks according to the strategy's rules.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;string&gt; Chunk(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to split into chunks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A collection of text chunks, ordered as they appear in the original text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ChunkCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkCore_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ChunkCore(System.String)">
+  ChunkCore(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core chunking logic to be implemented by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract IEnumerable&lt;(string Chunk, int StartPosition, int EndPosition)&gt; ChunkCore(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated text to split into chunks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.chunk">Chunk</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.startposition">StartPosition</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.endposition">EndPosition</a>)&gt;</dt>
+    <dd><p>A collection of tuples containing each chunk and its position information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkCore_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Implementers:</b> This is where you implement your specific chunking algorithm.
+<p>You don't need to:</p>
+<ul>
+<li>Validate the text (already done)</li>
+<li>Handle null/empty text (already validated)</li>
+</ul>
+<p>You should:</p>
+<ul>
+<li>Split the text according to your strategy (fixed-size, sentence-based, etc.)</li>
+<li>Respect ChunkSize and ChunkOverlap settings</li>
+<li>Return chunks with accurate start/end positions</li>
+<li>Ensure chunks appear in order</li>
+</ul>
+<p>Use the helper method CreateOverlappingChunks() for simple fixed-size chunking.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkWithPositions_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ChunkWithPositions*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkWithPositions_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ChunkWithPositions(System.String)">
+  ChunkWithPositions(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Splits a text string into chunks and returns them with position metadata.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;(string Chunk, int StartPosition, int EndPosition)&gt; ChunkWithPositions(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to split into chunks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.chunk">Chunk</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.startposition">StartPosition</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.endposition">EndPosition</a>)&gt;</dt>
+    <dd><p>A collection of tuples containing each chunk, its start position, and end position in the original text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_CreateOverlappingChunks_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.CreateOverlappingChunks*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_CreateOverlappingChunks_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.CreateOverlappingChunks(System.String)">
+  CreateOverlappingChunks(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates overlapping chunks from text using simple character-based splitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEnumerable&lt;(string Chunk, int StartPosition, int EndPosition)&gt; CreateOverlappingChunks(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to chunk.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.chunk">Chunk</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.startposition">StartPosition</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.endposition">EndPosition</a>)&gt;</dt>
+    <dd><p>A collection of overlapping chunks with position information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_CreateOverlappingChunks_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This helper method implements basic fixed-size chunking with overlap.
+It's useful for derived classes that need simple character-based splitting
+or as a fallback when more sophisticated splitting isn't possible.
+</p>
+<p><b>For Implementers:</b> Use this for simple fixed-size chunking.
+<p>This method:</p>
+<ul>
+<li>Splits text every ChunkSize characters</li>
+<li>Overlaps chunks by ChunkOverlap characters</li>
+<li>Tracks exact positions in original text</li>
+<li>Handles edge cases (last chunk, small text)</li>
+</ul>
+<p>Override ChunkCore if you need:</p>
+<ul>
+<li>Sentence-aware splitting</li>
+<li>Paragraph-aware splitting</li>
+<li>Semantic chunking</li>
+<li>Any non-character-based logic</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_SplitOnSentences_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.SplitOnSentences*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_SplitOnSentences_System_String_System_Char___" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.SplitOnSentences(System.String,System.Char[])">
+  SplitOnSentences(string, char[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Splits text on sentence boundaries while respecting chunk size limits.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEnumerable&lt;(string Chunk, int StartPosition, int EndPosition)&gt; SplitOnSentences(string text, char[]? sentenceEndings = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to split.</p>
+</dd>
+    <dt><code>sentenceEndings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a>[]</dt>
+    <dd><p>Characters that indicate sentence endings.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.chunk">Chunk</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.startposition">StartPosition</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.endposition">EndPosition</a>)&gt;</dt>
+    <dd><p>A collection of chunks with position information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_SplitOnSentences_System_String_System_Char____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This helper method splits text at sentence boundaries when possible, falling back
+to character-based splitting if sentences are too long. It respects the configured
+chunk size and overlap settings.
+</p>
+<p><b>For Implementers:</b> Use this for sentence-aware chunking.
+<p>This method:</p>
+<ul>
+<li>Tries to break at sentence boundaries (., !, ?)</li>
+<li>Falls back to character splitting for very long sentences</li>
+<li>Respects ChunkSize limits</li>
+<li>Maintains ChunkOverlap between chunks</li>
+</ul>
+<p>Good for: General text, articles, documentation
+Not ideal for: Code, structured data, poetry</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ValidateText_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ValidateText*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ValidateText_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.ValidateText(System.String)">
+  ValidateText(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the input text.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidateText(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ValidateText_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Implementers:</b> Override this if you need custom text validation.
+For example, checking encoding or specific character requirements.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

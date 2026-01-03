@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PPOOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PPOOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Proximal Policy Optimization (PPO) agents.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_PPOOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.PPOOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.PPOOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_PPOOptions_1" data-uid="AiDotNet.Models.Options.PPOOptions`1" class="text-break">
+Class PPOOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Proximal Policy Optimization (PPO) agents.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PPOOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PPOOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_PPOOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+PPO is a state-of-the-art policy gradient algorithm that achieves a balance between
+sample efficiency, simplicity, and reliability. It uses a clipped surrogate objective
+to prevent destructively large policy updates.
+</p>
+<p><b>For Beginners:</b>
+PPO learns a policy (strategy for choosing actions) by making careful, controlled updates.
+It's like learning to drive - you make small adjustments to your steering rather than
+jerking the wheel wildly. This makes learning stable and efficient.
+<p>Key features:</p>
+<ul>
+<li><strong>Actor-Critic</strong>: Learns both a policy (actor) and value function (critic)</li>
+<li><strong>Clipped Updates</strong>: Prevents too-large changes that could break learning</li>
+<li><strong>GAE</strong>: Generalized Advantage Estimation for better gradient estimates</li>
+<li><strong>Multi-Epoch</strong>: Reuses collected experience multiple times</li>
+</ul>
+<p>Famous for: OpenAI's ChatGPT uses PPO for RLHF (Reinforcement Learning from Human Feedback)</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1__ctor_" data-uid="AiDotNet.Models.Options.PPOOptions`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1__ctor" data-uid="AiDotNet.Models.Options.PPOOptions`1.#ctor">
+  PPOOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PPOOptions()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_ActionSize_" data-uid="AiDotNet.Models.Options.PPOOptions`1.ActionSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_ActionSize" data-uid="AiDotNet.Models.Options.PPOOptions`1.ActionSize">
+  ActionSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of possible actions (discrete) or action dimensions (continuous).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ActionSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_ClipEpsilon_" data-uid="AiDotNet.Models.Options.PPOOptions`1.ClipEpsilon*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_ClipEpsilon" data-uid="AiDotNet.Models.Options.PPOOptions`1.ClipEpsilon">
+  ClipEpsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>PPO clipping parameter (epsilon).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ClipEpsilon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_ClipEpsilon_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.1-0.3.
+Limits how much the policy can change in one update.
+Smaller = more conservative updates, more stable.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_DiscountFactor_" data-uid="AiDotNet.Models.Options.PPOOptions`1.DiscountFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_DiscountFactor" data-uid="AiDotNet.Models.Options.PPOOptions`1.DiscountFactor">
+  DiscountFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Discount factor (gamma) for future rewards.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DiscountFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_DiscountFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.95-0.99.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_EntropyCoefficient_" data-uid="AiDotNet.Models.Options.PPOOptions`1.EntropyCoefficient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_EntropyCoefficient" data-uid="AiDotNet.Models.Options.PPOOptions`1.EntropyCoefficient">
+  EntropyCoefficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Entropy coefficient for exploration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T EntropyCoefficient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_EntropyCoefficient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.01-0.1.
+Encourages exploration by penalizing deterministic policies.
+Higher = more exploration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_GaeLambda_" data-uid="AiDotNet.Models.Options.PPOOptions`1.GaeLambda*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_GaeLambda" data-uid="AiDotNet.Models.Options.PPOOptions`1.GaeLambda">
+  GaeLambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>GAE (Generalized Advantage Estimation) lambda parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GaeLambda { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_GaeLambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.95-0.99.
+Controls bias-variance tradeoff in advantage estimation.
+Higher values = lower bias, higher variance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_IsContinuous_" data-uid="AiDotNet.Models.Options.PPOOptions`1.IsContinuous*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_IsContinuous" data-uid="AiDotNet.Models.Options.PPOOptions`1.IsContinuous">
+  IsContinuous
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the action space is continuous (true) or discrete (false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsContinuous { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_MaxGradNorm_" data-uid="AiDotNet.Models.Options.PPOOptions`1.MaxGradNorm*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_MaxGradNorm" data-uid="AiDotNet.Models.Options.PPOOptions`1.MaxGradNorm">
+  MaxGradNorm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum gradient norm for gradient clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxGradNorm { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_MaxGradNorm_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.5-5.0.
+Prevents exploding gradients.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_MiniBatchSize_" data-uid="AiDotNet.Models.Options.PPOOptions`1.MiniBatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_MiniBatchSize" data-uid="AiDotNet.Models.Options.PPOOptions`1.MiniBatchSize">
+  MiniBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mini-batch size for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MiniBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_MiniBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 32-256.
+Should divide StepsPerUpdate evenly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_PolicyHiddenLayers_" data-uid="AiDotNet.Models.Options.PPOOptions`1.PolicyHiddenLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_PolicyHiddenLayers" data-uid="AiDotNet.Models.Options.PPOOptions`1.PolicyHiddenLayers">
+  PolicyHiddenLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Hidden layer sizes for policy network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; PolicyHiddenLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_PolicyLearningRate_" data-uid="AiDotNet.Models.Options.PPOOptions`1.PolicyLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_PolicyLearningRate" data-uid="AiDotNet.Models.Options.PPOOptions`1.PolicyLearningRate">
+  PolicyLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learning rate for the policy network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PolicyLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_Seed_" data-uid="AiDotNet.Models.Options.PPOOptions`1.Seed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_Seed" data-uid="AiDotNet.Models.Options.PPOOptions`1.Seed">
+  Seed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random seed for reproducibility (optional).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? Seed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_StateSize_" data-uid="AiDotNet.Models.Options.PPOOptions`1.StateSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_StateSize" data-uid="AiDotNet.Models.Options.PPOOptions`1.StateSize">
+  StateSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Size of the state observation space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int StateSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_StepsPerUpdate_" data-uid="AiDotNet.Models.Options.PPOOptions`1.StepsPerUpdate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_StepsPerUpdate" data-uid="AiDotNet.Models.Options.PPOOptions`1.StepsPerUpdate">
+  StepsPerUpdate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of steps to collect before each training update.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int StepsPerUpdate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_StepsPerUpdate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 128-2048.
+PPO collects trajectories, then trains on them.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_TrainingEpochs_" data-uid="AiDotNet.Models.Options.PPOOptions`1.TrainingEpochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_TrainingEpochs" data-uid="AiDotNet.Models.Options.PPOOptions`1.TrainingEpochs">
+  TrainingEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of epochs to train on collected data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrainingEpochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_TrainingEpochs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 3-10.
+PPO reuses collected experiences multiple times.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_ValueHiddenLayers_" data-uid="AiDotNet.Models.Options.PPOOptions`1.ValueHiddenLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_ValueHiddenLayers" data-uid="AiDotNet.Models.Options.PPOOptions`1.ValueHiddenLayers">
+  ValueHiddenLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Hidden layer sizes for value network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; ValueHiddenLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_ValueLearningRate_" data-uid="AiDotNet.Models.Options.PPOOptions`1.ValueLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_ValueLearningRate" data-uid="AiDotNet.Models.Options.PPOOptions`1.ValueLearningRate">
+  ValueLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learning rate for the value network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ValueLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_ValueLossCoefficient_" data-uid="AiDotNet.Models.Options.PPOOptions`1.ValueLossCoefficient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_ValueLossCoefficient" data-uid="AiDotNet.Models.Options.PPOOptions`1.ValueLossCoefficient">
+  ValueLossCoefficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Value function loss coefficient.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ValueLossCoefficient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PPOOptions_1_ValueLossCoefficient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.5-1.0.
+Weight of value loss relative to policy loss.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PPOOptions_1_ValueLossFunction_" data-uid="AiDotNet.Models.Options.PPOOptions`1.ValueLossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PPOOptions_1_ValueLossFunction" data-uid="AiDotNet.Models.Options.PPOOptions`1.ValueLossFunction">
+  ValueLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loss function for value network (typically MSE).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt; ValueLossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PPOOptions.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

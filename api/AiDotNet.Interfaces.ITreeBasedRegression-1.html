@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ITreeBasedRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ITreeBasedRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the core functionality for tree-based machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ITreeBasedRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ITreeBasedRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ITreeBasedRegression`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ITreeBasedRegression_1" data-uid="AiDotNet.Interfaces.ITreeBasedRegression`1" class="text-break">
+Interface ITreeBasedRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITreeBasedRegression.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the core functionality for tree-based machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ITreeBasedRegression&lt;T&gt; : INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html#AiDotNet_Interfaces_IFullModel_3_DefaultLossFunction">IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Train__0__1_">IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Predict__0_">IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Predict(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_GetModelMetadata">IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_">ICheckpointableModel.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_">ICheckpointableModel.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_GetParameters">IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_GetActiveFeatureIndices">IFeatureAware.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">IFeatureAware.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_IsFeatureUsed_System_Int32_">IFeatureAware.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html#AiDotNet_Interfaces_IFeatureImportance_1_GetFeatureImportance">IFeatureImportance&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_DeepCopy">ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_Clone">ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Interfaces_ITreeBasedRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Tree-based models make predictions by following a series of decision rules organized in a tree-like structure.
+These models can be used for both classification (predicting categories) and regression (predicting numeric values).</p>
+<p><b>For Beginners:</b> Tree-based models work like a flowchart of yes/no questions to make predictions.
+Imagine you're trying to predict if someone will like a movie:</p>
+<ol>
+<li>Is it an action movie? If yes, go to question 2. If no, go to question 3.</li>
+<li>Does it have their favorite actor? If yes, predict &quot;Like&quot;. If no, predict &quot;Dislike&quot;.</li>
+<li>Is it less than 2 hours long? If yes, predict &quot;Like&quot;. If no, predict &quot;Dislike&quot;.</li>
+</ol>
+<p>This is a simple decision tree. More advanced tree-based models like Random Forests or
+Gradient Boosted Trees use multiple trees together to make better predictions.</p>
+<p>This interface inherits from IFullModel&lt;T&gt;, which provides the basic methods for training,
+predicting, and evaluating machine learning models.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ITreeBasedRegression_1_FeatureImportances_" data-uid="AiDotNet.Interfaces.ITreeBasedRegression`1.FeatureImportances*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ITreeBasedRegression_1_FeatureImportances" data-uid="AiDotNet.Interfaces.ITreeBasedRegression`1.FeatureImportances">
+  FeatureImportances
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITreeBasedRegression.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the relative importance of each feature in making predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; FeatureImportances { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ITreeBasedRegression_1_FeatureImportances_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Feature importance indicates how much each input variable contributes to the model's predictions.
+Higher values indicate more important features.</p>
+<p><b>For Beginners:</b> This tells you which of your input variables are most helpful for making predictions.</p>
+<p>For example, if you're predicting house prices:</p>
+<ul>
+<li>FeatureImportances[0] = 0.7 for &quot;square footage&quot;</li>
+<li>FeatureImportances[1] = 0.2 for &quot;number of bedrooms&quot;</li>
+<li>FeatureImportances[2] = 0.1 for &quot;year built&quot;</li>
+</ul>
+<p>This would tell you that square footage is the most important factor in your model's predictions,
+followed by number of bedrooms, with year built having the least impact.</p>
+<p>You can use this information to:</p>
+<ul>
+<li>Focus on collecting better data for important features</li>
+<li>Possibly remove unimportant features to simplify your model</li>
+<li>Better understand what drives the predictions in your specific problem</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ITreeBasedRegression_1_MaxDepth_" data-uid="AiDotNet.Interfaces.ITreeBasedRegression`1.MaxDepth*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ITreeBasedRegression_1_MaxDepth" data-uid="AiDotNet.Interfaces.ITreeBasedRegression`1.MaxDepth">
+  MaxDepth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITreeBasedRegression.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum depth (number of sequential decisions) allowed in each decision tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxDepth { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ITreeBasedRegression_1_MaxDepth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The depth of a tree is the maximum number of decisions that must be made to reach a prediction.</p>
+<p><b>For Beginners:</b> This tells you how many questions the model can ask before making a prediction.</p>
+<p>For example, if MaxDepth = 3:</p>
+<ul>
+<li>The model can ask at most 3 questions before making a prediction</li>
+<li>This creates a simpler model that might be easier to understand</li>
+<li>But it might miss complex patterns in your data</li>
+</ul>
+<p>If MaxDepth = 20:</p>
+<ul>
+<li>The model can ask up to 20 questions before deciding</li>
+<li>This creates a more complex model that can capture detailed patterns</li>
+<li>But it might &quot;memorize&quot; your training data instead of learning general rules</li>
+</ul>
+<p>Setting the right MaxDepth helps balance between a model that's too simple (underfitting)
+and one that's too complex (overfitting).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ITreeBasedRegression_1_NumberOfTrees_" data-uid="AiDotNet.Interfaces.ITreeBasedRegression`1.NumberOfTrees*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ITreeBasedRegression_1_NumberOfTrees" data-uid="AiDotNet.Interfaces.ITreeBasedRegression`1.NumberOfTrees">
+  NumberOfTrees
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITreeBasedRegression.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of decision trees used in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int NumberOfTrees { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ITreeBasedRegression_1_NumberOfTrees_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For single decision tree models, this value is 1. For ensemble methods like Random Forests
+or Gradient Boosted Trees, this represents the number of trees in the ensemble.</p>
+<p><b>For Beginners:</b> Think of this as &quot;how many different flowcharts is the model using to make its decision?&quot;</p>
+<ul>
+<li>If NumberOfTrees = 1: The model is using a single decision tree (like the movie example above)</li>
+<li>If NumberOfTrees &gt; 1: The model is using multiple trees and combining their predictions</li>
+</ul>
+<p>More trees often lead to better predictions but make the model slower and more complex.
+Common values range from 10 to 1000 trees, depending on the specific algorithm and dataset.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITreeBasedRegression.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DifficultyEstimatorBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DifficultyEstimatorBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for difficulty estimators.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3">
+
+
+
+  <h1 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3" class="text-break">
+Class DifficultyEstimatorBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.CurriculumLearning.html">CurriculumLearning</a>.<a class="xref" href="AiDotNet.CurriculumLearning.DifficultyEstimators.html">DifficultyEstimators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for difficulty estimators.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class DifficultyEstimatorBase&lt;T, TInput, TOutput&gt; : IDifficultyEstimator&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DifficultyEstimatorBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.IDifficultyEstimator-3.html">IDifficultyEstimator</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.DifficultyEstimators.ComplexityBasedDifficultyEstimator-3.html">ComplexityBasedDifficultyEstimator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.DifficultyEstimators.ConfidenceBasedDifficultyEstimator-3.html">ConfidenceBasedDifficultyEstimator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.DifficultyEstimators.EnsembleDifficultyEstimator-3.html">EnsembleDifficultyEstimator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.DifficultyEstimators.ExpertDefinedDifficultyEstimator-3.html">ExpertDefinedDifficultyEstimator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.DifficultyEstimators.LossBasedDifficultyEstimator-3.html">LossBasedDifficultyEstimator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.DifficultyEstimators.TransferBasedDifficultyEstimator-3.html">TransferBasedDifficultyEstimator&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This base class provides common functionality for all
+difficulty estimators. It handles the mechanics of computing difficulty scores
+and sorting samples by difficulty.</p>
+</div>
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_NumOps" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_CacheScores_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.CacheScores*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_CacheScores" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.CacheScores">
+  CacheScores
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to cache difficulty scores.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool CacheScores { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_CachedScores_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.CachedScores*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_CachedScores" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.CachedScores">
+  CachedScores
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the cached difficulty scores (if caching is enabled).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt;? CachedScores { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_HasCachedScores_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.HasCachedScores*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_HasCachedScores" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.HasCachedScores">
+  HasCachedScores
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether scores have been computed and cached.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool HasCachedScores { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_Name_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.Name*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_Name" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the difficulty estimator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_RequiresModel_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.RequiresModel*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_RequiresModel" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.RequiresModel">
+  RequiresModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this estimator requires the model to estimate difficulty.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract bool RequiresModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_ComputeMean_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.ComputeMean*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_ComputeMean_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.ComputeMean(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeMean(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the mean of a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T ComputeMean(Vector&lt;T&gt; values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_ComputeStandardDeviation_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.ComputeStandardDeviation*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_ComputeStandardDeviation_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.ComputeStandardDeviation(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ComputeStandardDeviation(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the standard deviation of a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T ComputeStandardDeviation(Vector&lt;T&gt; values, T mean)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>mean</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_EstimateDifficulties_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.EstimateDifficulties*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_EstimateDifficulties_AiDotNet_Interfaces_IDataset__0__1__2__AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.EstimateDifficulties(AiDotNet.Interfaces.IDataset{`0,`1,`2},AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  EstimateDifficulties(IDataset&lt;T, TInput, TOutput&gt;, IFullModel&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates difficulty scores for all samples in a dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; EstimateDifficulties(IDataset&lt;T, TInput, TOutput&gt; dataset, IFullModel&lt;T, TInput, TOutput&gt;? model = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataset</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_EstimateDifficulty_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.EstimateDifficulty*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_EstimateDifficulty__1__2_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.EstimateDifficulty(`1,`2,AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  EstimateDifficulty(TInput, TOutput, IFullModel&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates the difficulty of a single sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract T EstimateDifficulty(TInput input, TOutput expectedOutput, IFullModel&lt;T, TInput, TOutput&gt;? model = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+    <dt><code>expectedOutput</code> <span class="xref">TOutput</span></dt>
+    <dd></dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_GetSortedIndices_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.GetSortedIndices*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_GetSortedIndices_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.GetSortedIndices(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  GetSortedIndices(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of samples sorted by difficulty (easy to hard).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int[] GetSortedIndices(Vector&lt;T&gt; difficulties)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>difficulties</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_NormalizeDifficulties_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.NormalizeDifficulties*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_NormalizeDifficulties_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.NormalizeDifficulties(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  NormalizeDifficulties(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes difficulty scores to [0, 1] range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; NormalizeDifficulties(Vector&lt;T&gt; difficulties)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>difficulties</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The difficulty scores to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized difficulty scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_Reset_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.Reset*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_Reset" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the estimator to its initial state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_Update_" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.Update*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_DifficultyEstimators_DifficultyEstimatorBase_3_Update_System_Int32_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.CurriculumLearning.DifficultyEstimators.DifficultyEstimatorBase`3.Update(System.Int32,AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  Update(int, IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the difficulty estimator based on training progress.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Update(int epoch, IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epoch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/DifficultyEstimators/DifficultyEstimatorBase.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

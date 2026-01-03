@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IFlamingoModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IFlamingoModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for Flamingo-style models with in-context visual learning capabilities.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IFlamingoModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IFlamingoModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IFlamingoModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IFlamingoModel_1" data-uid="AiDotNet.Interfaces.IFlamingoModel`1" class="text-break">
+Interface IFlamingoModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for Flamingo-style models with in-context visual learning capabilities.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IFlamingoModel&lt;T&gt; : IMultimodalEmbedding&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeText_System_String_">IMultimodalEmbedding&lt;T&gt;.EncodeText(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeTextBatch_System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.EncodeTextBatch(IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImage_System_Double___">IMultimodalEmbedding&lt;T&gt;.EncodeImage(double[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImageBatch_System_Collections_Generic_IEnumerable_System_Double____">IMultimodalEmbedding&lt;T&gt;.EncodeImageBatch(IEnumerable&lt;double[]&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ComputeSimilarity_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">IMultimodalEmbedding&lt;T&gt;.ComputeSimilarity(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ZeroShotClassify_System_Double___System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.ZeroShotClassify(double[], IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EmbeddingDimension">IMultimodalEmbedding&lt;T&gt;.EmbeddingDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_MaxSequenceLength">IMultimodalEmbedding&lt;T&gt;.MaxSequenceLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ImageSize">IMultimodalEmbedding&lt;T&gt;.ImageSize</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IFlamingoModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Flamingo is a visual language model that excels at few-shot learning - it can learn new tasks
+from just a few examples provided in the context. It uses gated cross-attention layers
+interleaved with frozen LLM layers to integrate visual information.
+</p>
+<p><b>For Beginners:</b> Flamingo learns new visual tasks from examples you show it!
+<p>Key innovation - In-context learning:</p>
+<ul>
+<li>Show Flamingo a few example image-text pairs</li>
+<li>It learns the pattern from these examples</li>
+<li>Apply the pattern to new images WITHOUT any training</li>
+</ul>
+<p>Architecture:</p>
+<ol>
+<li>Vision Encoder: Extracts image features (Perceiver Resampler)</li>
+<li>Gated Cross-Attention: Injects visual info into language model</li>
+<li>Frozen LLM: Chinchilla-based language model</li>
+</ol>
+<p>Example use case:</p>
+<ul>
+<li>Show 3 examples: [image1] &quot;A red apple&quot; [image2] &quot;A blue car&quot; [image3] &quot;A green tree&quot;</li>
+<li>Ask about new image: [image4] &quot;What color?&quot;</li>
+<li>Flamingo learns from examples that you want the color, answers correctly!</li>
+</ul>
+<p>Why Flamingo is revolutionary:</p>
+<ul>
+<li>No fine-tuning needed for new tasks</li>
+<li>Adapts to new visual concepts on-the-fly</li>
+<li>Strong performance with minimal examples</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_LanguageModelBackbone_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.LanguageModelBackbone*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_LanguageModelBackbone" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.LanguageModelBackbone">
+  LanguageModelBackbone
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the language model backbone used for generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">LanguageModelBackbone LanguageModelBackbone { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html">LanguageModelBackbone</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFlamingoModel_1_LanguageModelBackbone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Flamingo typically uses <a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html#AiDotNet_Enums_LanguageModelBackbone_Chinchilla">Chinchilla</a> as the backbone.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_MaxImagesInContext_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.MaxImagesInContext*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_MaxImagesInContext" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.MaxImagesInContext">
+  MaxImagesInContext
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of images that can be processed in a single context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxImagesInContext { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_NumPerceiverTokens_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.NumPerceiverTokens*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_NumPerceiverTokens" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.NumPerceiverTokens">
+  NumPerceiverTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of visual tokens per image after the Perceiver Resampler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int NumPerceiverTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFlamingoModel_1_NumPerceiverTokens_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The Perceiver Resampler compresses visual features to a fixed number of tokens
+(typically 64) regardless of input image size. This enables efficient processing
+of multiple images in context.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_DescribeVideo_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.DescribeVideo*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_DescribeVideo_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.DescribeVideo(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Int32)">
+  DescribeVideo(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates captions for a video represented as a sequence of frames.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string DescribeVideo(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames, string? prompt = null, int maxLength = 256)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Sequence of video frame tensors.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional prompt to guide generation.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated video description.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFlamingoModel_1_DescribeVideo_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Flamingo can process multiple frames as separate images interleaved in context,
+enabling basic video understanding.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_ExtractPerceiverFeatures_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.ExtractPerceiverFeatures*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_ExtractPerceiverFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.ExtractPerceiverFeatures(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ExtractPerceiverFeatures(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts visual features using the Perceiver Resampler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ExtractPerceiverFeatures(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Resampled visual tokens with shape [numPerceiverTokens, hiddenDim].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFlamingoModel_1_ExtractPerceiverFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The Perceiver Resampler uses cross-attention with learnable queries to compress
+variable-length visual features into a fixed number of tokens.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_FewShotGenerate_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.FewShotGenerate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_FewShotGenerate_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.FewShotGenerate(System.Collections.Generic.IEnumerable{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32)">
+  FewShotGenerate(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Text)&gt;, Tensor&lt;T&gt;, string?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs few-shot visual learning with interleaved image-text examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string FewShotGenerate(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Text)&gt; examples, Tensor&lt;T&gt; queryImage, string? queryPrompt = null, int maxLength = 256)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>examples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.image">Image</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.text">Text</a>)&gt;</dt>
+    <dd><p>Few-shot examples as (image, text) pairs.</p>
+</dd>
+    <dt><code>queryImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The new image to process.</p>
+</dd>
+    <dt><code>queryPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional prompt for the query (e.g., &quot;What is this?&quot;).</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The generated response based on learned pattern.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFlamingoModel_1_FewShotGenerate_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Learn a task from examples, then apply it!
+<p>Example - Learning to identify dog breeds:
+Examples:</p>
+<ul>
+<li>[image of labrador] &quot;This is a Labrador Retriever&quot;</li>
+<li>[image of poodle] &quot;This is a Poodle&quot;</li>
+<li>[image of beagle] &quot;This is a Beagle&quot;</li>
+</ul>
+<p>Query: [image of golden retriever] &quot;This is a...&quot;
+Response: &quot;Golden Retriever&quot;</p>
+<p>Flamingo learned the pattern from examples without any training!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_FewShotImageRetrieval_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.FewShotImageRetrieval*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_FewShotImageRetrieval_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.FewShotImageRetrieval(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32)">
+  FewShotImageRetrieval(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string?, IEnumerable&lt;Tensor&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the most similar images from a database using few-shot context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(int Index, T Score)&gt; FewShotImageRetrieval(IEnumerable&lt;Tensor&lt;T&gt;&gt; queryExamples, string? queryDescription, IEnumerable&lt;Tensor&lt;T&gt;&gt; candidateImages, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>queryExamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Example images representing what you're looking for.</p>
+</dd>
+    <dt><code>queryDescription</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional text description of desired images.</p>
+</dd>
+    <dt><code>candidateImages</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Database of images to search.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Indices of most similar images with scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_FewShotVQA_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.FewShotVQA*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_FewShotVQA_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.FewShotVQA(System.Collections.Generic.IEnumerable{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  FewShotVQA(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Question, string Answer)&gt;, Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs visual question answering with few-shot examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string FewShotVQA(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Question, string Answer)&gt; examples, Tensor&lt;T&gt; queryImage, string question)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>examples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string,system.string-.image">Image</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string,system.string-.question">Question</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string,system.string-.answer">Answer</a>)&gt;</dt>
+    <dd><p>Example (image, question, answer) tuples.</p>
+</dd>
+    <dt><code>queryImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The image to ask about.</p>
+</dd>
+    <dt><code>question</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The question to answer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The generated answer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_GenerateWithMultipleImages_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.GenerateWithMultipleImages*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_GenerateWithMultipleImages_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.GenerateWithMultipleImages(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Int32)">
+  GenerateWithMultipleImages(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates text for multiple images interleaved in a single context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateWithMultipleImages(IEnumerable&lt;Tensor&lt;T&gt;&gt; images, string prompt, int maxLength = 512)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Sequence of images to process.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Prompt that may reference images using special tokens.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated text response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFlamingoModel_1_GenerateWithMultipleImages_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Supports prompts like: "&lt;image&gt; shows a cat and &lt;image&gt; shows a dog. Compare them."
+where &lt;image&gt; tokens are replaced with corresponding image features.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_InContextClassify_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.InContextClassify*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_InContextClassify_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.InContextClassify(System.Collections.Generic.IEnumerable{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  InContextClassify(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Label)&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs in-context visual classification without explicit labels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;string, T&gt; InContextClassify(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Label)&gt; labeledExamples, Tensor&lt;T&gt; queryImage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>labeledExamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.image">Image</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.text">Text</a>)&gt;</dt>
+    <dd><p>Examples with (image, label) pairs.</p>
+</dd>
+    <dt><code>queryImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The image to classify.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Dictionary mapping labels to confidence scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFlamingoModel_1_InContextClassify_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Classify images using just a few examples!
+<p>Instead of training a classifier on thousands of images:</p>
+<ol>
+<li>Show a few examples per class</li>
+<li>Flamingo learns the categories</li>
+<li>It can now classify new images</li>
+</ol>
+<p>This is &quot;few-shot classification&quot; - works with any categories!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFlamingoModel_1_ScoreImageText_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.ScoreImageText*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFlamingoModel_1_ScoreImageText_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IFlamingoModel`1.ScoreImageText(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  ScoreImageText(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the log probability of a given text completion for an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ScoreImageText(Tensor&lt;T&gt; image, string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to score.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Log probability of the text given the image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFlamingoModel_1_ScoreImageText_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Useful for ranking candidate captions or performing discriminative tasks
+with a generative model.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFlamingoModel.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

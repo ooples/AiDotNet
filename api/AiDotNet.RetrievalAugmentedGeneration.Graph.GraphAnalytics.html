@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GraphAnalytics | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GraphAnalytics | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides graph analytics algorithms for analyzing knowledge graphs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics" class="text-break">
+Class GraphAnalytics  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.html">Graph</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides graph analytics algorithms for analyzing knowledge graphs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class GraphAnalytics</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GraphAnalytics</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class implements common graph algorithms used to analyze the structure
+and importance of nodes and edges in a knowledge graph.
+</p>
+<p><b>For Beginners:</b> Graph analytics help you understand your graph.
+<p>Think of a social network:</p>
+<ul>
+<li>PageRank: Who are the most influential people?</li>
+<li>Degree Centrality: Who has the most connections?</li>
+<li>Closeness Centrality: Who can reach everyone quickly?</li>
+<li>Betweenness Centrality: Who connects different groups?</li>
+</ul>
+<p>These algorithms answer &quot;who's important?&quot; and &quot;how are things connected?&quot;</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateAverageClusteringCoefficient_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateAverageClusteringCoefficient*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateAverageClusteringCoefficient__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateAverageClusteringCoefficient``1(AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph{``0})">
+  CalculateAverageClusteringCoefficient&lt;T&gt;(KnowledgeGraph&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L736"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the average clustering coefficient for the entire graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double CalculateAverageClusteringCoefficient&lt;T&gt;(KnowledgeGraph&lt;T&gt; graph)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>graph</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd><p>The knowledge graph to analyze.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The average clustering coefficient (0 to 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateAverageClusteringCoefficient__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how "clustered" the entire graph is.
+<ul>
+<li>Close to 1: Graph has many tight groups (like friend circles)</li>
+<li>Close to 0: Graph is sparse, few triangles (like a tree)</li>
+</ul>
+<p>Compare to random graphs:</p>
+<ul>
+<li>Random graph: Low clustering (~0.01 for large graphs)</li>
+<li>Real social networks: High clustering (~0.3-0.6)</li>
+<li>Small-world networks: High clustering + short paths</li>
+</ul>
+<p>This is one measure of graph structure used in network science.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateBetweennessCentrality_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateBetweennessCentrality*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateBetweennessCentrality__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__System_Boolean_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateBetweennessCentrality``1(AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph{``0},System.Boolean)">
+  CalculateBetweennessCentrality&lt;T&gt;(KnowledgeGraph&lt;T&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates betweenness centrality for all nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Dictionary&lt;string, double&gt; CalculateBetweennessCentrality&lt;T&gt;(KnowledgeGraph&lt;T&gt; graph, bool normalized = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>graph</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd><p>The knowledge graph to analyze.</p>
+</dd>
+    <dt><code>normalized</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to normalize scores (default: true).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary mapping node IDs to their betweenness centrality scores.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateBetweennessCentrality__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Betweenness centrality measures how often a node appears on shortest paths between
+other nodes. Nodes that act as "bridges" between different parts of the graph
+have high betweenness centrality.
+</p>
+<p><b>For Beginners:</b> Betweenness centrality finds "bridge" nodes.
+<p>Think of a transportation network:</p>
+<ul>
+<li>A bridge connecting two cities has high betweenness</li>
+<li>Many shortest paths go through the bridge</li>
+<li>If you remove it, people must take longer routes</li>
+</ul>
+<p>In social networks:</p>
+<ul>
+<li>People connecting different friend groups have high betweenness</li>
+<li>They're &quot;brokers&quot; or &quot;gatekeepers&quot; of information</li>
+</ul>
+<p>Algorithm (simplified Brandes' algorithm):</p>
+<ol>
+<li>For all pairs of nodes, find shortest paths</li>
+<li>Count how many paths go through each node</li>
+<li>Higher count = Higher betweenness</li>
+</ol>
+<p>High betweenness = Important connector/bridge in the network</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateClosenessCentrality_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateClosenessCentrality*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateClosenessCentrality__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateClosenessCentrality``1(AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph{``0})">
+  CalculateClosenessCentrality&lt;T&gt;(KnowledgeGraph&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates closeness centrality for all nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Dictionary&lt;string, double&gt; CalculateClosenessCentrality&lt;T&gt;(KnowledgeGraph&lt;T&gt; graph)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>graph</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd><p>The knowledge graph to analyze.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary mapping node IDs to their closeness centrality scores.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateClosenessCentrality__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Closeness centrality measures how close a node is to all other nodes in the graph.
+It's calculated as the inverse of the average shortest path distance to all other nodes.
+Nodes that can quickly reach all others have high closeness centrality.
+</p>
+<p><b>For Beginners:</b> Closeness centrality measures "how close" you are to everyone.
+<p>Think of an airport network:</p>
+<ul>
+<li>Hub airports (like Atlanta) can reach anywhere with few layovers → high closeness</li>
+<li>Remote airports need many connections → low closeness</li>
+</ul>
+<p>Algorithm:</p>
+<ol>
+<li>For each node, find shortest path to every other node</li>
+<li>Calculate average distance</li>
+<li>Closeness = 1 / average_distance</li>
+</ol>
+<p>Higher score = Can reach everyone more quickly</p>
+<p>Note: If nodes are unreachable, they're excluded from the calculation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateClusteringCoefficient_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateClusteringCoefficient*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateClusteringCoefficient__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateClusteringCoefficient``1(AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph{``0})">
+  CalculateClusteringCoefficient&lt;T&gt;(KnowledgeGraph&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L663"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the clustering coefficient for each node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Dictionary&lt;string, double&gt; CalculateClusteringCoefficient&lt;T&gt;(KnowledgeGraph&lt;T&gt; graph)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>graph</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd><p>The knowledge graph to analyze.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary mapping node IDs to their clustering coefficients (0 to 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateClusteringCoefficient__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The clustering coefficient measures how well a node's neighbors are connected to each other.
+A high coefficient means the node is part of a tightly-knit cluster.
+</p>
+<p><b>For Beginners:</b> Clustering coefficient measures how "clique-like" connections are.
+<p>Think of your friend group:</p>
+<ul>
+<li>High clustering: Your friends all know each other (tight group)</li>
+<li>Low clustering: Your friends don't know each other (you're the hub)</li>
+</ul>
+<p>Formula:</p>
+<ul>
+<li>Count how many of your friends are friends with each other</li>
+<li>Divide by maximum possible friendships between them</li>
+<li>Result: 0 (no friends know each other) to 1 (everyone knows everyone)</li>
+</ul>
+<p>Example:</p>
+<ul>
+<li>You have 3 friends: Alice, Bob, Charlie</li>
+<li>Maximum connections between them: 3 (Alice-Bob, Bob-Charlie, Alice-Charlie)</li>
+<li>Actual connections: 2 (Alice-Bob, Bob-Charlie)</li>
+<li>Clustering coefficient: 2/3 = 0.67</li>
+</ul>
+<p>Uses:</p>
+<ul>
+<li>Identify tight communities</li>
+<li>Find nodes embedded in groups vs connectors between groups</li>
+<li>Measure graph's overall &quot;cliquishness&quot;</li>
+</ul>
+<p>High coefficient = Node in dense cluster
+Low coefficient = Node connects different groups</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateDegreeCentrality_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateDegreeCentrality*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateDegreeCentrality__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__System_Boolean_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculateDegreeCentrality``1(AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph{``0},System.Boolean)">
+  CalculateDegreeCentrality&lt;T&gt;(KnowledgeGraph&lt;T&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates degree centrality for all nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Dictionary&lt;string, double&gt; CalculateDegreeCentrality&lt;T&gt;(KnowledgeGraph&lt;T&gt; graph, bool normalized = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>graph</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd><p>The knowledge graph to analyze.</p>
+</dd>
+    <dt><code>normalized</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to normalize scores by the maximum possible degree (default: true).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary mapping node IDs to their degree centrality scores.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculateDegreeCentrality__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Degree centrality is the simplest centrality measure. It counts the number of
+edges connected to each node. Nodes with more connections are considered more central.
+</p>
+<p><b>For Beginners:</b> Degree centrality counts connections.
+<p>In a social network:</p>
+<ul>
+<li>Person with 100 friends has higher degree centrality than person with 10 friends</li>
+<li>It's the simplest measure: &quot;Who knows the most people?&quot;</li>
+</ul>
+<p>Types:</p>
+<ul>
+<li>Out-degree: How many edges go OUT (how many people do you follow?)</li>
+<li>In-degree: How many edges come IN (how many followers do you have?)</li>
+<li>Total degree: Sum of both</li>
+</ul>
+<p>This implementation calculates total degree (in + out).</p>
+<p>Normalized: Divides by (N-1) where N is total nodes, giving a score from 0 to 1.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculatePageRank_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculatePageRank*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculatePageRank__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__System_Double_System_Int32_System_Double_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.CalculatePageRank``1(AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph{``0},System.Double,System.Int32,System.Double)">
+  CalculatePageRank&lt;T&gt;(KnowledgeGraph&lt;T&gt;, double, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates PageRank scores for all nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Dictionary&lt;string, double&gt; CalculatePageRank&lt;T&gt;(KnowledgeGraph&lt;T&gt; graph, double dampingFactor = 0.85, int maxIterations = 100, double convergenceThreshold = 0.0001)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>graph</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd><p>The knowledge graph to analyze.</p>
+</dd>
+    <dt><code>dampingFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The damping factor (default: 0.85). Must be between 0 and 1.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of iterations (default: 100).</p>
+</dd>
+    <dt><code>convergenceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Convergence threshold (default: 0.0001).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary mapping node IDs to their PageRank scores.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_CalculatePageRank__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__System_Double_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+PageRank is an algorithm used by Google to rank web pages. In a knowledge graph,
+it identifies the most "important" or "central" nodes based on the structure
+of relationships. Nodes pointed to by many important nodes get higher scores.
+</p>
+<p><b>For Beginners:</b> PageRank finds the most important nodes.
+<p>Imagine a citation network:</p>
+<ul>
+<li>Papers cited by many other papers get high PageRank</li>
+<li>Papers cited by highly-cited papers get even higher PageRank</li>
+<li>It's like asking: &quot;Which papers are most influential?&quot;</li>
+</ul>
+<p>The algorithm:</p>
+<ol>
+<li>Start: All nodes have equal rank</li>
+<li>Iterate: Each node shares its rank with nodes it points to</li>
+<li>Damping: 85% of rank flows through edges, 15% jumps randomly</li>
+<li>Repeat until scores stabilize</li>
+</ol>
+<p>Higher PageRank = More important/central in the graph</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when graph is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when dampingFactor is not between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_DetectCommunitiesLabelPropagation_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.DetectCommunitiesLabelPropagation*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_DetectCommunitiesLabelPropagation__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.DetectCommunitiesLabelPropagation``1(AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph{``0},System.Int32)">
+  DetectCommunitiesLabelPropagation&lt;T&gt;(KnowledgeGraph&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L557"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects communities using Label Propagation algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Dictionary&lt;string, int&gt; DetectCommunitiesLabelPropagation&lt;T&gt;(KnowledgeGraph&lt;T&gt; graph, int maxIterations = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>graph</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd><p>The knowledge graph to analyze.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of iterations (default: 100).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>Dictionary mapping node IDs to their community labels.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_DetectCommunitiesLabelPropagation__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Label Propagation is a fast community detection algorithm. Each node starts with
+a unique label, then iteratively adopts the most common label among its neighbors.
+Nodes in the same community will converge to the same label.
+</p>
+<p><b>For Beginners:</b> Label Propagation finds groups of nodes that cluster together.
+<p>Imagine a party where people wear colored hats:</p>
+<ol>
+<li>Everyone starts with a random color</li>
+<li>Every minute, you look at your friends' hats</li>
+<li>You change to the most popular color among your friends</li>
+<li>After a while, friend groups wear the same color</li>
+</ol>
+<p>In graphs:</p>
+<ul>
+<li>Start: Each node has unique label</li>
+<li>Iterate: Each node adopts most common neighbor label</li>
+<li>Converge: Nodes in same community have same label</li>
+</ul>
+<p>Why it works:</p>
+<ul>
+<li>Densely connected nodes influence each other</li>
+<li>They converge to the same label</li>
+<li>Weakly connected nodes drift apart</li>
+</ul>
+<p>Result: Community labels (numbers) for each node.
+Nodes with the same label are in the same community.</p>
+<p>Fast: O(k * E) where k = iterations, E = edges
+Great for: Large graphs, quick community detection</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_FindConnectedComponents_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.FindConnectedComponents*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_FindConnectedComponents__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.FindConnectedComponents``1(AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph{``0})">
+  FindConnectedComponents&lt;T&gt;(KnowledgeGraph&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L477"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds all connected components in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static List&lt;HashSet&lt;string&gt;&gt; FindConnectedComponents&lt;T&gt;(KnowledgeGraph&lt;T&gt; graph)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>graph</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd><p>The knowledge graph to analyze.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.hashset-1">HashSet</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;&gt;</dt>
+    <dd><p>List of connected components, each containing a set of node IDs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_FindConnectedComponents__1_AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A connected component is a maximal subgraph where every node can reach every other node.
+This helps identify isolated clusters or communities in the graph.
+</p>
+<p><b>For Beginners:</b> Connected components find separate "islands" in your graph.
+<p>Think of a social network:</p>
+<ul>
+<li>Component 1: Alice's friend group (all connected to each other)</li>
+<li>Component 2: Bob's friend group (completely separate from Alice's)</li>
+<li>Component 3: Isolated person Charlie (no connections)</li>
+</ul>
+<p>Uses:</p>
+<ul>
+<li>Find isolated communities</li>
+<li>Detect fragmented knowledge bases</li>
+<li>Identify separate discussion topics</li>
+<li>Check if graph is fully connected</li>
+</ul>
+<p>Algorithm (Union-Find/DFS):</p>
+<ol>
+<li>Start with first unvisited node</li>
+<li>Find all nodes reachable from it (BFS/DFS)</li>
+<li>That's one component</li>
+<li>Repeat for remaining unvisited nodes</li>
+</ol>
+<p>Result: List of components, each containing node IDs in that island.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_GetTopKNodes_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.GetTopKNodes*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_GetTopKNodes_System_Collections_Generic_Dictionary_System_String_System_Double__System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphAnalytics.GetTopKNodes(System.Collections.Generic.Dictionary{System.String,System.Double},System.Int32)">
+  GetTopKNodes(Dictionary&lt;string, double&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L430"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Identifies the top-k most central nodes based on a centrality measure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static List&lt;(string NodeId, double Score)&gt; GetTopKNodes(Dictionary&lt;string, double&gt; centrality, int k)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>centrality</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary of node IDs to centrality scores.</p>
+</dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of top nodes to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.double-.label">Label</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.double-.confidence">Confidence</a>)&gt;</dt>
+    <dd><p>List of (nodeId, score) tuples for the top-k nodes, ordered by descending score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_GraphAnalytics_GetTopKNodes_System_Collections_Generic_Dictionary_System_String_System_Double__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This finds the "most important" nodes.
+<p>After running PageRank or centrality calculations, use this to get:</p>
+<ul>
+<li>Top 10 most influential people (PageRank)</li>
+<li>Top 5 most connected nodes (Degree)</li>
+<li>Top 3 bridge nodes (Betweenness)</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var pageRank = GraphAnalytics.CalculatePageRank(graph);
+var top10 = GraphAnalytics.GetTopKNodes(pageRank, 10);
+// Returns the 10 most important nodes with their scores
+</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/GraphAnalytics.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

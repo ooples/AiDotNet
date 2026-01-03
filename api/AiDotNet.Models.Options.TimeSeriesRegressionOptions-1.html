@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TimeSeriesRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TimeSeriesRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for time series regression models, which analyze data collected over time to identify patterns and make predictions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_TimeSeriesRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.TimeSeriesRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1" class="text-break">
+Class TimeSeriesRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesRegressionOptions.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for time series regression models, which analyze data collected over time
+to identify patterns and make predictions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TimeSeriesRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically double or float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">TimeSeriesRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Models.Options.ARIMAOptions-1.html">ARIMAOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ARIMAXModelOptions-1.html">ARIMAXModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ARMAOptions-1.html">ARMAOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ARModelOptions-1.html">ARModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.AutoformerOptions-1.html">AutoformerOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions-1.html">BayesianStructuralTimeSeriesOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DeepAROptions-1.html">DeepAROptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions-1.html">DynamicRegressionWithARIMAErrorsOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ExponentialSmoothingOptions-1.html">ExponentialSmoothingOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GARCHModelOptions-1.html">GARCHModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.InformerOptions-1.html">InformerOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.InterventionAnalysisOptions-3.html">InterventionAnalysisOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MAModelOptions-1.html">MAModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NBEATSModelOptions-1.html">NBEATSModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NHiTSOptions-1.html">NHiTSOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NeuralNetworkARIMAOptions-1.html">NeuralNetworkARIMAOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ProphetOptions-3.html">ProphetOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SARIMAOptions-1.html">SARIMAOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.STLDecompositionOptions-1.html">STLDecompositionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SpectralAnalysisOptions-1.html">SpectralAnalysisOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.StateSpaceModelOptions-1.html">StateSpaceModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TBATSModelOptions-1.html">TBATSModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TemporalFusionTransformerOptions-1.html">TemporalFusionTransformerOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesIsolationForestOptions-1.html">TimeSeriesIsolationForestOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TransferFunctionOptions-3.html">TransferFunctionOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.UnobservedComponentsOptions-3.html">UnobservedComponentsOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.VARModelOptions-1.html">VARModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.AnomalyDetection.DeepANTOptions-1.html">DeepANTOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.AnomalyDetection.LSTMVAEOptions-1.html">LSTMVAEOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.ChronosOptions-1.html">ChronosOptions&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Time series regression extends traditional regression analysis to account for the temporal nature of data,
+where observations are collected sequentially over time. These models can capture trends, seasonal patterns,
+and the effects of past values on current and future values.
+</p>
+<p><b>For Beginners:</b> Time series regression helps you analyze and predict data that changes over time,
+like stock prices, weather patterns, or monthly sales figures. Unlike regular regression that just looks for
+relationships between variables, time series regression also considers when things happened. It can detect
+patterns like "sales always increase in December" or "temperature today is related to temperature yesterday."
+This class lets you configure how the model analyzes these time-based patterns.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection_" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.AutocorrelationCorrection*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.AutocorrelationCorrection">
+  AutocorrelationCorrection
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesRegressionOptions.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to apply autocorrelation correction to the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AutocorrelationCorrection { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to apply autocorrelation correction, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Autocorrelation occurs when error terms in a time series are correlated across observations, violating
+standard regression assumptions. When this option is enabled, the model applies methods to correct for
+this correlation, improving the accuracy of coefficient estimates and predictions.
+</p>
+<p><b>For Beginners:</b> This determines whether the model should adjust for the fact that errors in
+time series data tend to be related to each other. With the default value of true, the model will make
+these adjustments, which usually improves accuracy. For example, if the model consistently underestimates
+values for several days in a row, this correction helps it recognize and fix that pattern. You should
+generally leave this enabled unless you have a specific reason to disable it.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend_" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.IncludeTrend*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.IncludeTrend">
+  IncludeTrend
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesRegressionOptions.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to include a trend component in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IncludeTrend { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to include a trend component, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the model will include a linear trend term to capture consistent upward or downward movement in the data.
+This helps the model account for long-term directional changes that aren't explained by other variables.
+</p>
+<p><b>For Beginners:</b> This determines whether the model should look for overall upward or downward
+movement in your data over time. With the default value of true, the model will try to identify if your data
+is generally increasing or decreasing (like a growing customer base or declining costs). If your data doesn't
+have a clear direction over time, you might set this to false to simplify the model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder_" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.LagOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.LagOrder">
+  LagOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesRegressionOptions.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the lag order, which determines how many previous time steps are used as predictors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LagOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The lag order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The lag order specifies how many previous observations are included as explanatory variables in the model.
+For example, a lag order of 2 means that values from both t-1 and t-2 time steps are used to predict the value at time t.
+</p>
+<p><b>For Beginners:</b> This controls how far back in time the model looks when making predictions.
+With the default value of 1, the model considers only the previous time period (like yesterday's value when
+predicting today's). If you set it to 3, the model would look at the three previous time periods
+(like the last three days' values). Higher values help capture longer-term patterns but require more data
+and can make the model more complex.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction_" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.LossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesRegressionOptions.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss function used for gradient computation and model training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function, defaulting to null (which will use MeanSquaredErrorLoss).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The loss function determines how the model measures prediction errors during training.
+Different loss functions are appropriate for different types of problems and data characteristics.
+If null, the model will use Mean Squared Error (MSE) as the default loss function.
+</p>
+<p><b>For Beginners:</b> This determines how the model measures its mistakes during training.
+The default (null) uses Mean Squared Error, which works well for most time series forecasting tasks.
+You can provide a custom loss function if you have specific requirements, such as:
+- MeanAbsoluteErrorLoss for robustness to outliers
+- HuberLoss for a balance between MSE and MAE
+- Custom loss functions for domain-specific error metrics
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType_" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.ModelType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.ModelType">
+  ModelType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesRegressionOptions.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the specific type of time series model to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSeriesModelType ModelType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.TimeSeriesModelType.html">TimeSeriesModelType</a></dt>
+    <dd><p>The time series model type, defaulting to ARIMA.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Different time series model types have different capabilities and are suited to different types of data.
+ARIMA (AutoRegressive Integrated Moving Average) is a flexible and widely-used approach that can handle
+many common time series patterns.
+</p>
+<p><b>For Beginners:</b> This selects which specific algorithm the model uses to analyze your time series data.
+The default is ARIMA, which is a popular and versatile method that works well for many types of time data.
+Other options might include methods like exponential smoothing (good for data with clear trends and seasonality)
+or VAR (Vector AutoRegression, good for analyzing relationships between multiple time series).
+Unless you're familiar with the different methods, starting with ARIMA is usually a good choice.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod_" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.SeasonalPeriod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod" data-uid="AiDotNet.Models.Options.TimeSeriesRegressionOptions`1.SeasonalPeriod">
+  SeasonalPeriod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesRegressionOptions.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal period of the time series data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalPeriod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The seasonal period, defaulting to 0 (no seasonality).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The seasonal period represents how many time steps make up one complete cycle of seasonal pattern.
+For example, 12 for monthly data with yearly seasonality, 7 for daily data with weekly seasonality.
+A value of 0 indicates that no seasonal component should be included in the model.
+</p>
+<p><b>For Beginners:</b> This tells the model if your data has regular patterns that repeat at fixed intervals.
+The default value of 0 means "don't look for seasonal patterns." If you're analyzing monthly data and expect
+yearly patterns (like retail sales peaking every December), you would set this to 12. For daily data with
+weekly patterns, you'd use 7. For quarterly data with yearly patterns, you'd use 4. This helps the model
+recognize and predict these recurring cycles.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TimeSeriesRegressionOptions.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MiniBatchGradientDescentOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MiniBatchGradientDescentOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Mini-Batch Gradient Descent, an optimization algorithm that updates model parameters using the average gradient computed from small random subsets of training data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.MiniBatchGradientDescentOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3" class="text-break">
+Class MiniBatchGradientDescentOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MiniBatchGradientDescentOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Mini-Batch Gradient Descent, an optimization algorithm that
+updates model parameters using the average gradient computed from small random subsets of training data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MiniBatchGradientDescentOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">MiniBatchGradientDescentOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Mini-Batch Gradient Descent is a variation of the gradient descent optimization algorithm that strikes a
+balance between the efficiency of stochastic gradient descent and the stability of batch gradient descent.
+It updates model parameters after processing small randomly-selected subsets (mini-batches) of the training
+data, rather than processing individual samples (as in stochastic gradient descent) or the entire dataset
+(as in batch gradient descent). This approach often converges faster than batch methods while providing
+more stable updates than purely stochastic methods.
+</p>
+<p><b>For Beginners:</b> Mini-Batch Gradient Descent is a method for training machine learning models
+that tries to find the best values for the model's internal settings (parameters).
+<p>Imagine you're trying to find the lowest point in a hilly landscape while blindfolded:</p>
+<ul>
+<li>Full Batch Gradient Descent: You survey the entire landscape before taking each step</li>
+<li>Stochastic Gradient Descent: You take a step based on checking just one random spot</li>
+<li>Mini-Batch Gradient Descent: You check a small random sample of spots before each step</li>
+</ul>
+<p>This middle-ground approach is popular because:</p>
+<ul>
+<li>It's faster than checking the entire landscape each time</li>
+<li>It's more stable than making decisions based on just one spot</li>
+<li>It works well with modern hardware that can efficiently process small batches</li>
+</ul>
+<p>This class allows you to configure how this learning process works: how many examples to look at
+in each batch, how long to train, and how the algorithm adjusts its step size over time.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MiniBatchGradientDescentOptions.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of training examples used in each mini-batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The mini-batch size, defaulting to 32.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The batch size determines how many training examples are processed before updating the model parameters.
+Smaller batch sizes lead to more frequent updates and potentially faster convergence, but with more noise
+in the gradient estimates. Larger batch sizes provide more stable and accurate gradient estimates but
+require more computation per update and may converge more slowly in terms of epochs. The optimal batch
+size often depends on the specific problem, available computational resources, and the size and structure
+of the training dataset.
+</p>
+<p><b>For Beginners:</b> This setting controls how many examples the algorithm looks at before
+making each adjustment to the model.
+<p>Think of it like taste-testing a soup:</p>
+<ul>
+<li>BatchSize = 1: You taste just one spoonful before adding seasoning (frequent but potentially misleading feedback)</li>
+<li>BatchSize = 32: You taste 32 spoonfuls and consider the average flavor (more reliable feedback, but less frequent adjustments)</li>
+<li>BatchSize = [entire pot]: You taste the entire pot before making any adjustment (very reliable but very slow)</li>
+</ul>
+<p>The default value of 32 works well for many problems because:</p>
+<ul>
+<li>It's large enough to provide somewhat stable gradient estimates</li>
+<li>It's small enough to allow for frequent updates and efficient training</li>
+<li>It often fits well in modern hardware memory for parallel processing</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Your training seems unstable (parameters jumping around too much)</li>
+<li>You have plenty of computational resources</li>
+<li>Your dataset is very noisy</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Training seems to be progressing too slowly</li>
+<li>You have limited memory available</li>
+<li>You want to escape local minima more easily</li>
+</ul>
+<p>Common batch sizes are powers of 2 (16, 32, 64, 128, 256) because they often optimize performance on GPUs and other hardware.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_LearningRateDecreaseFactor_" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.LearningRateDecreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_LearningRateDecreaseFactor" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.LearningRateDecreaseFactor">
+  LearningRateDecreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MiniBatchGradientDescentOptions.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the learning rate is decreased when the loss is getting worse.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateDecreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate decrease multiplier, defaulting to 0.95 (5% decrease).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_LearningRateDecreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how quickly the learning rate is reduced when the optimization encounters
+difficulties (i.e., when the loss increases). After an unsuccessful update, the current learning
+rate is multiplied by this factor, forcing the algorithm to take smaller, more cautious steps. This
+adaptive approach helps the algorithm recover from overshooting and navigate complex loss landscapes
+by automatically adjusting the step size based on the observed performance.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm decreases its step size
+when it makes a mistake.
+<p>Continuing the walking downhill analogy:</p>
+<ul>
+<li>If you take a step and end up higher than before, you've gone in the wrong direction</li>
+<li>You'd want to be more careful with your next step</li>
+<li>This setting determines how much more cautious you become</li>
+</ul>
+<p>The default value of 0.95 means:</p>
+<ul>
+<li>Each time the model gets worse, the learning rate decreases by 5%</li>
+<li>For example, a learning rate of 0.1 would become 0.095 after an unsuccessful update</li>
+</ul>
+<p>This adjustment helps the algorithm:</p>
+<ul>
+<li>Recover from overshooting the optimal values</li>
+<li>Navigate tricky, curved areas of the loss landscape</li>
+<li>Eventually settle into a minimum</li>
+</ul>
+<p>You might want to decrease this value (like to 0.8) if:</p>
+<ul>
+<li>Training seems unstable</li>
+<li>You want the algorithm to become more cautious more quickly</li>
+</ul>
+<p>You might want to increase this value (like to 0.99) if:</p>
+<ul>
+<li>You want to be more persistent with the current learning rate</li>
+<li>The loss function has many local minima you want to try to escape</li>
+</ul>
+<p>Finding the right balance between increasing and decreasing the learning rate is important
+for efficient training.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_LearningRateIncreaseFactor_" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.LearningRateIncreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_LearningRateIncreaseFactor" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.LearningRateIncreaseFactor">
+  LearningRateIncreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MiniBatchGradientDescentOptions.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the learning rate is increased when the loss is improving.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateIncreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate increase multiplier, defaulting to 1.05 (5% increase).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_LearningRateIncreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how aggressively the learning rate is increased when the optimization is
+making progress (i.e., when the loss is decreasing). After a successful update, the current learning
+rate is multiplied by this factor, allowing the algorithm to take larger steps when moving in a
+promising direction. This adaptive approach can speed up convergence by taking larger steps when
+it's safe to do so, but the rate will never exceed the MaxLearningRate.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm increases its step size
+when things are going well.
+<p>Imagine you're walking downhill trying to reach the lowest point:</p>
+<ul>
+<li>When you're making good progress, you might want to speed up</li>
+<li>This setting determines how much faster you go with each successful step</li>
+</ul>
+<p>The default value of 1.05 means:</p>
+<ul>
+<li>Each time the model improves, the learning rate increases by 5%</li>
+<li>For example, a learning rate of 0.1 would become 0.105 after a successful update</li>
+</ul>
+<p>This gradual increase helps the algorithm:</p>
+<ul>
+<li>Speed up when moving in the right direction</li>
+<li>Cover large flat areas more quickly</li>
+<li>Potentially escape shallow local minima</li>
+</ul>
+<p>You might want to increase this value (like to 1.1) if:</p>
+<ul>
+<li>Training seems too slow</li>
+<li>Your optimization landscape has large flat regions</li>
+</ul>
+<p>You might want to decrease this value (like to 1.01) if:</p>
+<ul>
+<li>The learning rate becomes unstable too quickly</li>
+<li>You want more conservative adaptation</li>
+</ul>
+<p>The learning rate will never exceed the MaxLearningRate value, regardless of how many
+successful updates occur.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_MaxEpochs_" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.MaxEpochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_MaxEpochs" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.MaxEpochs">
+  MaxEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MiniBatchGradientDescentOptions.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of complete passes through the training dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxEpochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of epochs, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_MaxEpochs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+An epoch represents one complete pass through the entire training dataset. This parameter sets the
+maximum number of epochs the algorithm will perform during training. The actual training might
+terminate earlier based on other stopping criteria, such as convergence or validation performance.
+More epochs allow the model more opportunities to learn from the training data but increase the
+risk of overfitting and computational cost.
+</p>
+<p><b>For Beginners:</b> This setting determines how many times the algorithm will work through
+your entire training dataset.
+<p>Imagine you're studying for an exam:</p>
+<ul>
+<li>Each &quot;epoch&quot; is like reading through your entire textbook once</li>
+<li>You might need to read it multiple times to fully understand the material</li>
+<li>But reading it too many times might lead to memorizing specific examples rather than understanding the concepts</li>
+</ul>
+<p>The default value of 100 means the algorithm will go through your entire dataset up to 100 times.</p>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Your model is complex and needs more time to learn</li>
+<li>You're using techniques to prevent overfitting (like regularization)</li>
+<li>Your learning rate is very small, requiring more iterations</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Your model is overfitting (performing well on training data but poorly on new data)</li>
+<li>You have a very large dataset and training is taking too long</li>
+<li>You're doing initial experimentation and don't need perfect results</li>
+</ul>
+<p>In practice, you'll often use early stopping based on validation performance rather than
+relying solely on a fixed number of epochs.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_MaxLearningRate_" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.MaxLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_MaxLearningRate" data-uid="AiDotNet.Models.Options.MiniBatchGradientDescentOptions`3.MaxLearningRate">
+  MaxLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MiniBatchGradientDescentOptions.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed learning rate for the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum learning rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MiniBatchGradientDescentOptions_3_MaxLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate determines the step size in the parameter space during each update. This parameter
+sets an upper limit on how large the learning rate can become, even when using adaptive techniques that
+might otherwise increase it further. The 'new' keyword indicates this property overrides a similar
+property in the base class, potentially with a different default value or behavior specific to
+mini-batch processing.
+</p>
+<p><b>For Beginners:</b> This setting controls the maximum size of adjustments the algorithm
+can make to your model's parameters.
+<p>Think of it like adjusting the temperature on a thermostat:</p>
+<ul>
+<li>A higher MaxLearningRate (like 0.5) allows for bigger adjustments</li>
+<li>A lower MaxLearningRate (like 0.01) forces the algorithm to make smaller, more cautious adjustments</li>
+</ul>
+<p>The default value of 0.1 provides a reasonable balance for many problems:</p>
+<ul>
+<li>High enough to make meaningful progress quickly</li>
+<li>Low enough to avoid wildly overshooting the optimal values</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Training seems to be progressing too slowly</li>
+<li>You're confident the function being optimized is well-behaved</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Training is unstable (loss fluctuating wildly)</li>
+<li>Your model is very sensitive to small parameter changes</li>
+<li>You're working with a complex or ill-conditioned problem</li>
+</ul>
+<p>Note: This property overrides a similar setting in the parent class, which is why it has the 'new' keyword.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MiniBatchGradientDescentOptions.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

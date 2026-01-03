@@ -1,0 +1,2399 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ExpressionTree&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ExpressionTree&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a symbolic expression tree for mathematical operations that can be used for symbolic regression.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LinearAlgebra_ExpressionTree_3.md&amp;value=---%0Auid%3A%20AiDotNet.LinearAlgebra.ExpressionTree%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3">
+
+
+
+  <h1 id="AiDotNet_LinearAlgebra_ExpressionTree_3" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3" class="text-break">
+Class ExpressionTree&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LinearAlgebra.html">LinearAlgebra</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a symbolic expression tree for mathematical operations that can be used for symbolic regression.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ExpressionTree&lt;T, TInput, TOutput&gt; : IFullModel&lt;T, TInput, TOutput&gt;, IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, TInput, TOutput&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;, IGradientComputable&lt;T, TInput, TOutput&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the expression tree (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ExpressionTree&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_LinearAlgebra_ExpressionTree_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> An ExpressionTree is like a mathematical formula represented as a tree structure.
+Each node in the tree is either a number, a variable, or an operation (like addition or multiplication).
+This allows the AI to create and evolve mathematical formulas that can model your data.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3__ctor_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3__ctor_AiDotNet_Enums_ExpressionNodeType__0_AiDotNet_LinearAlgebra_ExpressionTree__0__1__2__AiDotNet_LinearAlgebra_ExpressionTree__0__1__2__AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.#ctor(AiDotNet.Enums.ExpressionNodeType,`0,AiDotNet.LinearAlgebra.ExpressionTree{`0,`1,`2},AiDotNet.LinearAlgebra.ExpressionTree{`0,`1,`2},AiDotNet.Interfaces.ILossFunction{`0})">
+  ExpressionTree(ExpressionNodeType, T?, ExpressionTree&lt;T, TInput, TOutput&gt;?, ExpressionTree&lt;T, TInput, TOutput&gt;?, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new expression tree node with the specified properties.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExpressionTree(ExpressionNodeType type, T? value = default, ExpressionTree&lt;T, TInput, TOutput&gt;? left = null, ExpressionTree&lt;T, TInput, TOutput&gt;? right = null, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>type</code> <a class="xref" href="AiDotNet.Enums.ExpressionNodeType.html">ExpressionNodeType</a></dt>
+    <dd><p>The type of node to create.</p>
+</dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value for this node (for constants and variables).</p>
+</dd>
+    <dt><code>left</code> <a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The left child node.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The right child node.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for symbolic regression.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3__ctor_AiDotNet_Enums_ExpressionNodeType__0_AiDotNet_LinearAlgebra_ExpressionTree__0__1__2__AiDotNet_LinearAlgebra_ExpressionTree__0__1__2__AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a new part of your mathematical formula.
+You can create simple nodes (like numbers or variables) or operation nodes
+(like addition or multiplication) that connect to other nodes.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Coefficients_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Coefficients*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Coefficients" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Coefficients">
+  Coefficients
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1352"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a vector containing all coefficient values in this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Coefficients { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Coefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This collects all the constant numbers from your formula into a list.
+For example, if your formula is &quot;2x + 3y + 5&quot;, this would give you [2, 3, 5].
+These numbers are called &quot;coefficients&quot; and are important when optimizing your model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Complexity_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Complexity*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Complexity" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Complexity">
+  Complexity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the complexity of this expression tree, measured as the total number of nodes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Complexity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Complexity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Complexity tells you how complicated the formula is.
+A higher number means a more complex formula with more terms and operations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_DefaultLossFunction_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.DefaultLossFunction*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_DefaultLossFunction" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.DefaultLossFunction">
+  DefaultLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default loss function used by this model for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt; DefaultLossFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_DefaultLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For ExpressionTree (symbolic regression), the default loss function is Mean Squared Error (MSE),
+which is the standard loss function for regression problems.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_FeatureCount_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.FeatureCount*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_FeatureCount" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.FeatureCount">
+  FeatureCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of features (variables) used in this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_FeatureCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how many different input variables
+your formula uses. For example, if your formula uses x[0], x[1], and x[2],
+the feature count would be 3.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Id_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Id*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Id" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Id">
+  Id
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L793"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the unique identifier for this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Id { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Id_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a unique number assigned to each part of your formula,
+making it easy to identify and reference specific parts of the expression tree.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Left_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Left*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Left" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Left">
+  Left
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the left child node of this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExpressionTree&lt;T, TInput, TOutput&gt;? Left { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Left_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> In operations like addition (a + b), the left child represents 'a'.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_ParameterCount_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_ParameterCount" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters (constant nodes) in this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how many constant values are in your formula.
+For example, if your formula is &quot;2x + 3y + 5&quot;, there are 3 parameters: 2, 3, and 5.
+This value is obtained from the Coefficients property, which returns a vector of all constant values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Parent_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Parent*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Parent" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Parent">
+  Parent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parent node of this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExpressionTree&lt;T, TInput, TOutput&gt;? Parent { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_RequiredFeatureCount_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.RequiredFeatureCount*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_RequiredFeatureCount" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.RequiredFeatureCount">
+  RequiredFeatureCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum number of features required for input data to this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RequiredFeatureCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_RequiredFeatureCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you the minimum number of columns your input data must have.
+It equals the maximum variable index used plus one. For example, if your formula uses x[5],
+the required feature count is 6 (indices 0 through 5).</p>
+<p>
+Note: This is different from FeatureCount which counts unique variables used.
+A tree using only x[5] has FeatureCount=1 but RequiredFeatureCount=6.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Right_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Right*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Right" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Right">
+  Right
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the right child node of this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExpressionTree&lt;T, TInput, TOutput&gt;? Right { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Right_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> In operations like addition (a + b), the right child represents 'b'.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SupportsJitCompilation_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SupportsJitCompilation" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1650"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this expression tree supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True - expression trees are inherently computation graphs and support JIT compilation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Expression trees are already symbolic computation graphs, making them ideal for JIT compilation.
+The tree structure directly represents the mathematical operations to be performed,
+which can be compiled into optimized native code.
+</p>
+<p><b>For Beginners:</b> Expression trees are like ready-made recipes for JIT compilation.
+<p>Since an expression tree already describes your formula as a series of operations
+(add, multiply, etc.), the JIT compiler can:</p>
+<ul>
+<li>Convert it directly to fast machine code</li>
+<li>Optimize common patterns (e.g., constant folding)</li>
+<li>Inline operations for better performance</li>
+</ul>
+<p>This provides 2-5x speedup for complex symbolic expressions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Type_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Type*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Type" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Type">
+  Type
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the type of this node (constant, variable, or operation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExpressionNodeType Type { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ExpressionNodeType.html">ExpressionNodeType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Value_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Value*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Value" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Value">
+  Value
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the value stored in this node. For constants, this is the actual value.
+For variables, this is the index of the variable in the input vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Value { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_ApplyGradients_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to update the model parameters (constants in the expression tree).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for the update.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Updates constants using: constant = constant - learningRate * gradient
+</p>
+<p><b>For Beginners:</b>
+After computing gradients (seeing which direction to adjust each constant),
+this method actually adjusts them. The learning rate controls how big of an adjustment to make.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>If gradients is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If gradient vector length doesn't match parameter count.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Clone_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Clone*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Clone" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L867"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a clone of this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new expression tree with the same structure and values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an exact duplicate of your formula.
+It's essentially the same as DeepCopy and Copy - it makes a complete
+duplicate that you can modify without changing the original.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_ComputeGradients_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ComputeGradients(`1,`2,AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ComputeGradients(TInput input, TOutput target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>target</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The target/expected output.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use. If null, uses the model's default loss function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing gradients with respect to all model parameters (constants in the expression tree).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes gradients using numerical differentiation (finite differences).
+For each constant in the expression tree, it slightly perturbs the value and
+measures how the loss changes, approximating the gradient.
+</p>
+<p><b>For Beginners:</b>
+This calculates how to adjust each constant in your mathematical formula to reduce error.
+Since expression trees are symbolic, we use a numerical approximation:
+we slightly change each constant and see how much the error changes.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>If input or target is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Copy_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Copy*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Copy" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Copy">
+  Copy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L504"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; Copy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new expression tree with the same structure and values as this one.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Copy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an exact duplicate of the formula, like making a photocopy.
+This is important because we often need to make changes to a formula without modifying the original.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Crossover_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Crossover*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Crossover_AiDotNet_Interfaces_IFullModel__0__1__2__System_Double_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Crossover(AiDotNet.Interfaces.IFullModel{`0,`1,`2},System.Double)">
+  Crossover(IFullModel&lt;T, TInput, TOutput&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L475"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Combines this expression tree with another to create a new &quot;offspring&quot; expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; Crossover(IFullModel&lt;T, TInput, TOutput&gt; other, double crossoverRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The other expression tree to combine with.</p>
+</dd>
+    <dt><code>crossoverRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability (0.0 to 1.0) that crossover will occur.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new expression tree that combines parts from both parent trees.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Crossover_AiDotNet_Interfaces_IFullModel__0__1__2__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Crossover is like taking parts from two different formulas and combining them
+to create a new formula. For example, if one formula is (x + 2) and another is (y * 3),
+crossover might create (x * 3) by taking parts from each. This mimics how genetic traits
+are passed from parents to children in nature.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_DeepCopy_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_DeepCopy" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L852"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new, identical expression tree.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_DeepCopy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an exact duplicate of the entire formula tree.
+Unlike the Copy method which returns a general IFullModel, this method returns
+a specific ExpressionTree. This is useful when you need to make changes to a
+copy without affecting the original formula.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Deserialize_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Deserialize_System_Byte___" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L727"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads an expression tree from a byte array, replacing the current tree's structure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized expression tree.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This loads a previously saved formula from a compact format and
+replaces the current formula with it. It's like opening a saved file and loading its contents.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Deserialize_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Deserialize_System_IO_BinaryReader_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Deserialize(System.IO.BinaryReader)">
+  Deserialize(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L400"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes an expression tree from a binary reader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExpressionTree&lt;T, TInput, TOutput&gt; Deserialize(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader containing the serialized tree data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new ExpressionTree instance created from the serialized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Deserialize_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method reads a saved expression tree from binary data and reconstructs it.
+Think of it like opening a saved file that contains your mathematical formula.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Evaluate_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Evaluate*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Evaluate_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Evaluate(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates this expression tree for a given input vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Evaluate(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector containing values for variables.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The result of evaluating the expression.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Evaluate_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates the result of your formula for a specific set of input values.
+For example, if your formula is &quot;2<em>x[0] + x[1]&quot; and your input is [3, 4], the result would be 2</em>3 + 4 = 10.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_ExportComputationGraph_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1679"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the expression tree as a computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes (variables and constants).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The root computation node representing the complete expression.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the expression tree into a computation graph by:
+1. Creating variable nodes for each unique variable in the tree
+2. Recursively building the computation graph from the tree structure
+3. Adding all input nodes (variables) to the inputNodes list
+</p>
+<p><b>For Beginners:</b> This converts your symbolic formula into a computation graph.
+<p>For example, the expression tree representing &quot;(x[0] * 2) + x[1]&quot; becomes:</p>
+<ul>
+<li>Variable node for x[0]</li>
+<li>Constant node for 2</li>
+<li>Multiply node connecting them</li>
+<li>Variable node for x[1]</li>
+<li>Add node combining the multiply result with x[1]</li>
+</ul>
+<p>The JIT compiler then optimizes this graph and generates fast code.</p>
+<p><b>Note:</b> Only variables are added to inputNodes. Constants are embedded in the graph.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when inputNodes is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_FindNodeById_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.FindNodeById*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_FindNodeById_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.FindNodeById(System.Int32)">
+  FindNodeById(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L781"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds a node in the tree by its unique identifier.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExpressionTree&lt;T, TInput, TOutput&gt;? FindNodeById(int id)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>id</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The unique identifier of the node to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The node with the specified ID, or null if no such node exists.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_FindNodeById_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Every part of your formula has a unique ID number.
+This method helps you find a specific part by its ID, like finding a person by their social security number.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Fit_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Fit*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Fit_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Fit(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L620"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fits the expression tree to the provided training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fit(Matrix&lt;T&gt; X, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Fit_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> For expression trees, &quot;fitting&quot; just checks if the formula can work with your data.
+Unlike other AI models, the formula itself doesn't change during fitting - it's predefined by the tree structure.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetActiveFeatureIndices_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetActiveFeatureIndices" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetActiveFeatureIndices">
+  GetActiveFeatureIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L913"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of all features (variables) used in this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;int&gt; GetActiveFeatureIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A collection of feature indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetActiveFeatureIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you which input variables are actually used in your formula.
+For example, if your formula only uses x[0] and x[2], this returns [0, 2], showing that
+the formula uses the first and third variables but not the second one.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetAllNodes_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetAllNodes*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetAllNodes" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetAllNodes">
+  GetAllNodes()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L747"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a list of all nodes in this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ExpressionTree&lt;T, TInput, TOutput&gt;&gt; GetAllNodes()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>A list containing all nodes in the tree.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetAllNodes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This collects all the parts of your formula into a list.
+For example, if your formula is (x + 2) * y, this would give you a list containing:
+the multiplication operation, the addition operation, the x variable, the constant 2, and the y variable.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetFeatureImportance_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetFeatureImportance" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetFeatureImportance">
+  GetFeatureImportance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L948"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores for this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, T&gt; GetFeatureImportance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary mapping feature names to importance scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetFeatureImportance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Feature importance tells you which input variables matter most in your formula.
+For expression trees, importance is calculated by counting how many times each variable appears in the formula.
+Variables that appear more frequently are considered more important.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetModelMetadata_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetModelMetadata" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L685"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about this expression tree model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about this model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This provides useful information about your formula, like how complex it is
+and how many input variables it needs. Think of it as a summary sheet about your mathematical model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetParameters_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetParameters*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetParameters" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L882"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters of this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all coefficient values in this expression tree.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This returns all the constant numbers from your formula.
+For example, if your formula is &quot;2x + 3y + 5&quot;, this would give you [2, 3, 5].
+These numbers are the adjustable parameters that can be tuned to improve predictions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_IsFeatureUsed_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.IsFeatureUsed*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_IsFeatureUsed_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.IsFeatureUsed(System.Int32)">
+  IsFeatureUsed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific feature (variable) is used in this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsFeatureUsed(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the feature to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the feature is used, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_IsFeatureUsed_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This checks if your formula uses a specific input variable.
+For example, if featureIndex is 2, it checks if x[2] appears anywhere in your formula.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_LoadModel_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.LoadModel*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_LoadModel_System_String_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1502"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads an expression tree model from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the file containing the saved model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This loads a previously saved formula from a file, allowing you to
+reuse it without recreating it. The loaded formula can immediately be used for predictions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_LoadState_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.LoadState*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_LoadState_System_IO_Stream_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1592"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the expression tree's state (structure and values) from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to read the expression tree state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_LoadState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes expression tree state that was previously saved with SaveState,
+restoring the complete tree structure, node types, values, and connections.
+It uses the existing Deserialize method after reading data from the stream.
+</p>
+<p><b>For Beginners:</b> This is like loading a saved snapshot of your mathematical formula.
+<p>When you call LoadState:</p>
+<ul>
+<li>The tree structure is read from the stream</li>
+<li>All node types and values are restored</li>
+<li>The formula becomes identical to when SaveState was called</li>
+</ul>
+<p>After loading, the formula can:</p>
+<ul>
+<li>Make predictions using the restored structure</li>
+<li>Continue evolving during optimization</li>
+<li>Be used for symbolic regression or genetic programming</li>
+</ul>
+<p>This is essential for:</p>
+<ul>
+<li>Resuming interrupted evolutionary training</li>
+<li>Loading the best formula after optimization</li>
+<li>Deploying symbolic models to production</li>
+<li>Knowledge distillation with interpretable models</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when there's an error reading from the stream.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the stream contains invalid or incompatible data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Mutate_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Mutate*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Mutate_System_Double_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Mutate(System.Double)">
+  Mutate(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L422"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a modified version of this expression tree by applying random mutations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; Mutate(double mutationRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mutationRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability (0.0 to 1.0) that a mutation will occur at each node.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new expression tree with mutations applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Mutate_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Mutation is like making small random changes to a formula to see if it improves.
+For example, changing a &quot;+&quot; to a &quot;*&quot; or changing a constant from 2.5 to 3.1.
+This is inspired by how genetic mutations work in nature and helps the AI explore different solutions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Predict_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Predict*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L661"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes predictions using this expression tree for multiple input samples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample and each column represents a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the predicted values for each input sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method takes your data (like height, weight, age values) and
+runs each row through the mathematical formula represented by this tree to get predictions.
+For example, if your tree represents &quot;2x + y&quot;, and your input has values [3,4], the prediction would be 2*3 + 4 = 10.</p>
+<p><b>Note:</b> If the input has more features than the model requires, the extra features are allowed but ignored.
+Only the features up to RequiredFeatureCount are used in predictions. This flexibility supports transfer learning scenarios
+where input data may contain additional features not used by this particular model.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the input matrix has incorrect dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Predict_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Predict*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Predict__1_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Predict(`1)">
+  Predict(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes a prediction for an input example.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Predict(TInput input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data (Vector, Matrix, or Tensor).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>The predicted output.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Predict__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method applies your mathematical formula to the input data
+to calculate a prediction. It handles different types of inputs (vectors, matrices, or tensors).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SaveModel_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SaveModel*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SaveModel_System_String_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1488"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the expression tree model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This saves your mathematical formula to a file so you can load it later
+without having to recreate it. The file contains the tree structure, all node types, and values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SaveState_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SaveState*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SaveState_System_IO_Stream_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1536"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the expression tree's current state (structure and values) to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to write the expression tree state to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_SaveState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes the complete expression tree structure, including all node types,
+values, and connections. It uses the existing Serialize method and writes the data
+to the provided stream.
+</p>
+<p><b>For Beginners:</b> This is like creating a snapshot of your mathematical formula.
+<p>When you call SaveState:</p>
+<ul>
+<li>The entire tree structure is written to the stream</li>
+<li>All node types (constants, variables, operations) are preserved</li>
+<li>All values and connections are saved</li>
+</ul>
+<p>This is particularly useful for:</p>
+<ul>
+<li>Checkpointing during evolutionary algorithm training</li>
+<li>Knowledge distillation with symbolic models</li>
+<li>Saving the best formula found during optimization</li>
+<li>Creating formula ensembles</li>
+</ul>
+<p>You can later use LoadState to restore the formula to this exact state.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when there's an error writing to the stream.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Serialize_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Serialize" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L710"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts this expression tree to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array representing the serialized expression tree.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts your mathematical formula into a compact format that can be
+saved to a file or sent over the internet. It's like zipping up your formula for storage.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Serialize_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Serialize_System_IO_BinaryWriter_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Serialize(System.IO.BinaryWriter)">
+  Serialize(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L381"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes this expression tree to a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Serialize(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Serialize_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This saves your formula to a file or stream so you can load it later.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetActiveFeatureIndices_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetActiveFeatureIndices(System.Collections.Generic.IEnumerable{System.Int32})">
+  SetActiveFeatureIndices(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1013"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active feature indices for this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The feature indices to use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This restricts the formula to only use specific input variables.
+Any variables in the tree that are not in the active set will be replaced with constant zero values.
+This is useful for feature selection and understanding which variables are most important.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetLeft_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetLeft*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetLeft_AiDotNet_LinearAlgebra_ExpressionTree__0__1__2__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetLeft(AiDotNet.LinearAlgebra.ExpressionTree{`0,`1,`2})">
+  SetLeft(ExpressionTree&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the left child of this node and updates the parent reference of the child.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetLeft(ExpressionTree&lt;T, TInput, TOutput&gt;? left)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The node to set as the left child.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetParameters_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetParameters*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1395"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the parameters (constant values) of this expression tree, modifying it in place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The new parameter values to assign to constant nodes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method replaces all the constant numbers in your formula with new values,
+modifying the current tree directly. Unlike UpdateCoefficients and WithParameters which create new
+trees with the updated values, this method mutates the tree in place. Use this when you want to
+modify the tree directly, such as during optimization iterations.</p>
+<p>
+<b>Note:</b> This implementation uses two tree traversals (counting and assignment)
+to validate parameter count BEFORE modifying the tree. This ensures atomicity:
+if the parameter count is wrong, the tree remains unchanged.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameter count doesn't match the number of constant nodes.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetRight_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetRight*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetRight_AiDotNet_LinearAlgebra_ExpressionTree__0__1__2__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetRight(AiDotNet.LinearAlgebra.ExpressionTree{`0,`1,`2})">
+  SetRight(ExpressionTree&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the right child of this node and updates the parent reference of the child.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetRight(ExpressionTree&lt;T, TInput, TOutput&gt;? right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>right</code> <a class="xref" href="AiDotNet.LinearAlgebra.ExpressionTree-3.html">ExpressionTree</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The node to set as the right child.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetType_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetType*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetType_AiDotNet_Enums_ExpressionNodeType_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetType(AiDotNet.Enums.ExpressionNodeType)">
+  SetType(ExpressionNodeType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the type of this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetType(ExpressionNodeType type)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>type</code> <a class="xref" href="AiDotNet.Enums.ExpressionNodeType.html">ExpressionNodeType</a></dt>
+    <dd><p>The node type to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetValue_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetValue*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_SetValue__0_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.SetValue(`0)">
+  SetValue(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the value of this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetValue(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_ToString_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ToString*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_ToString" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string representation of this expression tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string representing the mathematical expression.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_ToString_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the tree into a readable mathematical formula.
+For example, an addition node with children might return &quot;(2 + x[0])&quot;.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Train_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Train*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L635"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the expression tree on the provided data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Train(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> For expression trees, &quot;training&quot; just validates that the formula can process your data.
+The formula itself doesn't learn or change during training - it's predefined by the tree structure.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_Train_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Train*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_Train__1__2_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.Train(`1,`2)">
+  Train(TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L1065"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the expression tree on a single input-output pair.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Train(TInput input, TOutput expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data (Vector, Matrix, or Tensor).</p>
+</dd>
+    <dt><code>expectedOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The expected output value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_Train__1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> For expression trees, training doesn't actually change the formula.
+This method validates that the formula can process your input data correctly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_UpdateCoefficients_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.UpdateCoefficients*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_UpdateCoefficients_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.UpdateCoefficients(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateCoefficients(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L811"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new expression tree with updated coefficient values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; UpdateCoefficients(Vector&lt;T&gt; newCoefficients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newCoefficients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The new coefficient values to use.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new expression tree with the updated coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_UpdateCoefficients_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This changes the constant numbers in your formula without changing its structure.
+For example, if your formula is &quot;2x + 3&quot;, this might change it to &quot;4x + 1&quot; by updating the coefficients 2 and 3.
+This is useful when fine-tuning a model to make better predictions.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the number of new coefficients doesn't match the current number.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ExpressionTree_3_WithParameters_" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.WithParameters*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ExpressionTree_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LinearAlgebra.ExpressionTree`3.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L898"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new expression tree with updated parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The new parameter values to use.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new expression tree with the updated parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ExpressionTree_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This replaces all the constant numbers in your formula
+with new values. For example, changing &quot;2x + 3&quot; to &quot;4x + 1&quot; by providing [4, 1]
+as the new parameters. The structure of the formula stays the same.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ExpressionTree.cs/#L13" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

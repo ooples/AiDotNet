@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IAdaptiveDistillationStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IAdaptiveDistillationStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for adaptive distillation strategies that adjust temperature based on student performance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1">
+
+
+
+  <h1 id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1" class="text-break">
+Interface IAdaptiveDistillationStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/IAdaptiveDistillationStrategy.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.html">KnowledgeDistillation</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.html">Strategies</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for adaptive distillation strategies that adjust temperature based on student performance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IAdaptiveDistillationStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Adaptive strategies dynamically adjust the temperature parameter
+during training based on how well the student is learning. This allows for more flexible
+knowledge transfer compared to fixed-temperature distillation.</p>
+<p><b>Key Concepts:</b>
+- **Performance Tracking**: Monitor student learning progress
+- **Temperature Adaptation**: Adjust temperature based on sample difficulty or student confidence
+- **Per-Sample Adjustment**: Different temperatures for different training samples</p>
+<p><b>When to Use:</b>
+- Training data has varying difficulty levels
+- Student performance is uneven across samples
+- You want automatic temperature tuning instead of manual selection</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_AdaptationRate_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.AdaptationRate*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_AdaptationRate" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.AdaptationRate">
+  AdaptationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/IAdaptiveDistillationStrategy.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the adaptation rate for performance tracking.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double AdaptationRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_AdaptationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Controls how quickly the strategy adapts to new performance metrics.
+Lower values = slower adaptation, Higher values = faster adaptation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_MaxTemperature_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.MaxTemperature*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_MaxTemperature" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.MaxTemperature">
+  MaxTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/IAdaptiveDistillationStrategy.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum temperature value used for adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double MaxTemperature { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_MaxTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Higher temperatures produce softer probability distributions,
+making the distillation easier for the student.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_MinTemperature_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.MinTemperature*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_MinTemperature" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.MinTemperature">
+  MinTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/IAdaptiveDistillationStrategy.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum temperature value used for adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double MinTemperature { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_MinTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Lower temperatures produce sharper probability distributions,
+making the distillation more challenging for the student.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_ComputeAdaptiveTemperature_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.ComputeAdaptiveTemperature*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_ComputeAdaptiveTemperature_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.ComputeAdaptiveTemperature(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeAdaptiveTemperature(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/IAdaptiveDistillationStrategy.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the adaptive temperature for a specific sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double ComputeAdaptiveTemperature(Vector&lt;T&gt; studentOutput, Vector&lt;T&gt; teacherOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Student's current output (logits).</p>
+</dd>
+    <dt><code>teacherOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Teacher's output (logits).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Adapted temperature value for this sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_ComputeAdaptiveTemperature_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Implementers:</b> This method should analyze the student's output
+and return an appropriate temperature within [MinTemperature, MaxTemperature].</p>
+<p>Common approaches:
+- High confidence → lower temperature (student is doing well)
+- Low confidence → higher temperature (student needs help)
+- High entropy → lower temperature (focus learning)
+- Low entropy → higher temperature (explore more)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_GetPerformance_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.GetPerformance*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_GetPerformance_System_Int32_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.GetPerformance(System.Int32)">
+  GetPerformance(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/IAdaptiveDistillationStrategy.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current performance metric for a specific sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double GetPerformance(int sampleIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Index of the sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Performance metric (interpretation depends on strategy).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_GetPerformance_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Returns the tracked performance for a sample, or 0.5 (neutral) if not yet tracked.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_UpdatePerformance_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.UpdatePerformance*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_UpdatePerformance_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.KnowledgeDistillation.Strategies.IAdaptiveDistillationStrategy`1.UpdatePerformance(System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdatePerformance(int, Vector&lt;T&gt;, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/IAdaptiveDistillationStrategy.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the performance metric for a specific training sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdatePerformance(int sampleIndex, Vector&lt;T&gt; studentOutput, Vector&lt;T&gt;? trueLabel = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Index of the training sample.</p>
+</dd>
+    <dt><code>studentOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Student's output (logits) for this sample.</p>
+</dd>
+    <dt><code>trueLabel</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional true label for accuracy-based tracking.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_IAdaptiveDistillationStrategy_1_UpdatePerformance_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this method after each training step to update
+the strategy's understanding of how well the student is performing on each sample.</p>
+<p>The strategy uses this information to adjust temperature in future iterations.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/IAdaptiveDistillationStrategy.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CurriculumEpisodicDataLoader&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CurriculumEpisodicDataLoader&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides curriculum-based episodic task sampling that progressively increases task difficulty during training.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3">
+
+
+
+  <h1 id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3" class="text-break">
+Class CurriculumEpisodicDataLoader&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/CurriculumEpisodicDataLoader.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Loaders.html">Loaders</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides curriculum-based episodic task sampling that progressively increases task difficulty during training.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CurriculumEpisodicDataLoader&lt;T, TInput, TOutput&gt; : EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;, IEpisodicDataLoader&lt;T, TInput, TOutput&gt;, IDataLoader&lt;T&gt;, IResettable, ICountable, IBatchIterable&lt;MetaLearningTask&lt;T, TInput, TOutput&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for features and labels (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html">DataLoaderBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html">EpisodicDataLoaderBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">CurriculumEpisodicDataLoader&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IEpisodicDataLoader-3.html">IEpisodicDataLoader</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html">IDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IResettable.html">IResettable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICountable.html">ICountable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html">IBatchIterable</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.MetaLearningTask-3.html">MetaLearningTask</a>&lt;T, TInput, TOutput&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_DatasetX">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.DatasetX</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_DatasetY">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.DatasetY</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3__nWay">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;._nWay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3__kShot">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;._kShot</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3__queryShots">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;._queryShots</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_RandomInstance">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.RandomInstance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_ClassToIndices">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.ClassToIndices</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3__availableClasses">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;._availableClasses</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_NumOps">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_Name">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_Description">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_TotalCount">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_NWay">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.NWay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_KShot">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.KShot</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_QueryShots">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.QueryShots</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_AvailableClasses">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.AvailableClasses</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_BatchSize">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_HasNext">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.HasNext</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_GetNextTask">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.GetNextTask()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_GetTaskBatch_System_Int32_">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.GetTaskBatch(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_SetSeed_System_Int32_">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.SetSeed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_GetNextBatch">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.GetNextBatch()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_TryGetNextBatch_AiDotNet_Data_Structures_MetaLearningTask__0__1__2___">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.TryGetNextBatch(out MetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_LoadDataCoreAsync_System_Threading_CancellationToken_">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.LoadDataCoreAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_UnloadDataCore">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.UnloadDataCore()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_OnReset">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.OnReset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_GetNextTaskCore">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.GetNextTaskCore()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_BuildMetaLearningTask_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Collections_Generic_List__0__System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Collections_Generic_List__0__">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.BuildMetaLearningTask(List&lt;Vector&lt;T&gt;&gt;, List&lt;T&gt;, List&lt;Vector&lt;T&gt;&gt;, List&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_GetBatches_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.GetBatches(int?, bool, bool, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.EpisodicDataLoaderBase-3.html#AiDotNet_Data_Loaders_EpisodicDataLoaderBase_3_GetBatchesAsync_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Int32_System_Threading_CancellationToken_">EpisodicDataLoaderBase&lt;T, TInput, TOutput&gt;.GetBatchesAsync(int?, bool, bool, int?, int, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Name">DataLoaderBase&lt;T&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Description">DataLoaderBase&lt;T&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_IsLoaded">DataLoaderBase&lt;T&gt;.IsLoaded</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_TotalCount">DataLoaderBase&lt;T&gt;.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentIndex">DataLoaderBase&lt;T&gt;.CurrentIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchSize">DataLoaderBase&lt;T&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchCount">DataLoaderBase&lt;T&gt;.BatchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentBatchIndex">DataLoaderBase&lt;T&gt;.CurrentBatchIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Progress">DataLoaderBase&lt;T&gt;.Progress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Reset">DataLoaderBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Unload">DataLoaderBase&lt;T&gt;.Unload()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadDataCoreAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadDataCoreAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_UnloadDataCore">DataLoaderBase&lt;T&gt;.UnloadDataCore()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_OnReset">DataLoaderBase&lt;T&gt;.OnReset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_EnsureLoaded">DataLoaderBase&lt;T&gt;.EnsureLoaded()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceIndex_System_Int32_">DataLoaderBase&lt;T&gt;.AdvanceIndex(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceBatchIndex">DataLoaderBase&lt;T&gt;.AdvanceBatchIndex()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.ParallelBatchLoaderExtensions.html#AiDotNet_Data_Loaders_ParallelBatchLoaderExtensions_WithParallelLoading__1_AiDotNet_Interfaces_IBatchIterable___0__System_Func_System_Int32_____0__System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__">ParallelBatchLoaderExtensions.WithParallelLoading&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, Func&lt;int[], TBatch&gt;, int, int?, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_AiDotNet_Interfaces_IBatchIterable___0__">DataPipelineExtensions.ToPipeline&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatchesAsync__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__System_Int32_">DataLoaderExtensions.CreateBatchesAsync&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatches__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__">DataLoaderExtensions.CreateBatches&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?)</a>
+  </div>
+  </dd></dl>
+
+
+  <h2 id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_examples">Examples</h2>
+  <pre><code class="lang-csharp">var features = new Matrix&lt;double&gt;(1000, 784);
+var labels = new Vector&lt;double&gt;(1000);
+
+// Create curriculum loader: start easy (2-way 10-shot), end hard (5-way 1-shot)
+var loader = new CurriculumEpisodicDataLoader&lt;double&gt;(
+    datasetX: features,
+    datasetY: labels,
+    targetNWay: 5,         // Final target: 5-way
+    targetKShot: 1,        // Final target: 1-shot
+    queryShots: 15,        // Fixed query examples
+    initialNWay: 2,        // Start easy: 2-way
+    initialKShot: 10,      // Start easy: 10-shot
+    seed: 42
+);
+
+int totalEpisodes = 10000;
+for (int episode = 0; episode &lt; totalEpisodes; episode++)
+{
+    // Update curriculum progress (0.0 to 1.0)
+    double progress = (double)episode / totalEpisodes;
+    loader.SetProgress(progress);
+
+    var task = loader.GetNextTask();
+    // Train on progressively harder tasks
+
+    // At episode 0: 2-way 10-shot (easy)
+    // At episode 5000: ~3-way 5-shot (medium)
+    // At episode 10000: 5-way 1-shot (hard/target)
+}</code></pre>
+
+
+  <h2 id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The CurriculumEpisodicDataLoader implements curriculum learning for meta-learning by starting
+with easier tasks and progressively increasing difficulty. Easier tasks have fewer classes (lower N-way)
+and more examples per class (higher K-shot), while harder tasks approach the target N-way K-shot configuration.
+This gradual progression helps models learn more effectively by building on simpler concepts first.
+</p>
+<p><b>For Beginners:</b> Curriculum learning is inspired by how humans learn:
+- You don't start learning math with calculus - you start with counting, then addition, etc.
+- You don't learn a language by reading novels - you start with basic vocabulary and grammar
+- Complex skills are built on simpler foundations
+<p>This loader applies the same principle to meta-learning:</p>
+<ul>
+<li><b>Easy tasks:</b> 2-way 10-shot (2 classes, 10 examples each) - lots of examples, few classes</li>
+<li><b>Medium tasks:</b> 4-way 5-shot (4 classes, 5 examples each) - balanced difficulty</li>
+<li><b>Hard tasks:</b> 5-way 1-shot (5 classes, 1 example each) - few examples, many classes</li>
+</ul>
+<p><b>How difficulty progression works:</b></p>
+<ul>
+<li>Progress is tracked from 0.0 (start) to 1.0 (end)</li>
+<li>At progress 0.0: Easy tasks (2-way, lots of shots)</li>
+<li>At progress 0.5: Medium tasks (halfway to target)</li>
+<li>At progress 1.0: Target difficulty (full N-way K-shot)</li>
+</ul>
+<p><b>When to use this:</b></p>
+<ul>
+<li>When training struggles to converge on hard tasks from the start</li>
+<li>When you want to improve sample efficiency and training stability</li>
+<li>When implementing human-inspired learning strategies</li>
+<li>Research has shown curriculum learning often leads to better final performance</li>
+</ul>
+<p><b>Note:</b> You must manually update the progress as training proceeds (e.g., based on
+episode number, training loss, or validation accuracy).</p>
+
+<p>
+<b>Thread Safety:</b> This class is not thread-safe due to internal state.
+Create separate instances for concurrent task generation.
+</p>
+<p>
+<b>Performance:</b> Same complexity as standard EpisodicDataLoader, with minor overhead
+for calculating current difficulty parameters based on progress.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3__ctor_" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3.#ctor(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})">
+  CurriculumEpisodicDataLoader(Matrix&lt;T&gt;, Vector&lt;T&gt;, int, int, int, int, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/CurriculumEpisodicDataLoader.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the CurriculumEpisodicDataLoader for progressive N-way K-shot task sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CurriculumEpisodicDataLoader(Matrix&lt;T&gt; datasetX, Vector&lt;T&gt; datasetY, int targetNWay = 5, int targetKShot = 1, int queryShots = 15, int initialNWay = 2, int initialKShot = 10, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetX</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The feature matrix where each row is an example. Shape: [num_examples, num_features].</p>
+</dd>
+    <dt><code>datasetY</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The label vector containing class labels for each example. Length: num_examples.</p>
+</dd>
+    <dt><code>targetNWay</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The target number of classes per task (final difficulty). Must be at least 2.</p>
+</dd>
+    <dt><code>targetKShot</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The target number of support examples per class (final difficulty). Must be at least 1.</p>
+</dd>
+    <dt><code>queryShots</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of query examples per class (constant across curriculum). Must be at least 1.</p>
+</dd>
+    <dt><code>initialNWay</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The initial number of classes per task (easy start). Must be at least 2 and less than or equal to targetNWay.</p>
+</dd>
+    <dt><code>initialKShot</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The initial number of support examples per class (easy start). Must be at least targetKShot.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducible task sampling. If null, uses a time-based seed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This constructor sets up a curriculum from easy to hard:
+<ul>
+<li><b>initialNWay, initialKShot:</b> Starting difficulty (easy tasks with few classes, many examples)</li>
+<li><b>targetNWay, targetKShot:</b> Ending difficulty (hard tasks with many classes, few examples)</li>
+<li><b>queryShots:</b> Stays constant throughout (doesn't affect difficulty much)</li>
+</ul>
+<p><b>Parameter guidelines:</b></p>
+<ul>
+<li>initialNWay should be smaller than targetNWay (e.g., 2-way → 5-way)</li>
+<li>initialKShot should be larger than targetKShot (e.g., 10-shot → 1-shot)</li>
+<li>This creates an easy-to-hard progression</li>
+</ul>
+<p><b>Example progressions:</b></p>
+<ul>
+<li>Gentle: 3-way 5-shot → 5-way 3-shot</li>
+<li>Moderate: 2-way 10-shot → 5-way 3-shot</li>
+<li>Aggressive: 2-way 20-shot → 10-way 1-shot</li>
+</ul>
+<p>The loader starts at progress 0.0 (easy). Call SetProgress() to advance the curriculum.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when datasetX or datasetY is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions are invalid, dataset is too small, or curriculum parameters are inconsistent.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_CurriculumProgress_" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3.CurriculumProgress*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_CurriculumProgress" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3.CurriculumProgress">
+  CurriculumProgress
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/CurriculumEpisodicDataLoader.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current curriculum progress (0.0 = easiest, 1.0 = target difficulty).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CurriculumProgress { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_GetNextTaskCore_" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3.GetNextTaskCore*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_GetNextTaskCore" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3.GetNextTaskCore">
+  GetNextTaskCore()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/CurriculumEpisodicDataLoader.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core implementation of curriculum-based N-way K-shot task sampling with progressive difficulty.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override MetaLearningTask&lt;T, TInput, TOutput&gt; GetNextTaskCore()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Structures.MetaLearningTask-3.html">MetaLearningTask</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A MetaLearningTask with difficulty based on current curriculum progress.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_GetNextTaskCore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements progressive difficulty:
+1. Calculates current N-way and K-shot based on progress (linear interpolation)
+2. Randomly selects currentNWay classes
+3. For each class, samples (currentKShot + queryShots) examples
+4. Shuffles and splits into support and query sets
+5. Constructs and returns MetaLearningTask
+</p>
+<p><b>For Beginners:</b> The difficulty calculation works like this:
+<p>Assume: initialNWay=2, targetNWay=5, initialKShot=10, targetKShot=1</p>
+<p>At progress 0.0:</p>
+<ul>
+<li>currentNWay = 2 + (5-2) * 0.0 = 2</li>
+<li>currentKShot = 10 + (1-10) * 0.0 = 10</li>
+<li>Result: 2-way 10-shot (easiest)</li>
+</ul>
+<p>At progress 0.5:</p>
+<ul>
+<li>currentNWay = 2 + (5-2) * 0.5 = 3.5 → 4 (rounded)</li>
+<li>currentKShot = 10 + (1-10) * 0.5 = 5.5 → 5 (rounded)</li>
+<li>Result: 4-way 5-shot (medium)</li>
+</ul>
+<p>At progress 1.0:</p>
+<ul>
+<li>currentNWay = 2 + (5-2) * 1.0 = 5</li>
+<li>currentKShot = 10 + (1-10) * 1.0 = 1</li>
+<li>Result: 5-way 1-shot (target/hardest)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_SetProgress_" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3.SetProgress*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_SetProgress_System_Double_" data-uid="AiDotNet.Data.Loaders.CurriculumEpisodicDataLoader`3.SetProgress(System.Double)">
+  SetProgress(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/CurriculumEpisodicDataLoader.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the curriculum progress to control task difficulty.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetProgress(double progress)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>progress</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Progress value from 0.0 (easiest) to 1.0 (target difficulty).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_CurriculumEpisodicDataLoader_3_SetProgress_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method controls where you are in the curriculum.
+<p>Call this method periodically during training to advance the difficulty:</p>
+<ul>
+<li>Progress 0.0: Easiest tasks (initialNWay, initialKShot)</li>
+<li>Progress 0.5: Halfway between easy and hard</li>
+<li>Progress 1.0: Target tasks (targetNWay, targetKShot)</li>
+</ul>
+<p><b>Common strategies for updating progress:</b></p>
+<ul>
+<li>Linear: progress = current_episode / total_episodes</li>
+<li>Step-based: increase progress every N episodes</li>
+<li>Performance-based: increase when validation accuracy reaches thresholds</li>
+<li>Adaptive: increase when training loss stabilizes</li>
+</ul>
+<p>The curriculum automatically interpolates between initial and target difficulty.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when progress is outside [0.0, 1.0] range.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/CurriculumEpisodicDataLoader.cs/#L84" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

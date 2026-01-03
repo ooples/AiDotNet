@@ -1,0 +1,2466 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GradientOps | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GradientOps | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides gradient computation operations for backward pass execution.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_CodeGen_GradientOps.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.CodeGen.GradientOps%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_CodeGen_GradientOps" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps" class="text-break">
+Class GradientOps  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a>.<a class="xref" href="AiDotNet.JitCompiler.CodeGen.html">CodeGen</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides gradient computation operations for backward pass execution.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class GradientOps</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GradientOps</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_CodeGen_GradientOps_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class implements the actual gradient computations for backpropagation.
+Each method corresponds to a backward operation type and computes gradients
+with respect to the inputs of the forward operation.
+</p>
+<p><b>For Beginners:</b> These are the math operations for training neural networks.
+<p>When training, we need to compute how to adjust weights to reduce error.
+These methods implement the calculus (derivatives) needed for that.</p>
+<p>Each forward operation (Add, MatMul, ReLU, etc.) has a corresponding
+backward method that computes gradients.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_AccumulateGrad_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.AccumulateGrad*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_AccumulateGrad__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0____" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.AccumulateGrad``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0}[])">
+  AccumulateGrad&lt;T&gt;(params Tensor&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Accumulates multiple gradients by summing them.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; AccumulateGrad&lt;T&gt;(params Tensor&lt;T&gt;[] gradients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_AccumulateGrad__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When a tensor is used by multiple operations, gradients from
+all paths must be summed.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradAdd_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradAdd*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradAdd__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradAdd``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32)">
+  GradAdd&lt;T&gt;(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Add operation.
+Forward: c = a + b
+Backward: grad_a = grad_c, grad_b = grad_c</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradAdd&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int inputIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradAttention_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradAttention*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradAttention__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Double_System_Boolean_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradAttention``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.Double,System.Boolean)">
+  GradAttention&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, double, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L2287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Attention operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradAttention&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; savedAttentionWeights, Tensor&lt;T&gt; Q, Tensor&lt;T&gt; K, Tensor&lt;T&gt; V, int inputIndex, double scale, bool causalMask = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedAttentionWeights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>Q</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>V</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>causalMask</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradAttention__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Double_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Attention: output = softmax(Q @ K^T / sqrt(d_k)) @ V
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradAvgPool2D_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradAvgPool2D*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradAvgPool2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradAvgPool2D``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[],System.Int32[],System.Int32[])">
+  GradAvgPool2D&lt;T&gt;(Tensor&lt;T&gt;, int[], int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L661"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of AvgPool2D operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradAvgPool2D&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[] poolSize, int[] stride, int[] inputShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>poolSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>stride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradAvgPool2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Forward: Averages values in each window
+Backward: Distributes gradient equally to all elements in the window
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradBatchNorm_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradBatchNorm*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradBatchNorm__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Double_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradBatchNorm``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.Double)">
+  GradBatchNorm&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L723"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of BatchNorm operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradBatchNorm&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; savedTensor, int inputIndex, double epsilon)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedTensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradBatchNorm__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Computes gradients for input, scale (gamma), and bias (beta) parameters.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradBroadcast_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradBroadcast*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradBroadcast__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradBroadcast``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[],System.Int32[])">
+  GradBroadcast&lt;T&gt;(Tensor&lt;T&gt;, int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1062"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Broadcast operation.
+Forward: y = broadcast(x, target_shape)
+Backward: grad_x = reduce_sum(grad_y, broadcasted_axes)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradBroadcast&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[] originalShape, int[] broadcastedAxes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>originalShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>broadcastedAxes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradConcat_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradConcat*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradConcat__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradConcat``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.Int32,System.Int32)">
+  GradConcat&lt;T&gt;(Tensor&lt;T&gt;, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L788"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Concat operation for a specific input.
+Forward: y = concat([x1, x2, ...], axis)
+Backward: grad_xi = slice(grad_y, start_i, end_i, axis)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradConcat&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int axis, int startIndex, int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>startIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradConv2D_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradConv2D*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradConv2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradConv2D``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.Int32[],System.Int32[])">
+  GradConv2D&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L399"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Conv2D operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradConv2D&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; savedTensor, int inputIndex, int[] stride, int[] padding)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedTensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>stride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>padding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradConv2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Forward: output = conv2d(input, filters)
+Backward for input: grad_input = conv2d_transpose(grad_output, filters)
+Backward for filters: grad_filters = conv2d(input^T, grad_output)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradConvTranspose2D_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradConvTranspose2D*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradConvTranspose2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Int32___System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradConvTranspose2D``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.Int32[],System.Int32[],System.Int32[])">
+  GradConvTranspose2D&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, int[], int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1577"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of ConvTranspose2D operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradConvTranspose2D&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; savedTensor, int inputIndex, int[] stride, int[] padding, int[] outputPadding)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedTensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>stride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>padding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>outputPadding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradConvTranspose2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Int32___System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Forward: output = conv_transpose2d(input, filters)
+Backward for input: grad_input = conv2d(grad_output, filters)
+Backward for filters: grad_filters = conv2d(grad_output^T, input)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradCrop_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradCrop*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradCrop__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradCrop``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[],System.Int32[])">
+  GradCrop&lt;T&gt;(Tensor&lt;T&gt;, int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1982"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Crop operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradCrop&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[] originalShape, int[] cropOffsets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>originalShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>cropOffsets</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradCrop__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Forward: y = crop(x, offsets, sizes)
+Backward: grad_x = pad_with_zeros(grad_y, original_shape, offsets)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDepthwiseConv2D_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradDepthwiseConv2D*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDepthwiseConv2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradDepthwiseConv2D``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.Int32[],System.Int32[])">
+  GradDepthwiseConv2D&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1732"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of DepthwiseConv2D operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradDepthwiseConv2D&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; savedTensor, int inputIndex, int[] stride, int[] padding)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedTensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>stride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>padding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDepthwiseConv2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Depthwise convolution applies separate filter per input channel.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDivideDenominator_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradDivideDenominator*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDivideDenominator__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradDivideDenominator``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradDivideDenominator&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L830"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Divide operation for denominator.
+Forward: c = a / b
+Backward for b: grad_b = -grad_c * a / (b^2)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradDivideDenominator&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; numerator, Tensor&lt;T&gt; denominator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>numerator</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>denominator</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDivideNumerator_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradDivideNumerator*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDivideNumerator__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradDivideNumerator``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradDivideNumerator&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L820"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Divide operation for numerator.
+Forward: c = a / b
+Backward for a: grad_a = grad_c / b</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradDivideNumerator&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; denominator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>denominator</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDropout_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradDropout*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradDropout__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Double_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradDropout``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Double)">
+  GradDropout&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L975"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Dropout operation.
+Forward: y = dropout(x, p, mask)
+Backward: grad_x = grad_y * mask / (1 - p)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradDropout&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; mask, double probability)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>probability</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradElementwiseMultiply_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradElementwiseMultiply*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradElementwiseMultiply__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradElementwiseMultiply``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32)">
+  GradElementwiseMultiply&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of ElementwiseMultiply operation.
+Forward: c = a * b (element-wise)
+Backward: grad_a = grad_c * b, grad_b = grad_c * a</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradElementwiseMultiply&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; otherInput, int inputIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>otherInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradEmbedding_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradEmbedding*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradEmbedding__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradEmbedding``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[])">
+  GradEmbedding&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Embedding operation.
+Forward: y = embedding[indices]
+Backward: grad_embedding = scatter_add(grad_y, indices, embedding_shape)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradEmbedding&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; indices, int[] embeddingShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>indices</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>embeddingShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradExp_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradExp*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradExp__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradExp``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradExp&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Exp operation.
+Forward: y = exp(x)
+Backward: grad_x = grad_y * y</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradExp&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradGELU_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradGELU*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradGELU__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Boolean_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradGELU``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Boolean)">
+  GradGELU&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1013"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of GELU operation (approximate).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradGELU&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput, bool approximate = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>approximate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradGRUCell_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradGRUCell*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradGRUCell__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0____System_Int32_System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradGRUCell``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0}[],System.Int32,System.Int32)">
+  GradGRUCell&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;[], int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L2197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of GRU cell operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradGRUCell&lt;T&gt;(Tensor&lt;T&gt; gradHiddenOut, Tensor&lt;T&gt;[] savedTensors, int inputIndex, int hiddenSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradHiddenOut</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedTensors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>hiddenSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradGRUCell__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0____System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+GRU cell: h_t = gru_cell(x_t, h_{t-1}, weights)
+z = sigmoid(W_z @ x + U_z @ h)
+r = sigmoid(W_r @ x + U_r @ h)
+h_tilde = tanh(W_h @ x + U_h @ (r * h))
+h_t = (1 - z) * h + z * h_tilde
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradGather_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradGather*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradGather__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradGather``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.Int32[])">
+  GradGather&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1204"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Gather operation.
+Forward: y = gather(x, indices, axis)
+Backward: grad_x = scatter(grad_y, indices, axis, input_shape)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradGather&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; indices, int axis, int[] inputShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>indices</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradHardSigmoid_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradHardSigmoid*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradHardSigmoid__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradHardSigmoid``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradHardSigmoid&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L208"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of HardSigmoid operation.
+Forward: y = clip((x + 3) / 6, 0, 1)
+Backward: grad_x = grad_y * (1/6 if -3 &lt; x &lt; 3, else 0)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradHardSigmoid&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradHardTanh_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradHardTanh*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradHardTanh__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Double_System_Double_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradHardTanh``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Double,System.Double)">
+  GradHardTanh&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of HardTanh operation.
+Forward: y = clip(x, minVal, maxVal)
+Backward: grad_x = grad_y * (1 if minVal &lt; x &lt; maxVal, else 0)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradHardTanh&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput, double minVal = -1, double maxVal = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>minVal</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>maxVal</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLSTMCell_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradLSTMCell*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLSTMCell__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0____System_Int32_System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradLSTMCell``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0}[],System.Int32,System.Int32)">
+  GradLSTMCell&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;[], int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L2046"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of LSTM cell operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradLSTMCell&lt;T&gt;(Tensor&lt;T&gt; gradHiddenOut, Tensor&lt;T&gt; gradCellOut, Tensor&lt;T&gt;[] savedTensors, int inputIndex, int hiddenSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradHiddenOut</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>gradCellOut</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedTensors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>hiddenSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLSTMCell__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0____System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+LSTM cell: (h_t, c_t) = lstm_cell(x_t, h_{t-1}, c_{t-1}, weights)
+Computes gradient for specified input.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLayerNorm_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradLayerNorm*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLayerNorm__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Double_System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradLayerNorm``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.Double,System.Int32[])">
+  GradLayerNorm&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, double, int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1089"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of LayerNorm operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradLayerNorm&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; savedTensor, int inputIndex, double epsilon, int[] normalizedShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedTensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>normalizedShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLayerNorm__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_Double_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Layer normalization normalizes over the last N dimensions.
+The gradient computation involves the Jacobian of the normalization.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLeakyReLU_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradLeakyReLU*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLeakyReLU__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Double_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradLeakyReLU``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Double)">
+  GradLeakyReLU&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L990"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of LeakyReLU operation.
+Forward: y = max(alpha * x, x)
+Backward: grad_x = grad_y * (1 if x &gt; 0 else alpha)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradLeakyReLU&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput, double alpha)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLog_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradLog*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradLog__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradLog``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradLog&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Log operation.
+Forward: y = log(x)
+Backward: grad_x = grad_y / x</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradLog&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMatMulLeft_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMatMulLeft*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMatMulLeft__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMatMulLeft``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradMatMulLeft&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of MatMul operation (left input).
+Forward: C = A @ B
+Backward for A: grad_A = grad_C @ B^T</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradMatMulLeft&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; rightInput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>rightInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMatMulRight_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMatMulRight*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMatMulRight__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMatMulRight``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradMatMulRight&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of MatMul operation (right input).
+Forward: C = A @ B
+Backward for B: grad_B = A^T @ grad_C</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradMatMulRight&lt;T&gt;(Tensor&lt;T&gt; leftInput, Tensor&lt;T&gt; gradOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>leftInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMaxPool2D_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMaxPool2D*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMaxPool2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMaxPool2D``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[],System.Int32[])">
+  GradMaxPool2D&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L588"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of MaxPool2D operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradMaxPool2D&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput, int[] poolSize, int[] stride)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>poolSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>stride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMaxPool2D__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Forward: Records indices of max elements
+Backward: Routes gradient only to max elements (winner-take-all)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMean_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMean*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMean__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMean``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[],System.Int32)">
+  GradMean&lt;T&gt;(Tensor&lt;T&gt;, int[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L900"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Mean operation.
+Forward: y = mean(x, axes)
+Backward: grad_x = broadcast(grad_y / count, original_shape)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradMean&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[] originalShape, int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>originalShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMultiHeadAttention_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMultiHeadAttention*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradMultiHeadAttention__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0____System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradMultiHeadAttention``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0}[],System.Int32,System.Int32,System.Int32)">
+  GradMultiHeadAttention&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;[], int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L2337"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Multi-Head Attention operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradMultiHeadAttention&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt;[] savedTensors, int inputIndex, int numHeads, int headDim)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>savedTensors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>numHeads</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>headDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradPad_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradPad*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradPad__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradPad``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[])">
+  GradPad&lt;T&gt;(Tensor&lt;T&gt;, int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L952"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Pad operation.
+Forward: y = pad(x, padding)
+Backward: grad_x = slice(grad_y, unpad region)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradPad&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[] padding)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>padding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradPower_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradPower*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradPower__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Double_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradPower``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Double)">
+  GradPower&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L846"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Power operation.
+Forward: y = x^p
+Backward: grad_x = grad_y * p * x^(p-1)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradPower&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput, double exponent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>exponent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradReLU_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradReLU*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradReLU__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradReLU``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradReLU&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of ReLU operation.
+Forward: y = max(0, x)
+Backward: grad_x = grad_y * (x &gt; 0)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradReLU&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradReshape_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradReshape*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradReshape__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradReshape``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[])">
+  GradReshape&lt;T&gt;(Tensor&lt;T&gt;, int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L754"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Reshape operation.
+Forward: y = reshape(x, new_shape)
+Backward: grad_x = reshape(grad_y, original_shape)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradReshape&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[] originalShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>originalShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSigmoid_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSigmoid*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSigmoid__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSigmoid``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradSigmoid&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Sigmoid operation.
+Forward: y = 1 / (1 + exp(-x))
+Backward: grad_x = grad_y * y * (1 - y)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradSigmoid&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSlice_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSlice*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSlice__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSlice``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[],System.Int32[])">
+  GradSlice&lt;T&gt;(Tensor&lt;T&gt;, int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L917"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Slice operation.
+Forward: y = slice(x, start, end)
+Backward: grad_x = pad_with_zeros(grad_y, original_shape, start_indices)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradSlice&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[] originalShape, int[] startIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>originalShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>startIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSoftPlus_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSoftPlus*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSoftPlus__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Double_System_Double_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSoftPlus``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Double,System.Double)">
+  GradSoftPlus&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of SoftPlus operation.
+Forward: y = log(1 + exp(x)) (numerically stable)
+Backward: grad_x = grad_y * sigmoid(x)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradSoftPlus&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardInput, double beta = 1, double threshold = 20)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardInput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSoftmax_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSoftmax*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSoftmax__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSoftmax``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32)">
+  GradSoftmax&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Softmax operation.
+Forward: y_i = exp(x_i) / sum(exp(x_j))
+Backward: grad_x = y * (grad_y - sum(grad_y * y))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradSoftmax&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardOutput, int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSplit_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSplit*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSplit__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0____System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSplit``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0}[],System.Int32)">
+  GradSplit&lt;T&gt;(Tensor&lt;T&gt;[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L798"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Split operation.
+Forward: [y1, y2, ...] = split(x, sizes, axis)
+Backward: grad_x = concat([grad_y1, grad_y2, ...], axis)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradSplit&lt;T&gt;(Tensor&lt;T&gt;[] gradOutputs, int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd></dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSqrt_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSqrt*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSqrt__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSqrt``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradSqrt&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L874"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Sqrt operation.
+Forward: y = sqrt(x)
+Backward: grad_x = grad_y / (2 * y)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradSqrt&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSubtract_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSubtract*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSubtract__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSubtract``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32)">
+  GradSubtract&lt;T&gt;(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Subtract operation.
+Forward: c = a - b
+Backward: grad_a = grad_c, grad_b = -grad_c</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradSubtract&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int inputIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSum_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSum*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradSum__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradSum``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[],System.Int32[])">
+  GradSum&lt;T&gt;(Tensor&lt;T&gt;, int[], int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L889"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Sum operation.
+Forward: y = sum(x, axes)
+Backward: grad_x = broadcast(grad_y, original_shape)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradSum&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[] originalShape, int[]? axes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>originalShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>axes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradTanh_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradTanh*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradTanh__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradTanh``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GradTanh&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Tanh operation.
+Forward: y = tanh(x)
+Backward: grad_x = grad_y * (1 - y^2)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradTanh&lt;T&gt;(Tensor&lt;T&gt; gradOutput, Tensor&lt;T&gt; forwardOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>forwardOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradTranspose_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradTranspose*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradTranspose__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32___" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradTranspose``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32[])">
+  GradTranspose&lt;T&gt;(Tensor&lt;T&gt;, int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L764"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Transpose operation.
+Forward: y = transpose(x, axes)
+Backward: grad_x = transpose(grad_y, inverse_axes)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradTranspose&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int[]? axes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>axes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradUpsample_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradUpsample*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradUpsample__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_String_" data-uid="AiDotNet.JitCompiler.CodeGen.GradientOps.GradUpsample``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},System.Int32,System.String)">
+  GradUpsample&lt;T&gt;(Tensor&lt;T&gt;, int, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L1873"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient of Upsample operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; GradUpsample&lt;T&gt;(Tensor&lt;T&gt; gradOutput, int scale, string mode = &quot;nearest&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_CodeGen_GradientOps_GradUpsample__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Int32_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Forward: y = upsample(x, scale)
+Backward: grad_x = downsample(grad_y) (sum or average over scale region)
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/CodeGen/GradientOps.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

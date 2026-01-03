@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ComplexMorletWavelet&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ComplexMorletWavelet&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Complex Morlet wavelet, which is a complex exponential modulated by a Gaussian window, making it well-suited for time-frequency analysis of signals.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_WaveletFunctions_ComplexMorletWavelet_1.md&amp;value=---%0Auid%3A%20AiDotNet.WaveletFunctions.ComplexMorletWavelet%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1">
+
+
+
+  <h1 id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1" class="text-break">
+Class ComplexMorletWavelet&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexMorletWavelet.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.WaveletFunctions.html">WaveletFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Complex Morlet wavelet, which is a complex exponential modulated by a Gaussian window,
+making it well-suited for time-frequency analysis of signals.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ComplexMorletWavelet&lt;T&gt; : ComplexWaveletFunctionBase&lt;T&gt;, IWaveletFunction&lt;Complex&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase-1.html">ComplexWaveletFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ComplexMorletWavelet&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWaveletFunction-1.html">IWaveletFunction</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase-1.html#AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_NumOps">ComplexWaveletFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase-1.html#AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Convolve_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___">ComplexWaveletFunctionBase&lt;T&gt;.Convolve(Vector&lt;Complex&lt;T&gt;&gt;, Vector&lt;Complex&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase-1.html#AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Downsample_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___System_Int32_">ComplexWaveletFunctionBase&lt;T&gt;.Downsample(Vector&lt;Complex&lt;T&gt;&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Complex Morlet wavelet is one of the most widely used wavelets for time-frequency analysis.
+It consists of a complex exponential (sine and cosine) modulated by a Gaussian envelope,
+providing excellent time-frequency localization and the ability to analyze both amplitude
+and phase information in signals.
+</p>
+<p>
+<b>For Beginners:</b>
+The Complex Morlet wavelet is like a mathematical magnifying glass that can see both
+the "what" (frequency) and "when" (time) of patterns in your data simultaneously.
+<p>Key features of Complex Morlet wavelets:</p>
+<ul>
+<li>They combine a sine wave with a bell-shaped curve (Gaussian)</li>
+<li>They can detect oscillations in signals with great precision</li>
+<li>They work with complex numbers to capture both amplitude and phase</li>
+<li>They're excellent for analyzing rhythmic or oscillatory patterns</li>
+</ul>
+<p>Think of them as special detectors that can find specific &quot;musical notes&quot; in your data
+and tell you exactly when they occur.</p>
+<p>These wavelets are particularly useful for:</p>
+<ul>
+<li>Audio processing and music analysis</li>
+<li>Brain wave (EEG) analysis</li>
+<li>Vibration analysis in mechanical systems</li>
+<li>Financial time series analysis</li>
+<li>Any application where finding oscillatory patterns is important</li>
+</ul>
+<p>The parameters omega and sigma let you tune the wavelet to look for specific frequencies
+and control how precise it is in time versus frequency.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1__ctor_" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1__ctor_System_Double_System_Double_" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.#ctor(System.Double,System.Double)">
+  ComplexMorletWavelet(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexMorletWavelet.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ComplexMorletWavelet class with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ComplexMorletWavelet(double omega = 5, double sigma = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>omega</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The central frequency of the wavelet. Default is 5.0.</p>
+</dd>
+    <dt><code>sigma</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The bandwidth parameter controlling the width of the Gaussian window. Default is 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1__ctor_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The two parameters control different aspects of the wavelet:
+<ol>
+<li><p>Omega (?): The central frequency of the wavelet</p>
+<ul>
+<li>Higher values look for higher-frequency oscillations in your data</li>
+<li>Lower values look for lower-frequency oscillations</li>
+<li>Think of this as tuning which &quot;musical note&quot; you're looking for</li>
+<li>Default value of 5.0 is a good general-purpose setting</li>
+</ul>
+</li>
+<li><p>Sigma (s): The bandwidth parameter</p>
+<ul>
+<li>Controls the width of the Gaussian window</li>
+<li>Affects the trade-off between time and frequency precision</li>
+<li>Smaller values: Better time localization, poorer frequency resolution</li>
+<li>Larger values: Better frequency resolution, poorer time localization</li>
+<li>Default value of 1.0 provides a balanced trade-off</li>
+</ul>
+</li>
+</ol>
+<p>The relationship between these parameters determines the wavelet's properties:</p>
+<ul>
+<li>The product ?·s should be &gt; 5 to ensure admissibility (a mathematical requirement)</li>
+<li>The default values (?=5, s=1) satisfy this condition</li>
+</ul>
+<p>You might adjust these parameters when:</p>
+<ul>
+<li>Looking for specific frequency components (adjust ?)</li>
+<li>Needing better time precision or frequency precision (adjust s)</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Calculate_" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Calculate_AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.Calculate(AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  Calculate(Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexMorletWavelet.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the value of the Complex Morlet wavelet function at point z.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Complex&lt;T&gt; Calculate(Complex&lt;T&gt; z)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>z</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The complex point at which to evaluate the wavelet function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The complex value of the wavelet function at point z.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Calculate_AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method gives you the actual value of the Complex Morlet wavelet at a specific point.
+<p>The Complex Morlet wavelet is defined as:
+?(t) = (e^(i?t) · e^(-t²/(2s²)))</p>
+<p>Which can be broken down into:</p>
+<ul>
+<li>e^(i?t) = cos(?t) + i·sin(?t): The complex exponential (oscillating part)</li>
+<li>e^(-t²/(2s²)): The Gaussian envelope (bell-shaped curve)</li>
+</ul>
+<p>For a complex input z = x + iy, this function:</p>
+<ol>
+<li>Calculates the Gaussian envelope based on the distance from the origin</li>
+<li>Multiplies it by the cosine (for the real part) and sine (for the imaginary part)</li>
+<li>Returns the resulting complex number</li>
+</ol>
+<p>The result is a localized wave packet that oscillates at frequency ? within
+a Gaussian envelope of width controlled by s.</p>
+<p>You might use this method to visualize the wavelet or to directly apply the wavelet
+to a signal at specific points.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Decompose_" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.Decompose(AiDotNet.Tensors.LinearAlgebra.Vector{AiDotNet.Tensors.LinearAlgebra.Complex{`0}})">
+  Decompose(Vector&lt;Complex&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexMorletWavelet.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposes a complex input signal into approximation and detail coefficients using the Complex Morlet wavelet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (Vector&lt;Complex&lt;T&gt;&gt; approximation, Vector&lt;Complex&lt;T&gt;&gt; detail) Decompose(Vector&lt;Complex&lt;T&gt;&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The complex input signal vector to decompose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector-aidotnet.tensors.linearalgebra.complex--0--,aidotnet.tensors.linearalgebra.vector-aidotnet.tensors.linearalgebra.complex--0---.approximation">approximation</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector-aidotnet.tensors.linearalgebra.complex--0--,aidotnet.tensors.linearalgebra.vector-aidotnet.tensors.linearalgebra.complex--0---.detail">detail</a>)</dt>
+    <dd><p>A tuple containing the complex approximation coefficients and complex detail coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method performs one level of wavelet decomposition on your complex signal, splitting it into:
+<ul>
+<li>Approximation coefficients: Represent the low-frequency components (the overall shape)</li>
+<li>Detail coefficients: Represent the high-frequency components (the fine details)</li>
+</ul>
+<p>The process works like this:</p>
+<ol>
+<li>The input signal is convolved (filtered) with a scaling function to get the approximation</li>
+<li>The input signal is convolved with the wavelet function to get the details</li>
+<li>Both results are downsampled (every other value is kept)</li>
+</ol>
+<p>What makes Complex Morlet wavelets special for this task is:</p>
+<ul>
+<li>They can capture oscillatory patterns with great precision</li>
+<li>They preserve both amplitude and phase information</li>
+<li>They have excellent time-frequency localization</li>
+</ul>
+<p>This is particularly useful for analyzing signals with rhythmic or oscillatory components,
+such as audio, EEG, vibration data, or financial time series.</p>
+<p>The result has half the length of the original signal (due to downsampling),
+which makes wavelet decomposition efficient for compression and multi-resolution analysis.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_GetScalingCoefficients_" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.GetScalingCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_GetScalingCoefficients" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.GetScalingCoefficients">
+  GetScalingCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexMorletWavelet.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scaling function coefficients for the Complex Morlet wavelet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;Complex&lt;T&gt;&gt; GetScalingCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A vector of complex scaling function coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_GetScalingCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The scaling coefficients are the filter weights used to extract the low-frequency
+components (approximation) from a signal.
+<p>For Complex Morlet wavelets, these coefficients are derived from a sinc function:</p>
+<p>sinc(x) = sin(px)/(px)</p>
+<p>The sinc function is the ideal low-pass filter in signal processing theory.
+It lets through all frequencies below a cutoff point and blocks all frequencies above it.</p>
+<p>This method:</p>
+<ol>
+<li>Creates a discretized sinc function of specified length</li>
+<li>Normalizes the coefficients so they sum to 1</li>
+</ol>
+<p>The resulting filter captures the low-frequency components of the signal,
+providing the &quot;approximation&quot; part of the wavelet decomposition.</p>
+<p>Note that the sinc function has infinite support in theory, but we truncate it
+to a finite length for practical implementation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_GetWaveletCoefficients_" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.GetWaveletCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_GetWaveletCoefficients" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.GetWaveletCoefficients">
+  GetWaveletCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexMorletWavelet.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the wavelet function coefficients for the Complex Morlet wavelet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;Complex&lt;T&gt;&gt; GetWaveletCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A vector of complex wavelet function coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_GetWaveletCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The wavelet coefficients are the filter weights used to extract the high-frequency
+components (details) from a signal.
+<p>For Complex Morlet wavelets, these coefficients are a discretized version of the
+Complex Morlet wavelet function:</p>
+<p>?(t) = e^(i?t) · e^(-t²/(2s²))</p>
+<p>This method:</p>
+<ol>
+<li>Creates a discretized Complex Morlet wavelet of specified length</li>
+<li>The real part is the Gaussian-modulated cosine: e^(-t²/(2s²)) · cos(?t)</li>
+<li>The imaginary part is the Gaussian-modulated sine: e^(-t²/(2s²)) · sin(?t)</li>
+<li>Normalizes the coefficients to ensure energy preservation</li>
+</ol>
+<p>The resulting filter is sensitive to oscillations at frequency ?, making it
+ideal for detecting specific frequency components in the signal.</p>
+<p>The complex nature of the filter allows it to capture both amplitude and phase
+information, which is crucial for many applications like audio processing,
+vibration analysis, and EEG analysis.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Reconstruct_" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.Reconstruct*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___" data-uid="AiDotNet.WaveletFunctions.ComplexMorletWavelet`1.Reconstruct(AiDotNet.Tensors.LinearAlgebra.Vector{AiDotNet.Tensors.LinearAlgebra.Complex{`0}},AiDotNet.Tensors.LinearAlgebra.Vector{AiDotNet.Tensors.LinearAlgebra.Complex{`0}})">
+  Reconstruct(Vector&lt;Complex&lt;T&gt;&gt;, Vector&lt;Complex&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexMorletWavelet.cs/#L313"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reconstructs the original signal from approximation and detail coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;Complex&lt;T&gt;&gt; Reconstruct(Vector&lt;Complex&lt;T&gt;&gt; approximation, Vector&lt;Complex&lt;T&gt;&gt; detail)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>approximation</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The approximation coefficients from decomposition.</p>
+</dd>
+    <dt><code>detail</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The detail coefficients from decomposition.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The reconstructed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexMorletWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method reverses the decomposition process to get back the original signal.
+<p>For Complex Morlet wavelets, reconstruction works by:</p>
+<ol>
+<li>Upsampling (inserting zeros between each coefficient)</li>
+<li>Convolving with time-reversed reconstruction filters</li>
+<li>Adding the approximation and detail contributions together</li>
+</ol>
+<p>This is the inverse of the Decompose method, so:
+Reconstruct(Decompose(signal)) should equal the original signal.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexMorletWavelet.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

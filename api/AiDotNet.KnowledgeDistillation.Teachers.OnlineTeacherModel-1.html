@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OnlineTeacherModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OnlineTeacherModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Online teacher model that updates its parameters during student training.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1">
+
+
+
+  <h1 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1" class="text-break">
+Class OnlineTeacherModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.html">KnowledgeDistillation</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.Teachers.html">Teachers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Online teacher model that updates its parameters during student training.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class OnlineTeacherModel&lt;T&gt; : TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;, ITeacherModel&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html">TeacherModelBase</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, T&gt;</div>
+      <div><span class="xref">OnlineTeacherModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITeacherModel-2.html">ITeacherModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_NumOps">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_OutputDimension">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.OutputDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_GetLogits__0_">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.GetLogits(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_SupportsJitCompilation">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__2___">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_CheckWrappedModelJitSupport_AiDotNet_Interfaces_ITeacherModel__0__1__">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.CheckWrappedModelJitSupport(ITeacherModel&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_DelegateJitExport_AiDotNet_Interfaces_ITeacherModel__0__1__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__2___System_String_">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.DelegateJitExport(ITeacherModel&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;, List&lt;ComputationNode&lt;T&gt;&gt;, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_ThrowJitNotSupported_System_String_System_String_">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.ThrowJitNotSupported(string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_ValidateInput__0_System_String_">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.ValidateInput(Vector&lt;T&gt;, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_Softmax_AiDotNet_Tensors_LinearAlgebra_Vector__2__System_Double_">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.Softmax(Vector&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.TeacherModelBase-3.html#AiDotNet_KnowledgeDistillation_TeacherModelBase_3_ApplyTemperatureSoftmax__1_System_Double_">TeacherModelBase&lt;Vector&lt;T&gt;, Vector&lt;T&gt;, T&gt;.ApplyTemperatureSoftmax(Vector&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Unlike standard distillation where the teacher is frozen,
+online distillation allows the teacher to continue learning during student training.
+This is useful for:
+- Continuous learning scenarios
+- Evolving data distributions
+- Co-training teacher and student simultaneously</p>
+<p><b>How It Works:</b>
+1. Initialize teacher model (can be pre-trained or random)
+2. During student training, also update teacher with new data
+3. Teacher provides evolving knowledge to student
+4. Both models improve together</p>
+<p><b>Real-world Analogy:</b>
+Imagine a mentor and apprentice both continuing to learn as they work together.
+The mentor (teacher) doesn't just transfer old knowledge - they also learn from new
+experiences and share those insights with the apprentice (student).</p>
+<p><b>Use Cases:</b>
+- **Streaming Data**: New data arrives continuously
+- **Domain Adaptation**: Distribution shifts over time
+- **Co-training**: Teacher and student help each other
+- **Incremental Learning**: Models must adapt to new classes/tasks</p>
+<p><b>Update Strategies:</b>
+- **EMA (Exponential Moving Average)**: Smooth updates, stable teacher
+- **Periodic Sync**: Update teacher every N steps
+- **Gradient-based**: Teacher trained with separate loss
+- **Momentum**: Teacher follows student with momentum</p>
+<p><b>Advantages:</b>
+- Adapts to changing data
+- No need for pre-trained teacher
+- Can improve teacher and student together
+- Suitable for lifelong learning</p>
+<p><b>Challenges:</b>
+- Risk of teacher forgetting/degrading
+- Need careful update rate tuning
+- More complex training dynamics
+- Harder to debug</p>
+<p><b>References:</b>
+- Zhang et al. (2018). Deep Mutual Learning. CVPR.
+- Anil et al. (2018). Large Scale Distributed Neural Network Training through Online Distillation.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1__ctor_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1__ctor_AiDotNet_Interfaces_IJitCompilable__0__System_Int32_System_Int32_System_Action_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_KnowledgeDistillation_Teachers_OnlineUpdateMode_System_Double_System_Int32_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.#ctor(AiDotNet.Interfaces.IJitCompilable{`0},System.Int32,System.Int32,System.Action{AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.KnowledgeDistillation.Teachers.OnlineUpdateMode,System.Double,System.Int32)">
+  OnlineTeacherModel(IJitCompilable&lt;T&gt;, int, int, Action&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;?, OnlineUpdateMode, double, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the OnlineTeacherModel class using a JIT-compilable model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OnlineTeacherModel(IJitCompilable&lt;T&gt; jitCompilableModel, int inputDimension, int outputDimension, Action&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;? teacherUpdate = null, OnlineUpdateMode updateMode = OnlineUpdateMode.EMA, double updateRate = 0.999, int updateFrequency = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>jitCompilableModel</code> <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</dt>
+    <dd><p>A JIT-compilable model for forward pass.</p>
+</dd>
+    <dt><code>inputDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Input dimension of the teacher.</p>
+</dd>
+    <dt><code>outputDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output dimension of the teacher.</p>
+</dd>
+    <dt><code>teacherUpdate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional function to update teacher parameters.</p>
+</dd>
+    <dt><code>updateMode</code> <a class="xref" href="AiDotNet.KnowledgeDistillation.Teachers.OnlineUpdateMode.html">OnlineUpdateMode</a></dt>
+    <dd><p>How to update the teacher (default: EMA).</p>
+</dd>
+    <dt><code>updateRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Update rate for EMA or learning rate (default: 0.999 for EMA).</p>
+</dd>
+    <dt><code>updateFrequency</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How often to update (default: every step).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1__ctor_AiDotNet_Interfaces_IJitCompilable__0__System_Int32_System_Int32_System_Action_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_KnowledgeDistillation_Teachers_OnlineUpdateMode_System_Double_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>JIT Support:</b> This constructor enables JIT compilation for inference
+when the underlying model supports it. Note that updates still use the teacherUpdate
+function if provided.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1__ctor_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1__ctor_System_Func_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32_System_Int32_System_Action_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_KnowledgeDistillation_Teachers_OnlineUpdateMode_System_Double_System_Int32_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.#ctor(System.Func{AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Int32,System.Int32,System.Action{AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.KnowledgeDistillation.Teachers.OnlineUpdateMode,System.Double,System.Int32)">
+  OnlineTeacherModel(Func&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;, int, int, Action&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;?, OnlineUpdateMode, double, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the OnlineTeacherModel class using function delegates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OnlineTeacherModel(Func&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt; teacherForward, int inputDimension, int outputDimension, Action&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;? teacherUpdate = null, OnlineUpdateMode updateMode = OnlineUpdateMode.EMA, double updateRate = 0.999, int updateFrequency = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>teacherForward</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Function to perform forward pass through teacher.</p>
+</dd>
+    <dt><code>inputDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Input dimension of the teacher.</p>
+</dd>
+    <dt><code>outputDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output dimension of the teacher.</p>
+</dd>
+    <dt><code>teacherUpdate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional function to update teacher parameters (input, gradient).</p>
+</dd>
+    <dt><code>updateMode</code> <a class="xref" href="AiDotNet.KnowledgeDistillation.Teachers.OnlineUpdateMode.html">OnlineUpdateMode</a></dt>
+    <dd><p>How to update the teacher (default: EMA).</p>
+</dd>
+    <dt><code>updateRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Update rate for EMA or learning rate (default: 0.999 for EMA).</p>
+</dd>
+    <dt><code>updateFrequency</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How often to update (default: every step).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1__ctor_System_Func_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32_System_Int32_System_Action_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_KnowledgeDistillation_Teachers_OnlineUpdateMode_System_Double_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Note:</b> This constructor creates a non-JIT-compilable teacher.
+For JIT support, use the constructor that accepts an IJitCompilable model.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_IsUpdating_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.IsUpdating*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_IsUpdating" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.IsUpdating">
+  IsUpdating
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether the teacher is currently updating.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsUpdating { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_OutputDimension_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.OutputDimension*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_OutputDimension" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.OutputDimension">
+  OutputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the output dimension of the teacher model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int OutputDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_SupportsJitCompilation_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_SupportsJitCompilation" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this teacher supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> if constructed with an IJitCompilable model that supports JIT compilation;
+<code>false</code> if constructed with function delegates which cannot be exported as a computation graph.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_ExportComputationGraph_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L335"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When constructed with an IJitCompilable model, this method delegates to the underlying model's
+computation graph export. When constructed with function delegates, JIT compilation is not supported
+because function delegates can contain arbitrary code that cannot be represented as tensor operations.
+</p>
+<p>
+To enable JIT compilation, use the constructor that accepts an IJitCompilable model
+instead of using function delegates.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when using function delegates instead of an IJitCompilable model.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_GetLogits_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.GetLogits*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_GetLogits_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.GetLogits(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  GetLogits(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets logits from the teacher model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetLogits(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_GetLogits_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Architecture Note:</b> Returns raw logits. Temperature scaling and softmax
+are handled by distillation strategies, not by the teacher model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_PauseUpdates_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.PauseUpdates*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_PauseUpdates" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.PauseUpdates">
+  PauseUpdates()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Pauses teacher updates (freezes teacher).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void PauseUpdates()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_ResetCounter_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.ResetCounter*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_ResetCounter" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.ResetCounter">
+  ResetCounter()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the update counter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ResetCounter()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_ResumeUpdates_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.ResumeUpdates*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_ResumeUpdates" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.ResumeUpdates">
+  ResumeUpdates()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L302"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resumes teacher updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ResumeUpdates()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_Update_" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.Update*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_Update_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.KnowledgeDistillation.Teachers.OnlineTeacherModel`1.Update(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Update(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L204"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the teacher model with new data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Update(Vector&lt;T&gt; input, Vector&lt;T&gt; targetOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Input that was used for prediction.</p>
+</dd>
+    <dt><code>targetOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Target output for the teacher (can be ground truth or student prediction).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Teachers_OnlineTeacherModel_1_Update_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this after each batch to update the teacher.
+The teacher learns from either:
+- Ground truth labels (teacher improves on task)
+- Student predictions (mutual learning - teacher learns from student too!)</p>
+<p>Update modes:
+- **EMA**: Teacher smoothly tracks student, no explicit gradient
+- **GradientBased**: Teacher trained with standard gradient descent
+- **MomentumBased**: Teacher follows student with momentum</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Teachers/OnlineTeacherModel.cs/#L58" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RobustRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RobustRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for robust regression models, which are designed to be less sensitive to outliers and violations of standard regression assumptions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_RobustRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.RobustRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_RobustRegressionOptions_1" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1" class="text-break">
+Class RobustRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RobustRegressionOptions.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for robust regression models, which are designed to be less sensitive
+to outliers and violations of standard regression assumptions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RobustRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used in matrix operations for the regression model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">RobustRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_RobustRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Robust regression methods provide an alternative to standard least squares regression when data contains 
+outliers or exhibits heteroscedasticity (non-constant variance in errors). Unlike ordinary least squares 
+regression, which can be heavily influenced by outliers, robust regression methods use specialized techniques 
+to reduce the impact of outlying observations. This class extends the standard RegressionOptions class to 
+include additional parameters specific to robust regression algorithms, such as the tuning constant, 
+maximum iterations for iterative reweighting procedures, convergence tolerance, weight function selection, 
+and an optional initial regression model for initialization. These options allow fine-tuning of the robust 
+regression algorithm to best handle the specific characteristics of the dataset being analyzed.
+</p>
+<p><b>For Beginners:</b> Robust regression helps your model handle outliers and unusual data points.
+<p>Standard regression can be easily thrown off by outliers (extreme values):</p>
+<ul>
+<li>Imagine predicting house prices where most homes are $200,000-$400,000</li>
+<li>But there's one luxury mansion worth $10 million in your data</li>
+<li>Standard regression might shift significantly to accommodate this outlier</li>
+</ul>
+<p>Robust regression solves this problem by:</p>
+<ul>
+<li>Giving less weight to data points that are far from the pattern</li>
+<li>Focusing more on the typical cases that represent the true relationship</li>
+<li>Producing more reliable predictions when your data has unusual values</li>
+</ul>
+<p>Think of it like taking a poll:</p>
+<ul>
+<li>Standard regression counts everyone's vote equally</li>
+<li>Robust regression gives more consideration to mainstream opinions and less to extreme views</li>
+</ul>
+<p>This class lets you configure exactly how the robust regression algorithm handles outliers
+and unusual data points.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_RobustRegressionOptions_1_InitialRegression_" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.InitialRegression*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RobustRegressionOptions_1_InitialRegression" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.InitialRegression">
+  InitialRegression
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RobustRegressionOptions.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial regression model used to start the iterative procedure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IRegression&lt;T&gt;? InitialRegression { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</dt>
+    <dd><p>An implementation of IRegression&lt;T&gt; or null to use the default initialization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RobustRegressionOptions_1_InitialRegression_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Robust regression methods typically use an iterative procedure that requires an initial estimate of the 
+regression coefficients. This property allows specifying a custom regression model to provide these initial 
+estimates. When set to null (the default), the algorithm will use its own initialization method, typically 
+ordinary least squares regression. Providing a custom initial regression can be useful when there is prior 
+knowledge about the data that suggests a better starting point than ordinary least squares, or when 
+continuing a previous robust regression analysis with updated data. The initial regression should implement 
+the IRegression&lt;T&gt; interface and should be compatible with the data type T used in the robust regression.
+</p>
+<p><b>For Beginners:</b> This setting lets you provide a starting point for the algorithm.
+<p>Robust regression works iteratively, starting from an initial guess:</p>
+<ul>
+<li>By default (null), it starts with a standard least squares regression</li>
+<li>This property lets you provide a different starting point</li>
+</ul>
+<p>When you might want to set this:</p>
+<ul>
+<li>When you already have a regression model that's close to what you expect</li>
+<li>When you're updating an existing model with new data</li>
+<li>When standard regression performs poorly as a starting point</li>
+</ul>
+<p>For example, if you're analyzing seasonal data and have a previous model from
+similar seasons, you might use that as the starting point rather than starting fresh.</p>
+<p>Most users can leave this as null and let the algorithm use its default initialization.
+This is an advanced option that's primarily useful in specific scenarios where you have
+good prior information about what the solution should look like.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_RobustRegressionOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RobustRegressionOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RobustRegressionOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the iterative reweighting procedure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RobustRegressionOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Robust regression methods typically use an iterative reweighting procedure to compute the regression 
+coefficients. This property specifies the maximum number of iterations allowed before the algorithm 
+terminates, even if convergence (as determined by the Tolerance property) has not been achieved. 
+The default value of 100 is sufficient for most applications to achieve convergence. However, for 
+particularly complex datasets or when using very small tolerance values, more iterations may be required. 
+Conversely, for simpler datasets or when approximate solutions are acceptable, fewer iterations may be 
+sufficient. Setting a reasonable maximum prevents the algorithm from running indefinitely in cases where 
+convergence is difficult to achieve.
+</p>
+<p><b>For Beginners:</b> This setting limits how long the algorithm will try to find the best solution.
+<p>Robust regression works through an iterative process:</p>
+<ul>
+<li>It starts with an initial guess (often from standard regression)</li>
+<li>Then it repeatedly refines this solution, adjusting weights for outliers</li>
+<li>Each iteration should bring it closer to the optimal solution</li>
+</ul>
+<p>The MaxIterations value (default 100) sets a limit on this process:</p>
+<ul>
+<li>It prevents the algorithm from running forever if it can't find a perfect solution</li>
+<li>Most problems converge (reach a stable solution) well before 100 iterations</li>
+<li>If the algorithm reaches this limit, it returns the best solution found so far</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it (e.g., to 200 or 500) for complex datasets where convergence is difficult</li>
+<li>Decrease it (e.g., to 50 or 20) when you need faster results and approximate solutions are acceptable</li>
+</ul>
+<p>This is similar to giving someone a time limit to solve a puzzle - they'll return the best
+solution they've found when time runs out, even if it's not perfect.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_RobustRegressionOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RobustRegressionOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RobustRegressionOptions.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for the iterative reweighting procedure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1e-6 (0.000001).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RobustRegressionOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the convergence criterion for the iterative reweighting procedure used in robust 
+regression. The algorithm terminates when the change in parameter estimates between consecutive iterations 
+is less than this tolerance value. A smaller tolerance requires more precise convergence, potentially 
+leading to more accurate results but requiring more iterations. A larger tolerance allows for earlier 
+termination, potentially saving computational resources at the cost of less precise parameter estimates. 
+The default value of 1e-6 (0.000001) provides a good balance between precision and computational efficiency 
+for most applications. For high-precision requirements, a smaller value might be appropriate, while for 
+exploratory analysis or when computational resources are limited, a larger value might be used.
+</p>
+<p><b>For Beginners:</b> This setting determines how precise the final solution needs to be.
+<p>During the iterative process, the algorithm keeps refining its solution:</p>
+<ul>
+<li>It compares each new solution to the previous one</li>
+<li>When the difference becomes smaller than the tolerance value, it stops</li>
+<li>This indicates the solution has stabilized and further iterations won't improve much</li>
+</ul>
+<p>The Tolerance value (default 0.000001 or 1e-6) means:</p>
+<ul>
+<li>The algorithm will stop when changes between iterations are very small</li>
+<li>A smaller value requires more precision (and usually more iterations)</li>
+<li>A larger value allows the algorithm to stop earlier with an approximate solution</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it (e.g., to 1e-8) when you need extremely precise results</li>
+<li>Increase it (e.g., to 1e-4) when you need faster results and can accept slight imprecision</li>
+</ul>
+<p>This is like telling someone to keep refining their work until the improvements are so small
+they're not worth the extra effort - the tolerance defines what &quot;small&quot; means in this context.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_RobustRegressionOptions_1_TuningConstant_" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.TuningConstant*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RobustRegressionOptions_1_TuningConstant" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.TuningConstant">
+  TuningConstant
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RobustRegressionOptions.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the tuning constant that controls the sensitivity to outliers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TuningConstant { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1.345.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RobustRegressionOptions_1_TuningConstant_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The tuning constant determines how strongly outliers are downweighted in the robust regression procedure. 
+It controls the trade-off between efficiency (statistical optimality under ideal conditions) and robustness 
+(resistance to outliers). A smaller tuning constant provides more resistance to outliers but may be less 
+efficient when the data actually follows the assumed distribution. A larger tuning constant provides less 
+resistance to outliers but better efficiency under ideal conditions. The default value of 1.345 for the 
+Huber weight function provides approximately 95% efficiency for normally distributed errors while still 
+offering protection against outliers. Different weight functions may have different optimal tuning constants, 
+and the appropriate value may depend on the specific characteristics of the dataset and the chosen weight function.
+</p>
+<p><b>For Beginners:</b> This setting controls how aggressively the model ignores outliers.
+<p>The tuning constant determines the balance between:</p>
+<ul>
+<li>Treating all data points equally (like standard regression)</li>
+<li>Completely ignoring unusual data points</li>
+</ul>
+<p>The default value of 1.345:</p>
+<ul>
+<li>Is specifically chosen for the Huber method (the default weight function)</li>
+<li>Provides a good balance for most applications</li>
+<li>Gives approximately 95% statistical efficiency while still protecting against outliers</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Lower values (like 0.8 or 1.0): More aggressive outlier rejection, use when outliers are severe</li>
+<li>Higher values (like 2.0 or 2.5): More inclusive, use when you want to give outliers more influence</li>
+</ul>
+<p>For example, in financial data with occasional extreme market events, you might use a lower
+tuning constant to prevent these rare events from overly influencing your model.</p>
+<p>Note that the optimal value depends on which weight function you're using, so if you change
+the WeightFunction property, you may need to adjust this value accordingly.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_RobustRegressionOptions_1_WeightFunction_" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.WeightFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RobustRegressionOptions_1_WeightFunction" data-uid="AiDotNet.Models.Options.RobustRegressionOptions`1.WeightFunction">
+  WeightFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RobustRegressionOptions.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight function used to reduce the influence of outliers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public WeightFunction WeightFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.WeightFunction.html">WeightFunction</a></dt>
+    <dd><p>A value from the WeightFunction enumeration, defaulting to WeightFunction.Huber.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RobustRegressionOptions_1_WeightFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies which weight function is used to downweight outliers in the robust regression 
+procedure. Different weight functions have different characteristics in terms of efficiency, breakdown 
+point (the proportion of outliers that can be handled), and computational complexity. The Huber function 
+(the default) provides a good balance between efficiency and robustness for many applications. Other 
+common options include Bisquare (which completely downweights extreme outliers), Andrews (similar to 
+Bisquare but with different characteristics), and Fair (which is less aggressive in downweighting outliers). 
+The choice of weight function should be based on the specific characteristics of the dataset, particularly 
+the expected frequency and magnitude of outliers, and the desired trade-off between robustness and efficiency.
+</p>
+<p><b>For Beginners:</b> This setting selects the method used to handle outliers.
+<p>Different weight functions have different approaches to dealing with unusual data points:</p>
+<ul>
+<li>Huber (default): Reduces the influence of outliers gradually</li>
+<li>Bisquare: Completely ignores extreme outliers</li>
+<li>Andrews: Similar to Bisquare but with different mathematical properties</li>
+<li>Fair: More gentle reduction of outlier influence</li>
+</ul>
+<p>The default Huber function:</p>
+<ul>
+<li>Treats normal data points using standard least squares</li>
+<li>Gradually reduces the influence of points as they become more unusual</li>
+<li>Provides a good balance for most applications</li>
+</ul>
+<p>When to choose a different function:</p>
+<ul>
+<li>Bisquare: When you have extreme outliers that should be completely ignored</li>
+<li>Fair: When you want outliers to still have some influence, just reduced</li>
+<li>Andrews: Similar to Bisquare but sometimes more stable numerically</li>
+</ul>
+<p>For example, in a retail sales model, you might use Bisquare to completely ignore
+holiday sales spikes if you're trying to model normal day-to-day business.</p>
+<p>Each function has its own ideal tuning constant, so if you change this setting,
+consider also adjusting the TuningConstant property.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RobustRegressionOptions.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

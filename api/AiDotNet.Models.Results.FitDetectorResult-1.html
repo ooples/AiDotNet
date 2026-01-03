@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FitDetectorResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FitDetectorResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the result of a model fit detection analysis, which evaluates how well a model fits the data and provides recommendations for improvement.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_FitDetectorResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.FitDetectorResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.FitDetectorResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_FitDetectorResult_1" data-uid="AiDotNet.Models.Results.FitDetectorResult`1" class="text-break">
+Class FitDetectorResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FitDetectorResult.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the result of a model fit detection analysis, which evaluates how well a model fits the data
+and provides recommendations for improvement.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FitDetectorResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for confidence values, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FitDetectorResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_FitDetectorResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+When building statistical or machine learning models, it's important to assess how well the model fits the data. 
+This class stores the results of such an assessment, including the type of fit detected (e.g., good fit, 
+underfitting, overfitting), a confidence level for that assessment, and recommendations for improving the model. 
+It also provides a flexible dictionary for storing additional information specific to different types of models 
+or detection algorithms. This information helps data scientists and developers understand the quality of their 
+models and take appropriate actions to improve them.
+</p>
+<p><b>For Beginners:</b> This class helps you understand how well your model fits your data.
+<p>When building statistical or machine learning models:</p>
+<ul>
+<li>You need to know if your model is a good match for your data</li>
+<li>Models can underfit (too simple) or overfit (too complex)</li>
+<li>Different types of models have different fit characteristics</li>
+</ul>
+<p>This class stores:</p>
+<ul>
+<li>What type of fit was detected (good, underfit, overfit, etc.)</li>
+<li>How confident the detector is in its assessment</li>
+<li>Specific recommendations to improve your model</li>
+<li>Additional information that might be useful for diagnosis</li>
+</ul>
+<p>This information helps you make informed decisions about how to adjust your model
+to achieve better performance on both training and new data.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_FitDetectorResult_1__ctor_" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FitDetectorResult_1__ctor" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.#ctor">
+  FitDetectorResult()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FitDetectorResult.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the FitDetectorResult class with an empty list of recommendations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FitDetectorResult()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FitDetectorResult_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new FitDetectorResult instance with default values for FitType and ConfidenceLevel, 
+and initializes the Recommendations property to an empty list and AdditionalInfo to an empty dictionary. This 
+provides a clean starting point for storing fit detection results. The FitType and ConfidenceLevel properties 
+would typically be set after construction based on the results of the fit detection algorithm.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with default values.
+<p>When a new FitDetectorResult is created with this constructor:</p>
+<ul>
+<li>The fit type is set to its default value</li>
+<li>The confidence level is set to its default value</li>
+<li>The recommendations list is initialized as empty</li>
+<li>The additional info dictionary is initialized as empty</li>
+</ul>
+<p>This initialization is important because:</p>
+<ul>
+<li>It ensures consistent behavior regardless of how the object is created</li>
+<li>It prevents potential issues with uninitialized collections</li>
+<li>It provides a clean slate for the fit detector to populate</li>
+</ul>
+<p>You typically won't need to call this constructor directly, as it will be
+used internally by the fit detection process.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FitDetectorResult_1__ctor_" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FitDetectorResult_1__ctor_AiDotNet_Enums_FitType__0_" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.#ctor(AiDotNet.Enums.FitType,`0)">
+  FitDetectorResult(FitType, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FitDetectorResult.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the FitDetectorResult class with the specified fit type and confidence level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FitDetectorResult(FitType fitType, T confidenceLevel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitType</code> <a class="xref" href="AiDotNet.Enums.FitType.html">FitType</a></dt>
+    <dd><p>The type of fit detected for the model.</p>
+</dd>
+    <dt><code>confidenceLevel</code> <span class="xref">T</span></dt>
+    <dd><p>The confidence level for the fit type assessment.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FitDetectorResult_1__ctor_AiDotNet_Enums_FitType__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new FitDetectorResult instance with the specified FitType and ConfidenceLevel, and 
+initializes the Recommendations property to an empty list and AdditionalInfo to an empty dictionary. This 
+constructor is useful when the fit type and confidence level are known at the time of creation, such as when 
+the result is being created directly after a fit detection algorithm has completed. The Recommendations and 
+AdditionalInfo properties can be populated after construction as needed.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with specific fit type and confidence values.
+<p>When a new FitDetectorResult is created with this constructor:</p>
+<ul>
+<li>The fit type is set to the value you specify</li>
+<li>The confidence level is set to the value you specify</li>
+<li>The recommendations list is initialized as empty</li>
+<li>The additional info dictionary is initialized as empty</li>
+</ul>
+<p>This constructor is useful when:</p>
+<ul>
+<li>You already know the fit type and confidence level</li>
+<li>You want to create a result object in one step</li>
+<li>You plan to add recommendations and additional info later</li>
+</ul>
+<p>For example, you might use this constructor when you've determined that a model is
+overfitting with 85% confidence, and you'll add specific recommendations afterward.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_FitDetectorResult_1_AdditionalInfo_" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.AdditionalInfo*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FitDetectorResult_1_AdditionalInfo" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.AdditionalInfo">
+  AdditionalInfo
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FitDetectorResult.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets additional information about the fit detection result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; AdditionalInfo { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary mapping string keys to object values, initialized as an empty dictionary.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FitDetectorResult_1_AdditionalInfo_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides a flexible way to store additional information about the fit detection result that 
+doesn't fit into the other properties. The dictionary can contain any type of information that might be useful 
+for understanding or addressing the fit issues. For example, it might include specific metrics like R-squared 
+values, variance inflation factors for multicollinearity detection, or plots showing residual patterns for 
+heteroscedasticity detection. The keys are string identifiers for the information, and the values can be any 
+object type, allowing for maximum flexibility in what can be stored.
+</p>
+<p><b>For Beginners:</b> This dictionary stores extra information that might be helpful for diagnosis.
+<p>The additional information:</p>
+<ul>
+<li>Contains any extra details that don't fit in the other properties</li>
+<li>Can store different types of data (numbers, strings, arrays, etc.)</li>
+<li>Varies depending on the type of model and detection algorithm</li>
+</ul>
+<p>Common types of additional information:</p>
+<ul>
+<li>Specific metrics like R-squared or mean squared error</li>
+<li>Threshold values used in the detection</li>
+<li>Technical details about the model or data</li>
+<li>References to related documentation or resources</li>
+</ul>
+<p>This information is useful because:</p>
+<ul>
+<li>It provides context for the fit assessment</li>
+<li>It can help with more detailed diagnosis</li>
+<li>It might be needed for implementing the recommendations</li>
+</ul>
+<p>For example, for a multicollinearity detection, this might include
+the specific variance inflation factors for each feature.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FitDetectorResult_1_ConfidenceLevel_" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.ConfidenceLevel*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FitDetectorResult_1_ConfidenceLevel" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.ConfidenceLevel">
+  ConfidenceLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FitDetectorResult.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the confidence level for the fit type assessment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? ConfidenceLevel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A numeric value representing the confidence level, or null if not applicable.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FitDetectorResult_1_ConfidenceLevel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the confidence level or certainty with which the fit type was determined. Higher values 
+typically indicate greater confidence in the assessment. The exact interpretation of this value depends on the 
+specific detection algorithm used, but it generally provides a measure of how strongly the evidence supports the 
+identified fit type. This can be useful for prioritizing which issues to address first, focusing on those with 
+higher confidence levels. The property is nullable, allowing for cases where a confidence level is not applicable 
+or cannot be determined.
+</p>
+<p><b>For Beginners:</b> This value indicates how certain the detector is about the fit type assessment.
+<p>The confidence level:</p>
+<ul>
+<li>Measures how sure the detector is about its assessment</li>
+<li>Higher values indicate stronger evidence for the detected fit type</li>
+<li>Can be null if confidence couldn't be determined</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It helps you prioritize which issues to address first</li>
+<li>It indicates when a fit assessment might be borderline</li>
+<li>It can guide how aggressively you should apply the recommendations</li>
+</ul>
+<p>For example, a high confidence level for an overfitting detection suggests
+you should definitely take steps to reduce model complexity, while a low
+confidence might suggest more cautious adjustments.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FitDetectorResult_1_FitType_" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.FitType*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FitDetectorResult_1_FitType" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.FitType">
+  FitType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FitDetectorResult.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of fit detected for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FitType FitType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.FitType.html">FitType</a></dt>
+    <dd><p>A value from the FitType enumeration indicating the type of fit.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FitDetectorResult_1_FitType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the type of fit detected for the model, such as good fit, underfitting, or overfitting. 
+A good fit indicates that the model appropriately captures the patterns in the data without being too simple 
+or too complex. Underfitting occurs when the model is too simple to capture the underlying patterns in the data, 
+resulting in poor performance on both training and test data. Overfitting occurs when the model is too complex 
+and captures noise in the training data, resulting in good performance on training data but poor performance on 
+test data. Other fit types might include multicollinearity (when predictor variables are highly correlated) or 
+heteroscedasticity (when the variance of errors varies across the range of a predictor).
+</p>
+<p><b>For Beginners:</b> This property tells you what kind of fit was detected for your model.
+<p>The fit type:</p>
+<ul>
+<li>Identifies the relationship between your model and your data</li>
+<li>Helps you understand if your model needs to be adjusted</li>
+<li>Guides your next steps in the modeling process</li>
+</ul>
+<p>Common fit types include:</p>
+<ul>
+<li>Good Fit: Your model appropriately captures the patterns in the data</li>
+<li>Underfitting: Your model is too simple and misses important patterns</li>
+<li>Overfitting: Your model is too complex and captures noise along with patterns</li>
+<li>Multicollinearity: Your predictor variables are too highly correlated</li>
+<li>Heteroscedasticity: The variance of errors changes across your data</li>
+</ul>
+<p>For example, if this property is set to FitType.Overfitting, it means your model
+is likely too complex and needs to be simplified to generalize better.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FitDetectorResult_1_Recommendations_" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.Recommendations*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FitDetectorResult_1_Recommendations" data-uid="AiDotNet.Models.Results.FitDetectorResult`1.Recommendations">
+  Recommendations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FitDetectorResult.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a list of recommendations for improving the model fit.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; Recommendations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A list of string recommendations, initialized as an empty list.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FitDetectorResult_1_Recommendations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides specific recommendations for improving the model fit based on the detected fit type. 
+These recommendations are actionable suggestions that can help address issues with the model. For example, 
+if overfitting is detected, recommendations might include adding regularization, reducing model complexity, 
+or collecting more training data. If underfitting is detected, recommendations might include increasing model 
+complexity, adding more features, or using a different type of model. The recommendations are provided as 
+human-readable strings that can be directly presented to the user or logged for later review.
+</p>
+<p><b>For Beginners:</b> This list contains specific suggestions for improving your model.
+<p>The recommendations:</p>
+<ul>
+<li>Provide actionable steps to address the detected fit issues</li>
+<li>Are tailored to the specific fit type that was detected</li>
+<li>Can be directly presented to users or logged for later review</li>
+</ul>
+<p>Common recommendations might include:</p>
+<ul>
+<li>For overfitting: &quot;Add regularization to reduce model complexity&quot;</li>
+<li>For underfitting: &quot;Try a more complex model architecture&quot;</li>
+<li>For multicollinearity: &quot;Remove highly correlated features&quot;</li>
+</ul>
+<p>These recommendations are valuable because:</p>
+<ul>
+<li>They translate the technical diagnosis into practical actions</li>
+<li>They guide you toward better model performance</li>
+<li>They help you learn about best practices in modeling</li>
+</ul>
+<p>For example, if your model is overfitting, the recommendations might include
+&quot;Add L2 regularization&quot; and &quot;Increase dropout rate to 0.5&quot;.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FitDetectorResult.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum FitType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum FitType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents different types of model fit quality and common issues in machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_FitType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.FitType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.FitType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_FitType" data-uid="AiDotNet.Enums.FitType" class="text-break">
+Enum FitType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/FitType.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents different types of model fit quality and common issues in machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum FitType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_FitType_GoodFit"><code>GoodFit = 0</code></dt>
+  <dd><p>Indicates that the model fits the data well, capturing the underlying patterns without memorizing noise.</p>
+<p>
+A good fit means your model has found the right balance - it captures the important patterns
+in your data without being influenced too much by random noise or outliers.
+<p>Characteristics:</p>
+<ul>
+<li>Performs well on both training and test data</li>
+<li>Captures the true underlying relationship in the data</li>
+<li>Makes reasonable predictions on new, unseen data</li>
+<li>Has appropriate complexity for the problem</li>
+</ul>
+<p>This is the ideal outcome for any machine learning model.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_HighBias"><code>HighBias = 3</code></dt>
+  <dd><p>Indicates that the model consistently misses the true relationship in the data.</p>
+<p>
+<b>For Beginners:</b> High bias means your model makes systematic errors because it's missing 
+important patterns in the data.
+<p>Think of bias like a consistent error in measurement:</p>
+<ul>
+<li>The model consistently underestimates or overestimates values</li>
+<li>It's too simplified to capture the true relationship</li>
+<li>It makes the same kinds of mistakes repeatedly</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Consistently wrong in the same direction</li>
+<li>Underfits the training data</li>
+<li>Similar (poor) performance on training and test data</li>
+<li>Model predictions are far from actual values</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Model is too simple</li>
+<li>Important features or interactions are missing</li>
+<li>Incorrect assumptions about the data</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Use a more complex model</li>
+<li>Add more features or feature interactions</li>
+<li>Reduce regularization</li>
+<li>Try different model architectures</li>
+</ul>
+<p>High bias is related to underfitting but specifically refers to the systematic error component.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_HighVariance"><code>HighVariance = 4</code></dt>
+  <dd><p>Indicates that the model is too sensitive to small fluctuations in the training data.</p>
+<p>
+<b>For Beginners:</b> High variance means your model changes dramatically with small changes in the training data.
+<p>Think of variance like inconsistency:</p>
+<ul>
+<li>The model is very sensitive to which specific data points it sees during training</li>
+<li>It learns random noise along with the true patterns</li>
+<li>It performs very differently on different subsets of data</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Great performance on training data</li>
+<li>Much worse performance on test data</li>
+<li>Model predictions vary widely with small changes to training data</li>
+<li>Complex model with many parameters</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Model is too complex for the amount of data</li>
+<li>Not enough training examples</li>
+<li>Too many features relative to data points</li>
+<li>Insufficient regularization</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Get more training data</li>
+<li>Simplify the model</li>
+<li>Use regularization techniques</li>
+<li>Feature selection to reduce dimensionality</li>
+<li>Ensemble methods to average out variance</li>
+</ul>
+<p>High variance is related to overfitting but specifically refers to the model's sensitivity to changes in training data.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_Moderate"><code>Moderate = 14</code></dt>
+  <dd><p>Indicates a moderate level of effect or relationship in the data.</p>
+<p>
+<b>For Beginners:</b> Moderate indicates a middle-ground situation - not strong enough 
+to be concerning, but not weak enough to ignore completely.
+<p>Think of it like a partly cloudy day:</p>
+<ul>
+<li>Neither completely sunny nor completely overcast</li>
+<li>Has elements of both conditions</li>
+<li>Requires some attention but not immediate action</li>
+</ul>
+<p>This is a general-purpose value that can apply to different aspects of model fit,
+depending on context. It might refer to:</p>
+<ul>
+<li>Moderate correlation between variables</li>
+<li>Moderate fit quality</li>
+<li>Moderate level of any statistical effect</li>
+</ul>
+<p>When you see a &quot;Moderate&quot; classification:</p>
+<ul>
+<li>The effect is real and worth noting</li>
+<li>It may warrant some attention but isn't critical</li>
+<li>You might want to monitor it in case it becomes stronger</li>
+<li>It represents a middle ground between extremes</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_ModerateMulticollinearity"><code>ModerateMulticollinearity = 7</code></dt>
+  <dd><p>Indicates that input variables have some correlation, potentially affecting coefficient stability.</p>
+<p>
+<b>For Beginners:</b> Moderate multicollinearity means some of your input features are somewhat related, 
+which can make your model less reliable but not completely unstable.
+<p>Think of it like having two explanatory variables that overlap partially:</p>
+<ul>
+<li>They share some information but also have unique contributions</li>
+<li>The model can still function but coefficient interpretation becomes tricky</li>
+<li>Feature importance may be somewhat misleading</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Moderate correlation between two or more input features</li>
+<li>Coefficient estimates are somewhat unstable</li>
+<li>Standard errors are larger than ideal</li>
+<li>Individual feature importance is somewhat unreliable</li>
+<li>Overall predictions are usually still accurate</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Natural correlations in real-world data</li>
+<li>Features that partially measure the same underlying factor</li>
+<li>Trend variables that move together over time</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Consider whether all features are necessary</li>
+<li>Use regularization techniques</li>
+<li>Be cautious when interpreting individual coefficients</li>
+<li>Monitor variance inflation factors (VIFs)</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_NoAutocorrelation"><code>NoAutocorrelation = 13</code></dt>
+  <dd><p>Indicates that data points are not correlated with previous data points.</p>
+<p>
+<b>For Beginners:</b> No autocorrelation means each data point is independent of previous data points.
+<p>Think of it like flipping a coin:</p>
+<ul>
+<li>Previous flips don't influence the next flip</li>
+<li>Each data point stands on its own</li>
+<li>There are no time-based patterns to exploit</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Data points show no dependence on previous points</li>
+<li>Errors in your model are randomly distributed over time</li>
+<li>No visible patterns when data is plotted in sequence</li>
+<li>Autocorrelation tests show no significant effects</li>
+</ul>
+<p>This is often the ideal situation for many statistical models, as it means the
+independence assumption is satisfied. Standard regression and classification
+methods work best when there's no autocorrelation.</p>
+<p>If your data shows no autocorrelation:</p>
+<ul>
+<li>You can use standard statistical methods with confidence</li>
+<li>You don't need specialized time series approaches</li>
+<li>Your confidence intervals and p-values are more reliable</li>
+<li>You can treat observations as independent samples</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_Overfit"><code>Overfit = 1</code></dt>
+  <dd><p>Indicates that the model has memorized the training data too closely, including its noise and outliers.</p>
+<p>
+<b>For Beginners:</b> Overfitting happens when your model learns the training data too well, 
+memorizing even the random noise instead of just the important patterns.
+<p>Think of it like a student who memorizes test answers without understanding the concepts:</p>
+<ul>
+<li>Does extremely well on practice questions (training data)</li>
+<li>Performs poorly on new questions (test data)</li>
+<li>Has &quot;memorized&quot; rather than &quot;learned&quot;</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Very high accuracy on training data</li>
+<li>Much lower accuracy on test data</li>
+<li>Model is unnecessarily complex</li>
+<li>Makes unreliable predictions on new data</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Model is too complex for the amount of data</li>
+<li>Training for too many iterations</li>
+<li>Not enough regularization</li>
+<li>Too many features compared to data points</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Simplify your model</li>
+<li>Get more training data</li>
+<li>Use regularization techniques</li>
+<li>Implement early stopping</li>
+<li>Use cross-validation</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_PoorFit"><code>PoorFit = 8</code></dt>
+  <dd><p>Indicates that the model does not fit the data well but is not completely useless.</p>
+<p>
+A poor fit means your model captures some patterns in the data but misses many important relationships.
+<p>Characteristics:</p>
+<ul>
+<li>Below-average performance metrics</li>
+<li>Captures only the strongest patterns in the data</li>
+<li>Makes frequent errors in predictions</li>
+<li>May have issues with both bias and variance</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Missing important features</li>
+<li>Wrong type of model for the problem</li>
+<li>Insufficient data preprocessing</li>
+<li>Data quality issues</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Feature engineering to create better inputs</li>
+<li>Try different model architectures</li>
+<li>Improve data quality and preprocessing</li>
+<li>Gather more or better data</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_SevereMulticollinearity"><code>SevereMulticollinearity = 6</code></dt>
+  <dd><p>Indicates that input variables are highly correlated, causing unreliable coefficient estimates.</p>
+<p>
+<b>For Beginners:</b> Severe multicollinearity means some of your input features are so closely related 
+that the model can't tell them apart.
+<p>Think of it like trying to determine the individual contributions of two chefs who always cook together:</p>
+<ul>
+<li>You can't tell which chef is responsible for which aspects of the meal</li>
+<li>The model can't determine which feature is truly causing the effect</li>
+<li>Small changes in data can cause large changes in feature importance</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Very high correlation between two or more input features</li>
+<li>Coefficient estimates are unstable and can flip signs</li>
+<li>Standard errors of coefficients are very large</li>
+<li>Individual feature importance is unreliable</li>
+<li>Overall predictions may still be accurate</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Redundant features (e.g., age and birth year)</li>
+<li>Derived features that are closely related</li>
+<li>Features that measure the same underlying factor</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Remove one of the correlated features</li>
+<li>Combine correlated features (e.g., using PCA)</li>
+<li>Use regularization techniques (Ridge regression)</li>
+<li>Create interaction terms instead of using separate features</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_StrongNegativeAutocorrelation"><code>StrongNegativeAutocorrelation = 11</code></dt>
+  <dd><p>Indicates that data points are strongly correlated with previous data points in a negative direction.</p>
+<p>
+<b>For Beginners:</b> Strong negative autocorrelation means your data tends to swing back and forth, with high values 
+typically followed by low values and vice versa.
+<p>Think of it like a pendulum:</p>
+<ul>
+<li>If today's value is high, tomorrow's is likely to be low</li>
+<li>Values tend to alternate between high and low</li>
+<li>The data appears to zigzag when plotted over time</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Data points strongly depend on previous points, but in the opposite direction</li>
+<li>If one value is above average, the next is likely below average</li>
+<li>Errors in your model tend to alternate between positive and negative</li>
+<li>Data shows oscillating patterns</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Overcorrection in controlled systems</li>
+<li>Inventory or supply chain oscillations</li>
+<li>Measurement errors or calibration issues</li>
+<li>Alternating data collection methods</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Use time series specific models</li>
+<li>Include lagged variables as features</li>
+<li>Consider models that capture oscillating behavior</li>
+<li>Check for measurement or recording issues</li>
+<li>Analyze if the alternating pattern is a real phenomenon or an artifact</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_StrongPositiveAutocorrelation"><code>StrongPositiveAutocorrelation = 10</code></dt>
+  <dd><p>Indicates that data points are strongly correlated with previous data points in a positive direction.</p>
+<p>
+<b>For Beginners:</b> Strong positive autocorrelation means your data points are strongly related to previous data points.
+<p>Think of it like weather patterns:</p>
+<ul>
+<li>If today is hot, tomorrow is very likely to be hot too</li>
+<li>Values tend to stay high for a while, then low for a while</li>
+<li>You see clear patterns or &quot;runs&quot; in your data over time</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Data points strongly depend on previous data points</li>
+<li>Errors in your model tend to be similar across consecutive predictions</li>
+<li>If one prediction is too high, the next one is also likely too high</li>
+<li>Data shows clear trends or cycles</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Time series data with strong trends</li>
+<li>Seasonal patterns</li>
+<li>Missing important time-dependent variables</li>
+<li>Data collected at intervals shorter than the natural cycle of the phenomenon</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Use time series specific models (ARIMA, etc.)</li>
+<li>Include lagged variables as features</li>
+<li>Difference the data to remove trends</li>
+<li>Add features that capture seasonality</li>
+<li>Use specialized error terms that account for autocorrelation</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_Underfit"><code>Underfit = 2</code></dt>
+  <dd><p>Indicates that the model is too simple to capture the important patterns in the data.</p>
+<p>
+<b>For Beginners:</b> Underfitting happens when your model is too simple to capture the important 
+patterns in your data.
+<p>Think of it like using a straight line to describe a curved relationship:</p>
+<ul>
+<li>The model misses important patterns</li>
+<li>It's too simplistic to represent the true relationship</li>
+<li>It performs poorly on both training and test data</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Poor performance on training data</li>
+<li>Similarly poor performance on test data</li>
+<li>Model is too simple</li>
+<li>High error rates across all datasets</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Model is too simple (not enough parameters)</li>
+<li>Important features are missing</li>
+<li>Too much regularization</li>
+<li>Not training long enough</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Use a more complex model</li>
+<li>Add more relevant features</li>
+<li>Reduce regularization</li>
+<li>Train for more iterations</li>
+<li>Feature engineering to better represent the data</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_Unstable"><code>Unstable = 5</code></dt>
+  <dd><p>Indicates that small changes in the input data cause large, unpredictable changes in the model's predictions.</p>
+<p>
+<b>For Beginners:</b> An unstable model produces wildly different predictions with small changes to input data.
+<p>Think of instability like a wobbly table:</p>
+<ul>
+<li>Small changes cause big, unpredictable movements</li>
+<li>The model is unreliable because similar inputs produce very different outputs</li>
+<li>Results aren't consistent or trustworthy</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Predictions change dramatically with small input changes</li>
+<li>Different training runs produce very different models</li>
+<li>Performance varies widely across different data subsets</li>
+<li>Often has numerical issues during training</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Poor feature scaling</li>
+<li>Multicollinearity (highly correlated features)</li>
+<li>Numerical precision issues</li>
+<li>Too high learning rate</li>
+<li>Complex model with insufficient data</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Feature scaling (normalize or standardize inputs)</li>
+<li>Address multicollinearity</li>
+<li>Use more stable algorithms</li>
+<li>Ensemble methods to average out instability</li>
+<li>Regularization techniques</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_VeryPoorFit"><code>VeryPoorFit = 9</code></dt>
+  <dd><p>Indicates that the model performs extremely poorly and fails to capture meaningful patterns in the data.</p>
+<p>
+<b>For Beginners:</b> A very poor fit means your model is almost completely failing to learn from your data.
+<p>Think of it like trying to predict the weather by flipping a coin:</p>
+<ul>
+<li>The model's predictions have little to no relationship with the actual outcomes</li>
+<li>It's barely better than random guessing</li>
+<li>Almost no useful patterns are being captured</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Very low performance metrics (close to random)</li>
+<li>Large errors across all predictions</li>
+<li>No meaningful relationship between predictions and actual values</li>
+<li>Model fails on both training and test data</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Completely wrong model for the problem</li>
+<li>Major data quality issues</li>
+<li>Missing critical features</li>
+<li>Serious implementation errors</li>
+<li>Data that has no predictable pattern</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Reconsider your entire approach</li>
+<li>Check for implementation errors</li>
+<li>Verify data quality and relevance</li>
+<li>Consider if the problem is actually predictable</li>
+<li>Start with a simpler model and build up gradually</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FitType_WeakAutocorrelation"><code>WeakAutocorrelation = 12</code></dt>
+  <dd><p>Indicates that data points have some correlation with previous data points, but the relationship is not strong.</p>
+<p>
+<b>For Beginners:</b> Weak autocorrelation means your data shows some relationship to previous values, 
+but the connection isn't very strong.
+<p>Think of it like the relationship between today's and next week's weather:</p>
+<ul>
+<li>There's some connection, but it's not reliable for prediction</li>
+<li>You can see hints of patterns, but with many exceptions</li>
+<li>The relationship is present but not dominant</li>
+</ul>
+<p>Characteristics:</p>
+<ul>
+<li>Data points have some dependence on previous points</li>
+<li>Patterns exist but with considerable noise</li>
+<li>Autocorrelation tests show statistically significant but small effects</li>
+<li>Some clustering of similar values, but not consistent</li>
+</ul>
+<p>Common causes:</p>
+<ul>
+<li>Mild time dependencies in the data</li>
+<li>Distant seasonal effects</li>
+<li>Weak system memory or inertia</li>
+<li>Multiple competing factors affecting the data</li>
+</ul>
+<p>Solutions:</p>
+<ul>
+<li>Consider whether time series methods would help</li>
+<li>Test if adding lagged variables improves your model</li>
+<li>May be acceptable to ignore if the effect is very small</li>
+<li>Use robust standard errors in statistical testing</li>
+</ul>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_FitType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Model fit describes how well your AI model matches the data it's trying to learn from.
+<p>Think of model fit like trying on clothes:</p>
+<ul>
+<li>A good fit means the model captures the true patterns in your data</li>
+<li>A poor fit means the model doesn't match the data well</li>
+<li>Different types of poor fits have different causes and solutions</li>
+</ul>
+<p>Common fit problems include:</p>
+<ul>
+<li>Overfitting: The model memorizes the training data instead of learning general patterns</li>
+<li>Underfitting: The model is too simple to capture important patterns in the data</li>
+<li>Bias and variance issues: Different types of errors that affect how your model performs</li>
+<li>Multicollinearity: When input variables are too closely related to each other</li>
+<li>Autocorrelation: When data points are related to previous data points in a sequence</li>
+</ul>
+<p>Understanding the type of fit helps you diagnose problems with your model and make improvements.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/FitType.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

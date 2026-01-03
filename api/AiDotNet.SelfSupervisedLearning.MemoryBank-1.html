@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MemoryBank&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MemoryBank&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="FIFO memory queue for storing embeddings in contrastive learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_SelfSupervisedLearning_MemoryBank_1.md&amp;value=---%0Auid%3A%20AiDotNet.SelfSupervisedLearning.MemoryBank%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1">
+
+
+
+  <h1 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1" class="text-break">
+Class MemoryBank&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.SelfSupervisedLearning.html">SelfSupervisedLearning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>FIFO memory queue for storing embeddings in contrastive learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MemoryBank&lt;T&gt; : IMemoryBank&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for computations (typically float or double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MemoryBank&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.SelfSupervisedLearning.IMemoryBank-1.html">IMemoryBank</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A memory bank is a queue that stores embeddings from previous
+batches. This provides a large pool of negative samples for contrastive learning without
+requiring huge batch sizes.</p>
+<p><b>How it works:</b></p>
+<ul><li>New embeddings are added to the end of the queue (Enqueue)</li><li>When the queue is full, oldest embeddings are removed (FIFO)</li><li>All stored embeddings serve as negative samples for contrastive loss</li></ul>
+<p><b>Example usage:</b></p>
+<pre><code class="lang-csharp">// Create memory bank with 65536 entries
+var memoryBank = new MemoryBank&lt;float&gt;(capacity: 65536, embeddingDim: 128);
+
+// Training loop:
+var negatives = memoryBank.GetAll();  // Get negative samples
+var loss = ComputeContrastiveLoss(queries, keys, negatives);
+memoryBank.Enqueue(momentumEncoderOutput);  // Add new embeddings</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1__ctor_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1__ctor_System_Int32_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.#ctor(System.Int32,System.Int32,System.Nullable{System.Int32})">
+  MemoryBank(int, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MemoryBank class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MemoryBank(int capacity, int embeddingDim, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>capacity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of embeddings to store (e.g., 65536).</p>
+</dd>
+    <dt><code>embeddingDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Dimension of each embedding (e.g., 128).</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for sampling.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Capacity_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.Capacity*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Capacity" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.Capacity">
+  Capacity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum capacity of the memory bank (queue size).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Capacity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Capacity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 4096-65536. MoCo uses 65536 by default.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_CurrentSize_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.CurrentSize*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_CurrentSize" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.CurrentSize">
+  CurrentSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current number of stored embeddings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CurrentSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_EmbeddingDimension_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.EmbeddingDimension*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_EmbeddingDimension" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.EmbeddingDimension">
+  EmbeddingDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the embedding dimension of stored vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EmbeddingDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_IsFull_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.IsFull*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_IsFull" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.IsFull">
+  IsFull
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the memory bank is full (has reached capacity).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsFull { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Clear_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.Clear*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Clear" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all stored embeddings and resets the memory bank.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Enqueue_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.Enqueue*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Enqueue_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.Enqueue(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Enqueue(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds new embeddings to the memory bank (FIFO queue).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Enqueue(Tensor&lt;T&gt; embeddings)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>embeddings</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The embeddings to add (batch of vectors).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Enqueue_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> New embeddings are added to the end of the queue.
+When the queue is full, the oldest embeddings are removed (first-in, first-out).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_GetAll_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.GetAll*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_GetAll" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.GetAll">
+  GetAll()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all stored embeddings for use as negative samples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GetAll()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor containing all stored embeddings [CurrentSize, EmbeddingDimension].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_GetAll_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These embeddings serve as negative samples in contrastive loss.
+The more negatives you have, the harder and more informative the contrastive task becomes.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_GetAt_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.GetAt*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_GetAt_System_Int32_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.GetAt(System.Int32)">
+  GetAt(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the embedding at a specific index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GetAt(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the embedding to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The embedding tensor [1, embeddingDim].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Sample_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.Sample*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Sample_System_Int32_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.Sample(System.Int32)">
+  Sample(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a random subset of stored embeddings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Sample(int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of embeddings to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor of randomly sampled embeddings [count, EmbeddingDimension].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_Sample_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Useful when you want fewer negatives than the full memory bank.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_SetAt_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.SetAt*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_SetAt_System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.SetAt(System.Int32,AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SetAt(int, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the embedding at a specific index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetAt(int index, Tensor&lt;T&gt; embedding)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index to set.</p>
+</dd>
+    <dt><code>embedding</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The embedding tensor [1, embeddingDim] or [embeddingDim].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_UpdateWithMomentum_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.UpdateWithMomentum*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_UpdateWithMomentum_System_Int32___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.SelfSupervisedLearning.MemoryBank`1.UpdateWithMomentum(System.Int32[],AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  UpdateWithMomentum(int[], Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates embeddings by averaging with new values (for soft updates).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateWithMomentum(int[] indices, Tensor&lt;T&gt; newEmbeddings, double momentum)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of embeddings to update.</p>
+</dd>
+    <dt><code>newEmbeddings</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>New embedding values.</p>
+</dd>
+    <dt><code>momentum</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Momentum for exponential moving average (0-1).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MemoryBank_1_UpdateWithMomentum_System_Int32___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Some memory bank variants use soft updates: new = momentum * old + (1 - momentum) * new</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MemoryBank.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

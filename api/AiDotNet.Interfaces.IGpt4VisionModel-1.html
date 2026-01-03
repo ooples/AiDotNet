@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IGpt4VisionModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IGpt4VisionModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for GPT-4V-style models that combine vision understanding with large language model capabilities.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IGpt4VisionModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IGpt4VisionModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IGpt4VisionModel_1" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1" class="text-break">
+Interface IGpt4VisionModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for GPT-4V-style models that combine vision understanding with large language model capabilities.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IGpt4VisionModel&lt;T&gt; : IMultimodalEmbedding&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeText_System_String_">IMultimodalEmbedding&lt;T&gt;.EncodeText(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeTextBatch_System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.EncodeTextBatch(IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImage_System_Double___">IMultimodalEmbedding&lt;T&gt;.EncodeImage(double[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImageBatch_System_Collections_Generic_IEnumerable_System_Double____">IMultimodalEmbedding&lt;T&gt;.EncodeImageBatch(IEnumerable&lt;double[]&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ComputeSimilarity_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">IMultimodalEmbedding&lt;T&gt;.ComputeSimilarity(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ZeroShotClassify_System_Double___System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.ZeroShotClassify(double[], IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EmbeddingDimension">IMultimodalEmbedding&lt;T&gt;.EmbeddingDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_MaxSequenceLength">IMultimodalEmbedding&lt;T&gt;.MaxSequenceLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ImageSize">IMultimodalEmbedding&lt;T&gt;.ImageSize</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IGpt4VisionModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+GPT-4V represents the integration of vision capabilities into large language models,
+enabling sophisticated visual reasoning, multi-turn conversations about images,
+and complex visual-linguistic tasks.
+</p>
+<p><b>For Beginners:</b> GPT-4V is like giving ChatGPT the ability to see!
+<p>Key capabilities:</p>
+<ul>
+<li>Visual reasoning: Understanding relationships, counting, spatial awareness</li>
+<li>Multi-turn dialogue: Context-aware conversations about images</li>
+<li>Document understanding: Reading and analyzing documents, charts, diagrams</li>
+<li>Code generation from screenshots: Understanding UI and generating code</li>
+<li>Creative tasks: Describing images poetically, writing stories from images</li>
+</ul>
+<p>Architecture concepts:</p>
+<ol>
+<li>Vision Encoder: Processes images into visual tokens</li>
+<li>Visual-Language Alignment: Maps visual features to LLM embedding space</li>
+<li>Large Language Model: Generates text responses conditioned on visual input</li>
+<li>Multi-modal Attention: Allows text to attend to relevant image regions</li>
+</ol>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_ContextWindowSize_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.ContextWindowSize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_ContextWindowSize" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.ContextWindowSize">
+  ContextWindowSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the context window size in tokens.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int ContextWindowSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_MaxImageResolution_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.MaxImageResolution*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_MaxImageResolution" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.MaxImageResolution">
+  MaxImageResolution
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum resolution supported for input images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(int Width, int Height) MaxImageResolution { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32-.min">min</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32-.max">max</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_MaxImagesPerRequest_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.MaxImagesPerRequest*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_MaxImagesPerRequest" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.MaxImagesPerRequest">
+  MaxImagesPerRequest
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of images that can be processed in a single request.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxImagesPerRequest { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_SupportedDetailLevels_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.SupportedDetailLevels*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_SupportedDetailLevels" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.SupportedDetailLevels">
+  SupportedDetailLevels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the supported image detail levels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;string&gt; SupportedDetailLevels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_AnalyzeChart_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.AnalyzeChart*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_AnalyzeChart_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.AnalyzeChart(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  AnalyzeChart(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes a chart or graph and extracts data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(string ChartType, Dictionary&lt;string, object&gt; Data, string Interpretation) AnalyzeChart(Tensor&lt;T&gt; chartImage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chartImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Image of a chart or graph.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.object-,system.string-.charttype">ChartType</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.object-,system.string-.data">Data</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.object-,system.string-.interpretation">Interpretation</a>)</dt>
+    <dd><p>Chart analysis including type, data points, and interpretation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_AnalyzeDocument_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.AnalyzeDocument*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_AnalyzeDocument_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.AnalyzeDocument(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String)">
+  AnalyzeDocument(Tensor&lt;T&gt;, string, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes a document image (PDF page, screenshot, etc.).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string AnalyzeDocument(Tensor&lt;T&gt; documentImage, string analysisType = &quot;summary&quot;, string? additionalPrompt = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>documentImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The document image.</p>
+</dd>
+    <dt><code>analysisType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Type: &quot;summary&quot;, &quot;extract_text&quot;, &quot;answer_questions&quot;, &quot;analyze_structure&quot;.</p>
+</dd>
+    <dt><code>additionalPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional additional instructions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Analysis result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGpt4VisionModel_1_AnalyzeDocument_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Specialized for understanding structured documents like:
+- PDF pages and scanned documents
+- Charts and graphs
+- Tables and spreadsheets
+- Forms and invoices
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_AnswerVisualQuestion_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.AnswerVisualQuestion*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_AnswerVisualQuestion_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.AnswerVisualQuestion(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  AnswerVisualQuestion(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Answers a visual question with confidence score.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(string Answer, T Confidence) AnswerVisualQuestion(Tensor&lt;T&gt; image, string question)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image.</p>
+</dd>
+    <dt><code>question</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Question about the image.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.label">Label</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.confidence">Confidence</a>)</dt>
+    <dd><p>Answer and confidence score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_Chat_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.Chat*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_Chat_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_String___System_String_System_Int32_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.Chat(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String}},System.String,System.Int32)">
+  Chat(Tensor&lt;T&gt;, IEnumerable&lt;(string Role, string Content)&gt;, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Conducts a multi-turn conversation about an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Chat(Tensor&lt;T&gt; image, IEnumerable&lt;(string Role, string Content)&gt; conversationHistory, string userMessage, int maxTokens = 1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The image being discussed.</p>
+</dd>
+    <dt><code>conversationHistory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string-.role">Role</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string-.content">Content</a>)&gt;</dt>
+    <dd><p>Previous turns as (role, content) pairs.</p>
+</dd>
+    <dt><code>userMessage</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The new user message.</p>
+</dd>
+    <dt><code>maxTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated assistant response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_CompareImages_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.CompareImages*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_CompareImages_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.CompareImages(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  CompareImages(Tensor&lt;T&gt;, Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two images and describes their differences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string CompareImages(Tensor&lt;T&gt; image1, Tensor&lt;T&gt; image2, string comparisonType = &quot;detailed&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>First image.</p>
+</dd>
+    <dt><code>image2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Second image.</p>
+</dd>
+    <dt><code>comparisonType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Type: &quot;visual&quot;, &quot;semantic&quot;, &quot;detailed&quot;.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Comparison description.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_DescribeImage_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.DescribeImage*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_DescribeImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.DescribeImage(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String)">
+  DescribeImage(Tensor&lt;T&gt;, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Describes an image with specified style and detail level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string DescribeImage(Tensor&lt;T&gt; image, string style = &quot;factual&quot;, string detailLevel = &quot;medium&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description style: &quot;factual&quot;, &quot;poetic&quot;, &quot;technical&quot;, &quot;accessibility&quot;.</p>
+</dd>
+    <dt><code>detailLevel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Detail level: &quot;low&quot;, &quot;medium&quot;, &quot;high&quot;.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated description.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_DetectObjects_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.DetectObjects*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_DetectObjects_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.DetectObjects(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  DetectObjects(Tensor&lt;T&gt;, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Identifies and locates objects in an image with bounding boxes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(string Label, T Confidence, int X, int Y, int Width, int Height)&gt; DetectObjects(Tensor&lt;T&gt; image, string? objectQuery = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image.</p>
+</dd>
+    <dt><code>objectQuery</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional specific objects to find, or null for all objects.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,system.int32,system.int32,system.int32,system.int32-.label">Label</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,system.int32,system.int32,system.int32,system.int32-.confidence">Confidence</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,system.int32,system.int32,system.int32,system.int32-.x">X</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,system.int32,system.int32,system.int32,system.int32-.y">Y</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,system.int32,system.int32,system.int32,system.int32-.width">Width</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0,system.int32,system.int32,system.int32,system.int32-.height">Height</a>)&gt;</dt>
+    <dd><p>List of detected objects with bounding boxes and confidence scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_EvaluateImageQuality_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.EvaluateImageQuality*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_EvaluateImageQuality_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.EvaluateImageQuality(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  EvaluateImageQuality(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates image quality and provides improvement suggestions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(Dictionary&lt;string, T&gt; QualityScores, IEnumerable&lt;string&gt; Suggestions) EvaluateImageQuality(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The image to evaluate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.collections.generic.dictionary-system.string,-0-,system.collections.generic.ienumerable-system.string--.qualityscores">QualityScores</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.collections.generic.dictionary-system.string,-0-,system.collections.generic.ienumerable-system.string--.suggestions">Suggestions</a>)</dt>
+    <dd><p>Quality assessment with scores and suggestions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_ExtractStructuredData_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.ExtractStructuredData*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_ExtractStructuredData_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.ExtractStructuredData(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  ExtractStructuredData(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts structured data from an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string ExtractStructuredData(Tensor&lt;T&gt; image, string schema)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image.</p>
+</dd>
+    <dt><code>schema</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>JSON schema describing expected output structure.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Extracted data as JSON string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGpt4VisionModel_1_ExtractStructuredData_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Get structured data from images!
+<p>Example schema: {&quot;name&quot;: &quot;string&quot;, &quot;price&quot;: &quot;number&quot;, &quot;in_stock&quot;: &quot;boolean&quot;}
+From a product image, extracts: {&quot;name&quot;: &quot;Widget&quot;, &quot;price&quot;: 29.99, &quot;in_stock&quot;: true}</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_ExtractText_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.ExtractText*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_ExtractText_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.ExtractText(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Boolean)">
+  ExtractText(Tensor&lt;T&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs OCR with layout understanding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(string Text, Dictionary&lt;string, object&gt;? LayoutInfo) ExtractText(Tensor&lt;T&gt; image, bool preserveLayout = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Image containing text.</p>
+</dd>
+    <dt><code>preserveLayout</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to preserve spatial layout in output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.object--.text">Text</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.object--.layoutinfo">LayoutInfo</a>)</dt>
+    <dd><p>Extracted text with optional layout information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_Generate_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.Generate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_Generate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_Double_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.Generate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32,System.Double)">
+  Generate(Tensor&lt;T&gt;, string, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a response based on an image and text prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Generate(Tensor&lt;T&gt; image, string prompt, int maxTokens = 1024, double temperature = 0.7)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor [channels, height, width].</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text prompt or question about the image.</p>
+</dd>
+    <dt><code>maxTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Sampling temperature (0-2).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated text response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateCodeFromUI_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GenerateCodeFromUI*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateCodeFromUI_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GenerateCodeFromUI(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String)">
+  GenerateCodeFromUI(Tensor&lt;T&gt;, string, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates code from a UI screenshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateCodeFromUI(Tensor&lt;T&gt; uiScreenshot, string targetFramework = &quot;html_css&quot;, string? additionalInstructions = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>uiScreenshot</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Screenshot of a user interface.</p>
+</dd>
+    <dt><code>targetFramework</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Target framework: &quot;html_css&quot;, &quot;react&quot;, &quot;flutter&quot;, &quot;swiftui&quot;.</p>
+</dd>
+    <dt><code>additionalInstructions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional styling or functionality instructions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated code.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateEditInstructions_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GenerateEditInstructions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateEditInstructions_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GenerateEditInstructions(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  GenerateEditInstructions(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates image editing instructions based on a modification request.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateEditInstructions(Tensor&lt;T&gt; image, string editRequest)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The original image.</p>
+</dd>
+    <dt><code>editRequest</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of desired edit.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Structured editing instructions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateFromMultipleImages_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GenerateFromMultipleImages*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateFromMultipleImages_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32_System_Double_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GenerateFromMultipleImages(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Int32,System.Double)">
+  GenerateFromMultipleImages(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a response based on multiple images and text prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateFromMultipleImages(IEnumerable&lt;Tensor&lt;T&gt;&gt; images, string prompt, int maxTokens = 1024, double temperature = 0.7)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Multiple input images.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text prompt referencing the images.</p>
+</dd>
+    <dt><code>maxTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Sampling temperature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated text response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateFromMultipleImages_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Compare and analyze multiple images!
+<p>Examples:</p>
+<ul>
+<li>&quot;What are the differences between these two images?&quot;</li>
+<li>&quot;Which of these products looks more appealing?&quot;</li>
+<li>&quot;Describe how these images are related.&quot;</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateStory_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GenerateStory*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_GenerateStory_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GenerateStory(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String)">
+  GenerateStory(Tensor&lt;T&gt;, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a creative story or narrative based on an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateStory(Tensor&lt;T&gt; image, string genre = &quot;general&quot;, string length = &quot;medium&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The inspiring image.</p>
+</dd>
+    <dt><code>genre</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Story genre: &quot;fantasy&quot;, &quot;mystery&quot;, &quot;romance&quot;, &quot;scifi&quot;, &quot;general&quot;.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Approximate length: &quot;short&quot;, &quot;medium&quot;, &quot;long&quot;.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated story.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_GetAttentionMap_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GetAttentionMap*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_GetAttentionMap_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.GetAttentionMap(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  GetAttentionMap(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets attention weights showing which image regions influenced the response.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GetAttentionMap(Tensor&lt;T&gt; image, string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt used.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Attention map tensor [height, width] showing importance weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_SafetyCheck_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.SafetyCheck*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_SafetyCheck_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.SafetyCheck(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SafetyCheck(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Identifies potential safety concerns in an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;string, (bool IsFlagged, T Confidence)&gt; SafetyCheck(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The image to analyze.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,-0-.isflagged">IsFlagged</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,-0-.confidence">Confidence</a>)&gt;</dt>
+    <dd><p>Safety assessment with categories and confidence levels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGpt4VisionModel_1_VisualReasoning_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.VisualReasoning*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGpt4VisionModel_1_VisualReasoning_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_" data-uid="AiDotNet.Interfaces.IGpt4VisionModel`1.VisualReasoning(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String)">
+  VisualReasoning(Tensor&lt;T&gt;, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs visual reasoning tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(string Answer, string Explanation) VisualReasoning(Tensor&lt;T&gt; image, string reasoningTask, string question)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image.</p>
+</dd>
+    <dt><code>reasoningTask</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Task type: &quot;count&quot;, &quot;compare&quot;, &quot;spatial&quot;, &quot;temporal&quot;, &quot;causal&quot;.</p>
+</dd>
+    <dt><code>question</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Specific question for the reasoning task.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string-.component">component</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string-.operation">operation</a>)</dt>
+    <dd><p>Reasoning result with explanation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGpt4VisionModel.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

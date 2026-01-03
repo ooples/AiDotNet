@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StratifiedKFoldCrossValidationFitDetectorOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StratifiedKFoldCrossValidationFitDetectorOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for detecting overfitting, underfitting, and model stability using stratified k-fold cross-validation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions" class="text-break">
+Class StratifiedKFoldCrossValidationFitDetectorOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StratifiedKFoldCrossValidationFitDetectorOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for detecting overfitting, underfitting, and model stability using
+stratified k-fold cross-validation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StratifiedKFoldCrossValidationFitDetectorOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">StratifiedKFoldCrossValidationFitDetectorOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Stratified K-Fold Cross-Validation is a technique that divides the dataset into k folds (subsets) while 
+maintaining the same class distribution in each fold as in the complete dataset. This is particularly 
+important for imbalanced datasets where some classes have significantly fewer samples than others. The 
+fit detector uses the performance metrics across these folds to assess whether a model is overfitting 
+(performing much better on training data than validation data), underfitting (performing poorly on both 
+training and validation data), or has high variance (performance varies significantly across different 
+folds). This class provides configuration options for the thresholds used to make these determinations.
+</p>
+<p><b>For Beginners:</b> This class helps you detect common model training problems using cross-validation results.
+<p>When training machine learning models:</p>
+<ul>
+<li>Overfitting: Model learns the training data too well but doesn't generalize</li>
+<li>Underfitting: Model is too simple and doesn't capture important patterns</li>
+<li>High variance: Model performance changes dramatically with different data subsets</li>
+</ul>
+<p>Stratified k-fold cross-validation:</p>
+<ul>
+<li>Splits your data into k subsets (folds)</li>
+<li>Maintains the same class distribution in each fold (stratified)</li>
+<li>Trains k different models, each using k-1 folds for training and 1 for validation</li>
+<li>Helps assess how well your model will generalize to new data</li>
+</ul>
+<p>This class provides thresholds to automatically detect these issues based on
+cross-validation results, helping you diagnose and fix model training problems.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_GoodFitThreshold_" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.GoodFitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_GoodFitThreshold" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.GoodFitThreshold">
+  GoodFitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StratifiedKFoldCrossValidationFitDetectorOptions.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for determining a good fit.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GoodFitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.8.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_GoodFitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum acceptable value for the validation performance metric for a model to be 
+considered a good fit. Even if a model is not overfitting, underfitting, or showing high variance, it might 
+still not perform well enough for the specific application. For example, with the default value of 0.8 (80%), 
+if the average validation F1 score across the folds is below 0.8, the model would not be considered a good fit, 
+even if it doesn't exhibit other problems. A higher threshold is more strict, requiring better validation 
+performance to be considered a good fit, while a lower threshold is more lenient. The appropriate value depends 
+on the specific application and the minimum acceptable performance for the model to be useful.
+</p>
+<p><b>For Beginners:</b> This setting determines how well a model must perform on validation data to be considered a good fit.
+<p>A good fit means:</p>
+<ul>
+<li>The model performs well on validation data</li>
+<li>It has learned useful patterns that generalize beyond the training examples</li>
+<li>It meets the performance requirements for your application</li>
+</ul>
+<p>The default value of 0.8 means:</p>
+<ul>
+<li>The average validation performance must be at least 80% to be considered a good fit</li>
+<li>For example, if average validation accuracy is 0.75, that's not considered good enough</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.9): More strict, requires excellent validation performance</li>
+<li>Lower values (e.g., 0.7): More lenient, accepts moderate validation performance</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for applications where high performance is critical</li>
+<li>Decrease it for difficult problems where even state-of-the-art models achieve lower metrics</li>
+<li>Adjust based on the specific metric being used (F1, accuracy, etc.)</li>
+</ul>
+<p>For example, in spam detection where high accuracy is expected,
+you might increase this to 0.95, while for a complex recommendation system,
+you might decrease it to 0.7.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_HighVarianceThreshold_" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.HighVarianceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_HighVarianceThreshold" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.HighVarianceThreshold">
+  HighVarianceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StratifiedKFoldCrossValidationFitDetectorOptions.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting high variance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HighVarianceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_HighVarianceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum acceptable standard deviation of the validation performance metrics 
+across the k folds. If the standard deviation exceeds this threshold, the model is considered to have high 
+variance. For example, with the default value of 0.1 (10%), if the standard deviation of the validation F1 
+scores across the folds is greater than 0.1, the model would be flagged as having high variance. A smaller 
+threshold is more strict, flagging smaller variations as high variance, while a larger threshold is more 
+lenient, allowing larger variations before flagging high variance. The appropriate value depends on the 
+specific application, the size and diversity of the dataset, and the expected stability of the model across 
+different subsets of the data.
+</p>
+<p><b>For Beginners:</b> This setting determines how much a model's performance can vary across different data folds before it's considered unstable.
+<p>High variance occurs when:</p>
+<ul>
+<li>A model's performance changes significantly when trained on different subsets of data</li>
+<li>It's too sensitive to the specific examples it sees during training</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>If the standard deviation of performance across folds exceeds 0.1, the model has high variance</li>
+<li>For example, if validation scores across 5 folds are [0.7, 0.9, 0.65, 0.85, 0.75], the standard deviation is high</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 0.05): More strict, requires more consistent performance across folds</li>
+<li>Higher values (e.g., 0.15): More lenient, allows more variation across folds</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when stability across different data subsets is critical</li>
+<li>Increase it for smaller datasets where some variation across folds is expected</li>
+</ul>
+<p>For example, in financial risk models where consistent performance is essential,
+you might decrease this to 0.05 to ensure the model is stable across different data subsets.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_OverfitThreshold_" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.OverfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_OverfitThreshold" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.OverfitThreshold">
+  OverfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StratifiedKFoldCrossValidationFitDetectorOptions.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting overfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OverfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_OverfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum acceptable difference between the training and validation performance 
+metrics as a proportion of the training metric. If the difference exceeds this threshold, the model is 
+considered to be overfitting. For example, with the default value of 0.1 (10%), if the training F1 score 
+is 0.9 and the validation F1 score is 0.8 or lower, the model would be flagged as overfitting. A smaller 
+threshold is more strict, flagging smaller differences as overfitting, while a larger threshold is more 
+lenient, allowing larger differences before flagging overfitting. The appropriate value depends on the 
+specific application and the expected variability between training and validation performance.
+</p>
+<p><b>For Beginners:</b> This setting determines how much better a model can perform on training data versus validation data before it's considered overfitting.
+<p>Overfitting occurs when:</p>
+<ul>
+<li>A model performs significantly better on training data than on validation data</li>
+<li>It has essentially &quot;memorized&quot; the training examples rather than learning general patterns</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>If performance on validation data is more than 10% worse than on training data, the model is overfitting</li>
+<li>For example, if training accuracy is 0.95 and validation accuracy is 0.84, that's overfitting</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 0.05): More strict, flags smaller differences as overfitting</li>
+<li>Higher values (e.g., 0.2): More lenient, allows larger differences before flagging overfitting</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when working with simple datasets where training and validation should be very close</li>
+<li>Increase it for complex problems where some gap is expected and acceptable</li>
+</ul>
+<p>For example, in image classification with limited data, you might increase this to 0.15-0.2
+since some gap between training and validation performance is normal.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_PrimaryMetric_" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.PrimaryMetric*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_PrimaryMetric" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.PrimaryMetric">
+  PrimaryMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StratifiedKFoldCrossValidationFitDetectorOptions.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the primary metric used for evaluating model fit.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetricType PrimaryMetric { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>A value from the MetricType enumeration, defaulting to MetricType.F1Score.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_PrimaryMetric_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies which performance metric should be used as the primary criterion for evaluating the 
+model's fit. Different metrics emphasize different aspects of model performance and are appropriate for 
+different types of problems. The F1 score (the default) is a harmonic mean of precision and recall, providing 
+a balanced measure for classification problems, especially with imbalanced classes. Other common options might 
+include accuracy (proportion of correct predictions), precision (proportion of positive identifications that 
+were correct), recall (proportion of actual positives that were identified), or area under the ROC curve (AUC). 
+The choice of metric should align with the specific goals of the modeling task and the relative importance of 
+different types of errors.
+</p>
+<p><b>For Beginners:</b> This setting determines which performance metric is used to evaluate your model.
+<p>The primary metric:</p>
+<ul>
+<li>Is the main measure used to assess model performance</li>
+<li>Should align with what's most important for your specific problem</li>
+</ul>
+<p>The default F1Score:</p>
+<ul>
+<li>Balances precision (accuracy of positive predictions) and recall (ability to find all positives)</li>
+<li>Works well for classification problems, especially with imbalanced classes</li>
+</ul>
+<p>Common alternatives include:</p>
+<ul>
+<li>Accuracy: Simple percentage of correct predictions (good for balanced classes)</li>
+<li>Precision: Focus on minimizing false positives</li>
+<li>Recall: Focus on minimizing false negatives</li>
+<li>AUC: Area under the ROC curve (good for ranking performance)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Choose based on what type of errors are most important to minimize in your application</li>
+<li>For imbalanced classes, usually prefer F1Score, Precision, Recall, or AUC over Accuracy</li>
+</ul>
+<p>For example, in spam detection, you might use Precision if false positives (marking legitimate emails as spam)
+are more problematic, or Recall if false negatives (missing actual spam) are more problematic.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_StabilityThreshold_" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.StabilityThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_StabilityThreshold" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.StabilityThreshold">
+  StabilityThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StratifiedKFoldCrossValidationFitDetectorOptions.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for determining model stability.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double StabilityThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.05.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_StabilityThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum acceptable coefficient of variation (standard deviation divided by mean) 
+of the validation performance metrics across the k folds. This is an alternative measure of stability to the 
+HighVarianceThreshold, which considers the standard deviation relative to the mean performance rather than in 
+absolute terms. For example, with the default value of 0.05 (5%), if the coefficient of variation of the 
+validation F1 scores across the folds is greater than 0.05, the model would be flagged as unstable. A smaller 
+threshold is more strict, requiring more consistent relative performance across folds, while a larger threshold 
+is more lenient. The appropriate value depends on the specific application and the expected relative stability 
+of the model across different subsets of the data.
+</p>
+<p><b>For Beginners:</b> This setting determines how consistent a model's performance must be relative to its average performance.
+<p>Stability in this context means:</p>
+<ul>
+<li>The model performs consistently across different subsets of data</li>
+<li>The variation in performance is small relative to the average performance</li>
+</ul>
+<p>The default value of 0.05 means:</p>
+<ul>
+<li>If the coefficient of variation (standard deviation ÷ mean) exceeds 5%, the model is considered unstable</li>
+<li>This is a relative measure, unlike HighVarianceThreshold which is absolute</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 0.03): More strict, requires more consistent relative performance</li>
+<li>Higher values (e.g., 0.1): More lenient, allows more relative variation</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when consistent relative performance is critical</li>
+<li>Increase it when some relative variation is acceptable</li>
+<li>This is particularly useful for comparing stability across different metrics with different scales</li>
+</ul>
+<p>For example, in a clinical prediction model where consistent performance is essential,
+you might decrease this to 0.03 to ensure the model performs reliably across different patient subgroups.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_UnderfitThreshold_" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.UnderfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_UnderfitThreshold" data-uid="AiDotNet.Models.Options.StratifiedKFoldCrossValidationFitDetectorOptions.UnderfitThreshold">
+  UnderfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StratifiedKFoldCrossValidationFitDetectorOptions.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting underfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UnderfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.6.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StratifiedKFoldCrossValidationFitDetectorOptions_UnderfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum acceptable value for the training performance metric. If the training 
+metric falls below this threshold, the model is considered to be underfitting. For example, with the default 
+value of 0.6 (60%), if the training F1 score is below 0.6, the model would be flagged as underfitting. A 
+higher threshold is more strict, requiring better training performance to avoid being flagged as underfitting, 
+while a lower threshold is more lenient, allowing poorer training performance before flagging underfitting. 
+The appropriate value depends on the specific application, the complexity of the problem, and the expected 
+level of performance for a well-fitted model.
+</p>
+<p><b>For Beginners:</b> This setting determines how well a model must perform on training data to avoid being considered underfitting.
+<p>Underfitting occurs when:</p>
+<ul>
+<li>A model performs poorly on both training and validation data</li>
+<li>It's too simple to capture the underlying patterns in the data</li>
+</ul>
+<p>The default value of 0.6 means:</p>
+<ul>
+<li>If performance on training data is below 60%, the model is underfitting</li>
+<li>For example, if training accuracy is only 0.55, that's underfitting</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.7): More strict, requires better training performance</li>
+<li>Lower values (e.g., 0.5): More lenient, allows poorer training performance</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for problems where high performance is expected and achievable</li>
+<li>Decrease it for very difficult problems where even good models achieve lower metrics</li>
+<li>Adjust based on the specific metric being used (F1, accuracy, etc.)</li>
+</ul>
+<p>For example, in a medical diagnosis model where high accuracy is critical,
+you might increase this to 0.8 or higher to ensure the model is learning effectively.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StratifiedKFoldCrossValidationFitDetectorOptions.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

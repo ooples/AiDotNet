@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BenchmarkResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BenchmarkResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Results from evaluating a reasoning system on a benchmark.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1">
+
+
+
+  <h1 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1" class="text-break">
+Class BenchmarkResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Reasoning.html">Reasoning</a>.<a class="xref" href="AiDotNet.Reasoning.Benchmarks.html">Benchmarks</a>.<a class="xref" href="AiDotNet.Reasoning.Benchmarks.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Results from evaluating a reasoning system on a benchmark.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BenchmarkResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for metrics (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">BenchmarkResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This is like a report card for your reasoning system's performance
+on a standardized test.
+<p><strong>Key metrics:</strong></p>
+<ul>
+<li><strong>Accuracy</strong>: Percentage of problems answered correctly (most important)</li>
+<li><strong>Total Evaluated</strong>: How many problems were tested</li>
+<li><strong>Correct Count</strong>: How many were answered correctly</li>
+<li><strong>Average Confidence</strong>: How confident the system was on average</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code>Benchmark: GSM8K (Grade School Math)
+Problems Evaluated: 100
+Correct: 87
+Accuracy: 87.0%
+Average Confidence: 0.92
+Average Time: 3.2 seconds per problem
+</code></pre>
+<p>This would indicate the system got 87 out of 100 math problems correct, with high confidence.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_Accuracy_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.Accuracy*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_Accuracy" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.Accuracy">
+  Accuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Overall accuracy (correct / total) as a value between 0.0 and 1.0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Accuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_Accuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is your "score" on the test.
+0.87 means 87% correct, 1.0 means perfect score (100%).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_AccuracyByCategory_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.AccuracyByCategory*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_AccuracyByCategory" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.AccuracyByCategory">
+  AccuracyByCategory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Breakdown of accuracy by category (if applicable).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; AccuracyByCategory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_AccuracyByCategory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Shows performance in different areas.
+For example, in math: {"algebra": 0.92, "geometry": 0.78, "arithmetic": 0.95}
+This helps identify strengths and weaknesses.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_AverageConfidence_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.AverageConfidence*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_AverageConfidence" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.AverageConfidence">
+  AverageConfidence
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Average confidence across all evaluated problems.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AverageConfidence { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_AverageTimePerProblem_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.AverageTimePerProblem*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_AverageTimePerProblem" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.AverageTimePerProblem">
+  AverageTimePerProblem
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Average time per problem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan AverageTimePerProblem { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_BenchmarkName_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.BenchmarkName*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_BenchmarkName" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.BenchmarkName">
+  BenchmarkName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Name of the benchmark that was evaluated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string BenchmarkName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_ConfidenceScores_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.ConfidenceScores*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_ConfidenceScores" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.ConfidenceScores">
+  ConfidenceScores
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Confidence scores for each evaluated problem (as a Vector).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt;? ConfidenceScores { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_ConfidenceScores_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Each problem gets a confidence score (0.0-1.0) indicating
+how sure the system was about its answer. High confidence with wrong answers indicates
+the system doesn't know what it doesn't know (bad calibration).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_CorrectCount_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.CorrectCount*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_CorrectCount" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.CorrectCount">
+  CorrectCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of problems answered correctly.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CorrectCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_Metrics_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.Metrics*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_Metrics" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.Metrics">
+  Metrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Additional benchmark-specific metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metrics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_ProblemResults_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.ProblemResults*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_ProblemResults" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.ProblemResults">
+  ProblemResults
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detailed results for each evaluated problem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ProblemEvaluation&lt;T&gt;&gt; ProblemResults { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Benchmarks.Models.ProblemEvaluation-1.html">ProblemEvaluation</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_TotalDuration_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.TotalDuration*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_TotalDuration" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.TotalDuration">
+  TotalDuration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total time spent evaluating all problems.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TotalDuration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_TotalEvaluated_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.TotalEvaluated*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_TotalEvaluated" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.TotalEvaluated">
+  TotalEvaluated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total number of problems evaluated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalEvaluated { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_GetSummary_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.GetSummary*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_GetSummary" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.GetSummary">
+  GetSummary()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a summary string of the benchmark results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetSummary()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_ToString_" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.ToString*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_Models_BenchmarkResult_1_ToString" data-uid="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a summary string.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/Models/BenchmarkResult.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

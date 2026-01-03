@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ServingOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ServingOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the model serving framework. This class defines settings for server behavior, request batching, and startup model loading.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Serving_Configuration_ServingOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Serving.Configuration.ServingOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Serving.Configuration.ServingOptions">
+
+
+
+  <h1 id="AiDotNet_Serving_Configuration_ServingOptions" data-uid="AiDotNet.Serving.Configuration.ServingOptions" class="text-break">
+Class ServingOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L7"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Serving.html">Serving</a>.<a class="xref" href="AiDotNet.Serving.Configuration.html">Configuration</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Serving.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the model serving framework.
+This class defines settings for server behavior, request batching, and startup model loading.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ServingOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ServingOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_AdaptiveBatchSize_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.AdaptiveBatchSize*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_AdaptiveBatchSize" data-uid="AiDotNet.Serving.Configuration.ServingOptions.AdaptiveBatchSize">
+  AdaptiveBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable adaptive batch sizing based on latency feedback.
+When enabled, the batch size is dynamically adjusted to meet latency targets.
+Default is true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AdaptiveBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_BatchingStrategy_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.BatchingStrategy*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_BatchingStrategy" data-uid="AiDotNet.Serving.Configuration.ServingOptions.BatchingStrategy">
+  BatchingStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batching strategy to use.
+Default is Adaptive.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BatchingStrategyType BatchingStrategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.Configuration.BatchingStrategyType.html">BatchingStrategyType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_BatchingWindowMs_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.BatchingWindowMs*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_BatchingWindowMs" data-uid="AiDotNet.Serving.Configuration.ServingOptions.BatchingWindowMs">
+  BatchingWindowMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batching window in milliseconds.
+This is the maximum time the batcher will wait before processing accumulated requests.
+Default is 10 milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchingWindowMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_BucketSizes_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.BucketSizes*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_BucketSizes" data-uid="AiDotNet.Serving.Configuration.ServingOptions.BucketSizes">
+  BucketSizes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the bucket sizes for bucket-based batching and padding.
+Default is [32, 64, 128, 256, 512].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] BucketSizes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_EnablePerformanceMetrics_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.EnablePerformanceMetrics*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_EnablePerformanceMetrics" data-uid="AiDotNet.Serving.Configuration.ServingOptions.EnablePerformanceMetrics">
+  EnablePerformanceMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable detailed performance metrics collection.
+This includes latency percentiles, throughput, and batch utilization.
+Default is true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnablePerformanceMetrics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_EnablePriorityScheduling_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.EnablePriorityScheduling*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_EnablePriorityScheduling" data-uid="AiDotNet.Serving.Configuration.ServingOptions.EnablePriorityScheduling">
+  EnablePriorityScheduling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable priority-based request scheduling.
+Default is false.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnablePriorityScheduling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_FixedPaddingSize_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.FixedPaddingSize*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_FixedPaddingSize" data-uid="AiDotNet.Serving.Configuration.ServingOptions.FixedPaddingSize">
+  FixedPaddingSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fixed size for fixed-size padding strategy.
+Only used when PaddingStrategy is &quot;Fixed&quot;.
+Default is 512.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FixedPaddingSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_LatencyToleranceFactor_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.LatencyToleranceFactor*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_LatencyToleranceFactor" data-uid="AiDotNet.Serving.Configuration.ServingOptions.LatencyToleranceFactor">
+  LatencyToleranceFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the latency tolerance factor for adaptive batching.
+This defines the acceptable ratio between p99 and p50 latency.
+Default is 2.0 (p99 should be less than 2x p50).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LatencyToleranceFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_MaxBatchSize_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.MaxBatchSize*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_MaxBatchSize" data-uid="AiDotNet.Serving.Configuration.ServingOptions.MaxBatchSize">
+  MaxBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum batch size for inference requests.
+If set to 0 or less, there is no limit on batch size.
+Default is 100.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_MaxLatencySamples_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.MaxLatencySamples*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_MaxLatencySamples" data-uid="AiDotNet.Serving.Configuration.ServingOptions.MaxLatencySamples">
+  MaxLatencySamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of latency samples to keep for percentile calculation.
+Default is 10000.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxLatencySamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_MaxQueueSize_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.MaxQueueSize*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_MaxQueueSize" data-uid="AiDotNet.Serving.Configuration.ServingOptions.MaxQueueSize">
+  MaxQueueSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum queue size for backpressure handling.
+When the queue is full, new requests will be rejected.
+Set to 0 for unlimited queue size.
+Default is 1000.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxQueueSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_MinBatchSize_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.MinBatchSize*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_MinBatchSize" data-uid="AiDotNet.Serving.Configuration.ServingOptions.MinBatchSize">
+  MinBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum batch size for adaptive batching.
+Default is 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_ModelDirectory_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.ModelDirectory*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_ModelDirectory" data-uid="AiDotNet.Serving.Configuration.ServingOptions.ModelDirectory">
+  ModelDirectory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the root directory where model files are stored.
+Model paths are restricted to this directory for security.
+Default is &quot;models&quot; relative to the application directory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ModelDirectory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_PaddingStrategy_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.PaddingStrategy*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_PaddingStrategy" data-uid="AiDotNet.Serving.Configuration.ServingOptions.PaddingStrategy">
+  PaddingStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the padding strategy to use for variable-length sequences.
+Default is Minimal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PaddingStrategyType PaddingStrategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.Configuration.PaddingStrategyType.html">PaddingStrategyType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_Port_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.Port*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_Port" data-uid="AiDotNet.Serving.Configuration.ServingOptions.Port">
+  Port
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the port number on which the server will listen.
+Default is 52432.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Port { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_StartupModels_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.StartupModels*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_StartupModels" data-uid="AiDotNet.Serving.Configuration.ServingOptions.StartupModels">
+  StartupModels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the list of models to load at startup.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;StartupModel&gt; StartupModels { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Serving.Configuration.StartupModel.html">StartupModel</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Configuration_ServingOptions_TargetLatencyMs_" data-uid="AiDotNet.Serving.Configuration.ServingOptions.TargetLatencyMs*"></a>
+
+  <h3 id="AiDotNet_Serving_Configuration_ServingOptions_TargetLatencyMs" data-uid="AiDotNet.Serving.Configuration.ServingOptions.TargetLatencyMs">
+  TargetLatencyMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the target latency in milliseconds for adaptive batching.
+The adaptive strategy will try to maintain this latency while maximizing throughput.
+Default is 20 milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TargetLatencyMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Configuration/ServingOptions.cs/#L7" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

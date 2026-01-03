@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MADOutlierRemoval&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MADOutlierRemoval&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements outlier detection and removal based on the Median Absolute Deviation (MAD) method.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_OutlierRemoval_MADOutlierRemoval_3.md&amp;value=---%0Auid%3A%20AiDotNet.OutlierRemoval.MADOutlierRemoval%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.OutlierRemoval.MADOutlierRemoval`3">
+
+
+
+  <h1 id="AiDotNet_OutlierRemoval_MADOutlierRemoval_3" data-uid="AiDotNet.OutlierRemoval.MADOutlierRemoval`3" class="text-break">
+Class MADOutlierRemoval&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/OutlierRemoval/MADOutlierRemoval.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.OutlierRemoval.html">OutlierRemoval</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements outlier detection and removal based on the Median Absolute Deviation (MAD) method.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MADOutlierRemoval&lt;T, TInput, TOutput&gt; : IOutlierRemoval&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data structure.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data structure.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MADOutlierRemoval&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IOutlierRemoval-3.html">IOutlierRemoval</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_OutlierRemoval_MADOutlierRemoval_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides functionality to identify and remove outliers from a dataset using the Median Absolute Deviation (MAD) method.
+The MAD method is more robust to outliers than standard deviation-based approaches since it uses medians instead of means.
+The algorithm calculates a modified Z-score for each data point and compares it against a threshold to determine if the point
+is an outlier.
+</p>
+<p><b>For Beginners:</b> This class helps you find and remove "unusual" data points from your dataset.
+<p>Imagine you have a collection of measurements, like people's heights. Most measurements will be clustered around
+a typical value, but occasionally there might be mistakes or very unusual cases (like someone who is 9 feet tall).
+These unusual values are called &quot;outliers&quot; and can negatively affect your analysis.</p>
+<p>This class uses a technique called &quot;Median Absolute Deviation&quot; (MAD) to identify outliers:</p>
+<ul>
+<li>It finds the middle value (median) of your data</li>
+<li>It calculates how far each point is from this middle value</li>
+<li>It finds the middle value of these distances (the MAD)</li>
+<li>It calculates a score for each point that represents how unusual it is</li>
+<li>If this score is higher than a threshold, the point is considered an outlier</li>
+</ul>
+<p>This approach is particularly good because it's not easily fooled by the outliers themselves,
+unlike methods that use averages.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_OutlierRemoval_MADOutlierRemoval_3__ctor_" data-uid="AiDotNet.OutlierRemoval.MADOutlierRemoval`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_OutlierRemoval_MADOutlierRemoval_3__ctor_System_Double_" data-uid="AiDotNet.OutlierRemoval.MADOutlierRemoval`3.#ctor(System.Double)">
+  MADOutlierRemoval(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/OutlierRemoval/MADOutlierRemoval.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.OutlierRemoval.MADOutlierRemoval-3.html">MADOutlierRemoval&lt;T, TInput, TOutput&gt;</a> class with an optional threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MADOutlierRemoval(double threshold = 3.5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The threshold value for outlier detection. If not specified, a default value of 3.5 will be used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_OutlierRemoval_MADOutlierRemoval_3__ctor_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the outlier removal algorithm with a specified threshold. The threshold
+determines how extreme a value must be to be considered an outlier. Higher thresholds are more
+conservative, identifying fewer points as outliers.
+</p>
+<p><b>For Beginners:</b> This creates a new outlier detector with a specified sensitivity level.
+<p>The threshold parameter controls how sensitive the outlier detection is:</p>
+<ul>
+<li>A lower threshold (like 2.0) will be more aggressive in labeling points as outliers</li>
+<li>A higher threshold (like 5.0) will be more lenient, only marking very extreme values as outliers</li>
+</ul>
+<p>If you don't specify a threshold, the default value of 3.5 is used, which is a common choice
+in statistical practice for outlier detection.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_OutlierRemoval_MADOutlierRemoval_3_RemoveOutliers_" data-uid="AiDotNet.OutlierRemoval.MADOutlierRemoval`3.RemoveOutliers*"></a>
+
+  <h3 id="AiDotNet_OutlierRemoval_MADOutlierRemoval_3_RemoveOutliers__1__2_" data-uid="AiDotNet.OutlierRemoval.MADOutlierRemoval`3.RemoveOutliers(`1,`2)">
+  RemoveOutliers(TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/OutlierRemoval/MADOutlierRemoval.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes outliers from the provided inputs and outputs based on the MAD algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (TInput CleanedInputs, TOutput CleanedOutputs) RemoveOutliers(TInput inputs, TOutput outputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>The matrix of input data, where each row represents a data point and each column represents a feature.</p>
+</dd>
+    <dt><code>outputs</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The vector of output values corresponding to each row in the inputs matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.output">Output</a>)</dt>
+    <dd><p>A tuple containing the cleaned inputs (as a matrix) and cleaned outputs (as a vector) with outliers removed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_OutlierRemoval_MADOutlierRemoval_3_RemoveOutliers__1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method identifies outliers by examining each feature (column) in the inputs matrix. For each feature,
+it calculates the modified Z-score for every data point. If a data point has a modified Z-score exceeding the
+threshold for any feature, it is considered an outlier and is removed from both the inputs and outputs.
+The modified Z-score is calculated as 0.6745 * (x - median) / MAD, where MAD is the median absolute deviation.
+</p>
+<p><b>For Beginners:</b> This method analyzes your data and removes any unusual points.
+<p>Here's how it works:</p>
+<ol>
+<li>It looks at each characteristic (column) of your data separately</li>
+<li>For each characteristic, it:
+<ul>
+<li>Finds the middle value (median)</li>
+<li>Measures how far each point is from this middle value</li>
+<li>Calculates a score that indicates how unusual each point is</li>
+</ul>
+</li>
+<li>If a data point has an unusually high score for ANY characteristic, it's considered an outlier</li>
+<li>All outliers are removed, and the cleaned data is returned</li>
+</ol>
+<p>For example, if you have data about houses with columns for size, price, and age, a house might
+be considered an outlier if it has a normal size and age but an extremely high price.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/OutlierRemoval/MADOutlierRemoval.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

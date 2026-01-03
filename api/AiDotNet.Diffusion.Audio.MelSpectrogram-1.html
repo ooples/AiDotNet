@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MelSpectrogram&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MelSpectrogram&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Computes Mel spectrograms from audio signals.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Diffusion_Audio_MelSpectrogram_1.md&amp;value=---%0Auid%3A%20AiDotNet.Diffusion.Audio.MelSpectrogram%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1">
+
+
+
+  <h1 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1" class="text-break">
+Class MelSpectrogram&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.Diffusion.Audio.html">Audio</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Computes Mel spectrograms from audio signals.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MelSpectrogram&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MelSpectrogram&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Mel spectrogram is a representation of audio that mimics human hearing.
+It applies the Mel scale, which spaces frequencies according to how humans
+perceive pitch rather than the physical frequency.
+</p>
+<p>
+<b>For Beginners:</b> Human hearing doesn't perceive pitch linearly - we can
+tell the difference between 100Hz and 200Hz easily, but 10,000Hz and 10,100Hz
+sound almost the same to us. The Mel scale accounts for this.
+<p>A Mel spectrogram:</p>
+<ol>
+<li>Computes the power spectrogram using STFT</li>
+<li>Applies a bank of triangular filters on the Mel scale</li>
+<li>Takes the log (optional) to compress dynamic range</li>
+</ol>
+<p>This representation is commonly used for:</p>
+<ul>
+<li>Speech recognition (like Whisper)</li>
+<li>Music generation (like Riffusion)</li>
+<li>Audio classification</li>
+<li>Speaker verification</li>
+</ul>
+<p>Usage:</p>
+<pre><code class="lang-csharp">var melSpec = new MelSpectrogram&lt;float&gt;(
+    sampleRate: 44100,
+    nMels: 128,
+    nFft: 2048
+);
+var mel = melSpec.Forward(audioSignal);
+// mel.Shape = [numFrames, nMels]
+</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1__ctor_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1__ctor_System_Int32_System_Int32_System_Int32_System_Nullable_System_Int32__System_Double_System_Nullable_System_Double__AiDotNet_Interfaces_IWindowFunction__0__System_Boolean_System_Double_System_Double_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.#ctor(System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32},System.Double,System.Nullable{System.Double},AiDotNet.Interfaces.IWindowFunction{`0},System.Boolean,System.Double,System.Double)">
+  MelSpectrogram(int, int, int, int?, double, double?, IWindowFunction&lt;T&gt;?, bool, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new Mel spectrogram processor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MelSpectrogram(int sampleRate = 22050, int nMels = 128, int nFft = 2048, int? hopLength = null, double fMin = 0, double? fMax = null, IWindowFunction&lt;T&gt;? windowFunction = null, bool logMel = true, double refDb = 1, double minDb = -80)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Audio sample rate in Hz (default: 22050).</p>
+</dd>
+    <dt><code>nMels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of Mel frequency bins (default: 128).</p>
+</dd>
+    <dt><code>nFft</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>FFT size (default: 2048).</p>
+</dd>
+    <dt><code>hopLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Hop length between frames (default: nFft/4).</p>
+</dd>
+    <dt><code>fMin</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum frequency in Hz (default: 0).</p>
+</dd>
+    <dt><code>fMax</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Maximum frequency in Hz (default: sampleRate/2).</p>
+</dd>
+    <dt><code>windowFunction</code> <a class="xref" href="AiDotNet.Interfaces.IWindowFunction-1.html">IWindowFunction</a>&lt;T&gt;</dt>
+    <dd><p>Window function to use (default: HanningWindow - industry standard for audio).</p>
+</dd>
+    <dt><code>logMel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to apply log compression (default: true).</p>
+</dd>
+    <dt><code>refDb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Reference value for dB conversion (default: 1.0).</p>
+</dd>
+    <dt><code>minDb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum dB value floor (default: -80).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_MelSpectrogram_1__ctor_System_Int32_System_Int32_System_Int32_System_Nullable_System_Int32__System_Double_System_Nullable_System_Double__AiDotNet_Interfaces_IWindowFunction__0__System_Boolean_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+- sampleRate: Must match your audio file's sample rate
+- nMels: More bins = more frequency detail (128 is common for music, 80 for speech)
+- nFft: Larger = more frequency resolution, less time resolution
+- fMin/fMax: Filter out frequencies outside your range of interest
+- windowFunction: Reduces spectral leakage. Hann (default) is the industry standard.
+- logMel: Log compression makes the representation more perceptually uniform
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_NumMels_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.NumMels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_NumMels" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.NumMels">
+  NumMels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of Mel bins.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_STFT_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.STFT*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_STFT" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.STFT">
+  STFT
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the STFT parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ShortTimeFourierTransform&lt;T&gt; STFT { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform-1.html">ShortTimeFourierTransform</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_SampleRate_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_SampleRate" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sample rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_DbToPower_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.DbToPower*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_DbToPower_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.DbToPower(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  DbToPower(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts dB spectrogram back to power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; DbToPower(Tensor&lt;T&gt; db)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>db</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>dB spectrogram.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Power spectrogram.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_Forward_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.Forward*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the Mel spectrogram of an audio signal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; signal)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>signal</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio signal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Mel spectrogram tensor [numFrames, nMels].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>GPU Acceleration:</b> When GPU is available, this method uses IEngine.MelSpectrogram
+for hardware-accelerated processing of the entire pipeline (STFT + Mel filterbank + dB conversion).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_FromPowerSpectrogram_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.FromPowerSpectrogram*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_FromPowerSpectrogram_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.FromPowerSpectrogram(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  FromPowerSpectrogram(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Mel spectrogram from a pre-computed power spectrogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; FromPowerSpectrogram(Tensor&lt;T&gt; powerSpectrogram)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>powerSpectrogram</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Power spectrogram [numFrames, numFreqs].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Mel spectrogram tensor [numFrames, nMels].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_GetFilterbank_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.GetFilterbank*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_GetFilterbank" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.GetFilterbank">
+  GetFilterbank()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L537"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Mel filterbank matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GetFilterbank()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Filterbank matrix [nMels, numFreqs].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_GetMelCenterFrequencies_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.GetMelCenterFrequencies*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_GetMelCenterFrequencies" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.GetMelCenterFrequencies">
+  GetMelCenterFrequencies()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L548"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the frequency (in Hz) for each Mel bin center.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[] GetMelCenterFrequencies()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Array of center frequencies.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_HzToMel_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.HzToMel*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_HzToMel_System_Double_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.HzToMel(System.Double)">
+  HzToMel(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L515"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts frequency in Hz to Mel scale.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double HzToMel(double hz)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>hz</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Frequency in Hz.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Frequency in Mels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_HzToMel_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses the formula: mel = 2595 * log10(1 + hz / 700)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_InvertMelToMagnitude_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.InvertMelToMagnitude*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_InvertMelToMagnitude_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Boolean__" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.InvertMelToMagnitude(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Nullable{System.Boolean})">
+  InvertMelToMagnitude(Tensor&lt;T&gt;, bool?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L373"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Inverts a Mel spectrogram to approximate magnitude spectrogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; InvertMelToMagnitude(Tensor&lt;T&gt; melSpec, bool? isDb = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>melSpec</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Mel spectrogram (linear or dB).</p>
+</dd>
+    <dt><code>isDb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd><p>Whether the input is in dB (default: true if logMel was enabled).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Approximate magnitude spectrogram.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_InvertMelToMagnitude_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Boolean___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is an approximate inversion because the Mel filterbank
+is not perfectly invertible. The result can be used with Griffin-Lim to reconstruct audio.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_MelToHz_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.MelToHz*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_MelToHz_System_Double_" data-uid="AiDotNet.Diffusion.Audio.MelSpectrogram`1.MelToHz(System.Double)">
+  MelToHz(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L528"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts frequency in Mels to Hz.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double MelToHz(double mel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Frequency in Mels.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Frequency in Hz.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_MelSpectrogram_1_MelToHz_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses the formula: hz = 700 * (10^(mel / 2595) - 1)</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/MelSpectrogram.cs/#L45" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

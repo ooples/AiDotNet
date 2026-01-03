@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CNAPAlgorithm&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CNAPAlgorithm&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implementation of Conditional Neural Adaptive Processes (CNAP) for meta-learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3" class="text-break">
+Class CNAPAlgorithm&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/CNAPAlgorithm.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a>.<a class="xref" href="AiDotNet.MetaLearning.Algorithms.html">Algorithms</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implementation of Conditional Neural Adaptive Processes (CNAP) for meta-learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CNAPAlgorithm&lt;T, TInput, TOutput&gt; : MetaLearnerBase&lt;T, TInput, TOutput&gt;, IMetaLearner&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html">MetaLearnerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">CNAPAlgorithm&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearner-3.html">IMetaLearner</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_LossFunction">MetaLearnerBase&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3__options">MetaLearnerBase&lt;T, TInput, TOutput&gt;._options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_DataLoader">MetaLearnerBase&lt;T, TInput, TOutput&gt;.DataLoader</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_NumOps">MetaLearnerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_RandomGenerator">MetaLearnerBase&lt;T, TInput, TOutput&gt;.RandomGenerator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaOptimizer">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaOptimizer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_InnerOptimizer">MetaLearnerBase&lt;T, TInput, TOutput&gt;.InnerOptimizer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3__currentIteration">MetaLearnerBase&lt;T, TInput, TOutput&gt;._currentIteration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Engine">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_BaseModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.BaseModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Options">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CurrentIteration">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CurrentIteration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AlgorithmType">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AlgorithmType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptationSteps">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AdaptationSteps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_InnerLearningRate">MetaLearnerBase&lt;T, TInput, TOutput&gt;.InnerLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_OuterLearningRate">MetaLearnerBase&lt;T, TInput, TOutput&gt;.OuterLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Evaluate(TaskBatch&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrainStep_System_Int32_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaTrainStep(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Train">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Train()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_System_Int32_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Evaluate(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptAndEvaluate_AiDotNet_Data_Structures_MetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AdaptAndEvaluate(MetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_GetMetaModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.GetMetaModel()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_SetMetaModel_AiDotNet_Interfaces_IFullModel__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.SetMetaModel(IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Save_System_String_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Save(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Load_System_String_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Load(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Reset">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeGradients_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeGradients(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeSecondOrderGradients_AiDotNet_Interfaces_IFullModel__0__1__2__System_Collections_Generic_List_System_ValueTuple__1__2____1__2__0_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeSecondOrderGradients(IFullModel&lt;T, TInput, TOutput&gt;, List&lt;(TInput input, TOutput target)&gt;, TInput, TOutput, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, Vector&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ClipGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Nullable_System_Double__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ClipGradients(Vector&lt;T&gt;, double?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CreateTaskBatch_System_Collections_Generic_IReadOnlyList_AiDotNet_Data_Structures_MetaLearningTask__0__1__2___">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CreateTaskBatch(IReadOnlyList&lt;MetaLearningTask&lt;T, TInput, TOutput&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ToMetaLearningTask_AiDotNet_Data_Structures_MetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ToMetaLearningTask(MetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeAccuracy__2__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeAccuracy(TOutput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeLossFromOutput__2__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeLossFromOutput(TOutput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ConvertToVector__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ConvertToVector(TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeMean_System_Collections_Generic_List__0__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeMean(List&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CloneModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CloneModel()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CNAP extends Neural Processes by conditioning on task-specific context points
+and learning to produce fast adaptation weights for each task. Unlike MAML,
+which adapts through gradient descent, CNAP learns to directly generate
+task-specific weight modifications from context examples.
+</p>
+<p>
+<b>Key Innovation:</b> Instead of computing gradients on support sets, CNAP:
+1. Encodes support set examples into a task representation
+2. Uses an adaptation network to generate task-specific fast weights
+3. Applies these fast weights to modify the base model for that task
+</p>
+<p>
+<b>For Beginners:</b> CNAP is like having a teacher who can instantly understand
+a new subject from a few examples:
+</p>
+<p>
+- MAML: Learns how to learn quickly (by finding a good starting point)
+- CNAP: Learns to directly generate solutions (by understanding the task)
+<p>Imagine showing someone a few examples of a new font. CNAP doesn't need to
+practice writing in that font (like MAML would). Instead, it understands
+the pattern from examples and directly modifies how it writes.</p>
+
+<p>
+<b>Architecture:</b>
+- <b>Encoder:</b> Processes each context (input, output) pair into embeddings
+- <b>Aggregator:</b> Combines embeddings into a single task representation
+- <b>Adaptation Network:</b> Generates fast weights from task representation
+- <b>Base Model:</b> Modified by fast weights to perform the task
+</p>
+<p>
+<b>Algorithm:</b>
+<pre><code class="lang-csharp">For each task batch:
+  For each task:
+    1. Encode context points: z_i = encoder(x_i, y_i)
+    2. Aggregate to task representation: z = aggregate(z_1, ..., z_k)
+    3. Generate fast weights: α = adaptation_network(z)
+    4. Apply fast weights to base model: model' = apply_fast_weights(model, α)
+    5. Evaluate on query set: loss = query_loss(model', query_data)
+  Meta-update all networks based on query losses</code></pre>
+
+<p>
+Reference: Requeima, J., Gordon, J., Bronskill, J., Nowozin, S., &amp; Turner, R. E. (2019).
+Fast and Flexible Multi-Task Classification Using Conditional Neural Adaptive Processes.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3__ctor_" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3__ctor_AiDotNet_MetaLearning_Options_CNAPOptions__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3.#ctor(AiDotNet.MetaLearning.Options.CNAPOptions{`0,`1,`2})">
+  CNAPAlgorithm(CNAPOptions&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/CNAPAlgorithm.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the CNAPAlgorithm class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CNAPAlgorithm(CNAPOptions&lt;T, TInput, TOutput&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.MetaLearning.Options.CNAPOptions-3.html">CNAPOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>CNAP configuration options containing the model and all hyperparameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3__ctor_AiDotNet_MetaLearning_Options_CNAPOptions__0__1__2___examples">Examples</h4>
+  <pre><code class="lang-csharp">// Create CNAP with minimal configuration
+var options = new CNAPOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
+var cnap = new CNAPAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+
+// Create CNAP with custom configuration
+var options = new CNAPOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+{
+    RepresentationDimension = 512,
+    UseAttention = true,
+    NumAttentionHeads = 8,
+    FastWeightMode = FastWeightApplicationMode.FiLM
+};
+var cnap = new CNAPAlgorithm&lt;double, Tensor, Tensor&gt;(options);</code></pre>
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when options is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when required components are not set in options.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_AlgorithmType_" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3.AlgorithmType*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_AlgorithmType" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3.AlgorithmType">
+  AlgorithmType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/CNAPAlgorithm.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the algorithm type identifier for this meta-learner.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override MetaLearningAlgorithmType AlgorithmType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.MetaLearningAlgorithmType.html">MetaLearningAlgorithmType</a></dt>
+    <dd><p>Returns <a class="xref" href="AiDotNet.MetaLearning.MetaLearningAlgorithmType.html#AiDotNet_MetaLearning_MetaLearningAlgorithmType_CNAP">CNAP</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_AlgorithmType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property identifies the algorithm as CNAP (Conditional Neural Adaptive Processes),
+a feed-forward meta-learning algorithm that generates task-specific weights
+from context examples without gradient-based adaptation.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_Adapt_" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3.Adapt*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3.Adapt(AiDotNet.Interfaces.IMetaLearningTask{`0,`1,`2})">
+  Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/CNAPAlgorithm.cs/#L303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adapts the meta-learned model to a new task using CNAP's feed-forward approach.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt; Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt; task)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>task</code> <a class="xref" href="AiDotNet.Interfaces.IMetaLearningTask-3.html">IMetaLearningTask</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The new task containing support set examples for adaptation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new model instance that has been adapted to the given task using generated fast weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+CNAP adaptation is extremely efficient compared to gradient-based methods:
+</p>
+<p>
+<b>Adaptation Process:</b>
+1. Encode all support set examples into embeddings
+2. Aggregate embeddings into a task representation vector
+3. Generate fast weights from the task representation
+4. Apply fast weights to the base model
+5. Return the adapted model (no gradient steps needed!)
+</p>
+<p>
+<b>For Beginners:</b> When adapting to a new task, CNAP works like instant
+recognition. You show it a few examples, it immediately "understands" the task
+pattern, and modifies its behavior accordingly - all in a single forward pass.
+</p>
+<p>
+<b>Advantages over MAML at test time:</b>
+- No gradient computation required (just forward passes)
+- Constant time regardless of number of adaptation steps
+- More memory efficient (no computational graph needed)
+- Better suited for real-time applications
+</p>
+<p>
+<b>Trade-offs:</b>
+- May be less flexible than MAML for out-of-distribution tasks
+- Requires task distribution to be learnable by the adaptation network
+- Fast weight generation adds parameters that need to be trained
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when task is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_MetaTrain_" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3.MetaTrain*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.CNAPAlgorithm`3.MetaTrain(AiDotNet.MetaLearning.Data.TaskBatch{`0,`1,`2})">
+  MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/CNAPAlgorithm.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs one meta-training step using CNAP's feed-forward adaptation approach.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt; taskBatch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskBatch</code> <a class="xref" href="AiDotNet.MetaLearning.Data.TaskBatch-3.html">TaskBatch</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A batch of tasks to meta-train on, each containing support and query sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The average meta-loss across all tasks in the batch (evaluated on query sets).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_CNAPAlgorithm_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+CNAP meta-training differs fundamentally from gradient-based methods like MAML:
+</p>
+<p>
+<b>CNAP Approach (Feed-Forward):</b>
+1. Encode context points from support set into embeddings
+2. Aggregate embeddings into a single task representation
+3. Generate fast weights directly from the task representation
+4. Apply fast weights to modify base model
+5. Evaluate on query set and compute loss
+6. Update encoder and adaptation networks based on query loss
+</p>
+<p>
+<b>Key Differences from MAML:</b>
+- No gradient steps during inner loop (feed-forward only)
+- Fast weights are generated, not computed through gradients
+- More efficient at test time (no gradient computation needed)
+- Can be more sample-efficient for similar task distributions
+</p>
+<p>
+<b>For Beginners:</b> While MAML learns "how to learn quickly," CNAP learns
+"how to directly understand tasks." CNAP looks at the support set examples
+and generates a task-specific modification in one shot, without iterating.
+This is faster at test time but requires the task distribution to be
+well-structured enough for the adaptation network to learn patterns.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the task batch is null or empty.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when meta-gradient computation fails.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/CNAPAlgorithm.cs/#L66" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

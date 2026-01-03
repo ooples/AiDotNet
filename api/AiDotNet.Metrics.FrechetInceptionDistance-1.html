@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FrechetInceptionDistance&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FrechetInceptionDistance&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Fr&#233;chet Inception Distance (FID) - A metric for evaluating the quality of generated images. FID measures how similar generated images are to real images by comparing their statistical properties in a feature space. Lower FID scores indicate better quality. The algorithm:  Extract features from images using a pre-trained neural network Compute statistics (mean and covariance) for real and generated image features Compute the Fr&#233;chet distance between the two Gaussian distributions  Formula: FID = ||μ₁ - μ₂||&#178; + Tr(Σ₁ + Σ₂ - 2√(Σ₁Σ₂)) where μ is mean, Σ is covariance, Tr is trace Typical FID scores:  FID less than 10: Excellent quality FID 10-20: Good quality FID 20-50: Moderate quality FID greater than 50: Poor quality  Based on &amp;quot;GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium&amp;quot; by Heusel et al. (2017)">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Metrics_FrechetInceptionDistance_1.md&amp;value=---%0Auid%3A%20AiDotNet.Metrics.FrechetInceptionDistance%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1">
+
+
+
+  <h1 id="AiDotNet_Metrics_FrechetInceptionDistance_1" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1" class="text-break">
+Class FrechetInceptionDistance&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Metrics.html">Metrics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Fréchet Inception Distance (FID) - A metric for evaluating the quality of generated images.</p>
+<p>FID measures how similar generated images are to real images by comparing their
+statistical properties in a feature space. Lower FID scores indicate better quality.</p>
+<p>The algorithm:</p>
+<ol>
+<li>Extract features from images using a pre-trained neural network</li>
+<li>Compute statistics (mean and covariance) for real and generated image features</li>
+<li>Compute the Fréchet distance between the two Gaussian distributions</li>
+</ol>
+<p>Formula: FID = ||μ₁ - μ₂||² + Tr(Σ₁ + Σ₂ - 2√(Σ₁Σ₂))
+where μ is mean, Σ is covariance, Tr is trace</p>
+<p>Typical FID scores:</p>
+<ul>
+<li>FID less than 10: Excellent quality</li>
+<li>FID 10-20: Good quality</li>
+<li>FID 20-50: Moderate quality</li>
+<li>FID greater than 50: Poor quality</li>
+</ul>
+<p>Based on &quot;GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium&quot;
+by Heusel et al. (2017)</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FrechetInceptionDistance&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for computations</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FrechetInceptionDistance&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Metrics_FrechetInceptionDistance_1__ctor_" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Metrics_FrechetInceptionDistance_1__ctor_AiDotNet_NeuralNetworks_ConvolutionalNeuralNetwork__0__System_Int32_" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.#ctor(AiDotNet.NeuralNetworks.ConvolutionalNeuralNetwork{`0},System.Int32)">
+  FrechetInceptionDistance(ConvolutionalNeuralNetwork&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of FID calculator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FrechetInceptionDistance(ConvolutionalNeuralNetwork&lt;T&gt; featureNetwork, int featureDimension = 2048)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureNetwork</code> <a class="xref" href="AiDotNet.NeuralNetworks.ConvolutionalNeuralNetwork-1.html">ConvolutionalNeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>Pre-trained network for feature extraction</p>
+</dd>
+    <dt><code>featureDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Dimension of extracted features</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when featureNetwork is null</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when featureDimension is less than 1</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Metrics_FrechetInceptionDistance_1_FeatureDimension_" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.FeatureDimension*"></a>
+
+  <h3 id="AiDotNet_Metrics_FrechetInceptionDistance_1_FeatureDimension" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.FeatureDimension">
+  FeatureDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimensionality of extracted features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Metrics_FrechetInceptionDistance_1_FeatureLayer_" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.FeatureLayer*"></a>
+
+  <h3 id="AiDotNet_Metrics_FrechetInceptionDistance_1_FeatureLayer" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.FeatureLayer">
+  FeatureLayer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the layer index from which to extract features.
+Use -1 for the last layer, -2 for second to last, etc.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureLayer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Metrics_FrechetInceptionDistance_1_FeatureNetwork_" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.FeatureNetwork*"></a>
+
+  <h3 id="AiDotNet_Metrics_FrechetInceptionDistance_1_FeatureNetwork" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.FeatureNetwork">
+  FeatureNetwork
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature extraction network used for computing image representations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ConvolutionalNeuralNetwork&lt;T&gt; FeatureNetwork { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.ConvolutionalNeuralNetwork-1.html">ConvolutionalNeuralNetwork</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Metrics_FrechetInceptionDistance_1_ComputeFID_" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.ComputeFID*"></a>
+
+  <h3 id="AiDotNet_Metrics_FrechetInceptionDistance_1_ComputeFID_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.ComputeFID(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeFID(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the FID score between real and generated images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeFID(Tensor&lt;T&gt; realImages, Tensor&lt;T&gt; generatedImages)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>realImages</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tensor of real images [N, C, H, W]</p>
+</dd>
+    <dt><code>generatedImages</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tensor of generated images [N, C, H, W]</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>FID score (lower is better)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when images have incompatible shapes</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Metrics_FrechetInceptionDistance_1_ComputeFIDWithStats_" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.ComputeFIDWithStats*"></a>
+
+  <h3 id="AiDotNet_Metrics_FrechetInceptionDistance_1_ComputeFIDWithStats_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.ComputeFIDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeFIDWithStats(Vector&lt;T&gt;, Matrix&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L372"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes FID using pre-computed statistics for the real distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeFIDWithStats(Vector&lt;T&gt; realMean, Matrix&lt;T&gt; realCov, Tensor&lt;T&gt; generatedImages)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>realMean</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Mean of real image features</p>
+</dd>
+    <dt><code>realCov</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Covariance of real image features</p>
+</dd>
+    <dt><code>generatedImages</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated images to evaluate</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>FID score</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Metrics_FrechetInceptionDistance_1_PrecomputeStatistics_" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.PrecomputeStatistics*"></a>
+
+  <h3 id="AiDotNet_Metrics_FrechetInceptionDistance_1_PrecomputeStatistics_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Metrics.FrechetInceptionDistance`1.PrecomputeStatistics(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  PrecomputeStatistics(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L387"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Pre-computes statistics for a set of images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (Vector&lt;T&gt; mean, Matrix&lt;T&gt; covariance) PrecomputeStatistics(Tensor&lt;T&gt; images)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Images to compute statistics for</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.matrix--0--.means">means</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.matrix--0--.covariance">covariance</a>)</dt>
+    <dd><p>Tuple of (mean, covariance)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/FrechetInceptionDistance.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

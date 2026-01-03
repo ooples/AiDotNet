@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PredictionStats&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PredictionStats&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Calculates and stores various statistics to evaluate prediction performance and generate prediction intervals.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Statistics_PredictionStats_1.md&amp;value=---%0Auid%3A%20AiDotNet.Statistics.PredictionStats%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Statistics.PredictionStats`1">
+
+
+
+  <h1 id="AiDotNet_Statistics_PredictionStats_1" data-uid="AiDotNet.Statistics.PredictionStats`1" class="text-break">
+Class PredictionStats&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Statistics.html">Statistics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Calculates and stores various statistics to evaluate prediction performance and generate prediction intervals.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PredictionStats&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double, decimal).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PredictionStats&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Statistics_PredictionStats_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides a comprehensive set of metrics to evaluate predictive models and 
+calculate different types of statistical intervals around predictions.
+</p>
+<p>
+For Beginners:
+When you build a predictive model (like a machine learning model), you often want to:
+1. Measure how well your model performs (using metrics like R-squared (R2), accuracy, etc.)
+2. Understand how confident you can be in your predictions (using various intervals)
+3. Understand the relationship between actual and predicted values (using correlations)
+<p>This class helps you do all of these things. The &quot;T&quot; in PredictionStats&lt;T&gt; means it
+works with different number types like decimal, double, or float without needing separate
+implementations for each.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_Accuracy_" data-uid="AiDotNet.Statistics.PredictionStats`1.Accuracy*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_Accuracy" data-uid="AiDotNet.Statistics.PredictionStats`1.Accuracy">
+  Accuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L343"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The proportion of predictions that the model got correct (for classification).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Accuracy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_Accuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Accuracy is a simple metric for classification problems. It's the percentage of predictions
+that match the actual values.</p>
+<p>For example, if your model correctly classifies 90 out of 100 samples, the accuracy is 0.9 or 90%.</p>
+<p>While intuitive, accuracy can be misleading for imbalanced classes. For example, if 95% of your
+data belongs to class A, a model that always predicts class A would have 95% accuracy
+despite being useless for class B.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_AdjustedR2_" data-uid="AiDotNet.Statistics.PredictionStats`1.AdjustedR2*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_AdjustedR2" data-uid="AiDotNet.Statistics.PredictionStats`1.AdjustedR2">
+  AdjustedR2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AdjustedR2 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_BestDistributionFit_" data-uid="AiDotNet.Statistics.PredictionStats`1.BestDistributionFit*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_BestDistributionFit" data-uid="AiDotNet.Statistics.PredictionStats`1.BestDistributionFit">
+  BestDistributionFit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L487"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Information about the statistical distribution that best fits the prediction data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DistributionFitResult&lt;T&gt; BestDistributionFit { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.DistributionFitResult-1.html">DistributionFitResult</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_BestDistributionFit_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+BestDistributionFit helps you understand the shape of your prediction distribution.</p>
+<p>Knowing the distribution can help with:</p>
+<ul>
+<li>Creating better intervals (by using the right distribution assumptions)</li>
+<li>Understanding the types of predictions your model makes (are they normally distributed? skewed?)</li>
+<li>Identifying potential issues with your predictions</li>
+</ul>
+<p>This object contains information about which distribution type best fits your data
+and parameters describing that distribution.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_BootstrapInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.BootstrapInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_BootstrapInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.BootstrapInterval">
+  BootstrapInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Bootstrap Interval - An interval created using resampling techniques.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) BootstrapInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_BootstrapInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Bootstrap intervals use a technique called &quot;bootstrapping,&quot; where many samples are
+randomly drawn (with replacement) from your data to estimate the variability in your predictions.</p>
+<p>This approach is powerful because it doesn't assume any particular distribution for your data,
+making it robust when your data doesn't follow common patterns like the normal distribution.</p>
+<p>Bootstrap intervals are especially useful when you have limited data or when the theoretical
+assumptions for other interval types might not be valid.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_ConfidenceInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.ConfidenceInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_ConfidenceInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.ConfidenceInterval">
+  ConfidenceInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Confidence Interval - A range that likely contains the true mean of the predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) ConfidenceInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_ConfidenceInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+A confidence interval tells you the range where the true average prediction is likely to be.
+It helps you understand the precision of your model's average prediction.</p>
+<p>For example, if your model predicts an average of 50 and the confidence interval is (48, 52),
+you can be reasonably confident that the true average is between 48 and 52.
+The interval gets narrower with more data, indicating more precise estimates.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_CredibleInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.CredibleInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_CredibleInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.CredibleInterval">
+  CredibleInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Credible Interval - A Bayesian interval that contains the true value with a certain probability.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) CredibleInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_CredibleInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+A credible interval is the Bayesian version of a confidence interval. While they look similar,
+they have different interpretations:</p>
+<p>You can say &quot;There's a 95% chance that the true value lies within this credible interval,&quot;
+which is a more intuitive interpretation than confidence intervals provide.</p>
+<p>Credible intervals incorporate prior knowledge about the parameter being estimated,
+which can be beneficial when you have domain expertise or previous data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_DynamicTimeWarping_" data-uid="AiDotNet.Statistics.PredictionStats`1.DynamicTimeWarping*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_DynamicTimeWarping" data-uid="AiDotNet.Statistics.PredictionStats`1.DynamicTimeWarping">
+  DynamicTimeWarping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L470"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A measure of similarity between two temporal sequences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DynamicTimeWarping { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_DynamicTimeWarping_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+DynamicTimeWarping measures how similar two sequences are, even if they're not perfectly aligned in time.</p>
+<p>Unlike simple point-by-point comparisons, it can handle sequences that are stretched,
+compressed, or shifted in time. This is particularly useful for comparing time series
+where patterns might occur at different rates.</p>
+<p>Lower values indicate more similar sequences.</p>
+<p>This is especially useful for time series data like speech recognition, gesture recognition,
+or any data where timing may vary.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_ExplainedVarianceScore_" data-uid="AiDotNet.Statistics.PredictionStats`1.ExplainedVarianceScore*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_ExplainedVarianceScore" data-uid="AiDotNet.Statistics.PredictionStats`1.ExplainedVarianceScore">
+  ExplainedVarianceScore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L310"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The explained variance score - A measure of how well the model accounts for the variance in the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ExplainedVarianceScore { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_ExplainedVarianceScore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+ExplainedVarianceScore is similar to R2, but it doesn't penalize the model for systematic bias.
+ExplainedVarianceScore is similar to R², but it doesn't penalize the model for systematic bias.</p>
+<p>It ranges from 0 to 1, with higher values being better:</p>
+<ul>
+<li>1 means your model explains all the variance in the data (perfect)</li>
+<li>0 means your model doesn't explain any variance</li>
+</ul>
+<p>If your model's predictions are all shifted by a constant amount from the actual values,
+R2 would be lower, but ExplainedVarianceScore would still be high.
+R² would be lower, but ExplainedVarianceScore would still be high.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_F1Score_" data-uid="AiDotNet.Statistics.PredictionStats`1.F1Score*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_F1Score" data-uid="AiDotNet.Statistics.PredictionStats`1.F1Score">
+  F1Score
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L396"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The harmonic mean of precision and recall (for classification).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T F1Score { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_F1Score_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+F1Score balances precision and recall in a single metric, which is helpful because
+there's often a trade-off between them.</p>
+<p>It ranges from 0 to 1, with 1 being perfect.</p>
+<p>F1Score is particularly useful when:</p>
+<ul>
+<li>You need a single metric to compare models</li>
+<li>Classes are imbalanced (one class is much more common than others)</li>
+<li>You care equally about false positives and false negatives</li>
+</ul>
+<p>It's calculated as 2 * (precision * recall) / (precision + recall).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_ForecastInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.ForecastInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_ForecastInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.ForecastInterval">
+  ForecastInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Forecast Interval - A prediction interval specifically for time series forecasting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) ForecastInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_ForecastInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Forecast intervals are similar to prediction intervals but are specifically designed
+for time series data (data collected over time, like monthly sales or daily temperatures).</p>
+<p>They account for the unique characteristics of time series data, like increasing uncertainty
+the further you forecast into the future and potential seasonal patterns.</p>
+<p>A wider forecast interval indicates less certainty about future values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_JackknifeInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.JackknifeInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_JackknifeInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.JackknifeInterval">
+  JackknifeInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Jackknife Interval - An interval created by systematically leaving out one observation at a time.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) JackknifeInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_JackknifeInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+The jackknife method creates an interval by repeatedly recalculating your statistics
+while leaving out one data point each time. This helps assess how sensitive your results
+are to individual data points.</p>
+<p>It's particularly useful for detecting outliers or influential points that might be
+skewing your results, and for creating intervals when sample sizes are small.</p>
+<p>Like bootstrap intervals, jackknife intervals don't make strong assumptions about
+the distribution of your data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_KendallTau_" data-uid="AiDotNet.Statistics.PredictionStats`1.KendallTau*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_KendallTau" data-uid="AiDotNet.Statistics.PredictionStats`1.KendallTau">
+  KendallTau
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L452"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A measure of concordance between actual and predicted values based on paired rankings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T KendallTau { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_KendallTau_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+KendallTau is another rank correlation metric, similar to SpearmanCorrelation.</p>
+<p>It measures the proportion of pairs that are ranked in the same order in both actual
+and predicted values.</p>
+<p>Like other correlation metrics, it ranges from -1 to 1:</p>
+<ul>
+<li>1 means all pairs have the same ordering in both sets</li>
+<li>0 means the orderings are random relative to each other</li>
+<li>-1 means the orderings are exactly opposite</li>
+</ul>
+<p>KendallTau is often more robust to outliers than SpearmanCorrelation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_LearningCurve_" data-uid="AiDotNet.Statistics.PredictionStats`1.LearningCurve*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_LearningCurve" data-uid="AiDotNet.Statistics.PredictionStats`1.LearningCurve">
+  LearningCurve
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L327"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A list of performance metrics calculated at different training set sizes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; LearningCurve { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_LearningCurve_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+LearningCurve shows how your model's performance changes as you give it more training data.</p>
+<p>This is helpful for diagnosing if your model is suffering from high bias (underfitting)
+or high variance (overfitting):</p>
+<ul>
+<li>If performance quickly plateaus with small amounts of data, you might have high bias</li>
+<li>If performance continues improving with more data, you might need even more data</li>
+<li>If there's a large gap between training and validation performance, you might have high variance</li>
+</ul>
+<p>The list contains performance metrics at different training set sizes.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_MeanPredictionError_" data-uid="AiDotNet.Statistics.PredictionStats`1.MeanPredictionError*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_MeanPredictionError" data-uid="AiDotNet.Statistics.PredictionStats`1.MeanPredictionError">
+  MeanPredictionError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The average of all prediction errors (predicted - actual).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MeanPredictionError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_MeanPredictionError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+MeanPredictionError measures the average difference between predicted and actual values.</p>
+<p>A value close to zero suggests your model doesn't systematically overestimate or underestimate.
+A positive value means your model tends to predict values higher than the actual values.
+A negative value means your model tends to predict values lower than the actual values.</p>
+<p>Unlike error metrics that use absolute values (like MAE), this can tell you about the
+direction of the error, but positive and negative errors can cancel each other out.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_MedianPredictionError_" data-uid="AiDotNet.Statistics.PredictionStats`1.MedianPredictionError*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_MedianPredictionError" data-uid="AiDotNet.Statistics.PredictionStats`1.MedianPredictionError">
+  MedianPredictionError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The middle value of all prediction errors (predicted - actual).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MedianPredictionError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_MedianPredictionError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Similar to MeanPredictionError, but uses the median (middle value) instead of the mean (average).</p>
+<p>The advantage of using the median is that it's less affected by outliers or extreme errors.
+For example, if most errors are small but one is very large, the median will still show
+a value representative of the typical error.</p>
+<p>Like MeanPredictionError, a value close to zero is ideal.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_PearsonCorrelation_" data-uid="AiDotNet.Statistics.PredictionStats`1.PearsonCorrelation*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_PearsonCorrelation" data-uid="AiDotNet.Statistics.PredictionStats`1.PearsonCorrelation">
+  PearsonCorrelation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L414"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A measure of linear correlation between actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PearsonCorrelation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_PearsonCorrelation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+PearsonCorrelation measures the strength and direction of the linear relationship
+between actual and predicted values.</p>
+<p>It ranges from -1 to 1:</p>
+<ul>
+<li>1 means perfect positive correlation (as actual increases, predicted increases proportionally)</li>
+<li>0 means no correlation</li>
+<li>-1 means perfect negative correlation (as actual increases, predicted decreases proportionally)</li>
+</ul>
+<p>For prediction models, you typically want values close to 1, indicating that your
+predictions track well with actual values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_PercentileInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.PercentileInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_PercentileInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.PercentileInterval">
+  PercentileInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Percentile Interval - An interval based directly on the percentiles of the prediction distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) PercentileInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_PercentileInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+A percentile interval is one of the simplest types of intervals, created by taking
+the percentiles directly from your prediction distribution.</p>
+<p>For example, a 95% percentile interval might use the 2.5th and 97.5th percentiles
+of your predictions as the lower and upper bounds.</p>
+<p>These intervals are intuitive and don't require many statistical assumptions,
+making them useful for quick assessments of your prediction range.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_Precision_" data-uid="AiDotNet.Statistics.PredictionStats`1.Precision*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_Precision" data-uid="AiDotNet.Statistics.PredictionStats`1.Precision">
+  Precision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The proportion of positive predictions that were actually correct (for classification).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Precision { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_Precision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Precision answers the question: &quot;Of all the items labeled as positive, how many actually were positive?&quot;</p>
+<p>It ranges from 0 to 1, with 1 being perfect.</p>
+<p>For example, if your model identifies 100 emails as spam, and 90 of them actually are spam,
+the precision is 0.9 or 90%.</p>
+<p>Precision is important when the cost of false positives is high. In the spam example,
+high precision means fewer important emails mistakenly marked as spam.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_PredictionInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.PredictionInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_PredictionInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.PredictionInterval">
+  PredictionInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Prediction Interval - A range that likely contains future individual observations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) PredictionInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_PredictionInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+A prediction interval gives you a range where future individual values are likely to fall.
+For example, if your model predicts a value of 100 and the prediction interval is (90, 110),
+you can be reasonably confident that the actual value will be between 90 and 110.</p>
+<p>Unlike confidence intervals (which are about the average), prediction intervals account for
+both the uncertainty in the average prediction and the natural variability of individual values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_PredictionIntervalCoverage_" data-uid="AiDotNet.Statistics.PredictionStats`1.PredictionIntervalCoverage*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_PredictionIntervalCoverage" data-uid="AiDotNet.Statistics.PredictionStats`1.PredictionIntervalCoverage">
+  PredictionIntervalCoverage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The proportion of actual values that fall within the prediction interval.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PredictionIntervalCoverage { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_PredictionIntervalCoverage_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+PredictionIntervalCoverage tells you how well your prediction intervals actually work.</p>
+<p>For example, if you have a 95% prediction interval, ideally about 95% of actual values
+should fall within those intervals. PredictionIntervalCoverage measures the actual percentage.</p>
+<p>If this value is much lower than expected (like 70% for a 95% interval), your intervals
+are too narrow. If it's much higher (like 99% for a 95% interval), your intervals
+might be unnecessarily wide.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_QuantileIntervals_" data-uid="AiDotNet.Statistics.PredictionStats`1.QuantileIntervals*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_QuantileIntervals" data-uid="AiDotNet.Statistics.PredictionStats`1.QuantileIntervals">
+  QuantileIntervals
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Collection of prediction intervals at different quantile levels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;(T Quantile, T Lower, T Upper)&gt; QuantileIntervals { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0,-0-.quantile">Quantile</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0,-0-.lower">Lower</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0,-0-.upper">Upper</a>)&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_QuantileIntervals_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+QuantileIntervals provides prediction intervals at different probability levels.</p>
+<p>For example, it might include a 50% interval (showing where the middle half of values are expected),
+a 75% interval, and a 95% interval.</p>
+<p>Each tuple contains:</p>
+<ul>
+<li>Quantile: The probability level (like 0.5 for 50%)</li>
+<li>Lower: The lower bound of the interval</li>
+<li>Upper: The upper bound of the interval</li>
+</ul>
+<p>These are useful for understanding the uncertainty at different levels of confidence.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_R2_" data-uid="AiDotNet.Statistics.PredictionStats`1.R2*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_R2" data-uid="AiDotNet.Statistics.PredictionStats`1.R2">
+  R2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Coefficient of determination - The proportion of variance in the dependent variable explained by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T R2 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_R2_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+R-squared (R2) is perhaps the most common metric for regression models. It ranges from 0 to 1:
+R² (R-squared) is perhaps the most common metric for regression models. It ranges from 0 to 1:</p>
+<ul>
+<li>1 means your model perfectly predicts all values</li>
+<li>0 means your model does no better than simply predicting the average for every case</li>
+<li>Values in between indicate the percentage of variance your model explains</li>
+</ul>
+<p>For example, an R2 of 0.75 means your model explains 75% of the variability in the target variable.</p>
+<p>Be careful: a high R2 doesn't necessarily mean your model is good - it could be overfitting!
+For example, an R² of 0.75 means your model explains 75% of the variability in the target variable.</p>
+<p>Be careful: a high R² doesn't necessarily mean your model is good - it could be overfitting!</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_RSquared_" data-uid="AiDotNet.Statistics.PredictionStats`1.RSquared*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_RSquared" data-uid="AiDotNet.Statistics.PredictionStats`1.RSquared">
+  RSquared
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L268"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>R-Squared - Alias for R2 property (Coefficient of determination).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T RSquared { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_RSquared_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is an alternative name for the R2 property, providing the same value.
+Some frameworks and documentation use &quot;RSquared&quot; while others use &quot;R2&quot;.
+Both refer to the proportion of variance in the dependent variable explained by the model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_Recall_" data-uid="AiDotNet.Statistics.PredictionStats`1.Recall*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_Recall" data-uid="AiDotNet.Statistics.PredictionStats`1.Recall">
+  Recall
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L377"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The proportion of actual positive cases that were correctly identified (for classification).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Recall { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_Recall_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Recall answers the question: &quot;Of all the actual positive items, how many did the model identify?&quot;</p>
+<p>It ranges from 0 to 1, with 1 being perfect.</p>
+<p>For example, if there are 100 spam emails, and your model identifies 80 of them,
+the recall is 0.8 or 80%.</p>
+<p>Recall is important when the cost of false negatives is high. In a medical context,
+high recall means catching most cases of a disease, even if it means some false alarms.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_SimultaneousPredictionInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.SimultaneousPredictionInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_SimultaneousPredictionInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.SimultaneousPredictionInterval">
+  SimultaneousPredictionInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Simultaneous Prediction Interval - A prediction interval that accounts for multiple predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) SimultaneousPredictionInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_SimultaneousPredictionInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+When you make multiple predictions at once, there's a higher chance that at least one of them
+will fall outside a standard prediction interval just by random chance.</p>
+<p>Simultaneous prediction intervals account for this by creating wider intervals that are guaranteed
+to contain a certain percentage of all predictions made simultaneously.</p>
+<p>These are important when you need to ensure that all (or most) of your predictions are within
+the intervals, not just each one individually.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_SpearmanCorrelation_" data-uid="AiDotNet.Statistics.PredictionStats`1.SpearmanCorrelation*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_SpearmanCorrelation" data-uid="AiDotNet.Statistics.PredictionStats`1.SpearmanCorrelation">
+  SpearmanCorrelation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L433"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A measure of monotonic correlation between the ranks of actual and predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SpearmanCorrelation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_SpearmanCorrelation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+SpearmanCorrelation is similar to PearsonCorrelation but works with ranks instead of raw values.</p>
+<p>It measures whether predicted values tend to increase when actual values increase,
+regardless of whether the relationship is linear.</p>
+<p>Like Pearson's correlation, it ranges from -1 to 1:</p>
+<ul>
+<li>1 means perfect positive rank correlation</li>
+<li>0 means no rank correlation</li>
+<li>-1 means perfect negative rank correlation</li>
+</ul>
+<p>This is useful when you care about the order of predictions more than their exact values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_ToleranceInterval_" data-uid="AiDotNet.Statistics.PredictionStats`1.ToleranceInterval*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_ToleranceInterval" data-uid="AiDotNet.Statistics.PredictionStats`1.ToleranceInterval">
+  ToleranceInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Tolerance Interval - A range that contains a specified proportion of the population with a certain confidence.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) ToleranceInterval { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_ToleranceInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+A tolerance interval is different from both prediction and confidence intervals.
+It gives you a range that contains a specific percentage of all possible values
+(not just the average) with a certain level of confidence.</p>
+<p>For example, a 95/99 tolerance interval means you're 95% confident that the interval
+contains 99% of all possible values from the population.</p>
+<p>These are useful when you need to understand the range of almost all possible values,
+such as in quality control or setting specification limits.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_Empty_" data-uid="AiDotNet.Statistics.PredictionStats`1.Empty*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_Empty" data-uid="AiDotNet.Statistics.PredictionStats`1.Empty">
+  Empty()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L559"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty PredictionStats instance with all metrics set to zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static PredictionStats&lt;T&gt; Empty()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.PredictionStats-1.html">PredictionStats</a>&lt;T&gt;</dt>
+    <dd><p>A PredictionStats instance with all metrics initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_Empty_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This static method creates a PredictionStats object where all metrics are set to zero.
+It's useful when you need a placeholder or default instance, or when you want to
+compare against a baseline of &quot;perfect predictions.&quot;</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_GetMetric_" data-uid="AiDotNet.Statistics.PredictionStats`1.GetMetric*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_GetMetric_AiDotNet_Enums_MetricType_" data-uid="AiDotNet.Statistics.PredictionStats`1.GetMetric(AiDotNet.Enums.MetricType)">
+  GetMetric(MetricType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L639"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves a specific metric value by metric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMetric(MetricType metricType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricType</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The type of metric to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the requested metric.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_GetMetric_AiDotNet_Enums_MetricType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method provides a convenient way to get a specific metric value using the MetricType enum.</p>
+<p>For example, instead of directly accessing the R2 property, you could use:</p>
+<pre><code class="lang-csharp">var r2Value = stats.GetMetric(MetricType.R2);</code></pre>
+<p>This is particularly useful when you want to programmatically access different metrics
+based on user input or configuration settings.</p>
+<p>If you request a metric type that doesn't exist, the method will throw an ArgumentException.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when an unknown metric type is requested.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Statistics_PredictionStats_1_HasMetric_" data-uid="AiDotNet.Statistics.PredictionStats`1.HasMetric*"></a>
+
+  <h3 id="AiDotNet_Statistics_PredictionStats_1_HasMetric_AiDotNet_Enums_MetricType_" data-uid="AiDotNet.Statistics.PredictionStats`1.HasMetric(AiDotNet.Enums.MetricType)">
+  HasMetric(MetricType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L680"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific metric is available in this PredictionStats instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasMetric(MetricType metricType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricType</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The type of metric to check for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the metric is available, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_PredictionStats_1_HasMetric_AiDotNet_Enums_MetricType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method allows you to check if a particular metric is available before trying to get its value.
+It's useful when you're not sure if a specific metric was calculated for this set of predictions.</p>
+<p>For example:</p>
+<pre><code class="lang-csharp">if (stats.HasMetric(MetricType.R2))
+{
+    var r2Value = stats.GetMetric(MetricType.R2);
+    // Use r2Value...
+}</code></pre>
+<p>This prevents errors that might occur if you try to access a metric that wasn't calculated.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/PredictionStats.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NegativeBinomialRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NegativeBinomialRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Negative Binomial Regression, a statistical model used for count data that exhibits overdispersion (variance exceeding the mean).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.NegativeBinomialRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.NegativeBinomialRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1" data-uid="AiDotNet.Models.Options.NegativeBinomialRegressionOptions`1" class="text-break">
+Class NegativeBinomialRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NegativeBinomialRegressionOptions.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Negative Binomial Regression, a statistical model used for count data
+that exhibits overdispersion (variance exceeding the mean).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NegativeBinomialRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">NegativeBinomialRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Negative Binomial Regression extends Poisson regression by introducing an additional parameter
+that allows the variance to exceed the mean, making it suitable for overdispersed count data.
+This model is appropriate when analyzing count outcomes (like number of events, occurrences, or items)
+that show greater variability than would be expected under a Poisson distribution. The model is
+typically fitted using maximum likelihood estimation, optimized through iterative methods such as
+Fisher scoring or Newton-Raphson iterations.
+</p>
+<p><b>For Beginners:</b> Negative Binomial Regression is a specialized technique for analyzing
+count data - data where you're counting how many times something happens.
+<p>While Poisson regression is commonly used for count data, it assumes that the mean and variance are equal.
+In real-world data, we often see more variability than Poisson allows for:</p>
+<p>Think of it like predicting daily customer counts at a restaurant:</p>
+<ul>
+<li>Some days might have 50 customers, others 150, with an average of 100</li>
+<li>Poisson would expect most days to be fairly close to 100</li>
+<li>But real data often shows more extreme values (very busy days, very slow days)</li>
+<li>Negative Binomial can handle this extra variability</li>
+</ul>
+<p>This model is particularly useful when:</p>
+<ul>
+<li>You're counting events (visits, purchases, accidents, etc.)</li>
+<li>Your data shows &quot;clumping&quot; or extra variation</li>
+<li>Some counts are much higher or lower than the average would suggest</li>
+</ul>
+<p>This class lets you configure how the model learns from your data to make accurate predictions
+despite this extra variability.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_DecompositionType_" data-uid="AiDotNet.Models.Options.NegativeBinomialRegressionOptions`1.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_DecompositionType" data-uid="AiDotNet.Models.Options.NegativeBinomialRegressionOptions`1.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NegativeBinomialRegressionOptions.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the matrix decomposition type to use when solving the weighted least squares problem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The matrix decomposition type, defaulting to QR decomposition.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The decomposition type determines how the system of linear equations is solved during each iteration
+of the IRLS algorithm. QR decomposition is a numerically stable choice suitable for most problems.
+</p>
+<p><b>For Beginners:</b> This setting controls the mathematical method used to solve equations
+during model fitting. The default QR method works well for most cases - you typically don't need
+to change this unless you have specific performance or numerical stability requirements.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.NegativeBinomialRegressionOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.NegativeBinomialRegressionOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NegativeBinomialRegressionOptions.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations allowed for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets an upper limit on how many iterations the optimization algorithm will perform
+when fitting the model. The algorithm may terminate earlier if convergence is achieved based on
+the tolerance value. In Negative Binomial Regression, each iteration updates both the regression
+coefficients and the dispersion parameter to better fit the training data. The appropriate number
+of iterations depends on the complexity of the data and the initial values used.
+</p>
+<p><b>For Beginners:</b> This setting controls how many attempts the algorithm makes
+to fine-tune the model before giving up.
+<p>Imagine you're adjusting the seasoning in a recipe:</p>
+<ul>
+<li>Each &quot;iteration&quot; is like tasting the dish and adding a little more of this or that</li>
+<li>You keep making adjustments until you're satisfied with the taste</li>
+<li>This parameter is your maximum number of taste-and-adjust cycles</li>
+</ul>
+<p>The default value of 100 means the algorithm will make at most 100 attempts to improve its model.</p>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Your model is complex or has many features</li>
+<li>You notice the model hasn't fully converged when training completes</li>
+<li>You see in the logs that the algorithm is still making significant improvements
+when it reaches iteration 100</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>You need faster training times</li>
+<li>You're doing preliminary exploration</li>
+<li>Your model converges quickly anyway</li>
+</ul>
+<p>The algorithm might stop before reaching this maximum if it determines that additional
+iterations won't significantly improve the model (based on the Tolerance setting).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.NegativeBinomialRegressionOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.NegativeBinomialRegressionOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NegativeBinomialRegressionOptions.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance that determines when the optimization algorithm should stop.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 0.000001 (1e-6).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NegativeBinomialRegressionOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter defines the threshold for determining when the optimization has converged. The algorithm
+will stop when the improvement in the log-likelihood between consecutive iterations falls below this
+tolerance value. A smaller tolerance requires more precision in the parameter estimates, potentially
+leading to better model performance but requiring more iterations. A larger tolerance allows for earlier
+termination but might result in less optimal parameter estimates.
+</p>
+<p><b>For Beginners:</b> This setting determines how much improvement is considered
+"good enough" to stop training.
+<p>Continuing with our recipe analogy:</p>
+<ul>
+<li>As you make adjustments, the dish gets better</li>
+<li>Eventually, the improvements become very small</li>
+<li>This setting decides when those improvements are small enough to stop tasting and adjusting</li>
+</ul>
+<p>The default value of 0.000001 (one millionth) means:</p>
+<ul>
+<li>If an iteration improves the model by less than one millionth of its current quality</li>
+<li>The algorithm will decide it's &quot;good enough&quot; and stop</li>
+</ul>
+<p>This is a fairly strict setting, appropriate for many statistical modeling applications
+where high precision is desirable.</p>
+<p>You might want to increase this value (make it less strict, like 1e-4) if:</p>
+<ul>
+<li>Training is taking too long</li>
+<li>You're doing preliminary analysis</li>
+<li>You don't need extremely precise parameter estimates</li>
+</ul>
+<p>You might want to decrease this value (make it more strict, like 1e-8) if:</p>
+<ul>
+<li>You need very precise parameter estimates</li>
+<li>You're working on a problem where tiny differences matter</li>
+<li>You have the computational resources for longer training</li>
+</ul>
+<p>Finding the right tolerance is about balancing precision with computational efficiency.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NegativeBinomialRegressionOptions.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

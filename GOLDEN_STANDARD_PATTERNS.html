@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Golden Standard Patterns for AiDotNet Models and Layers | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Golden Standard Patterns for AiDotNet Models and Layers | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GOLDEN_STANDARD_PATTERNS.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="golden-standard-patterns-for-aidotnet-models-and-layers">Golden Standard Patterns for AiDotNet Models and Layers</h1>
+
+<p>This document defines the production-ready patterns that ALL models and layers in the AiDotNet library must follow. Consistency is critical for maintainability and user experience.</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#layer-pattern">Layer Pattern</a></li>
+<li><a href="#model-pattern">Model Pattern</a>
+<ul>
+<li><a href="#neural-network-model-pattern-primary---feedforwardneuralnetwork-as-golden-standard">Neural Network Model Pattern</a></li>
+<li><a href="#layer-creation-pattern-critical">Layer Creation Pattern</a></li>
+<li><a href="#standalone-model-pattern-for-non-layer-based-models">Standalone Model Pattern</a></li>
+</ul>
+</li>
+<li><a href="#common-conventions">Common Conventions</a></li>
+<li><a href="#documentation-standards">Documentation Standards</a></li>
+<li><a href="#interface-implementation-checklist">Interface Implementation Checklist</a></li>
+</ol>
+<hr>
+<h2 id="layer-pattern">Layer Pattern</h2>
+<p>All layers MUST extend <code>LayerBase&lt;T&gt;</code> and follow these patterns:</p>
+<h3 id="class-declaration">Class Declaration</h3>
+<pre><code class="lang-csharp">namespace AiDotNet.NeuralNetworks.Layers;
+
+/// &lt;summary&gt;
+/// Brief description of what this layer does.
+/// &lt;/summary&gt;
+/// &lt;remarks&gt;
+/// &lt;para&gt;
+/// Technical explanation of the layer's operation.
+/// &lt;/para&gt;
+/// &lt;para&gt;&lt;b&gt;For Beginners:&lt;/b&gt; Simple analogy explanation.
+/// &lt;/para&gt;
+/// &lt;/remarks&gt;
+/// &lt;typeparam name=&quot;T&quot;&gt;The numeric type used for calculations, typically float or double.&lt;/typeparam&gt;
+public class ExampleLayer&lt;T&gt; : LayerBase&lt;T&gt;, IOptionalInterface&lt;T&gt;
+{
+    // Implementation
+}
+</code></pre>
+<h3 id="field-naming">Field Naming</h3>
+<pre><code class="lang-csharp">// Private fields use underscore prefix
+private Tensor&lt;T&gt; _weights;
+private Tensor&lt;T&gt; _biases;
+private Tensor&lt;T&gt; _lastInput;    // Cached for backward pass
+private Tensor&lt;T&gt; _lastOutput;   // Cached for backward pass
+private Tensor&lt;T&gt;? _weightsGradient;  // Nullable for gradients
+private Tensor&lt;T&gt;? _biasesGradient;
+private readonly Random _random;
+
+// Public properties use PascalCase
+public int InputChannels { get; private set; }
+public int OutputChannels { get; private set; }
+</code></pre>
+<h3 id="constructor-pattern">Constructor Pattern</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Initializes a new instance with the specified parameters.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;inputDim&quot;&gt;Description of parameter.&lt;/param&gt;
+/// &lt;param name=&quot;outputDim&quot;&gt;Description of parameter.&lt;/param&gt;
+/// &lt;param name=&quot;activation&quot;&gt;The activation function to apply. Defaults to ReLU if not specified.&lt;/param&gt;
+public ExampleLayer(
+    int inputDim,
+    int outputDim,
+    IActivationFunction&lt;T&gt;? activation = null)
+    : base(
+        CalculateInputShape(inputDim),
+        CalculateOutputShape(outputDim),
+        activation ?? new ReLUActivation&lt;T&gt;())
+{
+    // Store configuration
+    InputChannels = inputDim;
+    OutputChannels = outputDim;
+
+    // Initialize tensors
+    _weights = new Tensor&lt;T&gt;([outputDim, inputDim]);
+    _biases = new Tensor&lt;T&gt;([outputDim]);
+    _lastInput = new Tensor&lt;T&gt;([inputDim]);
+    _lastOutput = new Tensor&lt;T&gt;([outputDim]);
+
+    // Use RandomHelper, NEVER new Random() directly
+    _random = RandomHelper.CreateSecureRandom();
+
+    // Initialize weights
+    InitializeWeights();
+}
+</code></pre>
+<h3 id="required-abstract-members">Required Abstract Members</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Gets a value indicating whether this layer supports training.
+/// &lt;/summary&gt;
+public override bool SupportsTraining =&gt; true;
+
+/// &lt;summary&gt;
+/// Gets whether this layer supports JIT compilation.
+/// &lt;/summary&gt;
+public override bool SupportsJitCompilation =&gt; CanActivationBeJitted();
+
+public override Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)
+{
+    _lastInput = input;
+
+    // Perform layer operation
+    var output = /* computation */;
+
+    // Apply activation
+    _lastOutput = ApplyActivation(output);
+    return _lastOutput;
+}
+
+public override Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)
+{
+    // Apply activation derivative
+    var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+
+    // Compute gradients for weights and biases
+    _weightsGradient = /* gradient computation */;
+    _biasesGradient = /* gradient computation */;
+
+    // Compute input gradient
+    return /* input gradient */;
+}
+
+public override void UpdateParameters(T learningRate)
+{
+    // Update weights: w = w - lr * gradient
+    // Use NumOps for type-safe operations
+    for (int i = 0; i &lt; _weights.Length; i++)
+    {
+        var update = NumOps.Multiply(learningRate, _weightsGradient[i]);
+        _weights[i] = NumOps.Subtract(_weights[i], update);
+    }
+}
+
+public override Vector&lt;T&gt; GetParameters()
+{
+    int totalParams = _weights.Length + _biases.Length;
+    var parameters = new Vector&lt;T&gt;(totalParams);
+
+    int index = 0;
+    // Copy all parameters to vector
+    foreach (var w in _weights.AsSpan())
+        parameters[index++] = w;
+    foreach (var b in _biases.AsSpan())
+        parameters[index++] = b;
+
+    return parameters;
+}
+
+public override void SetParameters(Vector&lt;T&gt; parameters)
+{
+    if (parameters.Length != ParameterCount)
+        throw new ArgumentException($&quot;Expected {ParameterCount} parameters, got {parameters.Length}&quot;);
+
+    int index = 0;
+    // Restore all parameters from vector
+}
+
+public override void ResetState()
+{
+    _lastInput = new Tensor&lt;T&gt;(InputShape);
+    _lastOutput = new Tensor&lt;T&gt;(OutputShape);
+}
+
+public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+{
+    // Create computation graph for JIT compilation
+}
+</code></pre>
+<h3 id="serialization">Serialization</h3>
+<pre><code class="lang-csharp">public override void Serialize(BinaryWriter writer)
+{
+    base.Serialize(writer);
+
+    // Write configuration
+    writer.Write(InputChannels);
+    writer.Write(OutputChannels);
+
+    // Write tensors (use NumOps.ToDouble for type conversion)
+    foreach (var w in _weights.AsSpan())
+        writer.Write(NumOps.ToDouble(w));
+}
+
+public override void Deserialize(BinaryReader reader)
+{
+    base.Deserialize(reader);
+
+    // Read configuration
+    InputChannels = reader.ReadInt32();
+    OutputChannels = reader.ReadInt32();
+
+    // Read tensors (use NumOps.FromDouble for type conversion)
+    _weights = new Tensor&lt;T&gt;([OutputChannels, InputChannels]);
+    var span = _weights.AsWritableSpan();
+    for (int i = 0; i &lt; span.Length; i++)
+        span[i] = NumOps.FromDouble(reader.ReadDouble());
+}
+</code></pre>
+<hr>
+<h2 id="model-pattern">Model Pattern</h2>
+<p>There are two main model patterns in AiDotNet:</p>
+<ol>
+<li><strong>Neural Network Models</strong> - Extend <code>NeuralNetworkBase&lt;T&gt;</code> (preferred for layer-based models)</li>
+<li><strong>Standalone Models</strong> - Implement <code>IFullModel&lt;T, TInput, TOutput&gt;</code> directly</li>
+</ol>
+<h3 id="neural-network-model-pattern-primary---feedforwardneuralnetwork-as-golden-standard">Neural Network Model Pattern (Primary - FeedForwardNeuralNetwork as Golden Standard)</h3>
+<p>All neural network models MUST extend <code>NeuralNetworkBase&lt;T&gt;</code>:</p>
+<pre><code class="lang-csharp">namespace AiDotNet.NeuralNetworks;
+
+/// &lt;summary&gt;
+/// Brief description of the neural network.
+/// &lt;/summary&gt;
+/// &lt;typeparam name=&quot;T&quot;&gt;The numeric type used for calculations (typically float or double).&lt;/typeparam&gt;
+/// &lt;remarks&gt;
+/// &lt;para&gt;
+/// Technical explanation of the network architecture.
+/// &lt;/para&gt;
+/// &lt;para&gt;
+/// &lt;b&gt;For Beginners:&lt;/b&gt; Simple analogy explaining what this network does.
+/// &lt;/para&gt;
+/// &lt;/remarks&gt;
+public class ExampleNeuralNetwork&lt;T&gt; : NeuralNetworkBase&lt;T&gt;
+{
+    /// &lt;summary&gt;
+    /// The loss function used to calculate the error between predicted and expected outputs.
+    /// &lt;/summary&gt;
+    private ILossFunction&lt;T&gt; _lossFunction;
+
+    /// &lt;summary&gt;
+    /// The optimization algorithm used to update the network's parameters during training.
+    /// &lt;/summary&gt;
+    private IGradientBasedOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; _optimizer;
+}
+</code></pre>
+<h3 id="constructor-pattern-neural-network">Constructor Pattern (Neural Network)</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Initializes a new instance with the specified architecture.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;architecture&quot;&gt;The architecture defining the structure of the neural network.&lt;/param&gt;
+/// &lt;param name=&quot;optimizer&quot;&gt;The optimization algorithm. If null, Adam optimizer is used.&lt;/param&gt;
+/// &lt;param name=&quot;lossFunction&quot;&gt;The loss function. If null, selected based on task type.&lt;/param&gt;
+/// &lt;param name=&quot;maxGradNorm&quot;&gt;Maximum gradient norm for gradient clipping.&lt;/param&gt;
+public ExampleNeuralNetwork(
+    NeuralNetworkArchitecture&lt;T&gt; architecture,
+    IGradientBasedOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;? optimizer = null,
+    ILossFunction&lt;T&gt;? lossFunction = null,
+    double maxGradNorm = 1.0)
+    : base(architecture,
+           lossFunction ?? NeuralNetworkHelper&lt;T&gt;.GetDefaultLossFunction(architecture.TaskType),
+           maxGradNorm)
+{
+    // Apply defaults for optional parameters
+    _optimizer = optimizer ?? new AdamOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(this);
+    _lossFunction = lossFunction ?? NeuralNetworkHelper&lt;T&gt;.GetDefaultLossFunction(architecture.TaskType);
+
+    // Initialize layers from architecture
+    InitializeLayers();
+}
+</code></pre>
+<h3 id="layer-creation-pattern-critical">Layer Creation Pattern (CRITICAL)</h3>
+<p><strong>All neural network models MUST support both user-provided layers AND default industry-standard layers.</strong></p>
+<p>The layer creation pattern uses a dual approach:</p>
+<ol>
+<li><strong>User-Provided Layers</strong>: If the user supplies layers via <code>Architecture.Layers</code>, use those</li>
+<li><strong>Default Layers</strong>: If no layers provided, use <code>LayerHelper&lt;T&gt;.CreateDefault&lt;ModelType&gt;Layers()</code> for industry-standard defaults</li>
+</ol>
+<h4 id="the-initializelayers-pattern">The InitializeLayers() Pattern</h4>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Initializes the layers of the neural network based on the architecture.
+/// &lt;/summary&gt;
+/// &lt;remarks&gt;
+/// &lt;para&gt;
+/// This method follows the dual-approach pattern:
+/// 1. If the user provides custom layers, use those (with validation)
+/// 2. Otherwise, use LayerHelper to create industry-standard default layers
+/// &lt;/para&gt;
+/// &lt;/remarks&gt;
+protected override void InitializeLayers()
+{
+    if (Architecture.Layers != null &amp;&amp; Architecture.Layers.Count &gt; 0)
+    {
+        // Use the layers provided by the user
+        Layers.AddRange(Architecture.Layers);
+        ValidateCustomLayers(Layers);
+    }
+    else
+    {
+        // Use default layer configuration if no layers are provided
+        // Each model type has its own CreateDefault&lt;ModelType&gt;Layers method
+        Layers.AddRange(LayerHelper&lt;T&gt;.CreateDefaultFeedForwardLayers(Architecture));
+    }
+}
+</code></pre>
+<h4 id="layerhelper-factory-methods">LayerHelper Factory Methods</h4>
+<p>The <code>LayerHelper&lt;T&gt;</code> class is a static factory that creates industry-standard layer configurations:</p>
+<pre><code class="lang-csharp">// Located at: src/Helpers/LayerHelper.cs
+public static class LayerHelper&lt;T&gt;
+{
+    private static readonly INumericOperations&lt;T&gt; NumOps = MathHelper.GetNumericOperations&lt;T&gt;();
+
+    // Feed-forward networks
+    public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultLayers(
+        NeuralNetworkArchitecture&lt;T&gt; architecture,
+        int hiddenLayerCount = 1,
+        int hiddenLayerSize = 64,
+        int outputSize = 1);
+
+    // Alias for CreateDefaultLayers (feed-forward)
+    public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultFeedForwardLayers(
+        NeuralNetworkArchitecture&lt;T&gt; architecture) =&gt;
+        CreateDefaultLayers(architecture);
+
+    // Convolutional Neural Networks
+    public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultCNNLayers(
+        NeuralNetworkArchitecture&lt;T&gt; architecture,
+        int convLayerCount = 2,
+        int filterCount = 32,
+        int kernelSize = 3,
+        int denseLayerCount = 1,
+        int denseLayerSize = 64,
+        int outputSize = 1);
+
+    // ResNet architectures
+    public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultResNetLayers(
+        NeuralNetworkArchitecture&lt;T&gt; architecture,
+        int blockCount = 3,
+        int blockSize = 2);
+
+    // LSTM-based temporal networks
+    public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultOccupancyTemporalLayers(
+        NeuralNetworkArchitecture&lt;T&gt; architecture,
+        int historyWindowSize);
+
+    // Deep Boltzmann Machines
+    public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultDeepBoltzmannMachineLayers(
+        NeuralNetworkArchitecture&lt;T&gt; architecture);
+
+    // Attention-based (Transformer) networks
+    public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultAttentionLayers(
+        NeuralNetworkArchitecture&lt;T&gt; architecture);
+}
+</code></pre>
+<h4 id="naming-convention-for-layerhelper-methods">Naming Convention for LayerHelper Methods</h4>
+<p>When adding a new model type, add a corresponding method to <code>LayerHelper&lt;T&gt;</code>:</p>
+<pre><code>CreateDefault&lt;ModelName&gt;Layers(NeuralNetworkArchitecture&lt;T&gt; architecture, [optional params])
+</code></pre>
+<p>Examples:</p>
+<ul>
+<li><code>CreateDefaultFeedForwardLayers</code> → FeedForwardNeuralNetwork</li>
+<li><code>CreateDefaultCNNLayers</code> → ConvolutionalNeuralNetwork</li>
+<li><code>CreateDefaultResNetLayers</code> → ResNetNeuralNetwork</li>
+<li><code>CreateDefaultTransformerLayers</code> → TransformerNeuralNetwork</li>
+<li><code>CreateDefaultDiffusionLayers</code> → DiffusionNeuralNetwork (future)</li>
+</ul>
+<h4 id="industry-standard-defaults">Industry-Standard Defaults</h4>
+<p>Each LayerHelper method should use industry-standard defaults:</p>
+<table>
+<thead>
+<tr>
+<th>Model Type</th>
+<th>Default Activations</th>
+<th>Default Sizes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Feed-Forward</td>
+<td>ReLU (hidden), Softmax (output)</td>
+<td>64 neurons per hidden layer</td>
+</tr>
+<tr>
+<td>CNN</td>
+<td>ReLU + MaxPool</td>
+<td>32 filters, 3x3 kernel</td>
+</tr>
+<tr>
+<td>ResNet</td>
+<td>ReLU + BatchNorm</td>
+<td>64 initial channels</td>
+</tr>
+<tr>
+<td>LSTM/Temporal</td>
+<td>Tanh + Sigmoid (recurrent)</td>
+<td>64-32 hidden sizes</td>
+</tr>
+<tr>
+<td>Attention</td>
+<td>ReLU</td>
+<td>4-8 heads</td>
+</tr>
+</tbody>
+</table>
+<h4 id="complete-example-feedforwardneuralnetwork">Complete Example: FeedForwardNeuralNetwork</h4>
+<pre><code class="lang-csharp">public class FeedForwardNeuralNetwork&lt;T&gt; : NeuralNetworkBase&lt;T&gt;
+{
+    public FeedForwardNeuralNetwork(
+        NeuralNetworkArchitecture&lt;T&gt; architecture,
+        IGradientBasedOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;? optimizer = null,
+        ILossFunction&lt;T&gt;? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture,
+               lossFunction ?? NeuralNetworkHelper&lt;T&gt;.GetDefaultLossFunction(architecture.TaskType),
+               maxGradNorm)
+    {
+        _optimizer = optimizer ?? new AdamOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(this);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper&lt;T&gt;.GetDefaultLossFunction(architecture.TaskType);
+
+        // CRITICAL: Always call InitializeLayers() at end of constructor
+        InitializeLayers();
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null &amp;&amp; Architecture.Layers.Count &gt; 0)
+        {
+            // User provided custom layers - use them
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            // No layers provided - use LayerHelper for defaults
+            Layers.AddRange(LayerHelper&lt;T&gt;.CreateDefaultFeedForwardLayers(Architecture));
+        }
+    }
+}
+</code></pre>
+<h3 id="required-override-methods-neural-network">Required Override Methods (Neural Network)</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Gets whether this network supports training.
+/// &lt;/summary&gt;
+public override bool SupportsTraining =&gt; true;
+
+/// &lt;summary&gt;
+/// Initializes the layers of the neural network based on the architecture.
+/// &lt;/summary&gt;
+protected override void InitializeLayers()
+{
+    if (Architecture.Layers != null &amp;&amp; Architecture.Layers.Count &gt; 0)
+    {
+        // Use user-provided layers
+        Layers.AddRange(Architecture.Layers);
+        ValidateCustomLayers(Layers);
+    }
+    else
+    {
+        // Use default layer configuration
+        Layers.AddRange(LayerHelper&lt;T&gt;.CreateDefaultFeedForwardLayers(Architecture));
+    }
+}
+
+/// &lt;summary&gt;
+/// Makes a prediction using the neural network.
+/// &lt;/summary&gt;
+public override Tensor&lt;T&gt; Predict(Tensor&lt;T&gt; input)
+{
+    IsTrainingMode = false;
+    TensorValidator.ValidateShape(input, Architecture.GetInputShape(), nameof(ExampleNeuralNetwork&lt;T&gt;), &quot;prediction&quot;);
+
+    var predictions = Forward(input);
+
+    IsTrainingMode = true;
+    return predictions;
+}
+
+/// &lt;summary&gt;
+/// Performs a forward pass through the network.
+/// &lt;/summary&gt;
+public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)
+{
+    TensorValidator.ValidateShape(input, Architecture.GetInputShape(), nameof(ExampleNeuralNetwork&lt;T&gt;), &quot;forward pass&quot;);
+
+    Tensor&lt;T&gt; output = input;
+    foreach (var layer in Layers)
+    {
+        output = layer.Forward(output);
+    }
+    return output;
+}
+
+/// &lt;summary&gt;
+/// Performs a backward pass through the network.
+/// &lt;/summary&gt;
+public Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)
+{
+    Tensor&lt;T&gt; gradient = outputGradient;
+    for (int i = Layers.Count - 1; i &gt;= 0; i--)
+    {
+        gradient = Layers[i].Backward(gradient);
+    }
+    return gradient;
+}
+
+/// &lt;summary&gt;
+/// Trains the neural network using the provided input and expected output.
+/// &lt;/summary&gt;
+public override void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)
+{
+    IsTrainingMode = true;
+
+    // Forward pass
+    var prediction = Forward(input);
+
+    // Calculate loss (including auxiliary losses from layers)
+    var primaryLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+    T auxiliaryLoss = NumOps.Zero;
+    foreach (var auxLayer in Layers.OfType&lt;IAuxiliaryLossLayer&lt;T&gt;&gt;().Where(l =&gt; l.UseAuxiliaryLoss))
+    {
+        var weightedAuxLoss = NumOps.Multiply(auxLayer.ComputeAuxiliaryLoss(), auxLayer.AuxiliaryLossWeight);
+        auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
+    }
+    LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
+
+    // Calculate gradient and backpropagate
+    var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+    Backward(Tensor&lt;T&gt;.FromVector(outputGradient));
+
+    // Update parameters
+    _optimizer.UpdateParameters(Layers);
+
+    IsTrainingMode = false;
+}
+
+/// &lt;summary&gt;
+/// Retrieves metadata about the neural network model.
+/// &lt;/summary&gt;
+public override ModelMetadata&lt;T&gt; GetModelMetadata()
+{
+    return new ModelMetadata&lt;T&gt;
+    {
+        ModelType = ModelType.FeedForwardNetwork,
+        AdditionalInfo = new Dictionary&lt;string, object&gt;
+        {
+            { &quot;InputShape&quot;, Architecture.GetInputShape() },
+            { &quot;OutputShape&quot;, Architecture.GetOutputShape() },
+            { &quot;LayerCount&quot;, Layers.Count },
+            { &quot;LayerTypes&quot;, Layers.Select(l =&gt; l.GetType().Name).ToArray() },
+            { &quot;TaskType&quot;, Architecture.TaskType.ToString() },
+            { &quot;ParameterCount&quot;, GetParameterCount() }
+        },
+        ModelData = this.Serialize()
+    };
+}
+
+/// &lt;summary&gt;
+/// Creates a new instance with the same configuration.
+/// &lt;/summary&gt;
+protected override IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; CreateNewInstance()
+{
+    return new ExampleNeuralNetwork&lt;T&gt;(
+        Architecture,
+        _optimizer,
+        _lossFunction,
+        Convert.ToDouble(MaxGradNorm));
+}
+</code></pre>
+<h3 id="serialization-neural-network">Serialization (Neural Network)</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Serializes network-specific data to a binary writer.
+/// &lt;/summary&gt;
+protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+{
+    writer.Write(_optimizer.GetType().FullName ?? &quot;AdamOptimizer&quot;);
+    writer.Write(_lossFunction.GetType().FullName ?? &quot;MeanSquaredErrorLoss&quot;);
+}
+
+/// &lt;summary&gt;
+/// Deserializes network-specific data from a binary reader.
+/// &lt;/summary&gt;
+protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+{
+    string optimizerType = reader.ReadString();
+    string lossFunctionType = reader.ReadString();
+    // Reconstruct optimizer and loss function from types if needed
+}
+</code></pre>
+<hr>
+<h3 id="standalone-model-pattern-for-non-layer-based-models">Standalone Model Pattern (For Non-Layer-Based Models)</h3>
+<p>For models that don't use the layer architecture (like diffusion base classes):</p>
+<pre><code class="lang-csharp">namespace AiDotNet.Diffusion;
+
+/// &lt;summary&gt;
+/// Brief description of the model.
+/// &lt;/summary&gt;
+/// &lt;typeparam name=&quot;T&quot;&gt;The numeric type used for calculations.&lt;/typeparam&gt;
+public abstract class ExampleModelBase&lt;T&gt; : IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;
+{
+    protected static readonly INumericOperations&lt;T&gt; NumOps = MathHelper.GetNumericOperations&lt;T&gt;();
+    protected Random RandomGenerator;
+    protected readonly ILossFunction&lt;T&gt; LossFunction;
+}
+</code></pre>
+<h3 id="ifullmodel-interface-requirements-standalone">IFullModel Interface Requirements (Standalone)</h3>
+<pre><code class="lang-csharp">// IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;
+public virtual void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput);
+public virtual Tensor&lt;T&gt; Predict(Tensor&lt;T&gt; input);
+public virtual ModelMetadata&lt;T&gt; GetModelMetadata();
+
+// IModelSerializer
+public virtual byte[] Serialize();
+public virtual void Deserialize(byte[] data);
+public virtual void SaveModel(string filePath);
+public virtual void LoadModel(string filePath);
+
+// ICheckpointableModel
+public virtual void SaveState(Stream stream);
+public virtual void LoadState(Stream stream);
+
+// IParameterizable&lt;T, TInput, TOutput&gt;
+public abstract Vector&lt;T&gt; GetParameters();
+public abstract void SetParameters(Vector&lt;T&gt; parameters);
+public virtual IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; WithParameters(Vector&lt;T&gt; parameters);
+
+// IFeatureAware
+public virtual IEnumerable&lt;int&gt; GetActiveFeatureIndices();
+public virtual void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices);
+public virtual bool IsFeatureUsed(int featureIndex);
+
+// IFeatureImportance&lt;T&gt;
+public virtual Dictionary&lt;string, T&gt; GetFeatureImportance();
+
+// ICloneable&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;
+public abstract IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; DeepCopy();
+
+// IGradientComputable&lt;T, TInput, TOutput&gt;
+public virtual Vector&lt;T&gt; ComputeGradients(Tensor&lt;T&gt; input, Tensor&lt;T&gt; target, ILossFunction&lt;T&gt;? lossFunction = null);
+public virtual void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate);
+
+// IJitCompilable&lt;T&gt;
+public virtual bool SupportsJitCompilation =&gt; false;
+public virtual ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes);
+
+// IFullModel&lt;T, TInput, TOutput&gt;
+public ILossFunction&lt;T&gt; DefaultLossFunction =&gt; LossFunction;
+</code></pre>
+<hr>
+<h2 id="common-conventions">Common Conventions</h2>
+<h3 id="numeric-operations">Numeric Operations</h3>
+<pre><code class="lang-csharp">// ALWAYS use NumOps for type T operations
+protected static readonly INumericOperations&lt;T&gt; NumOps = MathHelper.GetNumericOperations&lt;T&gt;();
+
+// Convert literals to T
+T one = NumOps.One;
+T zero = NumOps.Zero;
+T value = NumOps.FromDouble(0.5);
+
+// Arithmetic operations
+T result = NumOps.Add(a, b);
+T product = NumOps.Multiply(a, b);
+T quotient = NumOps.Divide(a, b);
+T difference = NumOps.Subtract(a, b);
+T sqrtVal = NumOps.Sqrt(x);
+
+// Convert back to double
+double d = NumOps.ToDouble(value);
+</code></pre>
+<h3 id="random-number-generation">Random Number Generation</h3>
+<pre><code class="lang-csharp">// NEVER use new Random() or new Random(seed) directly
+// ALWAYS use RandomHelper
+
+// For reproducible results with a seed
+var rng = seed.HasValue
+    ? RandomHelper.CreateSeededRandom(seed.Value)
+    : RandomHelper.CreateSecureRandom();
+
+// For thread-safe random access
+protected static Random Random =&gt; RandomHelper.ThreadSafeRandom;
+</code></pre>
+<h3 id="tensor-operations">Tensor Operations</h3>
+<pre><code class="lang-csharp">// Read-only span access
+var readSpan = tensor.AsSpan();
+
+// Writable span access
+var writeSpan = tensor.AsWritableSpan();
+
+// NEVER use AsReadOnlySpan() - it doesn't exist!
+</code></pre>
+<h3 id="nullable-parameters-with-defaults">Nullable Parameters with Defaults</h3>
+<pre><code class="lang-csharp">// Constructor with nullable optional parameters
+public ExampleLayer(
+    int requiredParam,
+    IActivationFunction&lt;T&gt;? activation = null,
+    int? seed = null)
+{
+    // Apply defaults in constructor body
+    _activation = activation ?? new ReLUActivation&lt;T&gt;();
+    _random = seed.HasValue
+        ? RandomHelper.CreateSeededRandom(seed.Value)
+        : RandomHelper.CreateSecureRandom();
+}
+</code></pre>
+<h3 id="property-initialization">Property Initialization</h3>
+<pre><code class="lang-csharp">// Use NumOps.FromDouble for generic type property defaults
+public T SomeWeight { get; set; }
+
+// In constructor:
+SomeWeight = NumOps.FromDouble(0.01);
+
+// NEVER use: SomeWeight = default!; (null-forgiving operator)
+</code></pre>
+<hr>
+<h2 id="documentation-standards">Documentation Standards</h2>
+<h3 id="xml-documentation-template">XML Documentation Template</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// One-line description of what this member does.
+/// &lt;/summary&gt;
+/// &lt;remarks&gt;
+/// &lt;para&gt;
+/// Detailed technical explanation of how it works.
+/// Include mathematical formulas where appropriate.
+/// &lt;/para&gt;
+/// &lt;para&gt;
+/// &lt;b&gt;For Beginners:&lt;/b&gt; Simple explanation using analogies.
+/// - Bullet points for key concepts
+/// - Real-world examples
+/// - What this means in practice
+/// &lt;/para&gt;
+/// &lt;/remarks&gt;
+/// &lt;param name=&quot;paramName&quot;&gt;Description of the parameter.&lt;/param&gt;
+/// &lt;returns&gt;Description of the return value.&lt;/returns&gt;
+/// &lt;exception cref=&quot;ArgumentException&quot;&gt;When this exception is thrown.&lt;/exception&gt;
+</code></pre>
+<h3 id="for-beginners-section-guidelines">&quot;For Beginners&quot; Section Guidelines</h3>
+<ol>
+<li>Use simple analogies</li>
+<li>Avoid jargon</li>
+<li>Explain why, not just what</li>
+<li>Include examples of real-world use cases</li>
+<li>Keep it concise but informative</li>
+</ol>
+<hr>
+<h2 id="interface-implementation-checklist">Interface Implementation Checklist</h2>
+<h3 id="for-layers-layerbase">For Layers (LayerBase<t>)</t></h3>
+<ul>
+<li>[ ] Extends <code>LayerBase&lt;T&gt;</code></li>
+<li>[ ] Has underscore-prefixed private fields</li>
+<li>[ ] Uses <code>NumOps</code> for all numeric operations</li>
+<li>[ ] Uses <code>RandomHelper</code> for random number generation</li>
+<li>[ ] Implements <code>SupportsTraining</code> property</li>
+<li>[ ] Implements <code>SupportsJitCompilation</code> property</li>
+<li>[ ] Implements <code>Forward(Tensor&lt;T&gt;)</code></li>
+<li>[ ] Implements <code>Backward(Tensor&lt;T&gt;)</code></li>
+<li>[ ] Implements <code>UpdateParameters(T)</code></li>
+<li>[ ] Implements <code>GetParameters()</code></li>
+<li>[ ] Implements <code>SetParameters(Vector&lt;T&gt;)</code></li>
+<li>[ ] Implements <code>ResetState()</code></li>
+<li>[ ] Implements <code>ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</code></li>
+<li>[ ] Overrides <code>Serialize(BinaryWriter)</code> if additional state</li>
+<li>[ ] Overrides <code>Deserialize(BinaryReader)</code> if additional state</li>
+<li>[ ] Has comprehensive XML documentation with &quot;For Beginners&quot; sections</li>
+</ul>
+<h3 id="for-neural-network-models-neuralnetworkbase">For Neural Network Models (NeuralNetworkBase<t>)</t></h3>
+<ul>
+<li>[ ] Extends <code>NeuralNetworkBase&lt;T&gt;</code></li>
+<li>[ ] Has <code>private ILossFunction&lt;T&gt; _lossFunction</code></li>
+<li>[ ] Has <code>private IGradientBasedOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; _optimizer</code></li>
+<li>[ ] Constructor accepts <code>NeuralNetworkArchitecture&lt;T&gt;</code> as first parameter</li>
+<li>[ ] Constructor has nullable <code>optimizer</code> and <code>lossFunction</code> parameters with defaults</li>
+<li>[ ] Calls <code>InitializeLayers()</code> at end of constructor</li>
+<li>[ ] Overrides <code>SupportsTraining</code> property</li>
+<li>[ ] Overrides <code>InitializeLayers()</code> method</li>
+<li>[ ] <strong>InitializeLayers() uses dual approach:</strong>
+<ul>
+<li>[ ] Checks <code>Architecture.Layers != null &amp;&amp; Architecture.Layers.Count &gt; 0</code></li>
+<li>[ ] If user provided layers: Uses <code>Layers.AddRange(Architecture.Layers)</code> and <code>ValidateCustomLayers(Layers)</code></li>
+<li>[ ] If no layers provided: Uses <code>LayerHelper&lt;T&gt;.CreateDefault&lt;ModelType&gt;Layers(Architecture)</code></li>
+</ul>
+</li>
+<li>[ ] <strong>Has corresponding LayerHelper method</strong> (e.g., <code>CreateDefaultMyModelLayers</code>)</li>
+<li>[ ] Overrides <code>Predict(Tensor&lt;T&gt;)</code> method</li>
+<li>[ ] Implements <code>Forward(Tensor&lt;T&gt;)</code> method</li>
+<li>[ ] Implements <code>Backward(Tensor&lt;T&gt;)</code> method</li>
+<li>[ ] Overrides <code>Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</code> method</li>
+<li>[ ] Overrides <code>GetModelMetadata()</code> method</li>
+<li>[ ] Overrides <code>CreateNewInstance()</code> method</li>
+<li>[ ] Overrides <code>SerializeNetworkSpecificData(BinaryWriter)</code> method</li>
+<li>[ ] Overrides <code>DeserializeNetworkSpecificData(BinaryReader)</code> method</li>
+<li>[ ] Uses <code>NumOps</code> for all numeric operations</li>
+<li>[ ] Uses <code>RandomHelper.ThreadSafeRandom</code> for random numbers (via base class)</li>
+<li>[ ] Has comprehensive XML documentation with &quot;For Beginners&quot; sections</li>
+</ul>
+<h3 id="for-standalone-models-ifullmodelt-tinput-toutput">For Standalone Models (IFullModel&lt;T, TInput, TOutput&gt;)</h3>
+<ul>
+<li>[ ] Implements <code>IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</code></li>
+<li>[ ] Has <code>protected static readonly INumericOperations&lt;T&gt; NumOps</code></li>
+<li>[ ] Has <code>protected Random RandomGenerator</code></li>
+<li>[ ] Has <code>protected readonly ILossFunction&lt;T&gt; LossFunction</code></li>
+<li>[ ] Implements <code>DefaultLossFunction</code> property</li>
+<li>[ ] Implements all interface methods (see Standalone Model Pattern section)</li>
+<li>[ ] Uses <code>NumOps</code> for all numeric operations</li>
+<li>[ ] Uses <code>RandomHelper</code> for random number generation</li>
+<li>[ ] Has comprehensive XML documentation with &quot;For Beginners&quot; sections</li>
+</ul>
+<hr>
+<h2 id="examples">Examples</h2>
+<h3 id="reference-layer-convolutionallayer">Reference Layer: ConvolutionalLayer</h3>
+<p>Located at: <code>src/NeuralNetworks/Layers/ConvolutionalLayer.cs</code></p>
+<p>Key patterns demonstrated:</p>
+<ul>
+<li>Constructor with nullable activation parameter</li>
+<li>Static <code>Configure</code> factory methods</li>
+<li>Proper weight initialization using <code>RandomHelper</code></li>
+<li>Forward/Backward pass caching (<code>_lastInput</code>, <code>_lastOutput</code>)</li>
+<li>Gradient storage (<code>_kernelsGradient</code>, <code>_biasesGradient</code>)</li>
+<li>Serialization/Deserialization with <code>NumOps.ToDouble</code>/<code>FromDouble</code></li>
+<li>JIT compilation support via <code>ExportComputationGraph</code></li>
+</ul>
+<h3 id="reference-layer-timeembeddinglayer">Reference Layer: TimeEmbeddingLayer</h3>
+<p>Located at: <code>src/NeuralNetworks/Layers/TimeEmbeddingLayer.cs</code></p>
+<p>Key patterns demonstrated:</p>
+<ul>
+<li>Diffusion-specific layer for timestep conditioning</li>
+<li>Two-layer MLP projection with SiLU activation</li>
+<li>Sinusoidal embedding computation</li>
+<li>Uses <code>RandomHelper.CreateSeededRandom()</code> for reproducibility</li>
+<li>Complete forward/backward implementation</li>
+</ul>
+<h3 id="reference-neural-network-model-feedforwardneuralnetwork">Reference Neural Network Model: FeedForwardNeuralNetwork</h3>
+<p>Located at: <code>src/NeuralNetworks/FeedForwardNeuralNetwork.cs</code></p>
+<p>Key patterns demonstrated:</p>
+<ul>
+<li>Extends <code>NeuralNetworkBase&lt;T&gt;</code> (THE GOLDEN STANDARD)</li>
+<li>Constructor with nullable optimizer and loss function</li>
+<li>Proper layer initialization from architecture using dual approach</li>
+<li>Forward/Backward pass implementation</li>
+<li>Training loop with auxiliary loss support</li>
+<li>Model metadata generation</li>
+<li>Network-specific serialization</li>
+</ul>
+<h3 id="reference-helper-layerhelper">Reference Helper: LayerHelper</h3>
+<p>Located at: <code>src/Helpers/LayerHelper.cs</code></p>
+<p>Key patterns demonstrated:</p>
+<ul>
+<li>Static factory class for creating default layer configurations</li>
+<li>Uses <code>IEnumerable&lt;ILayer&lt;T&gt;&gt;</code> with <code>yield return</code> for lazy evaluation</li>
+<li>Takes <code>NeuralNetworkArchitecture&lt;T&gt;</code> as first parameter</li>
+<li>Industry-standard defaults for each model type:
+<ul>
+<li><code>CreateDefaultLayers</code> / <code>CreateDefaultFeedForwardLayers</code> - Feed-forward networks</li>
+<li><code>CreateDefaultCNNLayers</code> - Convolutional Neural Networks</li>
+<li><code>CreateDefaultResNetLayers</code> - Residual Networks</li>
+<li><code>CreateDefaultOccupancyTemporalLayers</code> - LSTM-based temporal networks</li>
+<li><code>CreateDefaultDeepBoltzmannMachineLayers</code> - DBMs</li>
+<li><code>CreateDefaultAttentionLayers</code> - Transformer-style networks</li>
+</ul>
+</li>
+<li>ValidateLayerParameters helper for input validation</li>
+</ul>
+<h3 id="reference-base-class-noisepredictorbase">Reference Base Class: NoisePredictorBase</h3>
+<p>Located at: <code>src/Diffusion/NoisePredictors/NoisePredictorBase.cs</code></p>
+<p>Key patterns demonstrated:</p>
+<ul>
+<li>IFullModel implementation (standalone pattern)</li>
+<li>INoisePredictor interface for diffusion models</li>
+<li>Timestep embedding computation</li>
+<li>Numerical gradient computation</li>
+<li>Stream-based serialization</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GOLDEN_STANDARD_PATTERNS.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SoundLocalizer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SoundLocalizer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Sound source localization using microphone arrays.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Audio_Localization_SoundLocalizer_1.md&amp;value=---%0Auid%3A%20AiDotNet.Audio.Localization.SoundLocalizer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1">
+
+
+
+  <h1 id="AiDotNet_Audio_Localization_SoundLocalizer_1" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1" class="text-break">
+Class SoundLocalizer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Audio.html">Audio</a>.<a class="xref" href="AiDotNet.Audio.Localization.html">Localization</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Sound source localization using microphone arrays.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SoundLocalizer&lt;T&gt; : IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SoundLocalizer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Audio_Localization_SoundLocalizer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Estimates the direction of arrival (DOA) of sound sources using multiple microphones.
+Supports various algorithms: GCC-PHAT, MUSIC, SRP-PHAT.
+</p>
+<p><b>For Beginners:</b> Sound localization finds where sounds come from:
+<ul><li>Uses 2+ microphones to detect time differences in sound arrival</li><li>Calculates direction (azimuth/elevation) or 3D position of sound sources</li><li>Works like how human ears localize sounds</li></ul>
+<p>Usage:</p>
+<pre><code class="lang-csharp">// Define microphone array geometry (2 mics, 10cm apart)
+var micPositions = new double[,] { { -0.05, 0, 0 }, { 0.05, 0, 0 } };
+var localizer = new SoundLocalizer&lt;float&gt;(micPositions);
+
+// Audio from each microphone
+var audioChannels = new[] { LoadAudio("mic1.wav"), LoadAudio("mic2.wav") };
+var result = localizer.Localize(audioChannels);
+
+Console.WriteLine($"Sound from {result.AzimuthDegrees:F1} degrees");</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1__ctor_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1__ctor_System_Double_0__0___AiDotNet_Audio_Localization_SoundLocalizerOptions_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.#ctor(System.Double[0:,0:],AiDotNet.Audio.Localization.SoundLocalizerOptions)">
+  SoundLocalizer(double[,], SoundLocalizerOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new SoundLocalizer with specified microphone positions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SoundLocalizer(double[,] microphonePositions, SoundLocalizerOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>microphonePositions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[,]</dt>
+    <dd><p>Microphone positions as [numMics, 3] array (x, y, z in meters).</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Audio.Localization.SoundLocalizerOptions.html">SoundLocalizerOptions</a></dt>
+    <dd><p>Localization options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_MicrophonePositions_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.MicrophonePositions*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_MicrophonePositions" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.MicrophonePositions">
+  MicrophonePositions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the microphone positions (meters).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[,] MicrophonePositions { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[,]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_NumMicrophones_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.NumMicrophones*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_NumMicrophones" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.NumMicrophones">
+  NumMicrophones
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of microphones in the array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMicrophones { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_CreateCircularArray_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.CreateCircularArray*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_CreateCircularArray_System_Int32_System_Double_AiDotNet_Audio_Localization_SoundLocalizerOptions_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.CreateCircularArray(System.Int32,System.Double,AiDotNet.Audio.Localization.SoundLocalizerOptions)">
+  CreateCircularArray(int, double, SoundLocalizerOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a SoundLocalizer for a circular microphone array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static SoundLocalizer&lt;T&gt; CreateCircularArray(int numMicrophones, double radius, SoundLocalizerOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numMicrophones</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of microphones.</p>
+</dd>
+    <dt><code>radius</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Radius of the circle in meters.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Audio.Localization.SoundLocalizerOptions.html">SoundLocalizerOptions</a></dt>
+    <dd><p>Localization options.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Audio.Localization.SoundLocalizer-1.html">SoundLocalizer</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_CreateLinearArray_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.CreateLinearArray*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_CreateLinearArray_System_Int32_System_Double_AiDotNet_Audio_Localization_SoundLocalizerOptions_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.CreateLinearArray(System.Int32,System.Double,AiDotNet.Audio.Localization.SoundLocalizerOptions)">
+  CreateLinearArray(int, double, SoundLocalizerOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a SoundLocalizer for a linear microphone array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static SoundLocalizer&lt;T&gt; CreateLinearArray(int numMicrophones, double spacing, SoundLocalizerOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numMicrophones</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of microphones.</p>
+</dd>
+    <dt><code>spacing</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Spacing between microphones in meters.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Audio.Localization.SoundLocalizerOptions.html">SoundLocalizerOptions</a></dt>
+    <dd><p>Localization options.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Audio.Localization.SoundLocalizer-1.html">SoundLocalizer</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_Dispose_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_Dispose" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L586"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_Dispose_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_Dispose_System_Boolean_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.Dispose(System.Boolean)">
+  Dispose(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L592"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void Dispose(bool disposing)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>disposing</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_EstimateTdoa_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.EstimateTdoa*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_EstimateTdoa_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.EstimateTdoa(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  EstimateTdoa(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates time difference of arrival (TDOA) between two channels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EstimateTdoa(Tensor&lt;T&gt; channel1, Tensor&lt;T&gt; channel2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>channel1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>channel2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_Localize_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.Localize*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_Localize_AiDotNet_Tensors_LinearAlgebra_Tensor__0____" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.Localize(AiDotNet.Tensors.LinearAlgebra.Tensor{`0}[])">
+  Localize(Tensor&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Localizes sound sources from multi-channel audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LocalizationResult Localize(Tensor&lt;T&gt;[] audioChannels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audioChannels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd><p>Audio from each microphone.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Audio.Localization.LocalizationResult.html">LocalizationResult</a></dt>
+    <dd><p>Localization result with estimated direction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Localization_SoundLocalizer_1_LocalizeAsync_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.LocalizeAsync*"></a>
+
+  <h3 id="AiDotNet_Audio_Localization_SoundLocalizer_1_LocalizeAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0____System_Threading_CancellationToken_" data-uid="AiDotNet.Audio.Localization.SoundLocalizer`1.LocalizeAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0}[],System.Threading.CancellationToken)">
+  LocalizeAsync(Tensor&lt;T&gt;[], CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Localizes sound sources asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;LocalizationResult&gt; LocalizeAsync(Tensor&lt;T&gt;[] audioChannels, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audioChannels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Audio.Localization.LocalizationResult.html">LocalizationResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Localization/SoundLocalizer.cs/#L41" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

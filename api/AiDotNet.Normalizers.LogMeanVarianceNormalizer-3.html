@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LogMeanVarianceNormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LogMeanVarianceNormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Normalizes data by taking the logarithm and then applying mean-variance normalization.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Normalizers_LogMeanVarianceNormalizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.Normalizers.LogMeanVarianceNormalizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3">
+
+
+
+  <h1 id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3" class="text-break">
+Class LogMeanVarianceNormalizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LogMeanVarianceNormalizer.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Normalizers.html">Normalizers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Normalizes data by taking the logarithm and then applying mean-variance normalization.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LogMeanVarianceNormalizer&lt;T, TInput, TOutput&gt; : NormalizerBase&lt;T, TInput, TOutput&gt;, INormalizer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data structure.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data structure.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html">NormalizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">LogMeanVarianceNormalizer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INormalizer-3.html">INormalizer</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NumOps">NormalizerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Engine">NormalizerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NormalizeOutput__2_">NormalizerBase&lt;T, TInput, TOutput&gt;.NormalizeOutput(TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NormalizeInput__1_">NormalizerBase&lt;T, TInput, TOutput&gt;.NormalizeInput(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TOutput, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The LogMeanVarianceNormalizer combines logarithmic transformation with standardization to handle data that
+spans multiple orders of magnitude or has a skewed distribution. It first applies a logarithm transformation
+to compress the range of values, then centers and scales the transformed data based on the mean and
+standard deviation.
+</p>
+<p>
+The transformation occurs in several steps:
+1. Shift values to ensure all are positive (if needed)
+2. Apply a logarithm transformation
+3. Compute the mean and standard deviation of the log-transformed data
+4. Standardize the log-transformed data by subtracting the mean and dividing by the standard deviation
+</p>
+<p>
+This normalization method is particularly useful for:
+- Data with exponential growth or decay
+- Values that span several orders of magnitude
+- Financial data, population growth, or other naturally log-distributed phenomena
+- Dealing with data that has positive skew
+</p>
+<p><b>For Beginners:</b> Log-mean-variance normalization is like a zoom lens that works better for exponential data.
+<p>Think of this as a special way to normalize data when values are extremely spread out:</p>
+<ul>
+<li>Regular data normalization works well when values are somewhat evenly spread</li>
+<li>But when some values are MUCH larger than others (like 1, 10, 100, 1000), regular normalization can lose information</li>
+<li>This method first uses logarithms to &quot;compress&quot; these wide-ranging values</li>
+<li>Then it applies standard normalization techniques to the compressed data</li>
+</ul>
+<p>For example, with population data of cities:</p>
+<ul>
+<li>Original populations: [5,000, 50,000, 500,000, 5,000,000]</li>
+<li>After taking logarithms: [3.7, 4.7, 5.7, 6.7] (log10 values)</li>
+<li>After standardization: [-1.5, -0.5, 0.5, 1.5]</li>
+</ul>
+<p>This is particularly useful for data where ratios (like &quot;10 times bigger&quot;) are more meaningful
+than absolute differences (like &quot;9,000 more units&quot;).</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3__ctor_" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3__ctor" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.#ctor">
+  LogMeanVarianceNormalizer()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LogMeanVarianceNormalizer.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Normalizers.LogMeanVarianceNormalizer-3.html">LogMeanVarianceNormalizer&lt;T, TInput, TOutput&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LogMeanVarianceNormalizer()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new LogMeanVarianceNormalizer and initializes the numeric operations
+provider for the specified type T, either using the provided one or creating a default.
+It also initializes the epsilon value used to prevent issues with logarithms of very small numbers.
+</p>
+<p><b>For Beginners:</b> This sets up your logarithmic normalization system.
+<p>When you create a new LogMeanVarianceNormalizer:</p>
+<ul>
+<li>It prepares the mathematical tools needed for the normalization</li>
+<li>It sets up a tiny safety value (epsilon) to prevent mathematical errors</li>
+<li>You can optionally provide your own calculator (numOps), or it will use a default one</li>
+</ul>
+<p>It's like preparing a special camera with logarithmic zoom before taking pictures of objects
+that range from microscopic to gigantic in size.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.Denormalize(`1,`2,`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LogMeanVarianceNormalizer.cs/#L489"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the denormalized Y-intercept (constant term) for a linear model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xMatrix</code> <span class="xref">TInput</span></dt>
+    <dd><p>The original input feature matrix.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The original target vector.</p>
+</dd>
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The model coefficients.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters for the input features.</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters for the output variable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The denormalized Y-intercept for use with non-normalized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the appropriate y-intercept for a model trained on normalized data
+but applied to log-transformed (but not standardized) original data. The calculation accounts
+for the shifts in both the input features and the output variable that occurred during normalization.
+<p>Like with coefficient denormalization, this y-intercept should be used with log-transformed inputs,
+not with the raw original data, due to the non-linear nature of the logarithm transformation.</p>
+
+<p><b>For Beginners:</b> This method determines the correct starting point for predictions with log-transformed data.
+<p>In a prediction model, the y-intercept is the baseline value:</p>
+<ul>
+<li>It's the predicted output when all inputs are zero</li>
+<li>When using logarithmic normalization, this baseline needs special handling</li>
+</ul>
+<p>The calculation is complex because:</p>
+<ul>
+<li>The logarithmic transformation is non-linear</li>
+<li>Each feature has its own mean and standard deviation in log space</li>
+<li>The output also has its own mean and standard deviation in log space</li>
+</ul>
+<p>The method calculates the correct intercept to use with log-transformed data:</p>
+<ol>
+<li>It accounts for the means of all log-transformed features</li>
+<li>It adjusts for the scaling factors used during normalization</li>
+<li>It applies the exponential function and removes the shift to get back to the original scale</li>
+</ol>
+<p>As with the denormalized coefficients, this intercept is meant to be used in a model that:</p>
+<ul>
+<li>Takes the logarithm of input features</li>
+<li>Applies the denormalized coefficients and intercept</li>
+<li>Exponentiates the result to get predictions in the original scale</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.Denormalize(`2,AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LogMeanVarianceNormalizer.cs/#L339"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reverses the normalization of data using the provided normalization parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Denormalize(TOutput data, NormalizationParameters&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The normalized data to denormalize.</p>
+</dd>
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters containing shift, mean, and standard deviation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>A denormalized data with values converted back to their original scale.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reverses the log-mean-variance normalization by:
+1. Reversing the standardization step by multiplying by the standard deviation and adding the mean
+2. Reversing the logarithm transformation by applying exponentiation
+3. Reversing the initial shift by subtracting the shift value
+<p>This series of steps restores the values to their original scale and distribution.</p>
+
+<p><b>For Beginners:</b> This method converts your normalized values back to their original scale.
+<p>The process reverses all the normalization steps in reverse order:</p>
+<ol>
+<li>First, it multiplies by the standard deviation and adds the mean (undoing the standardization)</li>
+<li>Then, it takes the exponential of each value (undoing the logarithm)</li>
+<li>Finally, it subtracts the shift value that was added initially</li>
+</ol>
+<p>For example, if your normalized data was [-1.5, -0.5, 0.5, 1.5]:</p>
+<ul>
+<li>After undoing standardization: [0.69, 3.0, 5.3, 7.6]</li>
+<li>After taking exponentials: [2, 20, 200, 2000]</li>
+<li>After removing any shift: back to the original values</li>
+</ul>
+<p>This allows you to recover the original data after performing calculations or analysis
+on the normalized values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.Denormalize(`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LogMeanVarianceNormalizer.cs/#L411"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Denormalizes coefficients from a regression model that was trained on log-mean-variance normalized data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Denormalize(TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The regression coefficients to denormalize.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters for the input features.</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters for the output variable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>Denormalized coefficients that can be applied to log-transformed original data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method adjusts regression coefficients to work with log-transformed original data.
+For log-mean-variance normalization, this involves scaling each coefficient by the ratio of
+the output standard deviation to the corresponding input standard deviation.
+<p>Note that these denormalized coefficients should be applied to log-transformed inputs, not to
+the raw original data, due to the non-linear nature of the logarithm transformation.</p>
+
+<p><b>For Beginners:</b> This method adjusts prediction model weights for use with log-transformed original values.
+<p>When you build a model using logarithmically normalized data:</p>
+<ul>
+<li>The model learns weights (coefficients) based on the standardized log values</li>
+<li>To use this model with log-transformed (but not standardized) data, you need to adjust these weights</li>
+</ul>
+<p>This method performs that adjustment by:</p>
+<ul>
+<li>Calculating how much each input feature's log values were scaled</li>
+<li>Calculating how much the output's log values were scaled</li>
+<li>Adjusting each coefficient by the ratio of these scaling factors</li>
+</ul>
+<p>Important: Unlike simpler normalizers, you can't directly use these coefficients with the original raw data.
+Because logarithm transformation is non-linear, you would need to:</p>
+<ol>
+<li>Take the logarithm of your input data</li>
+<li>Apply these denormalized coefficients</li>
+<li>Exponentiate the result to get predictions in the original scale</li>
+</ol>
+<p>This reflects the complexity of working with logarithmic transformations.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_NormalizeInput_" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.NormalizeInput*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_NormalizeInput__1_" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.NormalizeInput(`1)">
+  NormalizeInput(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LogMeanVarianceNormalizer.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes input data using the log-mean-variance approach, applying normalization separately to each column.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (TInput, List&lt;NormalizationParameters&lt;T&gt;&gt;) NormalizeInput(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;)</dt>
+    <dd><p>A tuple containing the normalized data and a list of normalization parameters for each column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_NormalizeInput__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method normalizes each column of the matrix independently using the log-mean-variance approach.
+It treats each column as a separate feature that needs its own shift, mean, and standard deviation,
+since different features may have different distributions and scales.
+</p>
+<p><b>For Beginners:</b> This method applies logarithmic normalization to a table of data, one column at a time.
+<p>When working with a table (matrix) of data:</p>
+<ul>
+<li>Each column might represent a different type of information (population, GDP, area, etc.)</li>
+<li>Each column needs its own normalization because the ranges and distributions differ</li>
+<li>This method processes each column separately using the vector normalization method</li>
+</ul>
+<p>For example, with a table of country statistics:</p>
+<ul>
+<li>Column 1 (population) might range from thousands to billions</li>
+<li>Column 2 (GDP) might range from millions to trillions</li>
+<li>Each column gets its own appropriate logarithmic transformation</li>
+</ul>
+<p>The method returns:</p>
+<ul>
+<li>A new table with all values logarithmically normalized</li>
+<li>The parameters for each column, so you can convert back to original values later if needed</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_NormalizeOutput_" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.NormalizeOutput*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_NormalizeOutput__2_" data-uid="AiDotNet.Normalizers.LogMeanVarianceNormalizer`3.NormalizeOutput(`2)">
+  NormalizeOutput(TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LogMeanVarianceNormalizer.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes output data using the log-mean-variance approach.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (TOutput, NormalizationParameters&lt;T&gt;) NormalizeOutput(TOutput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The input data to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TOutput, <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;)</dt>
+    <dd><p>A tuple containing the normalized data and the normalization parameters, which include the shift, mean, and standard deviation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LogMeanVarianceNormalizer_3_NormalizeOutput__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method normalizes data by:
+1. Shifting values if necessary to ensure all are positive (required for logarithm)
+2. Applying a logarithm transformation to compress the range
+3. Computing the mean and standard deviation of the log-transformed values
+4. Standardizing the log-transformed values using the mean and standard deviation
+<p>The result is a vector where even widely varying values are well-distributed.
+Any potential NaN values (from logarithm issues) are replaced with zeros.</p>
+<p>The normalization parameters include the shift, mean, and standard deviation, which are needed for denormalization.</p>
+
+<p><b>For Beginners:</b> This method transforms your data to highlight patterns in highly varied values.
+<p>The process works like this:</p>
+<ol>
+<li>First, it adjusts your data to make sure all values are positive (required for logarithms)</li>
+<li>Then, it takes the logarithm of each value, which compresses very large differences</li>
+<li>Next, it calculates the average and spread of these logarithmic values</li>
+<li>Finally, it standardizes the values by centering them around zero and scaling by the spread</li>
+<li>Any problem values are cleaned up by replacing them with zeros</li>
+</ol>
+<p>After normalization:</p>
+<ul>
+<li>Values that were extremely spread out are now more evenly distributed</li>
+<li>Patterns and relationships become more visible when plotted or analyzed</li>
+<li>The data is centered around zero with most values falling between -3 and 3</li>
+</ul>
+<p>For example, with exponential data [2, 20, 200, 2000]:</p>
+<ul>
+<li>After logarithmic transformation: [0.69, 3.0, 5.3, 7.6]</li>
+<li>After standardization, something like: [-1.5, -0.5, 0.5, 1.5]</li>
+</ul>
+<p>This transformation preserves the important relationships in highly varied data.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LogMeanVarianceNormalizer.cs/#L47" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

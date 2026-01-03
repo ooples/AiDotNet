@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NadamOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NadamOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Nadam optimizer, which combines Nesterov momentum with Adam&#39;s adaptive learning rates for efficient training of neural networks and other gradient-based models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_NadamOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.NadamOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_NadamOptimizerOptions_3" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3" class="text-break">
+Class NadamOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Nadam optimizer, which combines Nesterov momentum with Adam's
+adaptive learning rates for efficient training of neural networks and other gradient-based models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NadamOptimizerOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">NadamOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Nadam (Nesterov-accelerated Adaptive Moment Estimation) is an optimization algorithm that extends
+Adam by incorporating Nesterov momentum. Like Adam, it maintains adaptive learning rates for each
+parameter based on estimates of first and second moments of the gradients. Additionally, it applies
+the Nesterov acceleration technique, which evaluates the gradient at a "look-ahead" position rather
+than the current position. This combination often leads to faster convergence than standard Adam,
+particularly for problems with complex loss landscapes or sparse gradients.
+</p>
+<p><b>For Beginners:</b> Nadam is an advanced optimization algorithm that helps neural networks
+and other machine learning models learn more efficiently.
+<p>Imagine you're trying to navigate to the lowest point in a hilly landscape while blindfolded:</p>
+<ul>
+<li>Standard gradient descent is like taking steps directly downhill from where you're standing</li>
+<li>Adam adds adaptive step sizes (taking bigger steps in flat areas, smaller steps in steep areas)</li>
+<li>Nadam goes a step further by trying to predict where you'll be after your next step and looking
+at the downhill direction from that predicted position</li>
+</ul>
+<p>This combination of techniques helps the algorithm:</p>
+<ul>
+<li>Learn faster than simpler methods</li>
+<li>Avoid getting stuck in small dips that aren't the true lowest point</li>
+<li>Adapt to different parts of the learning process with appropriate step sizes</li>
+</ul>
+<p>This class lets you fine-tune how Nadam works: how quickly it learns, how much it relies on past
+information, and how it adapts its learning rate during training.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for mini-batch gradient descent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 32.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+before making an update to the model. The default of 32 is a good balance for Nadam.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Beta1_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.Beta1*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Beta1" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.Beta1">
+  Beta1
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the exponential decay rate for the first moment estimates (momentum).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Beta1 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The first moment decay rate, defaulting to 0.9.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Beta1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Beta1 controls the exponential decay rate for the first moment estimates, effectively determining
+how much the algorithm relies on recent versus older gradients when computing momentum. Values closer
+to 1.0 give more weight to past gradients, creating more momentum and smoothing out updates. The value
+of 0.9 means that approximately the last 10 iterations have significant influence on the current update.
+This helps the optimizer navigate through noisy gradients and saddle points more effectively.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm relies on recent
+versus older gradient information when determining the direction to move.
+<p>Imagine you're calculating a running average of recent temperatures:</p>
+<ul>
+<li>Beta1 determines how much weight you give to yesterday's average versus today's temperature</li>
+<li>A higher value (closer to 1) means the average changes more slowly, incorporating more history</li>
+<li>A lower value means the average responds more quickly to recent changes</li>
+</ul>
+<p>The default value of 0.9 means:</p>
+<ul>
+<li>The algorithm keeps about 90% of its previous momentum</li>
+<li>And adds about 10% of the new information in each step</li>
+<li>This creates a smoothing effect that helps ignore small random fluctuations</li>
+</ul>
+<p>You might want to increase this value (like to 0.95) if:</p>
+<ul>
+<li>Your gradients are noisy (inconsistent between batches)</li>
+<li>You want more stable, consistent progress</li>
+</ul>
+<p>You might want to decrease this value (like to 0.8) if:</p>
+<ul>
+<li>You want the algorithm to respond more quickly to recent gradients</li>
+<li>Your loss landscape has sharp turns that require quick adaptation</li>
+</ul>
+<p>This parameter helps balance between making steady progress in a consistent direction and
+being responsive to new information.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Beta2_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.Beta2*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Beta2" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.Beta2">
+  Beta2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the exponential decay rate for the second moment estimates (adaptive learning rates).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Beta2 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The second moment decay rate, defaulting to 0.999.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Beta2_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Beta2 controls the exponential decay rate for the second moment estimates, which track the squared
+magnitudes of recent gradients. These estimates help adapt the learning rate for each parameter based
+on the historical variability of its gradients. Values closer to 1.0 create a longer "memory" of past
+squared gradients. The value of 0.999 means that approximately the last 1000 iterations have significant
+influence on the learning rate adaptation. This allows the algorithm to take smaller steps for parameters
+with historically large or highly variable gradients.
+</p>
+<p><b>For Beginners:</b> This setting controls how the algorithm adapts different learning
+rates for each parameter based on their historical gradient patterns.
+<p>While Beta1 tracks the direction to move, Beta2 tracks how variable or uncertain that direction has been:</p>
+<ul>
+<li>It keeps a running average of the squared gradient values</li>
+<li>Parameters with consistently large gradients get smaller step sizes</li>
+<li>Parameters with small or infrequent gradients get larger step sizes</li>
+</ul>
+<p>The default value of 0.999 means:</p>
+<ul>
+<li>The algorithm maintains approximately 99.9% of its previous estimate of gradient variability</li>
+<li>And adds about 0.1% of new information in each step</li>
+<li>This creates a very long-term memory of which parameters have been volatile</li>
+</ul>
+<p>You might want to decrease this value (like to 0.99) if:</p>
+<ul>
+<li>You want the algorithm to adapt more quickly to recent gradient patterns</li>
+<li>Training is progressing through distinct phases that require different adaptation</li>
+</ul>
+<p>Most users won't need to change this parameter, as the default value works well across a wide
+range of problems. It's typically less sensitive than Beta1 and primarily affects the algorithm's
+adaptive behavior for different parameters rather than its overall direction.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Epsilon_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.Epsilon*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Epsilon" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.Epsilon">
+  Epsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a small constant added to the denominator to improve numerical stability.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Epsilon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The numerical stability constant, defaulting to 0.00000001 (1e-8).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_Epsilon_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Epsilon is a small positive value added to the denominator when computing adaptive learning rates
+to prevent division by zero and improve numerical stability. It ensures that even parameters with
+very small or zero second moment estimates still receive finite updates. The value should be small
+enough not to interfere with the normal adaptation process but large enough to prevent numerical
+underflow or instability in floating-point operations.
+</p>
+<p><b>For Beginners:</b> This setting is a small safety value that prevents numerical
+problems when the algorithm's calculated values get extremely small.
+<p>Think of it like adding a tiny amount of friction to a wheel:</p>
+<ul>
+<li>It prevents the wheel from spinning infinitely fast if there's no resistance</li>
+<li>In the algorithm, it prevents certain mathematical calculations from becoming unstable</li>
+</ul>
+<p>The default value of 0.00000001 (1e-8) is extremely small, so it typically:</p>
+<ul>
+<li>Only affects parameters that have seen very few or very small gradient updates</li>
+<li>Prevents potential division-by-zero errors in the algorithm's calculations</li>
+</ul>
+<p>Most users will never need to change this value. It's a mathematical safeguard rather than
+a tuning parameter that affects the algorithm's learning behavior. If you do need to adjust it:</p>
+<ul>
+<li><p>Decrease it (like to 1e-10) if you're using very high-precision calculations and find the
+default value is interfering with proper convergence for some parameters</p>
+</li>
+<li><p>Increase it (like to 1e-6) if you encounter numerical stability issues (NaN or Inf values)
+during training</p>
+</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_InitialLearningRate_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.InitialLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_InitialLearningRate" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.InitialLearningRate">
+  InitialLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial learning rate that controls the step size in parameter updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial learning rate, defaulting to 0.002.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_InitialLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate determines the magnitude of parameter updates during optimization. In Nadam,
+this serves as the initial step size, which is then adjusted by the adaptive moment estimation
+mechanism based on the historical gradient information. The default value of 0.002 is typically
+suitable for Nadam, slightly higher than Adam's common default of 0.001, reflecting the algorithm's
+often improved efficiency. The actual step sizes used during training will vary by parameter and
+iteration as determined by the adaptive nature of the algorithm.
+</p>
+<p><b>For Beginners:</b> This setting controls how big of a step the algorithm takes
+when updating the model's parameters.
+<p>Think of it like adjusting the speed on a treadmill:</p>
+<ul>
+<li>A higher learning rate (like 0.01) means taking bigger steps, potentially moving faster toward the solution</li>
+<li>A lower learning rate (like 0.0001) means taking smaller, more cautious steps</li>
+</ul>
+<p>The default value of 0.002 is a moderate setting that works well for many problems:</p>
+<ul>
+<li>Fast enough to make good progress</li>
+<li>Cautious enough to avoid overshooting the solution</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Training is progressing too slowly</li>
+<li>You have a tight time budget</li>
+<li>Your loss function is relatively smooth</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Training is unstable (loss fluctuating wildly)</li>
+<li>You're getting poor final results</li>
+<li>You're fine-tuning a model that's already close to optimal</li>
+</ul>
+<p>Note that Nadam will adapt this learning rate differently for each parameter during training,
+but this initial value still significantly influences the overall training dynamics.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_LearningRateDecreaseFactor_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.LearningRateDecreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_LearningRateDecreaseFactor" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.LearningRateDecreaseFactor">
+  LearningRateDecreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L283"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the learning rate is decreased when the loss is getting worse.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateDecreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate decrease multiplier, defaulting to 0.95 (5% decrease).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_LearningRateDecreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how quickly the base learning rate is reduced when the optimization encounters
+difficulties (i.e., when the loss increases). After an unsuccessful update, the current learning
+rate is multiplied by this factor, forcing the algorithm to take smaller, more cautious steps. This
+adaptive approach helps the algorithm recover from overshooting and navigate complex loss landscapes
+by automatically adjusting the global step size based on the observed performance. The rate will never
+fall below MinLearningRate.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm decreases its
+global step size when it makes a mistake.
+<p>Continuing the walking downhill analogy:</p>
+<ul>
+<li>If you take a step and end up higher than before, you've gone in the wrong direction</li>
+<li>You'd want to be more careful with your next step</li>
+<li>This setting determines how much more cautious you become</li>
+</ul>
+<p>The default value of 0.95 means:</p>
+<ul>
+<li>Each time the model gets worse, the learning rate decreases by 5%</li>
+<li>For example, a learning rate of 0.002 would become 0.0019 after an unsuccessful update</li>
+</ul>
+<p>This adjustment helps the algorithm:</p>
+<ul>
+<li>Recover from overshooting the optimal values</li>
+<li>Navigate tricky, curved areas of the loss landscape</li>
+<li>Eventually settle into a minimum</li>
+</ul>
+<p>You might want to decrease this value (like to 0.8) if:</p>
+<ul>
+<li>Training seems unstable</li>
+<li>You want the algorithm to become more cautious more quickly after mistakes</li>
+</ul>
+<p>You might want to increase this value (like to 0.99) if:</p>
+<ul>
+<li>You want to be more persistent with the current learning rate</li>
+<li>You're worried about getting stuck in local minima</li>
+<li>The loss function is noisy and you don't want to overreact to small increases</li>
+</ul>
+<p>Finding the right balance between increasing and decreasing the learning rate is important
+for efficient training.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_LearningRateIncreaseFactor_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.LearningRateIncreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_LearningRateIncreaseFactor" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.LearningRateIncreaseFactor">
+  LearningRateIncreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the learning rate is increased when the loss is improving.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateIncreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate increase multiplier, defaulting to 1.05 (5% increase).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_LearningRateIncreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how aggressively the base learning rate is increased when the optimization is
+making progress (i.e., when the loss is decreasing). After a successful update, the current learning
+rate is multiplied by this factor, allowing the algorithm to take larger steps when moving in a
+promising direction. This adaptive approach can speed up convergence, but the rate will never exceed
+the MaxLearningRate. Note that this adjustment is separate from the per-parameter adaptation that
+Nadam performs and affects the global learning rate scale.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm increases its
+global step size when things are going well.
+<p>Imagine you're walking downhill trying to reach the lowest point:</p>
+<ul>
+<li>When you're making good progress, you might want to walk faster</li>
+<li>This setting determines how much faster you go with each successful step</li>
+</ul>
+<p>The default value of 1.05 means:</p>
+<ul>
+<li>Each time the model improves, the base learning rate increases by 5%</li>
+<li>For example, a learning rate of 0.002 would become 0.0021 after a successful update</li>
+</ul>
+<p>This gradual increase helps the algorithm:</p>
+<ul>
+<li>Speed up when it's on the right track</li>
+<li>Cover flat regions more efficiently</li>
+<li>Potentially escape shallow local minima</li>
+</ul>
+<p>You might want to increase this value (like to 1.1) if:</p>
+<ul>
+<li>Training seems too slow</li>
+<li>Your optimization landscape has large flat regions</li>
+</ul>
+<p>You might want to decrease this value (like to 1.01) if:</p>
+<ul>
+<li>You want more conservative adaptation</li>
+<li>You notice training becomes unstable after periods of progress</li>
+</ul>
+<p>Note that this differs from Nadam's normal adaptation mechanism - this adjusts the global
+learning rate scale, while Nadam's built-in adaptation adjusts rates differently for each parameter.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_MaxLearningRate_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.MaxLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_MaxLearningRate" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.MaxLearningRate">
+  MaxLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L362"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed value for the learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum learning rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_MaxLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter establishes an upper bound for the learning rate to prevent it from becoming
+too large after multiple increases. If repeated successful iterations would increase the learning
+rate above this value, it will be clamped to this maximum. This helps maintain stability by
+preventing excessively large steps that might cause the optimization to diverge. The 'new' keyword
+indicates this property overrides a similar property in the base class.
+</p>
+<p><b>For Beginners:</b> This setting prevents the learning rate from becoming
+too large, even after many successful steps.
+<p>Continuing with the volume analogy:</p>
+<ul>
+<li>After turning up the volume several times, you don't want it to become painfully loud</li>
+<li>This setting establishes the maximum volume level</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>The learning rate will never go above this value</li>
+<li>This prevents the algorithm from taking wildly large steps</li>
+<li>Without this limit, the learning rate could grow uncontrollably</li>
+</ul>
+<p>You might want to increase this value (like to 0.5) if:</p>
+<ul>
+<li>Your problem seems to benefit from occasionally large updates</li>
+<li>You're confident in the stability of your loss function</li>
+</ul>
+<p>You might want to decrease this value (like to 0.05) if:</p>
+<ul>
+<li>Training tends to become unstable</li>
+<li>You're working with a particularly sensitive model</li>
+<li>Your loss function has steep cliffs or sharp curves</li>
+</ul>
+<p>Finding the right maximum learning rate helps prevent the optimizer from &quot;jumping out&quot;
+of good solutions due to taking steps that are too large.</p>
+<p>Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NadamOptimizerOptions_3_MinLearningRate_" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.MinLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NadamOptimizerOptions_3_MinLearningRate" data-uid="AiDotNet.Models.Options.NadamOptimizerOptions`3.MinLearningRate">
+  MinLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L321"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed value for the learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum learning rate, defaulting to 0.00001 (1e-5).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NadamOptimizerOptions_3_MinLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter establishes a lower bound for the learning rate to prevent it from becoming
+too small after multiple decreases. If repeated unsuccessful iterations would decrease the learning
+rate below this value, it will be clamped to this minimum. This prevents the training from
+effectively stopping due to extremely small steps. The 'new' keyword indicates this property
+overrides a similar property in the base class, potentially with a different default value.
+</p>
+<p><b>For Beginners:</b> This setting prevents the learning rate from becoming
+too small, even after many unsuccessful steps.
+<p>Imagine adjusting the volume on a radio:</p>
+<ul>
+<li>The learning rate is like the volume control</li>
+<li>After turning it down several times, you don't want it to become inaudible</li>
+<li>This setting establishes the minimum volume level</li>
+</ul>
+<p>The default value of 0.00001 (1e-5) means:</p>
+<ul>
+<li>The learning rate will never go below this value</li>
+<li>This ensures the algorithm keeps making at least some progress</li>
+<li>Without this limit, the learning rate could become effectively zero</li>
+</ul>
+<p>You might want to increase this value (like to 1e-4) if:</p>
+<ul>
+<li>You notice training slows to a crawl after encountering difficulties</li>
+<li>You want to ensure the algorithm maintains a minimum level of exploration</li>
+</ul>
+<p>You might want to decrease this value (like to 1e-6) if:</p>
+<ul>
+<li>You want to allow for very fine-grained adjustments near the end of training</li>
+<li>Your problem requires extremely precise parameter values</li>
+</ul>
+<p>Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NadamOptimizerOptions.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

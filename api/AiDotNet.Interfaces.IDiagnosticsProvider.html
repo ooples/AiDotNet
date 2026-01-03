@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IDiagnosticsProvider | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IDiagnosticsProvider | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for components that provide diagnostic information for monitoring and debugging.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IDiagnosticsProvider.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IDiagnosticsProvider%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IDiagnosticsProvider">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IDiagnosticsProvider" data-uid="AiDotNet.Interfaces.IDiagnosticsProvider" class="text-break">
+Interface IDiagnosticsProvider  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDiagnosticsProvider.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for components that provide diagnostic information for monitoring and debugging.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IDiagnosticsProvider</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IDiagnosticsProvider_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This interface enables neural network components (layers, networks, loss functions, etc.)
+to provide detailed diagnostic information about their internal state and behavior.
+This is particularly useful for:
+<ul><li>Monitoring training progress</li><li>Debugging model behavior</li><li>Performance analysis and optimization</li><li>Understanding model decisions (explainability)</li></ul>
+
+<p>
+<b>For Beginners:</b> Think of this as a "health report" interface for neural network components.
+<p>Just like you might want to check various health metrics for your body (heart rate, blood pressure, etc.),
+you want to monitor various metrics for your neural network components during training and inference.</p>
+<p>Real-world analogy:
+Imagine you're driving a car. Your dashboard shows:</p>
+<ul>
+<li>Speed (how fast you're going)</li>
+<li>RPM (engine revolutions)</li>
+<li>Fuel level (remaining energy)</li>
+<li>Temperature (engine heat)</li>
+</ul>
+<p>Similarly, a neural network layer might report:</p>
+<ul>
+<li>Activation statistics (min, max, mean values)</li>
+<li>Gradient flow (how well training signals propagate)</li>
+<li>Resource utilization (memory usage, computation time)</li>
+<li>Layer-specific metrics (attention weights, expert usage, etc.)</li>
+</ul>
+<p>This information helps you understand:</p>
+<ul>
+<li>Is my model training properly?</li>
+<li>Are there any bottlenecks or issues?</li>
+<li>Which parts of the model are most active?</li>
+<li>Is the model behaving as expected?</li>
+</ul>
+
+<p>
+<b>Industry Best Practices:</b>
+<ul><li><b>Consistent Keys:</b> Use standardized key names across similar components</li><li><b>Meaningful Values:</b> Provide human-readable string representations</li><li><b>Hierarchical Organization:</b> Use prefixes to group related metrics (e.g., "activation.mean", "activation.std")</li><li><b>Efficient Computation:</b> Diagnostics should be cheap to compute or cached</li><li><b>Optional Depth:</b> Consider providing basic and detailed diagnostic modes</li></ul>
+
+<p>
+<b>Implementation Example:</b>
+<pre><code class="lang-csharp">public class DenseLayer&lt;T&gt; : LayerBase&lt;T&gt;, IDiagnosticsProvider&lt;T&gt;
+{
+    private Tensor&lt;T&gt;? _lastActivations;
+
+    public Dictionary&lt;string, string&gt; GetDiagnostics()
+    {
+        var diagnostics = new Dictionary&lt;string, string&gt;();
+
+        if (_lastActivations != null)
+        {
+            diagnostics["activation.mean"] = ComputeMean(_lastActivations).ToString();
+            diagnostics["activation.std"] = ComputeStd(_lastActivations).ToString();
+            diagnostics["activation.sparsity"] = ComputeSparsity(_lastActivations).ToString();
+        }
+
+        diagnostics["parameter.count"] = ParameterCount.ToString();
+        diagnostics["layer.type"] = "Dense";
+
+        return diagnostics;
+    }
+}
+
+// In monitoring code:
+foreach (var layer in network.Layers)
+{
+    if (layer is IDiagnosticsProvider&lt;T&gt; diagnosticLayer)
+    {
+        var metrics = diagnosticLayer.GetDiagnostics();
+        LogMetrics(metrics);
+    }
+}</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IDiagnosticsProvider_GetDiagnostics_" data-uid="AiDotNet.Interfaces.IDiagnosticsProvider.GetDiagnostics*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDiagnosticsProvider_GetDiagnostics" data-uid="AiDotNet.Interfaces.IDiagnosticsProvider.GetDiagnostics">
+  GetDiagnostics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDiagnosticsProvider.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets diagnostic information about this component's state and behavior.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;string, string&gt; GetDiagnostics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A dictionary containing diagnostic metrics. Keys should be descriptive and use
+consistent naming conventions (e.g., &quot;activation.mean&quot;, &quot;gradient.norm&quot;).
+Values should be human-readable string representations of the metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IDiagnosticsProvider_GetDiagnostics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method should return diagnostic information that is useful for understanding
+the component's current state. The specific metrics returned depend on the component type:
+<ul><li><b>Layers:</b> Activation statistics, gradient flow, sparsity, etc.</li><li><b>Networks:</b> Aggregate metrics, layer-by-layer summaries</li><li><b>Loss Functions:</b> Loss components, regularization terms</li><li><b>Optimizers:</b> Learning rates, momentum values, update statistics</li></ul>
+
+<p>
+<b>For Beginners:</b> This method returns a report card with various metrics.
+<p>The returned dictionary is like a set of labeled measurements:</p>
+<ul>
+<li>Keys: What you're measuring (e.g., &quot;mean_activation&quot;, &quot;sparsity&quot;)</li>
+<li>Values: The measurement results as strings (e.g., &quot;0.42&quot;, &quot;85% sparse&quot;)</li>
+</ul>
+<p>Example for a Dense layer:</p>
+<pre><code class="lang-csharp">{
+    "activation.mean": "0.342",
+    "activation.std": "0.156",
+    "activation.min": "-0.82",
+    "activation.max": "1.24",
+    "activation.sparsity": "0.23",
+    "gradient.norm": "0.042",
+    "weights.norm": "15.6",
+    "layer.output_size": "256"
+}</code></pre>
+<p>You can use this information to:</p>
+<ol>
+<li><b>Detect training issues:</b> If activations are all zero, something might be wrong</li>
+<li><b>Tune hyperparameters:</b> If gradients are too large/small, adjust learning rate</li>
+<li><b>Monitor convergence:</b> Track metrics over time to see if training is progressing</li>
+<li><b>Compare experiments:</b> See how different configurations affect internal behavior</li>
+</ol>
+<p>Common patterns:</p>
+<pre><code class="lang-csharp">// Log diagnostics periodically during training
+if (epoch % 10 == 0)
+{
+    foreach (var layer in network.Layers)
+    {
+        if (layer is IDiagnosticsProvider&lt;T&gt; diag)
+        {
+            Console.WriteLine($"Layer {layer.Name}:");
+            foreach (var (key, value) in diag.GetDiagnostics())
+            {
+                Console.WriteLine($"  {key}: {value}");
+            }
+        }
+    }
+}</code></pre>
+
+<p>
+<b>Performance Note:</b>
+Diagnostic computation should be efficient. If expensive calculations are needed,
+consider caching results or computing them only when diagnostics are requested.
+Diagnostics should not significantly impact training performance.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDiagnosticsProvider.cs/#L90" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

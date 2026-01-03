@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NeuralNetworkRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NeuralNetworkRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A neural network regression model that can learn complex non-linear relationships in data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_NeuralNetworkRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.NeuralNetworkRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.NeuralNetworkRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_NeuralNetworkRegression_1" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1" class="text-break">
+Class NeuralNetworkRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A neural network regression model that can learn complex non-linear relationships in data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NeuralNetworkRegression&lt;T&gt; : NonLinearRegressionBase&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html">NonLinearRegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">NeuralNetworkRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_NumOps">NonLinearRegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Engine">NonLinearRegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Options">NonLinearRegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Regularization">NonLinearRegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SupportVectors">NonLinearRegressionBase&lt;T&gt;.SupportVectors</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Alphas">NonLinearRegressionBase&lt;T&gt;.Alphas</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_B">NonLinearRegressionBase&lt;T&gt;.B</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_FeatureNames">NonLinearRegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ValidateInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.ValidateInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_InitializeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.InitializeModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ExtractModelParameters">NonLinearRegressionBase&lt;T&gt;.ExtractModelParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.PredictSingle(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_KernelFunction_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.KernelFunction(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Clip__0__0__0_">NonLinearRegressionBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetModelMetadata">NonLinearRegressionBase&lt;T&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetParameters">NonLinearRegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetActiveFeatureIndices">NonLinearRegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_IsFeatureUsed_System_Int32_">NonLinearRegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">NonLinearRegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetFeatureImportance">NonLinearRegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_DeepCopy">NonLinearRegressionBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Clone">NonLinearRegressionBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ParameterCount">NonLinearRegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SaveModel_System_String_">NonLinearRegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_LoadModel_System_String_">NonLinearRegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_DefaultLossFunction">NonLinearRegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">NonLinearRegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">NonLinearRegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SaveState_System_IO_Stream_">NonLinearRegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_LoadState_System_IO_Stream_">NonLinearRegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SupportsJitCompilation">NonLinearRegressionBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">NonLinearRegressionBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_NeuralNetworkRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class implements a fully connected feedforward neural network for regression tasks.
+It supports multiple hidden layers with customizable activation functions and uses
+gradient-based optimization to learn from data.
+</p>
+<p>
+The neural network architecture is defined by specifying the number of neurons in each layer,
+with the first layer corresponding to the input features and the last layer to the output.
+</p>
+<p>
+For Beginners:
+A neural network is a machine learning model inspired by the human brain. It consists of layers
+of interconnected "neurons" that process input data to make predictions. Each connection has a
+"weight" that determines its importance, and these weights are adjusted during training to improve
+the model's accuracy. This process is similar to how we learn from experience.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_NeuralNetworkRegression_1__ctor_" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_NeuralNetworkRegression_1__ctor_AiDotNet_Models_Options_NeuralNetworkRegressionOptions__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.#ctor(AiDotNet.Models.Options.NeuralNetworkRegressionOptions{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  NeuralNetworkRegression(NeuralNetworkRegressionOptions&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the NeuralNetworkRegression class with the specified options and regularization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NeuralNetworkRegression(NeuralNetworkRegressionOptions&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? options = null, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.NeuralNetworkRegressionOptions-3.html">NeuralNetworkRegressionOptions</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Configuration options for the neural network. If null, default options will be used.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Regularization method to prevent overfitting. If null, no regularization will be applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_NeuralNetworkRegression_1__ctor_AiDotNet_Models_Options_NeuralNetworkRegressionOptions__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the neural network with random weights and biases according to the Xavier/Glorot initialization method,
+which helps with training stability.
+</p>
+<p>
+If no options are provided, a default configuration will be used. If no optimizer is specified in the options,
+the Adam optimizer will be used by default.
+</p>
+<p>
+For Beginners:
+When you create a neural network, it starts with random values for its internal parameters (weights and biases).
+The Xavier/Glorot initialization is a smart way to set these initial random values to help the network learn more effectively.
+Think of it like setting up a balanced starting point for the learning process.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_NeuralNetworkRegression_1_CreateInstance_" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_NeuralNetworkRegression_1_CreateInstance" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L837"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the Neural Network Regression model with the same configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the Neural Network Regression model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_NeuralNetworkRegression_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a deep copy of the current Neural Network Regression model, including its 
+layer structure, weights, biases, optimizer configuration, and regularization settings.
+The new instance is completely independent of the original, allowing modifications without
+affecting the original model.
+</p>
+<p>
+For Beginners:
+This method creates an exact copy of your trained neural network.
+<p>Think of it like cloning your neural network with all its learned knowledge:</p>
+<ul>
+<li>It copies the structure (how many neurons in each layer)</li>
+<li>It duplicates all the connection strengths (weights) between neurons</li>
+<li>It preserves all the bias values for each neuron</li>
+<li>It maintains the same learning algorithm (optimizer) and settings</li>
+</ul>
+<p>Creating a copy is useful when you want to:</p>
+<ul>
+<li>Create a backup before further training or experimentation</li>
+<li>Create variations of the same model for different purposes</li>
+<li>Share the model with others while keeping your original intact</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the creation fails or required components are null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_NeuralNetworkRegression_1_Deserialize_" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_NeuralNetworkRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L758"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_NeuralNetworkRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes both the base class data and the neural network specific data,
+reconstructing the layer sizes, weights, and biases.
+</p>
+<p>
+For Beginners:
+Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
+the model's internal state. This allows you to load a previously trained model and use it to make
+predictions without having to retrain it. It's like loading a saved game to continue where you left off.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_NeuralNetworkRegression_1_GetModelType_" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.GetModelType*"></a>
+
+  <h3 id="AiDotNet_Regression_NeuralNetworkRegression_1_GetModelType" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.GetModelType">
+  GetModelType()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L662"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the type of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelType GetModelType()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd><p>The model type identifier for neural network regression.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_NeuralNetworkRegression_1_GetModelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is used for model identification and serialization purposes.
+</p>
+<p>
+For Beginners:
+This method simply returns an identifier that indicates this is a neural network regression model.
+It's used internally by the library to keep track of different types of models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_NeuralNetworkRegression_1_OptimizeModel_" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.OptimizeModel*"></a>
+
+  <h3 id="AiDotNet_Regression_NeuralNetworkRegression_1_OptimizeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.OptimizeModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  OptimizeModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L680"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizes the model parameters using the provided training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OptimizeModel(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_NeuralNetworkRegression_1_OptimizeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is called by the base class during the fitting process to optimize the model parameters.
+It simply calls the Train method to perform the optimization.
+</p>
+<p>
+For Beginners:
+This is an internal method that's part of the model fitting process. It delegates the actual training
+to the Train method, which handles the details of updating the model parameters to fit the data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_NeuralNetworkRegression_1_Predict_" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Regression_NeuralNetworkRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L535"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes predictions for the given input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; X)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix where each row is an example and each column is a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predicted values for each input example.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_NeuralNetworkRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a forward pass through the network for each input example and returns
+the predicted values.
+</p>
+<p>
+For Beginners:
+After training, this method is used to make predictions on new data. It runs each example through
+the trained network and returns the predicted values. This is like using what the network has learned
+to make educated guesses about new situations it hasn't seen before.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_NeuralNetworkRegression_1_Serialize_" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_NeuralNetworkRegression_1_Serialize" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L701"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_NeuralNetworkRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes both the base class data and the neural network specific data,
+including the layer sizes, weights, and biases.
+</p>
+<p>
+For Beginners:
+Serialization converts the model's internal state into a format that can be saved to disk or
+transmitted over a network. This allows you to save a trained model and load it later without
+having to retrain it. Think of it like saving your progress in a video game.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_NeuralNetworkRegression_1_Train_" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.Train*"></a>
+
+  <h3 id="AiDotNet_Regression_NeuralNetworkRegression_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.NeuralNetworkRegression`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the neural network on the provided data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Train(Matrix&lt;T&gt; X, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix where each row is a training example and each column is a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector corresponding to each training example.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_NeuralNetworkRegression_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method trains the neural network using mini-batch gradient descent. The data is divided into batches,
+and for each batch, the model parameters are updated based on the computed gradients.
+</p>
+<p>
+The training process runs for the number of epochs specified in the options, and the data is shuffled
+before each epoch to improve training stability.
+</p>
+<p>
+For Beginners:
+Training a neural network is like teaching it to make accurate predictions by showing it many examples.
+An "epoch" is one complete pass through all the training data. The data is divided into smaller "batches"
+to make the training more efficient. Before each epoch, the data is shuffled (like shuffling flashcards)
+to help the network learn better patterns rather than memorizing the order of examples.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/NeuralNetworkRegression.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

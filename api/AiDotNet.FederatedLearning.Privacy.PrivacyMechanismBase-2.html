@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PrivacyMechanismBase&lt;TModel, T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PrivacyMechanismBase&lt;TModel, T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for privacy mechanisms in federated learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2.md&amp;value=---%0Auid%3A%20AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase%602%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase`2">
+
+
+
+  <h1 id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2" data-uid="AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase`2" class="text-break">
+Class PrivacyMechanismBase&lt;TModel, T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Privacy/PrivacyMechanismBase.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FederatedLearning.html">FederatedLearning</a>.<a class="xref" href="AiDotNet.FederatedLearning.Privacy.html">Privacy</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for privacy mechanisms in federated learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class PrivacyMechanismBase&lt;TModel, T&gt; : FederatedLearningComponentBase&lt;T&gt;, IPrivacyMechanism&lt;TModel&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TModel</code></dt>
+    <dd><p>Model/update representation.</p>
+</dd>
+    <dt><code>T</code></dt>
+    <dd><p>Numeric type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase-1.html">FederatedLearningComponentBase</a>&lt;T&gt;</div>
+      <div><span class="xref">PrivacyMechanismBase&lt;TModel, T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPrivacyMechanism-1.html">IPrivacyMechanism</a>&lt;TModel&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Privacy.GaussianDifferentialPrivacyVector-1.html">GaussianDifferentialPrivacyVector&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Privacy.GaussianDifferentialPrivacy-1.html">GaussianDifferentialPrivacy&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase-1.html#AiDotNet_FederatedLearning_Infrastructure_FederatedLearningComponentBase_1_NumOps">FederatedLearningComponentBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_ApplyPrivacy_" data-uid="AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase`2.ApplyPrivacy*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_ApplyPrivacy__0_System_Double_System_Double_" data-uid="AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase`2.ApplyPrivacy(`0,System.Double,System.Double)">
+  ApplyPrivacy(TModel, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Privacy/PrivacyMechanismBase.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies privacy-preserving techniques to a model update before sharing it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract TModel ApplyPrivacy(TModel model, double epsilon, double delta)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <span class="xref">TModel</span></dt>
+    <dd><p>The model update to apply privacy to.</p>
+</dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Privacy budget parameter - smaller values provide stronger privacy.</p>
+</dd>
+    <dt><code>delta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Probability of privacy guarantee failure - typically very small (e.g., 1e-5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TModel</span></dt>
+    <dd><p>The model update with privacy mechanisms applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_ApplyPrivacy__0_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method transforms model updates to provide privacy guarantees while maintaining utility.</p>
+<p><b>For Beginners:</b> This is like redacting sensitive parts of a document before sharing it.
+You remove or obscure information that could identify individuals while keeping the
+useful content intact.</p>
+<p>Common techniques:</p>
+<ul>
+<li>Differential Privacy: Adds random noise proportional to sensitivity</li>
+<li>Gradient Clipping: Limits the magnitude of updates to prevent outliers</li>
+<li>Local DP: Each client adds noise before sending updates</li>
+<li>Central DP: Server adds noise after aggregation</li>
+</ul>
+<p>For example with differential privacy:</p>
+<ol>
+<li>Client trains model and computes weight updates</li>
+<li>Applies gradient clipping to limit maximum change</li>
+<li>Adds calibrated Gaussian noise to each weight</li>
+<li>Sends noisy update to server</li>
+<li>Even if server is compromised, individual data remains private</li>
+</ol>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_GetMechanismName_" data-uid="AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase`2.GetMechanismName*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_GetMechanismName" data-uid="AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase`2.GetMechanismName">
+  GetMechanismName()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Privacy/PrivacyMechanismBase.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the privacy mechanism.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string GetMechanismName()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string describing the privacy mechanism (e.g., &quot;Gaussian Mechanism&quot;, &quot;Laplace Mechanism&quot;).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_GetMechanismName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This identifies which privacy technique is being used,
+helpful for documentation and comparing different privacy approaches.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_GetPrivacyBudgetConsumed_" data-uid="AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase`2.GetPrivacyBudgetConsumed*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_GetPrivacyBudgetConsumed" data-uid="AiDotNet.FederatedLearning.Privacy.PrivacyMechanismBase`2.GetPrivacyBudgetConsumed">
+  GetPrivacyBudgetConsumed()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Privacy/PrivacyMechanismBase.cs/#L15"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current privacy budget consumed by this mechanism.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract double GetPrivacyBudgetConsumed()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The amount of privacy budget consumed so far.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Privacy_PrivacyMechanismBase_2_GetPrivacyBudgetConsumed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Privacy budget is a finite resource in differential privacy. Each time you share
+information, you &quot;spend&quot; some privacy budget. Once exhausted, you can no longer
+provide strong privacy guarantees.</p>
+<p><b>For Beginners:</b> Think of privacy budget like a bank account for privacy.
+Each time you share data, you withdraw from this account. When the account is empty,
+you've used up your privacy guarantees and should stop sharing.</p>
+<p>For example:</p>
+<ul>
+<li>Start with privacy budget ε=10</li>
+<li>Round 1: Share update with ε=1, remaining budget = 9</li>
+<li>Round 2: Share update with ε=1, remaining budget = 8</li>
+<li>After 10 rounds, budget is exhausted</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Privacy/PrivacyMechanismBase.cs/#L11" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

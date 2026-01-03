@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StackingClassifier&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StackingClassifier&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Stacking classifier that uses predictions from base classifiers as features for a meta-classifier.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Classification_Meta_StackingClassifier_1.md&amp;value=---%0Auid%3A%20AiDotNet.Classification.Meta.StackingClassifier%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Classification.Meta.StackingClassifier`1">
+
+
+
+  <h1 id="AiDotNet_Classification_Meta_StackingClassifier_1" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1" class="text-break">
+Class StackingClassifier&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Classification.html">Classification</a>.<a class="xref" href="AiDotNet.Classification.Meta.html">Meta</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Stacking classifier that uses predictions from base classifiers as features for a meta-classifier.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StackingClassifier&lt;T&gt; : MetaClassifierBase&lt;T&gt;, IProbabilisticClassifier&lt;T&gt;, IClassifier&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html">ClassifierBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Classification.ProbabilisticClassifierBase-1.html">ProbabilisticClassifierBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierBase-1.html">MetaClassifierBase</a>&lt;T&gt;</div>
+      <div><span class="xref">StackingClassifier&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IProbabilisticClassifier-1.html">IProbabilisticClassifier</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IClassifier-1.html">IClassifier</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierBase-1.html#AiDotNet_Classification_Meta_MetaClassifierBase_1_EstimatorFactory">MetaClassifierBase&lt;T&gt;.EstimatorFactory</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierBase-1.html#AiDotNet_Classification_Meta_MetaClassifierBase_1_CreateBaseEstimator">MetaClassifierBase&lt;T&gt;.CreateBaseEstimator()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierBase-1.html#AiDotNet_Classification_Meta_MetaClassifierBase_1_GetParameters">MetaClassifierBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierBase-1.html#AiDotNet_Classification_Meta_MetaClassifierBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">MetaClassifierBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierBase-1.html#AiDotNet_Classification_Meta_MetaClassifierBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">MetaClassifierBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierBase-1.html#AiDotNet_Classification_Meta_MetaClassifierBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">MetaClassifierBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierBase-1.html#AiDotNet_Classification_Meta_MetaClassifierBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">MetaClassifierBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ProbabilisticClassifierBase-1.html#AiDotNet_Classification_ProbabilisticClassifierBase_1_ApplySoftmax_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">ProbabilisticClassifierBase&lt;T&gt;.ApplySoftmax(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ProbabilisticClassifierBase-1.html#AiDotNet_Classification_ProbabilisticClassifierBase_1_ApplySigmoid_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ProbabilisticClassifierBase&lt;T&gt;.ApplySigmoid(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_NumOps">ClassifierBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Engine">ClassifierBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Regularization">ClassifierBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_NumClasses">ClassifierBase&lt;T&gt;.NumClasses</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_TaskType">ClassifierBase&lt;T&gt;.TaskType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ClassLabels">ClassifierBase&lt;T&gt;.ClassLabels</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_NumFeatures">ClassifierBase&lt;T&gt;.NumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_FeatureNames">ClassifierBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ExpectedParameterCount">ClassifierBase&lt;T&gt;.ExpectedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_InferTaskType_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ClassifierBase&lt;T&gt;.InferTaskType(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ExtractClassLabels_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ClassifierBase&lt;T&gt;.ExtractClassLabels(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ComputeClassWeights_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ClassifierBase&lt;T&gt;.ComputeClassWeights(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_GetClassIndexFromLabel__0_">ClassifierBase&lt;T&gt;.GetClassIndexFromLabel(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Serialize">ClassifierBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Deserialize_System_Byte___">ClassifierBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_GetActiveFeatureIndices">ClassifierBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_IsFeatureUsed_System_Int32_">ClassifierBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">ClassifierBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_GetFeatureImportance">ClassifierBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_DeepCopy">ClassifierBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ParameterCount">ClassifierBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_DefaultLossFunction">ClassifierBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_SaveModel_System_String_">ClassifierBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_LoadModel_System_String_">ClassifierBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_SaveState_System_IO_Stream_">ClassifierBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_LoadState_System_IO_Stream_">ClassifierBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_SupportsJitCompilation">ClassifierBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">ClassifierBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Classification_Meta_StackingClassifier_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Stacking trains multiple base classifiers and then uses their predictions
+as features to train a final meta-classifier.
+</p>
+<p>
+<b>For Beginners:</b>
+Stacking is a sophisticated ensemble method:
+<ol>
+<li>Train multiple base classifiers</li>
+<li>Get predictions from each on training data (using cross-validation)</li>
+<li>Use these predictions as features for a &quot;meta&quot; classifier</li>
+<li>Train the meta-classifier on these stacked predictions</li>
+</ol>
+<p>For prediction:</p>
+<ol>
+<li>Get predictions from all base classifiers</li>
+<li>Stack them as features</li>
+<li>Feed to meta-classifier for final prediction</li>
+</ol>
+<p>Benefits:</p>
+<ul>
+<li>Can combine very different types of classifiers</li>
+<li>Often achieves better accuracy than individual classifiers</li>
+<li>The meta-classifier learns which base classifiers to trust</li>
+</ul>
+<p>Considerations:</p>
+<ul>
+<li>More complex to implement</li>
+<li>Risk of overfitting if not using cross-validation</li>
+<li>Computationally expensive</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1__ctor_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1__ctor_System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_IClassifier__0___System_Func_AiDotNet_Interfaces_IClassifier__0___AiDotNet_Classification_Meta_StackingClassifierOptions__0__AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.#ctor(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.IClassifier{`0}},System.Func{AiDotNet.Interfaces.IClassifier{`0}},AiDotNet.Classification.Meta.StackingClassifierOptions{`0},AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  StackingClassifier(IEnumerable&lt;IClassifier&lt;T&gt;&gt;, Func&lt;IClassifier&lt;T&gt;&gt;, StackingClassifierOptions&lt;T&gt;?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the StackingClassifier class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StackingClassifier(IEnumerable&lt;IClassifier&lt;T&gt;&gt; estimators, Func&lt;IClassifier&lt;T&gt;&gt; finalEstimator, StackingClassifierOptions&lt;T&gt;? options = null, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>estimators</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IClassifier-1.html">IClassifier</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of base classifiers.</p>
+</dd>
+    <dt><code>finalEstimator</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-1">Func</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IClassifier-1.html">IClassifier</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The meta-classifier for final predictions.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Classification.Meta.StackingClassifierOptions-1.html">StackingClassifierOptions</a>&lt;T&gt;</dt>
+    <dd><p>Configuration options for the classifier.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization strategy.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_Options_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.Options*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_Options" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the stacking-specific options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected StackingClassifierOptions&lt;T&gt; Options { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Classification.Meta.StackingClassifierOptions-1.html">StackingClassifierOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_Clone_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_Clone" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L486"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a clone of the classifier model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the model with the same parameters and options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_CreateNewInstance_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_CreateNewInstance" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L452"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the same type as this classifier.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the same classifier type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_GetModelMetadata_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_GetModelMetadata" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L530"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_Meta_StackingClassifier_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the model, including its type, feature count, complexity,
+description, and additional information specific to classification.
+</p>
+<p>
+<b>For Beginners:</b>
+Model metadata provides information about the model itself, rather than the predictions it makes.
+This includes details about the model's structure (like how many features it uses) and characteristics
+(like how many classes it can predict). This information can be useful for understanding and
+comparing different models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_GetModelType_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.GetModelType*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_GetModelType" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.GetModelType">
+  GetModelType()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the model type identifier for this classifier.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelType GetModelType()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_Predict_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L384"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts class labels for the given input data by taking the argmax of probabilities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix where each row is an example and each column is a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predicted class indices for each input example.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_Meta_StackingClassifier_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This implementation uses the argmax of the probability distribution to determine
+the predicted class. For binary classification with a custom decision threshold,
+you may want to use PredictProbabilities() directly and apply your own threshold.
+</p>
+<p>
+<b>For Beginners:</b>
+This method picks the class with the highest probability for each sample.
+<p>For example, if the probabilities are [0.1, 0.7, 0.2] for classes [A, B, C],
+this method returns class B (index 1) because it has the highest probability (0.7).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_PredictLogProbabilities_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.PredictLogProbabilities*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_PredictLogProbabilities_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.PredictLogProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PredictLogProbabilities(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L429"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts log-probabilities for each class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; PredictLogProbabilities(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix where each row is a sample and each column is a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row corresponds to an input sample and each column corresponds to a class.
+The values are the natural logarithm of the class probabilities.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_Meta_StackingClassifier_1_PredictLogProbabilities_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The default implementation computes log(PredictProbabilities(input)).
+Subclasses that compute log-probabilities directly (like Naive Bayes) should
+override this method for better numerical stability.
+</p>
+<p>
+<b>For Beginners:</b>
+Log-probabilities are probabilities transformed by the natural logarithm.
+They're useful for numerical stability when working with very small probabilities.
+<p>For example:</p>
+<ul>
+<li>Probability 0.9 → Log-probability -0.105</li>
+<li>Probability 0.1 → Log-probability -2.303</li>
+<li>Probability 0.001 → Log-probability -6.908</li>
+</ul>
+<p>Log-probabilities are always negative (since probabilities are between 0 and 1).
+Higher (less negative) values mean higher probability.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_PredictProbabilities_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.PredictProbabilities*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_PredictProbabilities_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.PredictProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PredictProbabilities(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L396"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts class probabilities for each sample in the input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; PredictProbabilities(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix where each row is a sample and each column is a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row corresponds to an input sample and each column corresponds to a class.
+The values represent the probability of the sample belonging to each class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_Meta_StackingClassifier_1_PredictProbabilities_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by derived classes to compute
+class probabilities. The output matrix should have shape [num_samples, num_classes],
+and each row should sum to 1.0.
+</p>
+<p>
+<b>For Beginners:</b>
+This method computes the probability of each sample belonging to each class.
+Each row in the output represents one sample, and each column represents one class.
+The values in each row sum to 1.0 (100% total probability).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Classification_Meta_StackingClassifier_1_Train_" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.Train*"></a>
+
+  <h3 id="AiDotNet_Classification_Meta_StackingClassifier_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Classification.Meta.StackingClassifier`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the stacking classifier.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Train(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/Meta/StackingClassifier.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

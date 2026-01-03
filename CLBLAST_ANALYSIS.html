@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>CLBlast GEMM Kernel Analysis | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="CLBlast GEMM Kernel Analysis | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/CLBLAST_ANALYSIS.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="clblast-gemm-kernel-analysis">CLBlast GEMM Kernel Analysis</h1>
+
+<p>This document analyzes CLBlast's GEMM (General Matrix Multiplication) kernel implementation to identify optimization techniques and potential gaps for building superior GPU kernels.</p>
+<h2 id="overview">Overview</h2>
+<p>CLBlast is a tuned OpenCL BLAS library that achieves near-vendor performance through auto-tuning. The GEMM implementation consists of multiple kernel variants:</p>
+<ul>
+<li><strong>Indirect GEMM</strong> (<code>xgemm_part1-4.opencl</code>): Pre-/post-processing kernels for optimal performance</li>
+<li><strong>Direct GEMM</strong> (<code>xgemm_direct_part1-3.opencl</code>): Single-pass kernel for all sizes</li>
+<li><strong>Batched GEMM</strong> (<code>xgemm_batched.opencl</code>): Multiple matrix multiplications in parallel</li>
+</ul>
+<hr>
+<h2 id="clblast-gemm-optimization-techniques">CLBlast GEMM Optimization Techniques</h2>
+<h3 id="1-tiling-strategy">1. Tiling Strategy</h3>
+<p>CLBlast uses a hierarchical tiling approach with three levels:</p>
+<p><strong>Workgroup Tiles:</strong></p>
+<ul>
+<li><code>MWG</code>: Tile size in M dimension (16-128)</li>
+<li><code>NWG</code>: Tile size in N dimension (16-128)</li>
+<li><code>KWG</code>: Tile size in K dimension (16-32)</li>
+</ul>
+<p><strong>Thread Tiles (Register Blocking):</strong></p>
+<ul>
+<li><code>MDIMC</code>, <code>NDIMC</code>: Thread distribution (4-32)</li>
+<li><code>MDIMA</code>, <code>NDIMB</code>: Alternative thread mapping (2-32)</li>
+</ul>
+<p><strong>Example Configuration (RTX 4090 Single-Precision):</strong></p>
+<pre><code>MWG=128, NWG=64, KWG=32
+MDIMC=8, NDIMC=8
+MDIMA=8, NDIMB=8
+</code></pre>
+<h3 id="2-register-blocking">2. Register Blocking</h3>
+<p>Each thread computes multiple output elements stored in private registers:</p>
+<pre><code class="lang-opencl">// Private accumulators for NWI x MWI output elements
+realM cpm[NWI * (MWI/VWM)];
+
+// Initialize to zero
+for (int _ni = 0; _ni &lt; NWI; _ni++) {
+    for (int _mi = 0; _mi &lt; MWI/VWM; _mi++) {
+        SetToZero(cpm[_ni * (MWI/VWM) + _mi]);
+    }
+}
+</code></pre>
+<p><strong>Key Insight:</strong> CLBlast uses vector types (<code>realM</code> = <code>float4</code>/<code>float8</code>) to pack multiple accumulators, reducing register count while maintaining throughput.</p>
+<h3 id="3-shared-memory-usage-patterns">3. Shared Memory Usage Patterns</h3>
+<p><strong>Local Memory Allocation:</strong></p>
+<pre><code class="lang-opencl">// Conditional allocation based on SA/SB flags
+#if SA == 1
+    __local realM alm[KWG * MWG/VWM];
+#endif
+#if SB == 1
+    __local realN blm[KWG * NWG/VWN];
+#endif
+</code></pre>
+<p><strong>Bank Conflict Avoidance (Transpose Kernel):</strong></p>
+<pre><code class="lang-opencl">// Padding to prevent bank conflicts
+__local realT tile[TRA_WPT * TRA_DIM][TRA_DIM + TRA_PAD];
+</code></pre>
+<p>The <code>PADA</code> and <code>PADB</code> parameters add padding to local memory arrays to avoid bank conflicts during column-wise access.</p>
+<h3 id="4-memory-access-coalescing">4. Memory Access Coalescing</h3>
+<p><strong>Global-to-Local Loading with Coalescing:</strong></p>
+<pre><code class="lang-opencl">// Vectorized coalesced load from global memory
+void GlobalToLocalDirectA(__local realM* alm, const __global realM* agm,
+                          const int kSizeM, const int tid, const int kwg) {
+    // Multiple elements per thread with stride matching warp size
+    for (int _la = 0; _la &lt; MWAI/VWM; _la++) {
+        int mg = _la * MDIMAD + lid0;     // Coalesced index
+        int kg = _lb * NDIMAD + lid1;     // K dimension
+        alm[kg * (MWG/VWM) + mg] = agm[kg * kSizeM + mg + kwg];
+    }
+}
+</code></pre>
+<p><strong>Strided vs Non-Strided Access:</strong></p>
+<ul>
+<li><code>STRM</code>/<code>STRN</code> flags control whether threads access contiguous or strided elements</li>
+<li>Non-strided (STRM=0): Better for row-major matrices</li>
+<li>Strided (STRM=1): Better for transposed access patterns</li>
+</ul>
+<h3 id="5-vectorized-loads">5. Vectorized Loads</h3>
+<p>CLBlast supports vector widths from 1 to 16 elements:</p>
+<pre><code class="lang-opencl">// Vector type definitions based on VWM/VWN parameters
+#if VWM == 1
+    typedef real realM;
+#elif VWM == 2
+    typedef real2 realM;
+#elif VWM == 4
+    typedef real4 realM;
+#elif VWM == 8
+    typedef real8 realM;
+#elif VWM == 16
+    typedef real16 realM;
+#endif
+</code></pre>
+<p><strong>Vectorized Multiply-Add:</strong></p>
+<pre><code class="lang-opencl">inline void MultiplyAddVector(realM *cvec, const realM avec, const real bval) {
+    #if USE_VECTOR_MAD == 1
+        *cvec += avec * bval;
+    #else
+        // Manual component-wise for older hardware
+        (*cvec).x += avec.x * bval;
+        (*cvec).y += avec.y * bval;
+        (*cvec).z += avec.z * bval;
+        (*cvec).w += avec.w * bval;
+    #endif
+}
+</code></pre>
+<h3 id="6-loop-unrolling-strategies">6. Loop Unrolling Strategies</h3>
+<p><strong>K-Dimension Loop:</strong></p>
+<pre><code class="lang-opencl">// Main computation loop over K tiles
+for (int kwg = 0; kwg &lt; kSizeK; kwg += KWG) {
+    // Load A and B tiles into local memory
+    GlobalToLocalA(alm, agm, ...);
+    GlobalToLocalB(blm, bgm, ...);
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    // Unrolled inner loop over K within tile
+    #pragma unroll
+    for (int _ki = 0; _ki &lt; KWG; _ki++) {
+        // Load from local to private registers
+        LocalToPrivateA(apm, alm, _ki);
+        LocalToPrivateB(bpm, blm, _ki);
+
+        // Compute outer product
+        MultiplyAccumulate(cpm, apm, bpm);
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+}
+</code></pre>
+<p><strong>Register-Level Unrolling:</strong></p>
+<pre><code class="lang-opencl">// Fully unrolled accumulation
+for (int _ni = 0; _ni &lt; NWI; _ni++) {
+    for (int _mi = 0; _mi &lt; MWI/VWM; _mi++) {
+        MultiplyAddVector(&amp;cpm[_ni*(MWI/VWM)+_mi], apm[_mi], bpm[_ni]);
+    }
+}
+</code></pre>
+<h3 id="7-local-memory-barriers">7. Local Memory Barriers</h3>
+<p><strong>Synchronization Points:</strong></p>
+<pre><code class="lang-opencl">// After loading tiles to shared memory
+barrier(CLK_LOCAL_MEM_FENCE);
+
+// Before next tile load (double buffering not used)
+barrier(CLK_LOCAL_MEM_FENCE);
+
+// Optional global fence for result writing
+#if GLOBAL_MEM_FENCE == 1
+barrier(CLK_GLOBAL_MEM_FENCE);
+#endif
+</code></pre>
+<h3 id="8-vendor-specific-optimizations">8. Vendor-Specific Optimizations</h3>
+<p><strong>Subgroup Shuffling (GEMMK=1):</strong></p>
+<pre><code class="lang-opencl">// NVIDIA/Intel subgroup shuffle for data exchange
+#if USE_SUBGROUP_SHUFFLING == 1
+    // Broadcast values within subgroup without shared memory
+    real bval = sub_group_broadcast(bpm[_ki], _ni);
+#endif
+</code></pre>
+<p><strong>Staggered Indices (Partition Camping Prevention):</strong></p>
+<pre><code class="lang-opencl">#if USE_STAGGERED_INDICES == 1
+    // Shuffle workgroup IDs to avoid memory bank conflicts
+    int group_id = (get_group_id(0) + get_group_id(1)) % get_num_groups(0);
+#endif
+</code></pre>
+<hr>
+<h2 id="auto-tuning-parameters">Auto-Tuning Parameters</h2>
+<h3 id="parameter-definitions-and-ranges">Parameter Definitions and Ranges</h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Description</th>
+<th>Limited Range</th>
+<th>Extended Range</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MWG</code></td>
+<td>M-dimension workgroup tile</td>
+<td>16, 32, 64</td>
+<td>16-128</td>
+</tr>
+<tr>
+<td><code>NWG</code></td>
+<td>N-dimension workgroup tile</td>
+<td>16, 32, 64</td>
+<td>16-128</td>
+</tr>
+<tr>
+<td><code>KWG</code></td>
+<td>K-dimension tile size</td>
+<td>32</td>
+<td>16, 32</td>
+</tr>
+<tr>
+<td><code>MDIMC</code></td>
+<td>Threads in M dimension</td>
+<td>8, 16, 32</td>
+<td>2-32</td>
+</tr>
+<tr>
+<td><code>NDIMC</code></td>
+<td>Threads in N dimension</td>
+<td>8, 16, 32</td>
+<td>2-32</td>
+</tr>
+<tr>
+<td><code>MDIMA</code></td>
+<td>Alt thread mapping M</td>
+<td>8, 16, 32</td>
+<td>2-32</td>
+</tr>
+<tr>
+<td><code>NDIMB</code></td>
+<td>Alt thread mapping N</td>
+<td>8, 16, 32</td>
+<td>2-32</td>
+</tr>
+<tr>
+<td><code>VWM</code></td>
+<td>Vector width for M</td>
+<td>1, 2, 4</td>
+<td>1, 2, 4, 8</td>
+</tr>
+<tr>
+<td><code>VWN</code></td>
+<td>Vector width for N</td>
+<td>1, 2, 4</td>
+<td>1, 2, 4, 8</td>
+</tr>
+<tr>
+<td><code>SA</code></td>
+<td>Use local mem for A</td>
+<td>0, 1</td>
+<td>0, 1</td>
+</tr>
+<tr>
+<td><code>SB</code></td>
+<td>Use local mem for B</td>
+<td>0, 1</td>
+<td>0, 1</td>
+</tr>
+<tr>
+<td><code>STRM</code></td>
+<td>Strided access for M</td>
+<td>0, 1</td>
+<td>0, 1</td>
+</tr>
+<tr>
+<td><code>STRN</code></td>
+<td>Strided access for N</td>
+<td>0, 1</td>
+<td>0, 1</td>
+</tr>
+<tr>
+<td><code>KREG</code></td>
+<td>K-register blocking (GEMMK=1)</td>
+<td>1, 2, 4</td>
+<td>1-16</td>
+</tr>
+</tbody>
+</table>
+<h3 id="optimal-parameters-by-gpu">Optimal Parameters by GPU</h3>
+<table>
+<thead>
+<tr>
+<th>GPU</th>
+<th>MWG</th>
+<th>NWG</th>
+<th>KWG</th>
+<th>MDIMC</th>
+<th>NDIMC</th>
+<th>VWM</th>
+<th>VWN</th>
+<th>SA</th>
+<th>SB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTX 4090</td>
+<td>128</td>
+<td>64</td>
+<td>32</td>
+<td>8</td>
+<td>8</td>
+<td>4</td>
+<td>4</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr>
+<td>RTX 3090</td>
+<td>64</td>
+<td>64</td>
+<td>32</td>
+<td>8</td>
+<td>8</td>
+<td>4</td>
+<td>4</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Tesla V100</td>
+<td>64</td>
+<td>32</td>
+<td>32</td>
+<td>8</td>
+<td>8</td>
+<td>4</td>
+<td>4</td>
+<td>1</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>GPU</th>
+<th>MWG</th>
+<th>NWG</th>
+<th>KWG</th>
+<th>MDIMC</th>
+<th>NDIMC</th>
+<th>VWM</th>
+<th>VWN</th>
+<th>SA</th>
+<th>SB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RX 6800 XT</td>
+<td>128</td>
+<td>64</td>
+<td>16</td>
+<td>8</td>
+<td>32</td>
+<td>4</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>RX 5700 XT</td>
+<td>64</td>
+<td>64</td>
+<td>16</td>
+<td>8</td>
+<td>8</td>
+<td>2</td>
+<td>2</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr>
+<td>RX 480</td>
+<td>64</td>
+<td>16</td>
+<td>32</td>
+<td>16</td>
+<td>16</td>
+<td>2</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>GPU</th>
+<th>MWG</th>
+<th>NWG</th>
+<th>KWG</th>
+<th>MDIMC</th>
+<th>NDIMC</th>
+<th>VWM</th>
+<th>VWN</th>
+<th>SA</th>
+<th>SB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Arc A770</td>
+<td>64</td>
+<td>32</td>
+<td>16</td>
+<td>4</td>
+<td>4</td>
+<td>1</td>
+<td>8</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>UHD 770</td>
+<td>64</td>
+<td>128</td>
+<td>32</td>
+<td>8</td>
+<td>8</td>
+<td>1</td>
+<td>8</td>
+<td>1</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<h3 id="constraints">Constraints</h3>
+<p>CLBlast enforces several parameter constraints:</p>
+<pre><code>MWG % (MDIMC * VWM) == 0
+NWG % (NDIMC * VWN) == 0
+KWG % ((MDIMC * NDIMC) / MDIMA) == 0
+KWG % ((MDIMC * NDIMC) / NDIMB) == 0
+KREG % VWN == 0  (for GEMMK=1)
+</code></pre>
+<hr>
+<h2 id="identified-gaps-and-opportunities">Identified Gaps and Opportunities</h2>
+<h3 id="1-missing-double-buffering--prefetching">1. Missing Double-Buffering / Prefetching</h3>
+<p><strong>Gap:</strong> CLBlast uses single-buffering with barriers, causing pipeline stalls.</p>
+<p><strong>Current Pattern:</strong></p>
+<pre><code class="lang-opencl">for (int kwg = 0; kwg &lt; kSizeK; kwg += KWG) {
+    // Load tile (STALL while loading)
+    GlobalToLocal(...);
+    barrier(CLK_LOCAL_MEM_FENCE);  // &lt;-- STALL
+
+    // Compute (memory subsystem idle)
+    MultiplyAccumulate(...);
+    barrier(CLK_LOCAL_MEM_FENCE);  // &lt;-- STALL
+}
+</code></pre>
+<p><strong>Opportunity:</strong> Implement double-buffering to overlap compute with memory:</p>
+<pre><code class="lang-opencl">// Load first tile
+LoadTile(buffer[0], k=0);
+barrier();
+
+for (int kwg = 0; kwg &lt; kSizeK-KWG; kwg += KWG) {
+    // Async load NEXT tile while computing current
+    LoadTileAsync(buffer[(kwg/KWG+1)%2], kwg+KWG);
+    ComputeTile(buffer[kwg/KWG%2]);
+    barrier();
+}
+// Compute last tile
+ComputeTile(buffer[last]);
+</code></pre>
+<p><strong>Expected Gain:</strong> 15-30% for memory-bound configurations.</p>
+<h3 id="2-no-tensor-core--matrix-core-utilization">2. No Tensor Core / Matrix Core Utilization</h3>
+<p><strong>Gap:</strong> CLBlast uses scalar/vector FMA instructions only.</p>
+<p><strong>Opportunity:</strong> Modern GPUs have dedicated matrix units:</p>
+<ul>
+<li>NVIDIA: Tensor Cores (WMMA/MMA instructions)</li>
+<li>AMD: Matrix Cores (MFMA instructions)</li>
+<li>Intel: XMX units</li>
+</ul>
+<p><strong>Example for NVIDIA Tensor Cores:</strong></p>
+<pre><code class="lang-cpp">// Using CUDA's WMMA API (translatable to OpenCL via vendor extensions)
+wmma::fragment&lt;wmma::matrix_a, 16, 16, 16, half, wmma::row_major&gt; a_frag;
+wmma::fragment&lt;wmma::matrix_b, 16, 16, 16, half, wmma::col_major&gt; b_frag;
+wmma::fragment&lt;wmma::accumulator, 16, 16, 16, float&gt; c_frag;
+
+wmma::load_matrix_sync(a_frag, a_ptr, lda);
+wmma::load_matrix_sync(b_frag, b_ptr, ldb);
+wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+</code></pre>
+<p><strong>Expected Gain:</strong> 3-10x for supported precisions (FP16, TF32, INT8).</p>
+<h3 id="3-limited-fused-operations">3. Limited Fused Operations</h3>
+<p><strong>Gap:</strong> CLBlast only supports <code>C = alpha*A*B + beta*C</code>.</p>
+<p><strong>Opportunity:</strong> Implement fused kernels for common patterns:</p>
+<ol>
+<li><strong>GEMM + Activation:</strong></li>
+</ol>
+<pre><code class="lang-opencl">// Fused: Y = activation(alpha*A*B + beta*C)
+// Saves one global memory round-trip
+C[idx] = activation(alpha * dot_product + beta * C[idx]);
+</code></pre>
+<ol start="2">
+<li><strong>GEMM + Bias + Activation (Neural Network Forward):</strong></li>
+</ol>
+<pre><code class="lang-opencl">// Fused: Y = activation(A*B + bias)
+C[idx] = relu(dot_product + bias[col]);
+</code></pre>
+<ol start="3">
+<li><strong>GEMM + Softmax:</strong></li>
+</ol>
+<pre><code class="lang-opencl">// Fused attention pattern
+// Q*K^T -&gt; softmax -&gt; *V in single kernel
+</code></pre>
+<ol start="4">
+<li><strong>Batched GEMM + Reduction:</strong></li>
+</ol>
+<pre><code class="lang-opencl">// Fused: sum(A_i * B_i) for ensemble methods
+</code></pre>
+<p><strong>Expected Gain:</strong> 20-50% for memory-bound workloads.</p>
+<h3 id="4-suboptimal-small-matrix-handling">4. Suboptimal Small Matrix Handling</h3>
+<p><strong>Gap:</strong> Direct GEMM kernel has high overhead for small matrices (&lt;256).</p>
+<p><strong>Current Approach:</strong></p>
+<ul>
+<li>Same tile sizes regardless of matrix size</li>
+<li>Fixed workgroup dimensions</li>
+<li>No persistent kernel support</li>
+</ul>
+<p><strong>Opportunity:</strong></p>
+<ol>
+<li><strong>Warp-level GEMM for small matrices:</strong></li>
+</ol>
+<pre><code class="lang-opencl">// Single warp computes entire small GEMM
+if (M &lt;= 32 &amp;&amp; N &lt;= 32 &amp;&amp; K &lt;= 32) {
+    // All data in registers, no shared memory
+    WarpGEMM(A, B, C, M, N, K);
+}
+</code></pre>
+<ol start="2">
+<li><strong>Persistent Kernels for Batched Small GEMM:</strong></li>
+</ol>
+<pre><code class="lang-opencl">// Single kernel launch processes all batches
+__kernel void PersistentBatchedGEMM(...) {
+    while (batch_idx &lt; total_batches) {
+        ProcessBatch(batch_idx);
+        batch_idx = atomic_inc(&amp;global_counter);
+    }
+}
+</code></pre>
+<h3 id="5-no-automatic-precision-selection">5. No Automatic Precision Selection</h3>
+<p><strong>Gap:</strong> User must manually choose precision.</p>
+<p><strong>Opportunity:</strong> Mixed-precision computation:</p>
+<pre><code class="lang-opencl">// Accumulate in FP32, load/store in FP16
+half a_val = A[idx];  // FP16 load (saves bandwidth)
+half b_val = B[idx];  // FP16 load
+float acc = (float)a_val * (float)b_val;  // FP32 compute
+// ... accumulate in FP32 ...
+C[idx] = (half)acc;  // FP16 store
+</code></pre>
+<p><strong>Expected Gain:</strong> 2x bandwidth reduction with minimal accuracy loss.</p>
+<h3 id="6-missing-sparsity-support">6. Missing Sparsity Support</h3>
+<p><strong>Gap:</strong> No sparse matrix acceleration.</p>
+<p><strong>Opportunity:</strong> Structured sparsity (2:4 pattern for NVIDIA Ampere+):</p>
+<pre><code class="lang-opencl">// Process 2:4 sparse matrices
+// 50% sparsity = 2x compute throughput
+__kernel void SparseMMA(
+    __global half* A_values,  // Only non-zero values
+    __global int* A_indices,  // Sparsity pattern
+    __global half* B,
+    __global float* C
+) {
+    // Use sparse tensor core instructions
+}
+</code></pre>
+<h3 id="7-architecture-specific-gaps">7. Architecture-Specific Gaps</h3>
+<p><strong>NVIDIA:</strong></p>
+<ul>
+<li>No async copy (<code>cp.async</code>) for Ampere+</li>
+<li>No warp specialization (producer/consumer pattern)</li>
+<li>No tensor memory accelerator (TMA) for Hopper</li>
+</ul>
+<p><strong>AMD:</strong></p>
+<ul>
+<li>No MFMA (Matrix Fused Multiply-Add) utilization</li>
+<li>No LDS (Local Data Share) swizzling optimization</li>
+<li>Limited wave32/wave64 selection</li>
+</ul>
+<p><strong>Intel:</strong></p>
+<ul>
+<li>No XMX (Xe Matrix eXtensions) utilization</li>
+<li>No EU thread preemption hints</li>
+<li>Limited SLM bank conflict optimization</li>
+</ul>
+<h3 id="8-memory-access-pattern-improvements">8. Memory Access Pattern Improvements</h3>
+<p><strong>Gap:</strong> Fixed access patterns don't adapt to matrix layouts.</p>
+<p><strong>Opportunity:</strong> Runtime layout selection:</p>
+<pre><code class="lang-opencl">// Detect optimal layout at runtime
+if (is_row_major(A) &amp;&amp; is_col_major(B)) {
+    // Use NT kernel variant with specific tile shape
+} else if (is_col_major(A) &amp;&amp; is_row_major(B)) {
+    // Use TN kernel variant
+}
+</code></pre>
+<h3 id="9-kernel-fusion-framework">9. Kernel Fusion Framework</h3>
+<p><strong>Gap:</strong> No mechanism for custom operation fusion.</p>
+<p><strong>Opportunity:</strong> JIT kernel generation:</p>
+<pre><code class="lang-cpp">// Runtime kernel composition
+KernelBuilder builder;
+builder.addOp(GEMM, {M, N, K});
+builder.addOp(BIAS_ADD, {bias_ptr});
+builder.addOp(RELU, {});
+builder.addOp(DROPOUT, {0.1});
+auto kernel = builder.compile();
+</code></pre>
+<h3 id="10-improved-auto-tuning">10. Improved Auto-Tuning</h3>
+<p><strong>Gap:</strong> Exhaustive search or random sampling only.</p>
+<p><strong>Opportunity:</strong></p>
+<ol>
+<li><strong>Bayesian Optimization:</strong> Model performance as function of parameters</li>
+<li><strong>Transfer Learning:</strong> Use tuning results from similar GPUs</li>
+<li><strong>Analytical Models:</strong> Predict performance without running kernels</li>
+<li><strong>Multi-objective Optimization:</strong> Balance performance vs. power</li>
+</ol>
+<hr>
+<h2 id="summary-priority-optimization-targets">Summary: Priority Optimization Targets</h2>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Optimization</th>
+<th>Expected Gain</th>
+<th>Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Tensor Core support</td>
+<td>3-10x</td>
+<td>High</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Double-buffering</td>
+<td>15-30%</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Fused GEMM+Activation</td>
+<td>20-50%</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Mixed precision</td>
+<td>2x bandwidth</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Small matrix optimization</td>
+<td>2-5x</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Async copy (Ampere+)</td>
+<td>10-20%</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Structured sparsity</td>
+<td>2x</td>
+<td>High</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Kernel fusion framework</td>
+<td>Variable</td>
+<td>High</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="references">References</h2>
+<ul>
+<li>CLBlast GitHub: <a href="https://github.com/CNugteren/CLBlast">https://github.com/CNugteren/CLBlast</a></li>
+<li>CLBlast Paper: Nugteren, C. (2018). CLBlast: A Tuned OpenCL BLAS Library. IWOCL.</li>
+<li>NVIDIA CUTLASS: <a href="https://github.com/NVIDIA/cutlass">https://github.com/NVIDIA/cutlass</a></li>
+<li>AMD rocBLAS: <a href="https://github.com/ROCmSoftwarePlatform/rocBLAS">https://github.com/ROCmSoftwarePlatform/rocBLAS</a></li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/CLBLAST_ANALYSIS.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

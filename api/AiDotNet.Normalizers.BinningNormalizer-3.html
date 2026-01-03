@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BinningNormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BinningNormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a normalizer that uses data binning to transform values into discrete ranges.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Normalizers_BinningNormalizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.Normalizers.BinningNormalizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Normalizers.BinningNormalizer`3">
+
+
+
+  <h1 id="AiDotNet_Normalizers_BinningNormalizer_3" data-uid="AiDotNet.Normalizers.BinningNormalizer`3" class="text-break">
+Class BinningNormalizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/BinningNormalizer.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Normalizers.html">Normalizers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a normalizer that uses data binning to transform values into discrete ranges.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BinningNormalizer&lt;T, TInput, TOutput&gt; : NormalizerBase&lt;T, TInput, TOutput&gt;, INormalizer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data structure.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data structure.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html">NormalizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">BinningNormalizer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INormalizer-3.html">INormalizer</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NumOps">NormalizerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Engine">NormalizerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NormalizeOutput__2_">NormalizerBase&lt;T, TInput, TOutput&gt;.NormalizeOutput(TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NormalizeInput__1_">NormalizerBase&lt;T, TInput, TOutput&gt;.NormalizeInput(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TOutput, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Normalizers_BinningNormalizer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The BinningNormalizer divides data into a fixed number of bins (categories) based on their values.
+It transforms each value to a normalized value representing the bin it belongs to, creating a 
+discrete representation of continuous data. This approach can be useful for handling outliers
+and non-linear relationships in the data.
+</p>
+<p>
+The binning process works by:
+- Sorting the input values
+- Creating equally spaced quantile bins (default is 10 bins)
+- Mapping each value to its corresponding bin
+- Normalizing bin indices to the range [0, 1]
+</p>
+<p><b>For Beginners:</b> A BinningNormalizer is like sorting items into different sized containers.
+<p>Think of binning as organizing your data like groceries on shelves:</p>
+<ul>
+<li>Instead of keeping the exact price of each item, you group them into price ranges</li>
+<li>For example, items costing $0-$5 go on shelf 1, $5-$10 on shelf 2, and so on</li>
+<li>The shelves (bins) are sized to contain roughly equal numbers of items</li>
+<li>After binning, you just need to know which shelf an item is on, not its exact price</li>
+</ul>
+<p>This is useful when:</p>
+<ul>
+<li>You care more about the general range of a value than its exact number</li>
+<li>Your data has unusual values that might skew your analysis</li>
+<li>You want to simplify complex data into more manageable categories</li>
+</ul>
+<p>For instance, instead of working with exact ages (23, 37, 82, etc.), binning might group them
+into categories like &quot;young adult,&quot; &quot;middle-aged,&quot; and &quot;senior.&quot;</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Normalizers_BinningNormalizer_3__ctor_" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Normalizers_BinningNormalizer_3__ctor" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.#ctor">
+  BinningNormalizer()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/BinningNormalizer.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Normalizers.BinningNormalizer-3.html">BinningNormalizer&lt;T, TInput, TOutput&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BinningNormalizer()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_BinningNormalizer_3__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new BinningNormalizer and initializes the numeric operations
+provider for the specified type T. No additional parameters are required as the normalizer
+uses the default bin count.
+</p>
+<p><b>For Beginners:</b> This sets up your binning system with default settings.
+<p>When you create a new BinningNormalizer:</p>
+<ul>
+<li>It automatically sets up to use 10 bins (categories)</li>
+<li>It figures out what kind of numbers you're working with</li>
+<li>It gets ready to sort your data into these bins</li>
+</ul>
+<p>It's like setting up shelves in a store before you start organizing products.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.Denormalize(`1,`2,`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/BinningNormalizer.cs/#L476"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Denormalizes the y-intercept from a regression model that was trained on binned data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xMatrix</code> <span class="xref">TInput</span></dt>
+    <dd><p>The original input feature matrix.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The original output vector.</p>
+</dd>
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The regression coefficients.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters for the input features.</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters for the output variable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A denormalized y-intercept that can be used with original, unbinned data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method attempts to adjust the y-intercept of a regression model to work with original unbinned data.
+Like coefficient denormalization, this is a complex task for binned data and may not always produce
+ideal results. This implementation uses a simplified approach based on the midpoints of the bin ranges.
+</p>
+<p><b>For Beginners:</b> This method adjusts the baseline value of a prediction model to work with original values.
+<p>In a prediction model, the y-intercept is like the starting point or baseline:</p>
+<ul>
+<li>It's the predicted value when all features are set to zero</li>
+<li>When using binned data, this baseline needs to be adjusted to work with original values</li>
+<li>This method calculates an approximate y-intercept for the unbinned data</li>
+</ul>
+<p>Like with coefficient denormalization:</p>
+<ul>
+<li>This is an approximation because binning loses some information</li>
+<li>The adjusted baseline might not be as accurate as one from a model trained on unbinned data</li>
+<li>It uses the average values of bins to estimate a reasonable baseline</li>
+</ul>
+<p>Think of it as figuring out where to start your predictions when switching from working
+with simplified bin numbers back to complex original values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.Denormalize(`2,AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/BinningNormalizer.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Denormalizes a vector using the provided normalization parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Denormalize(TOutput data, NormalizationParameters&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The normalized vector to denormalize.</p>
+</dd>
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters containing bin information.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>A denormalized vector with values approximated from the bins.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts normalized bin indices back to approximate original values.
+Since binning is a lossy transformation (multiple original values map to the same bin),
+the denormalization process returns an approximation, typically the average value of the bin.
+</p>
+<p><b>For Beginners:</b> This method converts shelf numbers back to approximate original values.
+<p>When you denormalize binned data:</p>
+<ul>
+<li>You're trying to go from bin numbers (0.0 to 1.0) back to something close to the original values</li>
+<li>Since multiple original values were grouped into the same bin, you can't recover exact original values</li>
+<li>Instead, the method returns a representative value for each bin (typically the average of the bin's boundaries)</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>If age 25 and age 30 both got binned to 0.4 during normalization</li>
+<li>When denormalizing 0.4, you might get back 27.5 (the average of those ages)</li>
+<li>This is an approximation, not the exact original value</li>
+</ul>
+<p>This loss of precision is the trade-off for the simplification that binning provides.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameters do not contain valid bin information.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.Denormalize(`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/BinningNormalizer.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Denormalizes coefficients from a regression model that was trained on binned data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Denormalize(TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The regression coefficients to denormalize.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters for the input features.</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters for the output variable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>Denormalized coefficients that can be applied to original, unbinned data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_BinningNormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method attempts to adjust regression coefficients to work with original unbinned data.
+Denormalizing coefficients for binned data is complex and may not always produce ideal results,
+as binning is a non-linear transformation that changes the relationship between variables.
+This implementation uses a simplified approach based on the range of each variable.
+</p>
+<p><b>For Beginners:</b> This method adjusts prediction model weights to work with original values instead of bin numbers.
+<p>When you've built a prediction model using binned data:</p>
+<ul>
+<li>The model's weights (coefficients) were learned based on bin numbers (0.0 to 1.0)</li>
+<li>To use this model with unbinned data, you need to adjust these weights</li>
+<li>This method attempts to convert the weights to work with the original scale of your data</li>
+</ul>
+<p>However, there's an important limitation:</p>
+<ul>
+<li>Since binning groups many values together, some information is permanently lost</li>
+<li>This means the conversion back to original scales is an approximation</li>
+<li>The adjusted weights might not work as well as a model originally trained on unbinned data</li>
+</ul>
+<p>Think of it like translating between languages - some meaning inevitably gets lost or changed.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_BinningNormalizer_3_NormalizeInput_" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.NormalizeInput*"></a>
+
+  <h3 id="AiDotNet_Normalizers_BinningNormalizer_3_NormalizeInput__1_" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.NormalizeInput(`1)">
+  NormalizeInput(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/BinningNormalizer.cs/#L209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes a matrix using the binning approach, applying normalization separately to each column.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (TInput, List&lt;NormalizationParameters&lt;T&gt;&gt;) NormalizeInput(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input matrix to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;)</dt>
+    <dd><p>A tuple containing the normalized matrix and a list of normalization parameters for each column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_BinningNormalizer_3_NormalizeInput__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method normalizes each column of the matrix independently using the binning approach.
+It treats each column as a separate feature that needs its own binning strategy, since different
+features may have different distributions and ranges.
+</p>
+<p><b>For Beginners:</b> This method applies binning to a table of data, one column at a time.
+<p>When working with a table (matrix) of data:</p>
+<ul>
+<li>Each column might represent a different type of information (age, height, income, etc.)</li>
+<li>Each column needs its own binning strategy because the ranges and distributions differ</li>
+<li>This method processes each column separately using the vector normalization method</li>
+</ul>
+<p>For example, with a table of people's information:</p>
+<ul>
+<li>Column 1 (ages) might be binned into age ranges</li>
+<li>Column 2 (heights) would be binned into height ranges</li>
+<li>Each column gets its own set of bins appropriate for its values</li>
+</ul>
+<p>The method returns:</p>
+<ul>
+<li>A new table with all values replaced by their bin positions (0.0 to 1.0)</li>
+<li>A separate set of bin boundaries for each column, so you can reverse the process later</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_BinningNormalizer_3_NormalizeOutput_" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.NormalizeOutput*"></a>
+
+  <h3 id="AiDotNet_Normalizers_BinningNormalizer_3_NormalizeOutput__2_" data-uid="AiDotNet.Normalizers.BinningNormalizer`3.NormalizeOutput(`2)">
+  NormalizeOutput(TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/BinningNormalizer.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes a vector using the binning approach.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (TOutput, NormalizationParameters&lt;T&gt;) NormalizeOutput(TOutput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The input vector to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TOutput, <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;)</dt>
+    <dd><p>A tuple containing the normalized vector and the normalization parameters, which include the bin boundaries.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_BinningNormalizer_3_NormalizeOutput__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method normalizes a vector by:
+1. Sorting the values to determine the distribution
+2. Creating equally spaced quantile bins based on the sorted values
+3. Assigning each value to a bin and returning the normalized bin index (between 0 and 1)
+<p>The normalization parameters include the bin boundaries, which are needed for later denormalization.</p>
+
+<p><b>For Beginners:</b> This method sorts your data into bins and gives each value a shelf number.
+<p>The process works like this:</p>
+<ol>
+<li>First, it sorts all your values from smallest to largest</li>
+<li>Then, it creates 10 bins (shelves) that will each contain roughly the same number of items</li>
+<li>For each value in your original data:
+<ul>
+<li>It figures out which bin the value belongs in</li>
+<li>It assigns a normalized value based on the bin number (bin 0 ? 0.0, bin 9 ? 1.0)</li>
+</ul>
+</li>
+</ol>
+<p>The method returns:</p>
+<ul>
+<li>Your transformed data with each value replaced by its normalized bin value</li>
+<li>Information about the bin boundaries so you can reverse the process later</li>
+</ul>
+<p>For example, if you had ages [5, 18, 25, 40, 62, 71], after normalization they might become
+values like [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] representing which bin they fall into.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/BinningNormalizer.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

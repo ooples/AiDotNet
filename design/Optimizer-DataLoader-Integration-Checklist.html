@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Optimizer DataLoader Integration Checklist | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Optimizer DataLoader Integration Checklist | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/design/Optimizer-DataLoader-Integration-Checklist.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="optimizer-dataloader-integration-checklist">Optimizer DataLoader Integration Checklist</h1>
+
+<p>This document tracks the progress of integrating the DataLoader API into all gradient-based optimizers.</p>
+<h2 id="integration-pattern">Integration Pattern</h2>
+<p>Each optimizer requires:</p>
+<ol>
+<li>Add <code>BatchSize</code> property to options class (default: 32)</li>
+<li>Change iteration loop to epoch-based loop</li>
+<li>Add <code>NotifyEpochStart(epoch)</code> at start of each epoch</li>
+<li>Create batcher: <code>var batcher = CreateBatcher(inputData, _options.BatchSize)</code></li>
+<li>Inner loop: <code>foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())</code></li>
+<li>Move evaluation to after batch loop (end of epoch)</li>
+<li>Add DataLoader Integration documentation in remarks</li>
+</ol>
+<hr>
+<h2 id="first-order-gradient-optimizers">First-Order Gradient Optimizers</h2>
+<h3 id="core-optimizers">Core Optimizers</h3>
+<ul>
+<li>[x] <strong>StochasticGradientDescentOptimizer</strong> - Refactored (BatchSize default: 1)</li>
+<li>[x] <strong>MiniBatchGradientDescentOptimizer</strong> - Already uses DataLoader</li>
+<li>[x] <strong>GradientDescentOptimizer</strong> - Refactored (BatchSize default: 32)</li>
+</ul>
+<h3 id="adam-family">Adam Family</h3>
+<ul>
+<li>[x] <strong>AdamOptimizer</strong> - Refactored</li>
+<li>[x] <strong>AdamWOptimizer</strong> - Refactored</li>
+<li>[x] <strong>NadamOptimizer</strong> - Refactored</li>
+<li>[x] <strong>AMSGradOptimizer</strong> - Refactored</li>
+<li>[x] <strong>AdaMaxOptimizer</strong> - Refactored</li>
+</ul>
+<h3 id="momentum-family">Momentum Family</h3>
+<ul>
+<li>[x] <strong>MomentumOptimizer</strong> - Refactored</li>
+<li>[x] <strong>NesterovAcceleratedGradientOptimizer</strong> - Refactored</li>
+</ul>
+<h3 id="adaptive-learning-rate-family">Adaptive Learning Rate Family</h3>
+<ul>
+<li>[x] <strong>AdagradOptimizer</strong> - Refactored</li>
+<li>[x] <strong>AdaDeltaOptimizer</strong> - Refactored</li>
+<li>[x] <strong>RootMeanSquarePropagationOptimizer</strong> (RMSprop) - Refactored</li>
+</ul>
+<h3 id="modernspecialized-optimizers">Modern/Specialized Optimizers</h3>
+<ul>
+<li>[x] <strong>LionOptimizer</strong> - Refactored</li>
+<li>[x] <strong>FTRLOptimizer</strong> - Refactored</li>
+<li>[x] <strong>ProximalGradientDescentOptimizer</strong> - Refactored</li>
+<li>[x] <strong>ADMMOptimizer</strong> - Refactored (epoch notification only, full batch)</li>
+<li>[x] <strong>CoordinateDescentOptimizer</strong> - Refactored (epoch notification only, full batch)</li>
+</ul>
+<hr>
+<h2 id="second-order-optimizers-full-batch-only">Second-Order Optimizers (Full-Batch Only)</h2>
+<p>These optimizers require full-batch gradients due to Hessian/quasi-Newton requirements.
+They use <code>BatchSize = -1</code> (full batch) and have <code>NotifyEpochStart(epoch)</code> for curriculum learning compatibility.</p>
+<ul>
+<li>[x] <strong>ConjugateGradientOptimizer</strong> - Refactored (epoch notification, full batch)</li>
+<li>[x] <strong>BFGSOptimizer</strong> - Refactored (epoch notification, full batch for Hessian approximation)</li>
+<li>[x] <strong>LBFGSOptimizer</strong> - Refactored (epoch notification, full batch for limited-memory BFGS)</li>
+<li>[x] <strong>DFPOptimizer</strong> - Refactored (epoch notification, full batch for inverse Hessian approximation)</li>
+<li>[x] <strong>NewtonMethodOptimizer</strong> - Refactored (epoch notification, full batch for Hessian computation)</li>
+<li>[x] <strong>LevenbergMarquardtOptimizer</strong> - Refactored (epoch notification, full batch for Jacobian)</li>
+<li>[x] <strong>TrustRegionOptimizer</strong> - Refactored (epoch notification, full batch for quadratic model)</li>
+</ul>
+<hr>
+<h2 id="non-gradient-based-optimizers-not-applicable">Non-Gradient-Based Optimizers (Not Applicable)</h2>
+<p>These optimizers do not use gradients and don't need DataLoader integration:</p>
+<ul>
+<li>N/A <strong>GeneticAlgorithmOptimizer</strong> - Evolutionary algorithm</li>
+<li>N/A <strong>ParticleSwarmOptimizer</strong> - Swarm intelligence</li>
+<li>N/A <strong>SimulatedAnnealingOptimizer</strong> - Probabilistic metaheuristic</li>
+<li>N/A <strong>DifferentialEvolutionOptimizer</strong> - Evolutionary algorithm</li>
+<li>N/A <strong>AntColonyOptimizer</strong> - Swarm intelligence</li>
+<li>N/A <strong>CMAESOptimizer</strong> - Evolutionary strategy</li>
+<li>N/A <strong>TabuSearchOptimizer</strong> - Metaheuristic</li>
+<li>N/A <strong>BayesianOptimizer</strong> - Bayesian optimization</li>
+<li>N/A <strong>NelderMeadOptimizer</strong> - Simplex method</li>
+<li>N/A <strong>PowellOptimizer</strong> - Direction set method</li>
+<li>N/A <strong>NormalOptimizer</strong> - Statistical optimization</li>
+</ul>
+<hr>
+<h2 id="progress-summary">Progress Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Completed</th>
+<th>Total</th>
+<th>Percentage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core Optimizers</td>
+<td>3</td>
+<td>3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Adam Family</td>
+<td>5</td>
+<td>5</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Momentum Family</td>
+<td>2</td>
+<td>2</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Adaptive LR Family</td>
+<td>3</td>
+<td>3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Modern/Specialized</td>
+<td>5</td>
+<td>5</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Second-Order</td>
+<td>7</td>
+<td>7</td>
+<td>100%</td>
+</tr>
+<tr>
+<td><strong>Total All</strong></td>
+<td><strong>25</strong></td>
+<td><strong>25</strong></td>
+<td><strong>100%</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="batching-semantics-summary">Batching Semantics Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Optimizer Type</th>
+<th>Default BatchSize</th>
+<th>Batching Support</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>First-Order (SGD, Adam, etc.)</td>
+<td>32</td>
+<td>Full mini-batch support</td>
+</tr>
+<tr>
+<td>Stochastic GD</td>
+<td>1</td>
+<td>Single-sample batching</td>
+</tr>
+<tr>
+<td>ADMM, Coordinate Descent</td>
+<td>-1 (full)</td>
+<td>Epoch notification only</td>
+</tr>
+<tr>
+<td>Second-Order (BFGS, Newton, etc.)</td>
+<td>-1 (full)</td>
+<td>Epoch notification only</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note</strong>: Second-order optimizers use full-batch gradients because they build Hessian or
+quasi-Hessian approximations that require consistent gradient information between iterations.
+Mini-batching would introduce noise that disrupts these approximations.</p>
+<hr>
+<h2 id="unit-tests-phase-6">Unit Tests (Phase 6)</h2>
+<p>Comprehensive unit tests created for the DataLoader infrastructure:</p>
+<table>
+<thead>
+<tr>
+<th>Test File</th>
+<th>Tests</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OptimizationDataBatcherTests.cs</code></td>
+<td>29</td>
+<td>Tests for batch creation, shuffling, drop last, seeds</td>
+</tr>
+<tr>
+<td><code>DataSamplerTests.cs</code></td>
+<td>45</td>
+<td>Tests for RandomSampler, SequentialSampler, SubsetSampler, CurriculumSampler, WeightedSampler</td>
+</tr>
+<tr>
+<td><code>OptimizerBatchingTests.cs</code></td>
+<td>26</td>
+<td>Tests for optimizer options, batch sizes, sampler integration</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>100</strong></td>
+<td>All tests passing</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="performance-benchmarks-phase-7">Performance Benchmarks (Phase 7)</h2>
+<p>Comprehensive BenchmarkDotNet benchmarks for DataLoader infrastructure:</p>
+<table>
+<thead>
+<tr>
+<th>Benchmark File</th>
+<th>Benchmarks</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DataLoaderBenchmarks.cs</code></td>
+<td>28</td>
+<td>Tests for batcher creation, iteration, batch sizes, shuffle overhead, samplers</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Benchmark Categories:</strong></p>
+<ul>
+<li><strong>Batcher Creation</strong>: Measure overhead of creating batchers with/without shuffle</li>
+<li><strong>Batch Iteration</strong>: Compare iteration performance across dataset sizes (100, 1000, 10000 samples)</li>
+<li><strong>Batch Size Comparison</strong>: Compare batch sizes 1, 16, 32, 64, 128</li>
+<li><strong>Shuffle vs No-Shuffle</strong>: Measure shuffle overhead impact</li>
+<li><strong>Sampler Performance</strong>: RandomSampler, SequentialSampler, CurriculumSampler</li>
+<li><strong>GetBatchIndices vs GetBatches</strong>: Compare lightweight index-only vs full data extraction</li>
+<li><strong>DropLast Comparison</strong>: Measure impact of dropping incomplete last batch</li>
+<li><strong>WeightedSampler</strong>: Balanced weights creation and weighted sampling</li>
+</ul>
+<p><strong>Running Benchmarks:</strong></p>
+<pre><code class="lang-bash">dotnet run -c Release --project AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj -- --filter &quot;*DataLoader*&quot;
+</code></pre>
+<hr>
+<h2 id="last-updated">Last Updated</h2>
+<ul>
+<li>Date: 2025-12-24</li>
+<li>Session: Issue #443 DataLoader Integration</li>
+<li>Phase: Phase 7 complete (performance benchmarks added)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/design/Optimizer-DataLoader-Integration-Checklist.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MixtureOfExpertsBuilder&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MixtureOfExpertsBuilder&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A builder class that helps create and configure Mixture-of-Experts layers with sensible defaults.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1" class="text-break">
+Class MixtureOfExpertsBuilder&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Layers.html">Layers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A builder class that helps create and configure Mixture-of-Experts layers with sensible defaults.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MixtureOfExpertsBuilder&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically float or double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MixtureOfExpertsBuilder&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This builder simplifies the creation of Mixture-of-Experts layers by providing convenient methods
+with research-backed default values. It follows best practices from MoE literature to ensure
+good initial configuration for most use cases.
+</p>
+<p>
+<b>For Beginners:</b> Think of this as a guided recipe for creating an MoE layer.
+<p>Instead of manually specifying every detail of your MoE layer (which experts to use,
+how to route between them, whether to use load balancing, etc.), this builder provides
+good default choices based on research and best practices.</p>
+<p>It's like having a cooking recipe that says &quot;preheat to 350°F&quot; instead of making you
+figure out the right temperature yourself. You can still customize if needed, but the
+defaults work well for most cases.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1__ctor" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.#ctor">
+  MixtureOfExpertsBuilder()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The builder is initialized with sensible default values based on research:
+- 4 experts (balance between capacity and computation)
+- Soft routing (all experts active, good for smaller models)
+- Load balancing enabled with weight 0.01 (prevents expert collapse)
+- ReLU activation for experts (standard, well-tested choice)
+- Identity activation for output (let downstream layers add non-linearity)
+</p>
+<p>
+<b>For Beginners:</b> Creates a new MoE builder with smart default settings.
+<p>The defaults are chosen to work well in most situations:</p>
+<ul>
+<li>Not too many experts (4): Fast training and inference</li>
+<li>Not too few experts (4): Enough specialization capacity</li>
+<li>Load balancing: Ensures all experts get used</li>
+<li>ReLU activation: The most popular choice, works well in practice</li>
+</ul>
+<p>These defaults are based on what researchers have found works best in practice.
+You can change any of these later if you have specific needs.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_Build_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.Build*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_Build" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.Build">
+  Build()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L455"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds the Mixture-of-Experts layer with the configured settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsLayer&lt;T&gt; Build()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer-1.html">MixtureOfExpertsLayer</a>&lt;T&gt;</dt>
+    <dd><p>A configured MixtureOfExpertsLayer instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_Build_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates all the expert networks, the routing network, and assembles them into
+a complete MoE layer. It uses the configuration specified via the builder methods, falling
+back to sensible defaults for any unspecified settings.
+</p>
+<p>
+<b>For Beginners:</b> Creates the actual MoE layer with all your settings.
+<p>What happens when you call Build():</p>
+<ol>
+<li>Creates the routing network (decides which experts to use)</li>
+<li>Creates all the expert networks with your specified architecture</li>
+<li>Connects everything together into one MoE layer</li>
+<li>Initializes all parameters with good starting values</li>
+</ol>
+<p>After calling Build(), you get a complete, ready-to-use MoE layer that you can:</p>
+<ul>
+<li>Add to your neural network architecture</li>
+<li>Train with your data</li>
+<li>Use for inference</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var moeLayer = new MixtureOfExpertsBuilder&lt;float&gt;()
+    .WithExperts(8)
+    .WithDimensions(256, 256)
+    .WithTopK(2)
+    .WithLoadBalancing(true, 0.01)
+    .Build();</code></pre>
+<p>This creates an MoE layer with 8 experts, where each input uses only the top 2 experts,
+and load balancing ensures all experts get used equally during training.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithDimensions_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithDimensions*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithDimensions_System_Int32_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithDimensions(System.Int32,System.Int32)">
+  WithDimensions(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the input and output dimensions for the MoE layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithDimensions(int inputDim, int outputDim)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The input dimension.</p>
+</dd>
+    <dt><code>outputDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The output dimension.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithDimensions_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For transformer-style architectures, input and output dimensions are typically the same (residual connections).
+For bottleneck architectures, output might be smaller than input (dimensionality reduction).
+For expansion architectures, output might be larger than input (feature expansion).
+</p>
+<p>
+<b>For Beginners:</b> Sets the size of data coming in and going out.
+<p>Common patterns:</p>
+<ul>
+<li>Same size (128→128): Maintains dimensionality, easy to stack multiple MoE layers</li>
+<li>Bottleneck (512→128): Compresses information, reduces computation in later layers</li>
+<li>Expansion (128→512): Expands features, increases representational capacity</li>
+</ul>
+<p>Most transformer-based models use the same input and output dimensions,
+which makes it easy to stack many MoE layers together.</p>
+<p>Example: If your previous layer outputs 256 features and your next layer expects
+256 features, use WithDimensions(256, 256).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExpertActivation_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithExpertActivation*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExpertActivation_AiDotNet_Interfaces_IActivationFunction__0__" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithExpertActivation(AiDotNet.Interfaces.IActivationFunction{`0})">
+  WithExpertActivation(IActivationFunction&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L338"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the activation function for experts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithExpertActivation(IActivationFunction&lt;T&gt; activation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The activation function to use in expert networks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExpertActivation_AiDotNet_Interfaces_IActivationFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Common choices: ReLU (default, fast and stable), GELU (used in transformers, smoother),
+Swish/SiLU (good performance, slightly more computation).
+ReLU is the safest default choice for most applications.
+</p>
+<p>
+<b>For Beginners:</b> Sets what mathematical function experts use for non-linearity.
+<p>Popular choices:</p>
+<ul>
+<li><p>ReLU (default): Fast, stable, works in most cases</p>
+<ul>
+<li>Use when: You want safe, reliable performance</li>
+<li>Used in: Most computer vision, many NLP models</li>
+</ul>
+</li>
+<li><p>GELU: Smoother than ReLU, used in modern transformers</p>
+<ul>
+<li>Use when: Building transformer-based models</li>
+<li>Used in: BERT, GPT, most modern language models</li>
+</ul>
+</li>
+<li><p>Swish/SiLU: Smooth and performs well</p>
+<ul>
+<li>Use when: You want slightly better performance</li>
+<li>Trade-off: A bit slower than ReLU</li>
+</ul>
+</li>
+<li><p>Tanh: Classic choice, outputs -1 to 1</p>
+<ul>
+<li>Use when: You need bounded outputs</li>
+<li>Used in: LSTMs, some older architectures</li>
+</ul>
+</li>
+</ul>
+<p>If unsure, stick with the default (ReLU). It's the most tested and reliable.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExpertHiddenDim_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithExpertHiddenDim*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExpertHiddenDim_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithExpertHiddenDim(System.Int32)">
+  WithExpertHiddenDim(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the hidden dimension for the expert networks (for 2-layer experts).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithExpertHiddenDim(int hiddenDim)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>hiddenDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The hidden dimension for expert networks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExpertHiddenDim_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Research often uses 4x the model dimension as hidden dimension in MoE layers.
+For example, if your model uses 128-dimensional embeddings, use hiddenDim=512.
+This is known as the "feed-forward expansion factor" in transformer literature.
+</p>
+<p>
+<b>For Beginners:</b> Sets how large the "middle" of each expert is.
+<p>Each expert is like a mini-network: Input → Hidden → Output
+The hidden layer is where the expert does its &quot;thinking.&quot;</p>
+<p>Common practice: Make hidden dimension 4x the input dimension</p>
+<ul>
+<li>Input 128 → Hidden 512 → Output 128</li>
+<li>Input 256 → Hidden 1024 → Output 256</li>
+</ul>
+<p>Why 4x?</p>
+<ul>
+<li>Gives experts enough capacity to learn complex patterns</li>
+<li>Based on extensive research (used in BERT, GPT, etc.)</li>
+<li>Good balance between capacity and efficiency</li>
+</ul>
+<p>You can go lower (2x) for smaller models or higher (8x) for more capacity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExperts_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithExperts*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExperts_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithExperts(System.Int32)">
+  WithExperts(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the number of expert networks in the MoE layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithExperts(int numExperts)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numExperts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of experts (must be at least 2).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithExperts_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Common values in research: 4-16 for small/medium models, 32-128 for large models.
+More experts = more capacity but also more computation and memory.
+</p>
+<p>
+<b>For Beginners:</b> Sets how many specialist networks to create.
+<p>Guidelines:</p>
+<ul>
+<li>2-4 experts: Good for small models or limited compute</li>
+<li>4-8 experts: Sweet spot for most applications</li>
+<li>8-16 experts: For larger, more complex tasks</li>
+<li>16+ experts: For very large scale models (use with TopK for efficiency)</li>
+</ul>
+<p>More experts allow more specialization, but:</p>
+<ul>
+<li>Take longer to train</li>
+<li>Use more memory</li>
+<li>May need load balancing to prevent some being unused</li>
+</ul>
+<p>Start with 4-8 and adjust based on your results.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithHiddenExpansion_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithHiddenExpansion*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithHiddenExpansion_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithHiddenExpansion(System.Int32)">
+  WithHiddenExpansion(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L200"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the hidden dimension expansion factor for expert networks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithHiddenExpansion(int expansion)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>expansion</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The expansion factor (hidden dim = input dim * expansion).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithHiddenExpansion_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The actual expert hidden dimension will be calculated as InputDim * expansion.
+Common values: 2-4 for moderate capacity, 4-8 for high capacity.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithIntermediateLayer_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithIntermediateLayer*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithIntermediateLayer_System_Boolean_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithIntermediateLayer(System.Boolean)">
+  WithIntermediateLayer(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L411"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures whether experts should use an intermediate (hidden) layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithIntermediateLayer(bool useIntermediateLayer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>useIntermediateLayer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use 2-layer experts, false for single-layer experts.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithIntermediateLayer_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Two-layer experts (Input → Hidden → Output) provide more capacity and are standard in research.
+Single-layer experts (Input → Output) are faster and use less memory, suitable for simpler tasks.
+Default is true (two-layer) as this matches most research implementations.
+</p>
+<p>
+<b>For Beginners:</b> Controls how complex each expert network is.
+<p>Two-layer experts (default: true):</p>
+<ul>
+<li>Structure: Input → Hidden → Output</li>
+<li>Pros: More capacity to learn complex patterns</li>
+<li>Cons: Slower, uses more memory</li>
+<li>Use when: You have a complex task or enough compute</li>
+<li>Example: Input(128) → Hidden(512) → Output(128)</li>
+</ul>
+<p>Single-layer experts (false):</p>
+<ul>
+<li>Structure: Input → Output (direct connection)</li>
+<li>Pros: Faster, less memory, easier to train</li>
+<li>Cons: Less capacity for complex patterns</li>
+<li>Use when: Simpler task or limited compute</li>
+<li>Example: Input(128) → Output(128)</li>
+</ul>
+<p>Rule of thumb:</p>
+<ul>
+<li>Complex tasks (language, vision): Use two-layer (true)</li>
+<li>Simple tasks (regression, small classification): Can use single-layer (false)</li>
+<li>When unsure: Stick with default (true)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithLoadBalancing_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithLoadBalancing*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithLoadBalancing_System_Boolean_System_Double_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithLoadBalancing(System.Boolean,System.Double)">
+  WithLoadBalancing(bool, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures load balancing to encourage even expert utilization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithLoadBalancing(bool enabled = true, double weight = 0.01)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>enabled</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to enable load balancing.</p>
+</dd>
+    <dt><code>weight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The weight for the load balancing loss (typically 0.01-0.1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithLoadBalancing_System_Boolean_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Load balancing prevents "expert collapse" where all inputs are routed to a small subset of experts.
+The default weight of 0.01 is based on the Switch Transformer paper and works well in most cases.
+Increase to 0.05-0.1 if you observe severe imbalance, decrease to 0.001-0.005 if it hurts accuracy.
+</p>
+<p>
+<b>For Beginners:</b> Ensures all experts get used roughly equally.
+<p>The Problem:
+Without load balancing, the router might send all inputs to just 1-2 experts,
+leaving others unused. This wastes capacity and prevents specialization.</p>
+<p>The Solution:
+Load balancing adds a small penalty when experts are used unevenly,
+encouraging the router to spread inputs across all experts.</p>
+<p>Weight Guidelines:</p>
+<ul>
+<li>0.01 (default): Gentle encouragement, rarely hurts accuracy</li>
+<li>0.05: Moderate encouragement, use if you see significant imbalance</li>
+<li>0.1: Strong encouragement, may slightly reduce accuracy but ensures balance</li>
+<li>0.001: Very gentle, use if load balancing seems to hurt performance</li>
+</ul>
+<p>When to use:</p>
+<ul>
+<li>Always use for training (enabled by default)</li>
+<li>Disable for inference/testing (the builder does this automatically)</li>
+</ul>
+<p>Monitoring:
+Check GetAuxiliaryLossDiagnostics() during training to see if experts
+are balanced. Ideally, all experts should be used 10-30% of the time
+(with 4 experts, each should get ~25%).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithOutputActivation_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithOutputActivation*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithOutputActivation_AiDotNet_Interfaces_IActivationFunction__0__" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithOutputActivation(AiDotNet.Interfaces.IActivationFunction{`0})">
+  WithOutputActivation(IActivationFunction&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L371"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the activation function for the MoE layer output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithOutputActivation(IActivationFunction&lt;T&gt; activation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The activation function to apply after combining expert outputs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithOutputActivation_AiDotNet_Interfaces_IActivationFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The default is Identity (no activation), which is appropriate when the MoE layer is used
+as a drop-in replacement for a feed-forward layer in architectures with residual connections.
+Use ReLU or other activations if you want non-linearity at this point.
+</p>
+<p>
+<b>For Beginners:</b> Sets what happens to the combined output of all experts.
+<p>Typical choices:</p>
+<ul>
+<li><p>Identity (default): No change to the output</p>
+<ul>
+<li>Use when: MoE is part of a residual block (most transformer architectures)</li>
+<li>Reasoning: Downstream layers will add their own activations</li>
+</ul>
+</li>
+<li><p>ReLU: Applies non-linearity to the final output</p>
+<ul>
+<li>Use when: MoE is a standalone layer without residual connections</li>
+<li>Common in: Feed-forward networks, some CNN architectures</li>
+</ul>
+</li>
+</ul>
+<p>In most modern architectures (like transformers), you want Identity here
+because the architecture already has non-linearity elsewhere.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithTopK_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithTopK*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithTopK_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder`1.WithTopK(System.Int32)">
+  WithTopK(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures Top-K sparse routing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixtureOfExpertsBuilder&lt;T&gt; WithTopK(int k)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of top experts to activate per input (0 = use all experts).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>This builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_MixtureOfExpertsBuilder_1_WithTopK_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Top-K routing dramatically improves efficiency by activating only K experts per input.
+Common values: K=1 or K=2 for large models, K=0 (all experts) for smaller models.
+Research shows K=2 often provides the best accuracy/efficiency tradeoff.
+</p>
+<p>
+<b>For Beginners:</b> Controls how many experts process each input.
+<p>Options:</p>
+<ul>
+<li><p>TopK = 0 (default): All experts process every input (soft routing)</p>
+<ul>
+<li>Pros: Maximum quality, all experts contribute</li>
+<li>Cons: Slower, uses more memory</li>
+<li>Best for: Small models (4-8 experts), when quality is critical</li>
+</ul>
+</li>
+<li><p>TopK = 1: Only the best expert for each input</p>
+<ul>
+<li>Pros: Very fast, minimal computation</li>
+<li>Cons: Less capacity, experts must specialize strongly</li>
+<li>Best for: Very large models (32+ experts), inference speed critical</li>
+</ul>
+</li>
+<li><p>TopK = 2 (recommended for large models): Top 2 experts per input</p>
+<ul>
+<li>Pros: Good balance of quality and speed</li>
+<li>Cons: Still more computation than TopK=1</li>
+<li>Best for: Medium to large models (8-32 experts)</li>
+</ul>
+</li>
+</ul>
+<p>Example: With 8 experts and TopK=2, you use only 25% of the computation!</p>
+<p>Rule of thumb:</p>
+<ul>
+<li>4-8 experts: Use TopK=0 (all)</li>
+<li>8-16 experts: Use TopK=2</li>
+<li>16+ experts: Use TopK=1 or TopK=2</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/MixtureOfExpertsBuilder.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

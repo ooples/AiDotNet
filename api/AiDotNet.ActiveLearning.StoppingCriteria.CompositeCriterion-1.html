@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CompositeCriterion&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CompositeCriterion&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Composite stopping criterion that combines multiple criteria.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1.md&amp;value=---%0Auid%3A%20AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1">
+
+
+
+  <h1 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1" class="text-break">
+Class CompositeCriterion&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActiveLearning.html">ActiveLearning</a>.<a class="xref" href="AiDotNet.ActiveLearning.StoppingCriteria.html">StoppingCriteria</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Composite stopping criterion that combines multiple criteria.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CompositeCriterion&lt;T&gt; : ICompositeCriterion&lt;T&gt;, IStoppingCriterion&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CompositeCriterion&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.ICompositeCriterion-1.html">ICompositeCriterion</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion-1.html">IStoppingCriterion</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Sometimes you want to stop based on multiple conditions.
+For example, stop if you run out of budget OR if performance plateaus. This composite
+criterion lets you combine multiple criteria with AND/OR logic.</p>
+<p><b>Combination Modes:</b></p>
+<ul><li><b>Any (OR):</b> Stop if ANY criterion says to stop</li><li><b>All (AND):</b> Stop only if ALL criteria say to stop</li></ul>
+<p><b>Common Combinations:</b></p>
+<ul><li>Budget OR Plateau: Stop when budget exhausted or performance plateaus</li><li>Budget AND Convergence: Stop only after both conditions met</li><li>Time OR (Budget AND Plateau): Complex nested logic</li></ul>
+<p><b>Example Usage:</b></p>
+<pre><code class="lang-csharp">var composite = new CompositeCriterion&lt;double&gt;(CombinationMode.Any);
+composite.AddCriterion(new BudgetExhaustedCriterion&lt;double&gt;(100));
+composite.AddCriterion(new PerformancePlateauCriterion&lt;double&gt;());
+composite.AddCriterion(new TimeBudgetCriterion&lt;double&gt;(TimeSpan.FromHours(2)));</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1__ctor_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1__ctor" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.#ctor">
+  CompositeCriterion()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new empty CompositeCriterion with Any mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CompositeCriterion()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1__ctor_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1__ctor_AiDotNet_ActiveLearning_StoppingCriteria_CombinationMode_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.#ctor(AiDotNet.ActiveLearning.StoppingCriteria.CombinationMode)">
+  CompositeCriterion(CombinationMode)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new empty CompositeCriterion with specified mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CompositeCriterion(CombinationMode mode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.ActiveLearning.StoppingCriteria.CombinationMode.html">CombinationMode</a></dt>
+    <dd><p>How to combine criteria (Any = OR, All = AND).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1__ctor_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1__ctor_System_Collections_Generic_IEnumerable_AiDotNet_ActiveLearning_Interfaces_IStoppingCriterion__0___AiDotNet_ActiveLearning_StoppingCriteria_CombinationMode_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.#ctor(System.Collections.Generic.IEnumerable{AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion{`0}},AiDotNet.ActiveLearning.StoppingCriteria.CombinationMode)">
+  CompositeCriterion(IEnumerable&lt;IStoppingCriterion&lt;T&gt;&gt;, CombinationMode)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a CompositeCriterion with specified criteria and mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CompositeCriterion(IEnumerable&lt;IStoppingCriterion&lt;T&gt;&gt; criteria, CombinationMode mode = CombinationMode.Any)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>criteria</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion-1.html">IStoppingCriterion</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Initial criteria to include.</p>
+</dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.ActiveLearning.StoppingCriteria.CombinationMode.html">CombinationMode</a></dt>
+    <dd><p>How to combine criteria.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Criteria_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Criteria*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Criteria" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Criteria">
+  Criteria
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the individual criteria in this composite.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;IStoppingCriterion&lt;T&gt;&gt; Criteria { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion-1.html">IStoppingCriterion</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Description_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Description*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Description" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a description of when this criterion triggers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Mode_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Mode*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Mode" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Mode">
+  Mode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the combination mode for this composite.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CombinationMode Mode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.StoppingCriteria.CombinationMode.html">CombinationMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Name_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Name*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Name" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the stopping criterion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_AddCriterion_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.AddCriterion*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_AddCriterion_AiDotNet_ActiveLearning_Interfaces_IStoppingCriterion__0__" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.AddCriterion(AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion{`0})">
+  AddCriterion(IStoppingCriterion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a criterion to the composite.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddCriterion(IStoppingCriterion&lt;T&gt; criterion)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>criterion</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion-1.html">IStoppingCriterion</a>&lt;T&gt;</dt>
+    <dd><p>The criterion to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_All_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.All*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_All_AiDotNet_ActiveLearning_Interfaces_IStoppingCriterion__0____" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.All(AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion{`0}[])">
+  All(params IStoppingCriterion&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a composite criterion that stops when ALL of the given criteria are met.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CompositeCriterion&lt;T&gt; All(params IStoppingCriterion&lt;T&gt;[] criteria)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>criteria</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion-1.html">IStoppingCriterion</a>&lt;T&gt;[]</dt>
+    <dd><p>Criteria to combine with AND logic.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion-1.html">CompositeCriterion</a>&lt;T&gt;</dt>
+    <dd><p>A new composite criterion.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Any_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Any*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Any_AiDotNet_ActiveLearning_Interfaces_IStoppingCriterion__0____" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Any(AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion{`0}[])">
+  Any(params IStoppingCriterion&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a composite criterion that stops when ANY of the given criteria is met.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CompositeCriterion&lt;T&gt; Any(params IStoppingCriterion&lt;T&gt;[] criteria)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>criteria</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion-1.html">IStoppingCriterion</a>&lt;T&gt;[]</dt>
+    <dd><p>Criteria to combine with OR logic.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion-1.html">CompositeCriterion</a>&lt;T&gt;</dt>
+    <dd><p>A new composite criterion.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_GetProgress_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.GetProgress*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_GetProgress_AiDotNet_ActiveLearning_Interfaces_ActiveLearningContext__0__" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.GetProgress(AiDotNet.ActiveLearning.Interfaces.ActiveLearningContext{`0})">
+  GetProgress(ActiveLearningContext&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a progress indicator (0 to 1) showing how close to stopping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetProgress(ActiveLearningContext&lt;T&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.ActiveLearningContext-1.html">ActiveLearningContext</a>&lt;T&gt;</dt>
+    <dd><p>The current active learning context.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Progress value between 0 (just started) and 1 (about to stop).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_RemoveCriterion_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.RemoveCriterion*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_RemoveCriterion_AiDotNet_ActiveLearning_Interfaces_IStoppingCriterion__0__" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.RemoveCriterion(AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion{`0})">
+  RemoveCriterion(IStoppingCriterion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes a criterion from the composite.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RemoveCriterion(IStoppingCriterion&lt;T&gt; criterion)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>criterion</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion-1.html">IStoppingCriterion</a>&lt;T&gt;</dt>
+    <dd><p>The criterion to remove.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the criterion was found and removed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Reset_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Reset*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_Reset" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the criterion to its initial state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_ShouldStop_" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.ShouldStop*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_StoppingCriteria_CompositeCriterion_1_ShouldStop_AiDotNet_ActiveLearning_Interfaces_ActiveLearningContext__0__" data-uid="AiDotNet.ActiveLearning.StoppingCriteria.CompositeCriterion`1.ShouldStop(AiDotNet.ActiveLearning.Interfaces.ActiveLearningContext{`0})">
+  ShouldStop(ActiveLearningContext&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks whether the stopping criterion is met.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ShouldStop(ActiveLearningContext&lt;T&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.ActiveLearningContext-1.html">ActiveLearningContext</a>&lt;T&gt;</dt>
+    <dd><p>The current active learning context.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if learning should stop, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/StoppingCriteria/CompositeCriterion.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

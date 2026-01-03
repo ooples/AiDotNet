@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NaturalSplineInterpolation&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NaturalSplineInterpolation&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Natural Cubic Spline interpolation for one-dimensional data points.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interpolation_NaturalSplineInterpolation_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interpolation.NaturalSplineInterpolation%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interpolation.NaturalSplineInterpolation`1">
+
+
+
+  <h1 id="AiDotNet_Interpolation_NaturalSplineInterpolation_1" data-uid="AiDotNet.Interpolation.NaturalSplineInterpolation`1" class="text-break">
+Class NaturalSplineInterpolation&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpolation/NaturalSplineInterpolation.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interpolation.html">Interpolation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Natural Cubic Spline interpolation for one-dimensional data points.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NaturalSplineInterpolation&lt;T&gt; : IInterpolation&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NaturalSplineInterpolation&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInterpolation-1.html">IInterpolation</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interpolation_NaturalSplineInterpolation_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Natural spline interpolation creates a smooth curve that passes through all given data points.
+It ensures that the curve has continuous first and second derivatives throughout, resulting
+in a visually pleasing and mathematically well-behaved interpolation.</p>
+<p><b>For Beginners:</b> Think of natural spline interpolation like drawing a smooth curve through a set of dots.
+Unlike simpler methods that might connect dots with straight lines, spline interpolation creates
+gentle curves that flow naturally through each point. It's similar to how artists use flexible rulers
+(called splines) to draw smooth curves through a set of fixed points. This method is particularly
+useful when you need a smooth representation of your data without abrupt changes in direction.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Interpolation_NaturalSplineInterpolation_1__ctor_" data-uid="AiDotNet.Interpolation.NaturalSplineInterpolation`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Interpolation_NaturalSplineInterpolation_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Interfaces_IMatrixDecomposition__0__" data-uid="AiDotNet.Interpolation.NaturalSplineInterpolation`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,AiDotNet.Interfaces.IMatrixDecomposition{`0})">
+  NaturalSplineInterpolation(Vector&lt;T&gt;, Vector&lt;T&gt;, int, IMatrixDecomposition&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpolation/NaturalSplineInterpolation.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the Natural Spline interpolation algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NaturalSplineInterpolation(Vector&lt;T&gt; x, Vector&lt;T&gt; y, int degree = 3, IMatrixDecomposition&lt;T&gt;? decomposition = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The x-coordinates of the known data points.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The y-coordinates (values) of the known data points.</p>
+</dd>
+    <dt><code>degree</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The degree of the spline polynomial. Default is 3 for cubic splines.</p>
+</dd>
+    <dt><code>decomposition</code> <a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</dt>
+    <dd><p>Optional matrix decomposition method for solving the system.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpolation_NaturalSplineInterpolation_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Interfaces_IMatrixDecomposition__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor initializes the interpolator with your data points and configuration options,
+and automatically calculates the necessary coefficients for the spline curves.</p>
+<p><b>For Beginners:</b> When you create a Natural Spline interpolator, you provide:</p>
+<ol>
+<li>Your known data points (x and y coordinates)</li>
+<li>The degree of the polynomial (usually 3 for cubic splines)</li>
+</ol>
+<p>The interpolator will then be ready to estimate y-values at any x location between your data points.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input vectors have different lengths, there are fewer than 2 points, or the degree is less than 2.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interpolation_NaturalSplineInterpolation_1_Interpolate_" data-uid="AiDotNet.Interpolation.NaturalSplineInterpolation`1.Interpolate*"></a>
+
+  <h3 id="AiDotNet_Interpolation_NaturalSplineInterpolation_1_Interpolate__0_" data-uid="AiDotNet.Interpolation.NaturalSplineInterpolation`1.Interpolate(`0)">
+  Interpolate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpolation/NaturalSplineInterpolation.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Interpolates the y-value at a given x-coordinate using Natural Spline interpolation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Interpolate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The x-coordinate at which to interpolate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The interpolated y-value at the specified x-coordinate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpolation_NaturalSplineInterpolation_1_Interpolate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method calculates the y-value at any x-coordinate by evaluating the appropriate
+spline polynomial for the interval containing the x-coordinate.</p>
+<p><b>For Beginners:</b> Once you've set up the interpolator with your known points, this method
+lets you ask &quot;What would the y-value be at this specific x location?&quot; The algorithm:</p>
+<ol>
+<li>Finds which interval (between which two known points) your x-value falls into</li>
+<li>Uses the pre-calculated coefficients to evaluate the spline polynomial at that point</li>
+<li>Returns the resulting y-value</li>
+</ol>
+<p>This gives you a smooth estimate that respects the natural curvature suggested by your data points.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interpolation/NaturalSplineInterpolation.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

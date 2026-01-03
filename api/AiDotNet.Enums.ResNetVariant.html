@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum ResNetVariant | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum ResNetVariant | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the available ResNet (Residual Network) architecture variants.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_ResNetVariant.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.ResNetVariant%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.ResNetVariant">
+
+
+
+
+  <h1 id="AiDotNet_Enums_ResNetVariant" data-uid="AiDotNet.Enums.ResNetVariant" class="text-break">
+Enum ResNetVariant  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/ResNetVariant.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the available ResNet (Residual Network) architecture variants.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum ResNetVariant</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_ResNetVariant_ResNet101"><code>ResNet101 = 3</code></dt>
+  <dd><p>ResNet-101: 101 weight layers using BottleneckBlock. For complex tasks requiring more capacity.</p>
+<p>
+Architecture: conv1 + [3, 4, 23, 3] BottleneckBlocks + FC = 101 layers
+</p>
+<p>
+<b>For Beginners:</b> ResNet101 has approximately 44.5 million parameters and provides more
+capacity than ResNet50. The additional depth (especially in the third stage with 23 blocks)
+allows it to learn more complex patterns. Use this when ResNet50 underfits your data or when
+you're working with very complex visual recognition tasks. Requires more GPU memory and
+longer training times than ResNet50.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ResNetVariant_ResNet152"><code>ResNet152 = 4</code></dt>
+  <dd><p>ResNet-152: 152 weight layers using BottleneckBlock. Maximum capacity ResNet variant.</p>
+<p>
+Architecture: conv1 + [3, 8, 36, 3] BottleneckBlocks + FC = 152 layers
+</p>
+<p>
+<b>For Beginners:</b> ResNet152 is the deepest standard ResNet variant with approximately
+60.2 million parameters. It significantly increases depth in the second and third stages.
+This model is typically used for competition-level performance on very large and complex
+datasets like ImageNet. It requires substantial computational resources and is often slower
+to train and run inference than smaller variants. For most practical applications, ResNet50
+or ResNet101 provide better speed/accuracy tradeoffs.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ResNetVariant_ResNet18"><code>ResNet18 = 0</code></dt>
+  <dd><p>ResNet-18: 18 weight layers using BasicBlock. Suitable for smaller datasets.</p>
+<p>
+Architecture: conv1 + [2, 2, 2, 2] BasicBlocks + FC = 18 layers
+</p>
+<p>
+<b>For Beginners:</b> ResNet18 is the smallest ResNet variant with approximately 11.7 million parameters.
+It's a good choice for smaller datasets, limited computational resources, or when you need faster
+inference times. Despite being relatively shallow, it still benefits from residual connections
+and typically outperforms VGG networks with similar parameter counts.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ResNetVariant_ResNet34"><code>ResNet34 = 1</code></dt>
+  <dd><p>ResNet-34: 34 weight layers using BasicBlock. Good balance of depth and efficiency.</p>
+<p>
+Architecture: conv1 + [3, 4, 6, 3] BasicBlocks + FC = 34 layers
+</p>
+<p>
+<b>For Beginners:</b> ResNet34 has approximately 21.8 million parameters and provides a good
+balance between model capacity and training efficiency. It uses the same BasicBlock structure
+as ResNet18 but with more blocks, allowing it to learn more complex features. Often used when
+ResNet18 underfits but computational resources are limited.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ResNetVariant_ResNet50"><code>ResNet50 = 2</code></dt>
+  <dd><p>ResNet-50: 50 weight layers using BottleneckBlock. The most commonly used ResNet variant.</p>
+<p>
+Architecture: conv1 + [3, 4, 6, 3] BottleneckBlocks + FC = 50 layers
+</p>
+<p>
+<b>For Beginners:</b> ResNet50 is the most popular ResNet variant with approximately 25.6 million
+parameters. It switches to BottleneckBlocks (1x1-3x3-1x1 convolutions) which are more parameter
+efficient than BasicBlocks. Despite having more layers than ResNet34, the bottleneck design
+keeps the parameter count manageable while significantly increasing depth. This is the go-to
+architecture for most image classification tasks and transfer learning.
+</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_ResNetVariant_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ResNet architectures are a family of deep convolutional neural networks that introduced skip connections
+(residual connections) to enable training of very deep networks. The key innovation is learning residual
+functions with reference to the layer inputs, rather than learning unreferenced functions.
+</p>
+<p>
+<b>For Beginners:</b> ResNet networks are named after their total number of weight layers.
+For example, ResNet50 has 50 convolutional and fully-connected layers. These networks can be
+much deeper than earlier architectures (like VGG) because the skip connections allow gradients
+to flow more easily during training, solving the "vanishing gradient" problem.
+</p>
+<p>
+<b>Architecture Types:</b>
+<ul><li>ResNet18/34 use "BasicBlock" with two 3x3 convolutions</li><li>ResNet50/101/152 use "BottleneckBlock" with 1x1, 3x3, 1x1 convolutions for efficiency</li></ul>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/ResNetVariant.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

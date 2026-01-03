@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum FewShotSelectionStrategy | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum FewShotSelectionStrategy | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents strategies for selecting few-shot examples in prompt templates.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_FewShotSelectionStrategy.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.FewShotSelectionStrategy%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.FewShotSelectionStrategy">
+
+
+
+
+  <h1 id="AiDotNet_Enums_FewShotSelectionStrategy" data-uid="AiDotNet.Enums.FewShotSelectionStrategy" class="text-break">
+Enum FewShotSelectionStrategy  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/FewShotSelectionStrategy.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents strategies for selecting few-shot examples in prompt templates.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum FewShotSelectionStrategy</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_FewShotSelectionStrategy_ClusterBased"><code>ClusterBased = 5</code></dt>
+  <dd><p>Select examples using a clustering approach to ensure broad coverage.</p>
+<p>
+<b>For Beginners:</b> Cluster-based selection groups similar examples and picks representatives.
+<p>Think of organizing a photo collection:</p>
+<ul>
+<li>Group 1: Beach photos</li>
+<li>Group 2: Mountain photos</li>
+<li>Group 3: City photos</li>
+<li>Group 4: Portrait photos</li>
+</ul>
+<p>Instead of showing all beach photos, you show one representative from each group.</p>
+<p>How it works:</p>
+<ol>
+<li>Cluster all examples into groups of similar items</li>
+<li>Select examples from different clusters</li>
+<li>Ensure each cluster is represented</li>
+<li>Optionally, weight selection by cluster size or importance</li>
+</ol>
+<p>Example - Customer support queries:
+Clusters discovered:</p>
+<ul>
+<li>Billing issues (100 examples)</li>
+<li>Technical problems (150 examples)</li>
+<li>Account questions (50 examples)</li>
+<li>Shipping inquiries (75 examples)</li>
+</ul>
+<p>Selection for 4 examples:</p>
+<ul>
+<li>Pick 1 from Billing issues</li>
+<li>Pick 1 from Technical problems</li>
+<li>Pick 1 from Account questions</li>
+<li>Pick 1 from Shipping inquiries</li>
+</ul>
+<p>Result: Examples that cover all major types of customer queries.</p>
+<p>Advantages:</p>
+<ul>
+<li>Systematic coverage of the example space</li>
+<li>Prevents over-representation of any one type</li>
+<li>Good for varied input distributions</li>
+<li>Generalizes well</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Requires pre-computed clusters</li>
+<li>May not adapt to individual queries</li>
+<li>Setup overhead for clustering</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Examples naturally fall into categories</li>
+<li>You want guaranteed coverage of all categories</li>
+<li>Example pool has uneven distribution</li>
+<li>Building a general-purpose system</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FewShotSelectionStrategy_Diversity"><code>Diversity = 2</code></dt>
+  <dd><p>Select diverse examples to maximize coverage of different patterns.</p>
+<p>
+<b>For Beginners:</b> Diversity selection picks examples that are different from each other.
+<p>Think of it like choosing a diverse team:</p>
+<ul>
+<li>You don't want everyone with the same skills</li>
+<li>You want a variety of perspectives and strengths</li>
+<li>Together, they cover more ground than similar individuals would</li>
+</ul>
+<p>The goal is to show the model different types of inputs and outputs so it understands
+the full range of possibilities.</p>
+<p>Example - Sentiment classification:
+Instead of all similar examples:</p>
+<ul>
+<li>&quot;Great product!&quot; → Positive</li>
+<li>&quot;Loved it!&quot; → Positive</li>
+<li>&quot;Excellent quality!&quot; → Positive</li>
+</ul>
+<p>Diverse selection chooses:</p>
+<ul>
+<li>&quot;Great product!&quot; → Positive (enthusiastic positive)</li>
+<li>&quot;It's okay, nothing special.&quot; → Neutral (mild, mixed)</li>
+<li>&quot;Complete waste of money!&quot; → Negative (strong negative)</li>
+<li>&quot;Not bad, but could be better.&quot; → Mixed (constructive criticism)</li>
+</ul>
+<p>The diverse set teaches the model to handle different tones, lengths, and edge cases.</p>
+<p>Advantages:</p>
+<ul>
+<li>Model learns broader patterns</li>
+<li>Better generalization</li>
+<li>Handles edge cases better</li>
+<li>Less likely to overfit to specific patterns</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>May not include the most relevant examples for specific queries</li>
+<li>Requires clustering or diversity metrics</li>
+<li>More complex to implement</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Input space is large and varied</li>
+<li>You want robust, generalizable performance</li>
+<li>Examples naturally cluster into groups</li>
+<li>You're building a general-purpose system</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FewShotSelectionStrategy_Fixed"><code>Fixed = 4</code></dt>
+  <dd><p>Select examples in a fixed, predetermined order.</p>
+<p>
+<b>For Beginners:</b> Fixed ordering uses the same examples in the same order every time.
+<p>Like a textbook that always shows the same examples:</p>
+<ul>
+<li>Example 1 is always first</li>
+<li>Example 2 is always second</li>
+<li>And so on...</li>
+</ul>
+<p>Use cases:</p>
+<ul>
+<li>You've carefully curated the best examples</li>
+<li>Order matters (simple to complex, for instance)</li>
+<li>Consistency across all queries is important</li>
+<li>You want predictable, reproducible behavior</li>
+</ul>
+<p>Example - Teaching code style:
+Always show these examples in this order:</p>
+<ol>
+<li>Simple variable naming</li>
+<li>Function documentation</li>
+<li>Error handling</li>
+<li>Complex class structure</li>
+</ol>
+<p>This builds from basics to advanced, regardless of the query.</p>
+<p>Advantages:</p>
+<ul>
+<li>Completely predictable</li>
+<li>No computation needed</li>
+<li>Fastest option</li>
+<li>Can carefully control the learning progression</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Not adaptive to different queries</li>
+<li>May include irrelevant examples</li>
+<li>Less flexible</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>You have a canonical set of examples</li>
+<li>All queries are similar enough that the same examples work</li>
+<li>Speed and consistency are critical</li>
+<li>You want to maintain exact reproducibility</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FewShotSelectionStrategy_MaximumMarginalRelevance"><code>MaximumMarginalRelevance = 3</code></dt>
+  <dd><p>Select examples based on maximum marginal relevance (balance between relevance and diversity).</p>
+<p>
+<b>For Beginners:</b> MMR (Maximum Marginal Relevance) balances being relevant AND diverse.
+<p>Think of it like building a playlist:</p>
+<ul>
+<li>Pure relevance: All songs sound almost identical (boring!)</li>
+<li>Pure diversity: Random songs that don't fit together (confusing!)</li>
+<li>MMR: Similar style, but each song brings something different (perfect!)</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>Start with the most relevant example</li>
+<li>For the next example, consider both:
+<ul>
+<li>How relevant it is to the query (good)</li>
+<li>How different it is from already-selected examples (also good)</li>
+</ul>
+</li>
+<li>Pick the example with the best balance</li>
+<li>Repeat until you have enough examples</li>
+</ol>
+<p>Example - Question answering about Python:
+Query: &quot;How do I sort a list in Python?&quot;</p>
+<p>Step 1: Most relevant example
+Selected: &quot;How to reverse a list → list.reverse()&quot; (very similar to sorting)</p>
+<p>Step 2: Balance relevance and diversity
+Candidates:</p>
+<ul>
+<li>&quot;How to sort a dictionary&quot; (Relevant: 0.9, Diversity: 0.4) → Score: 0.65</li>
+<li>&quot;How to use list comprehensions&quot; (Relevant: 0.5, Diversity: 0.9) → Score: 0.70</li>
+<li>&quot;How to remove duplicates&quot; (Relevant: 0.7, Diversity: 0.7) → Score: 0.70</li>
+</ul>
+<p>Selected: &quot;How to use list comprehensions&quot; or &quot;How to remove duplicates&quot;</p>
+<p>The result: Examples that are all related to the query but show different aspects
+of working with lists.</p>
+<p>Advantages:</p>
+<ul>
+<li>Best of both worlds (relevance + diversity)</li>
+<li>Often outperforms pure relevance or pure diversity</li>
+<li>Prevents redundant examples</li>
+<li>Provides comprehensive coverage</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>More complex to implement</li>
+<li>Slower than simple strategies</li>
+<li>Requires tuning the relevance/diversity balance parameter</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>You want the best possible performance</li>
+<li>You have the computational resources</li>
+<li>Both relevance and diversity matter</li>
+<li>Quality is the top priority</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FewShotSelectionStrategy_Random"><code>Random = 0</code></dt>
+  <dd><p>Select examples randomly from the available pool.</p>
+<p>
+<b>For Beginners:</b> Random selection picks examples without any particular logic.
+<p>Like drawing names from a hat:</p>
+<ul>
+<li>Each example has an equal chance of being selected</li>
+<li>No consideration of relevance or similarity</li>
+<li>Simple and fast</li>
+<li>Good baseline approach</li>
+</ul>
+<p>Example:
+Available examples: 100 sentiment classification examples
+Need: 3 examples
+Strategy: Randomly pick 3 from the 100</p>
+<p>Advantages:</p>
+<ul>
+<li>Very fast</li>
+<li>No special setup required</li>
+<li>Unbiased</li>
+<li>Good for diverse example sets</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>May pick irrelevant examples</li>
+<li>Performance varies between runs</li>
+<li>Doesn't adapt to the specific query</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>You have diverse, high-quality examples</li>
+<li>All examples are roughly equally useful</li>
+<li>Simplicity is important</li>
+<li>You don't have semantic similarity infrastructure</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_FewShotSelectionStrategy_SemanticSimilarity"><code>SemanticSimilarity = 1</code></dt>
+  <dd><p>Select examples most semantically similar to the current input.</p>
+<p>
+<b>For Beginners:</b> Semantic similarity picks examples that are most similar to the current query.
+<p>Think of it like a tutor who:</p>
+<ul>
+<li>Looks at the problem the student is struggling with</li>
+<li>Finds previous problems that are similar</li>
+<li>Shows those similar examples to help the student understand</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>Convert query and all examples into embeddings (mathematical representations)</li>
+<li>Calculate similarity between query and each example</li>
+<li>Select the most similar examples</li>
+</ol>
+<p>Example:
+Query: &quot;This restaurant was absolutely terrible, worst experience ever.&quot;</p>
+<p>Example pool:</p>
+<ul>
+<li>&quot;The movie was amazing, I loved it!&quot; (Low similarity)</li>
+<li>&quot;Bad service, would not recommend this place.&quot; (High similarity - both negative reviews)</li>
+<li>&quot;The weather is nice today.&quot; (Low similarity)</li>
+<li>&quot;Horrible food, never going back.&quot; (High similarity - both negative, about food)</li>
+</ul>
+<p>Selected examples:</p>
+<ul>
+<li>&quot;Bad service, would not recommend this place.&quot;</li>
+<li>&quot;Horrible food, never going back.&quot;</li>
+</ul>
+<p>Advantages:</p>
+<ul>
+<li>Examples are relevant to the specific query</li>
+<li>Often better performance than random</li>
+<li>Adapts to different types of queries</li>
+</ul>
+<p>Disadvantages:</p>
+<ul>
+<li>Requires embedding model</li>
+<li>Slower than random (need to compute similarities)</li>
+<li>May lack diversity if all examples are too similar</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Query types vary significantly</li>
+<li>Relevant examples significantly improve performance</li>
+<li>You have an embedding model available</li>
+<li>Quality is more important than speed</li>
+</ul>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_FewShotSelectionStrategy_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Few-shot selection strategies determine which examples to show the language model.
+<p>Think of it like choosing which practice problems to show a student:</p>
+<ul>
+<li>You could show random problems</li>
+<li>You could show problems similar to the current one</li>
+<li>You could show problems that cover diverse scenarios</li>
+<li>You could show the most helpful examples</li>
+</ul>
+<p>The right strategy depends on what you're trying to teach and what works best.
+Different strategies can significantly impact the model's performance.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/FewShotSelectionStrategy.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

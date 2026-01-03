@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SplitConformalPredictor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SplitConformalPredictor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Split Conformal Prediction for regression tasks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1.md&amp;value=---%0Auid%3A%20AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1">
+
+
+
+  <h1 id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1" class="text-break">
+Class SplitConformalPredictor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/UncertaintyQuantification/ConformalPrediction/SplitConformalPredictor.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.UncertaintyQuantification.html">UncertaintyQuantification</a>.<a class="xref" href="AiDotNet.UncertaintyQuantification.ConformalPrediction.html">ConformalPrediction</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Split Conformal Prediction for regression tasks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SplitConformalPredictor&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SplitConformalPredictor&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Conformal Prediction is a framework that provides prediction intervals
+with guaranteed coverage, regardless of the underlying model.
+<p>Key concepts:</p>
+<ul>
+<li>Instead of a single prediction, you get a prediction interval: [lower_bound, upper_bound]</li>
+<li>The interval is guaranteed to contain the true value with a specified probability (e.g., 90%)</li>
+<li>This guarantee holds for ANY model (neural network, random forest, etc.)</li>
+</ul>
+<p>Example:
+If you set confidence level = 90%:</p>
+<ul>
+<li>The model predicts: &quot;House price will be between $180K and $220K&quot;</li>
+<li>You're guaranteed that at least 90% of such intervals contain the true price</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>Split data into training set, calibration set, and test set</li>
+<li>Train your model on the training set</li>
+<li>Use the calibration set to compute &quot;non-conformity scores&quot; (prediction errors)</li>
+<li>Use these scores to build prediction intervals for new data</li>
+</ol>
+<p>This is particularly valuable when you NEED reliability guarantees, such as:</p>
+<ul>
+<li>Medical diagnosis (must know uncertainty bounds)</li>
+<li>Safety-critical systems (must guarantee coverage)</li>
+<li>Scientific applications (need statistically valid uncertainty)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1__ctor_" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1__ctor_AiDotNet_Interfaces_IModel_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Models_ModelMetadata__0___" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.#ctor(AiDotNet.Interfaces.IModel{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Models.ModelMetadata{`0}})">
+  SplitConformalPredictor(IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/UncertaintyQuantification/ConformalPrediction/SplitConformalPredictor.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the SplitConformalPredictor class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SplitConformalPredictor(IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The underlying prediction model (must be already trained).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1__ctor_AiDotNet_Interfaces_IModel_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Models_ModelMetadata__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The model should be trained on a separate training set before
+passing it here. This class wraps the model to add conformal prediction intervals.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_Calibrate_" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.Calibrate*"></a>
+
+  <h3 id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_Calibrate_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.Calibrate(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Calibrate(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/UncertaintyQuantification/ConformalPrediction/SplitConformalPredictor.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calibrates the conformal predictor using a calibration dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Calibrate(Matrix&lt;T&gt; calibrationInputs, Vector&lt;T&gt; calibrationTargets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>calibrationInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Input features from the calibration set.</p>
+</dd>
+    <dt><code>calibrationTargets</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>True target values from the calibration set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_Calibrate_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is a critical step! You MUST calibrate before making predictions.
+<p>The calibration set should be:</p>
+<ul>
+<li>Separate from your training set (otherwise intervals will be too narrow)</li>
+<li>Separate from your test set (otherwise you're &quot;cheating&quot;)</li>
+<li>Representative of the data you'll see in practice</li>
+<li>Typically 20-30% of your total data</li>
+</ul>
+<p>During calibration, the method:</p>
+<ol>
+<li>Runs the model on calibration data</li>
+<li>Computes prediction errors (non-conformity scores)</li>
+<li>Stores these scores for later use in building intervals</li>
+</ol>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_ComputeAverageIntervalWidth_" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.ComputeAverageIntervalWidth*"></a>
+
+  <h3 id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_ComputeAverageIntervalWidth_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Double_" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.ComputeAverageIntervalWidth(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Double)">
+  ComputeAverageIntervalWidth(Matrix&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/UncertaintyQuantification/ConformalPrediction/SplitConformalPredictor.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the average interval width on a test set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeAverageIntervalWidth(Matrix&lt;T&gt; testInputs, double confidenceLevel = 0.9)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>testInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Test input features.</p>
+</dd>
+    <dt><code>confidenceLevel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The confidence level used for intervals.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The average width of prediction intervals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_ComputeAverageIntervalWidth_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Narrower intervals are better (more precise), but coverage must
+still be maintained. This metric helps you understand the precision of your uncertainty estimates.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_EvaluateCoverage_" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.EvaluateCoverage*"></a>
+
+  <h3 id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_EvaluateCoverage_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.EvaluateCoverage(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Double)">
+  EvaluateCoverage(Matrix&lt;T&gt;, Vector&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/UncertaintyQuantification/ConformalPrediction/SplitConformalPredictor.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the empirical coverage of prediction intervals on a test set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EvaluateCoverage(Matrix&lt;T&gt; testInputs, Vector&lt;T&gt; testTargets, double confidenceLevel = 0.9)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>testInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Test input features.</p>
+</dd>
+    <dt><code>testTargets</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>True test target values.</p>
+</dd>
+    <dt><code>confidenceLevel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The confidence level used for intervals.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The empirical coverage (proportion of intervals containing true value).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_EvaluateCoverage_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use this to verify that your intervals achieve the desired coverage.
+For example, with 90% confidence level, the empirical coverage should be around 0.90.
+If it's much lower, your calibration set might not be representative.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_PredictWithInterval_" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.PredictWithInterval*"></a>
+
+  <h3 id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_PredictWithInterval_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor`1.PredictWithInterval(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  PredictWithInterval(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/UncertaintyQuantification/ConformalPrediction/SplitConformalPredictor.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts with a conformal prediction interval.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T prediction, T lowerBound, T upperBound) PredictWithInterval(Tensor&lt;T&gt; input, double confidenceLevel = 0.9)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input features for prediction.</p>
+</dd>
+    <dt><code>confidenceLevel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The desired coverage level (e.g., 0.9 for 90% coverage).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0,-0-.precision">Precision</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0,-0-.recall">Recall</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0,-0-.f1score">F1Score</a>)</dt>
+    <dd><p>A tuple containing (point_prediction, lower_bound, upper_bound).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_UncertaintyQuantification_ConformalPrediction_SplitConformalPredictor_1_PredictWithInterval_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This returns both a point prediction and an interval around it.
+<p>The confidence level determines how wide the interval is:</p>
+<ul>
+<li>0.90 (90%): Narrower interval, 90% guaranteed coverage</li>
+<li>0.95 (95%): Wider interval, 95% guaranteed coverage</li>
+<li>0.99 (99%): Even wider interval, 99% guaranteed coverage</li>
+</ul>
+<p>Example output: (prediction=200, lower=180, upper=220)
+Interpretation: &quot;We predict 200, and we're 90% confident the true value is between 180 and 220&quot;</p>
+<p>The guarantee: If you use 90% confidence, then 90% of your prediction intervals
+will contain the true value (assuming calibration set is representative).</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if Calibrate hasn't been called first.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/UncertaintyQuantification/ConformalPrediction/SplitConformalPredictor.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

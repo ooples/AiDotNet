@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum Interpolation2DType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum Interpolation2DType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies different methods for interpolating 2D data points to create a continuous surface.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_Interpolation2DType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.Interpolation2DType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.Interpolation2DType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_Interpolation2DType" data-uid="AiDotNet.Enums.Interpolation2DType" class="text-break">
+Enum Interpolation2DType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/Interpolation2DType.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies different methods for interpolating 2D data points to create a continuous surface.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum Interpolation2DType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_Interpolation2DType_Bicubic"><code>Bicubic = 1</code></dt>
+  <dd><p>A smoother interpolation method that uses cubic polynomials in both x and y directions.</p>
+<p>
+<b>For Beginners:</b> Bicubic interpolation creates a smoother surface than bilinear by using curved lines 
+instead of straight lines between points.
+<p>Think of it as:</p>
+<ul>
+<li>Like bilinear, but with curves that create smoother transitions</li>
+<li>Similar to how high-quality image resizing works</li>
+<li>Preserves smoothness better than bilinear</li>
+<li>Still relatively fast, but more accurate</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>You need smoother results than bilinear provides</li>
+<li>Working with data that should be continuous and smooth</li>
+<li>Resizing images or other grid data with better quality</li>
+<li>You want a good balance between speed and smoothness</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_Interpolation2DType_Bilinear"><code>Bilinear = 0</code></dt>
+  <dd><p>A simple, fast interpolation method that uses linear interpolation in both x and y directions.</p>
+<p>
+<b>For Beginners:</b> Bilinear interpolation is like drawing straight lines between your known points 
+and using those lines to estimate values in between.
+<p>Think of it as:</p>
+<ul>
+<li>The simplest and fastest method</li>
+<li>Like stretching a flat sheet over your data points</li>
+<li>Good for when you need quick results and don't need perfect smoothness</li>
+<li>Similar to how a low-resolution image looks when zoomed in</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Speed is more important than accuracy</li>
+<li>Your data is already fairly smooth</li>
+<li>You're working with grid-like data (like images)</li>
+<li>You need a simple, predictable result</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_Interpolation2DType_CubicConvolution"><code>CubicConvolution = 7</code></dt>
+  <dd><p>An interpolation method that preserves the sharpness of edges while providing smooth results elsewhere.</p>
+<p>
+<b>For Beginners:</b> Cubic Convolution is similar to bicubic interpolation but uses a wider range 
+of neighboring points to calculate each value.
+<p>Think of it as:</p>
+<ul>
+<li>An enhanced version of bicubic interpolation</li>
+<li>Better at preserving edges and details</li>
+<li>Creates smooth results without excessive blurring</li>
+<li>Commonly used in image processing and remote sensing</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>You need to preserve edges and details</li>
+<li>Working with images or grid data</li>
+<li>You want better quality than bicubic but without artifacts</li>
+<li>Your data contains both smooth regions and sharp transitions</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_Interpolation2DType_Kriging"><code>Kriging = 3</code></dt>
+  <dd><p>A geostatistical method that uses spatial correlation between data points.</p>
+<p>
+<b>For Beginners:</b> Kriging is an advanced method that considers how data points relate to each other 
+based on distance and direction. It was originally developed for mining and geology applications.
+<p>Think of it as:</p>
+<ul>
+<li>A &quot;smart&quot; method that learns patterns from your data</li>
+<li>Takes into account how values tend to vary with distance</li>
+<li>Provides both estimated values AND uncertainty estimates</li>
+<li>More computationally intensive but potentially more accurate</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Your data has spatial patterns or trends</li>
+<li>You need to know how confident you can be in the interpolated values</li>
+<li>Working with geospatial data like elevation, rainfall, or mineral concentrations</li>
+<li>You have enough data points to establish reliable spatial relationships</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_Interpolation2DType_MovingLeastSquares"><code>MovingLeastSquares = 5</code></dt>
+  <dd><p>A flexible method that fits local polynomial functions to nearby data points.</p>
+<p>
+<b>For Beginners:</b> Moving Least Squares creates a smooth surface by fitting small, simple 
+mathematical functions to groups of nearby points.
+<p>Think of it as:</p>
+<ul>
+<li>Like having many small &quot;patches&quot; that blend together</li>
+<li>Each area is influenced mainly by nearby points</li>
+<li>Creates a smooth surface that adapts to local patterns</li>
+<li>More flexible than simpler methods</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Your data has different patterns in different regions</li>
+<li>You need a smooth result that adapts to local features</li>
+<li>Working with complex surfaces like terrain or 3D models</li>
+<li>You need better quality than simple methods but don't want the complexity of Kriging</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_Interpolation2DType_MultiQuadratic"><code>MultiQuadratic = 6</code></dt>
+  <dd><p>An interpolation method using radial basis functions with multiquadratic form.</p>
+<p>
+<b>For Beginners:</b> MultiQuadratic interpolation uses special mathematical functions that 
+create smooth hills and valleys centered at each data point.
+<p>Think of it as:</p>
+<ul>
+<li>Placing a smooth bump or dip at each data point</li>
+<li>These bumps blend together to form a continuous surface</li>
+<li>Creates very smooth results even with scattered data</li>
+<li>Good for capturing both local and global patterns</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>You need very smooth interpolation</li>
+<li>Working with scattered data points</li>
+<li>Your data represents a physical phenomenon that should be smooth</li>
+<li>You need accurate results and smoothness is important</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_Interpolation2DType_ShepardsMethod"><code>ShepardsMethod = 4</code></dt>
+  <dd><p>A distance-weighted interpolation method that gives more influence to nearby points.</p>
+<p>
+<b>For Beginners:</b> Shepard's Method calculates values based on the idea that nearby points 
+should have more influence than distant points.
+<p>Think of it as:</p>
+<ul>
+<li>Like a weighted average where closer points count more</li>
+<li>The influence of each point decreases with distance</li>
+<li>Simple to understand and implement</li>
+<li>Works with irregularly spaced data points</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>You have scattered data points (not in a grid)</li>
+<li>Closer points should logically have more influence</li>
+<li>You need a method that's intuitive and relatively simple</li>
+<li>You want to avoid complex mathematical models</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_Interpolation2DType_ThinPlateSpline"><code>ThinPlateSpline = 2</code></dt>
+  <dd><p>A flexible interpolation method that minimizes the bending energy of a thin metal plate.</p>
+<p>
+<b>For Beginners:</b> Thin Plate Spline interpolation creates a smooth surface that passes through all your data points 
+while minimizing the overall "bending" of the surface.
+<p>Think of it as:</p>
+<ul>
+<li>Like placing a thin, flexible metal sheet over your data points</li>
+<li>The sheet bends to touch all points but stays as flat as possible elsewhere</li>
+<li>Creates very natural-looking smooth surfaces</li>
+<li>Good for scattered (non-grid) data points</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Your data points aren't arranged in a grid</li>
+<li>You need a smooth surface that passes exactly through your data points</li>
+<li>You're working with geographic or spatial data</li>
+<li>You want natural-looking results for physical phenomena</li>
+</ul>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_Interpolation2DType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Interpolation is like "filling in the blanks" between known data points. 
+Imagine you have temperature readings from several weather stations across a city, and you 
+want to estimate the temperature at locations between these stations. Interpolation methods 
+are different mathematical techniques to make these estimates.
+<p>Each method has different strengths:</p>
+<ul>
+<li>Some are faster but less accurate</li>
+<li>Some preserve certain properties of your data better than others</li>
+<li>Some work better for smooth data, others for data with sharp changes</li>
+</ul>
+<p>The right choice depends on your specific data and what properties you want to preserve.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/Interpolation2DType.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
