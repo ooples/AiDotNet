@@ -131,7 +131,7 @@ protected override void Dispose(bool disposing)
 
 | Layer | Has Weights | Has Bias | Status |
 |-------|-------------|----------|--------|
-| [ ] DenseLayer | Yes | Yes | Has GPU code, needs refactor |
+| [x] DenseLayer | Yes | Yes | ✅ Complete - Uses FusedLinear, RegisterTrainableParameter |
 | [ ] FullyConnectedLayer | Yes | Yes | Needs update |
 | [ ] SparseLinearLayer | Yes | Yes | Needs update |
 | [ ] LocallyConnectedLayer | Yes | Yes | Needs update |
@@ -146,7 +146,7 @@ protected override void Dispose(bool disposing)
 
 | Layer | Has Weights | Has Bias | Status |
 |-------|-------------|----------|--------|
-| [ ] ConvolutionalLayer | Yes | Yes | Needs update |
+| [x] ConvolutionalLayer | Yes | Yes | ✅ Complete - Uses Engine.Conv2D, RegisterTrainableParameter |
 | [ ] Conv3DLayer | Yes | Yes | Needs update |
 | [ ] DeconvolutionalLayer | Yes | Yes | Needs update |
 | [ ] DepthwiseSeparableConvolutionalLayer | Yes | Yes | Needs update |
@@ -405,10 +405,12 @@ These layers have significant manual implementations that should use IEngine:
    - [x] Add disposal cleanup for registered tensors in Dispose(bool)
    - [x] Document pattern for derived layers
 
-3. **Phase 3: Priority 1 Layers**
-   - Refactor DenseLayer to use FusedLinear
-   - Refactor ConvolutionalLayer to use FusedConv2D
-   - Remove GPU-specific code from layers
+3. **Phase 3: Priority 1 Layers** ✅ COMPLETE
+   - [x] Refactor DenseLayer to use FusedLinear
+   - [x] Refactor ConvolutionalLayer to use FusedConv2D
+   - [x] Remove GPU-specific code from layers (DirectGpu imports, caching fields)
+   - [x] Add RegisterTrainableParameter calls to constructors
+   - [x] Add Engine.InvalidatePersistentTensor calls in UpdateParameters, SetParameters, Dispose
 
 4. **Phase 4: Priority 2-3 Layers**
    - Add FusedBatchNorm, FusedLayerNorm
@@ -510,7 +512,37 @@ These layers have significant manual implementations that should use IEngine:
 - `GeGLU<T>` with backward pass
 - `ScatterAdd<T>`, `ScatterMean<T>`, `ScatterMax<T>` with backward passes
 
+### 2026-01-02: Phase 3 Priority 1 Layers Complete
+
+**DenseLayer.cs Refactoring:**
+- Removed `using AiDotNet.Tensors.Engines.DirectGpu;` import
+- Removed GPU-specific fields: `_weightsTransposedCache`, `_directGpuWeightsBuffer`, `_cuBlasInstance`, etc.
+- Added `RegisterTrainableParameter(_weights, PersistentTensorRole.Weights)` in both constructors
+- Added `RegisterTrainableParameter(_biases, PersistentTensorRole.Biases)` in both constructors
+- Forward method now uses `Engine.FusedLinear(input, weights, bias, FusedActivationType)` for GPU/CPU optimized operations
+- Added `GetFusedActivationType()` method mapping ReLU/Sigmoid/Tanh to enum values
+- Replaced `InvalidateWeightCaches()` with `Engine.InvalidatePersistentTensor(_weights/biases)` in:
+  - `SetWeights()` method
+  - `UpdateParameters()` method
+  - `SetParameters()` method
+  - `Dispose(bool)` method
+
+**ConvolutionalLayer.cs Refactoring:**
+- Already correctly uses `Engine.Conv2D()` and `Engine.TensorBroadcastAdd()` for forward pass
+- Already correctly uses `Engine.Conv2DBackwardInput/Kernel()` and `Engine.ReduceSum()` for backward pass
+- Added `using AiDotNet.Tensors.Engines;` import for PersistentTensorRole enum
+- Added `RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights)` in both constructors
+- Added `RegisterTrainableParameter(_biases, PersistentTensorRole.Biases)` in both constructors
+- Added `Engine.InvalidatePersistentTensor(_kernels/biases)` in:
+  - `UpdateParameters()` method
+  - `SetParameters()` method
+  - New `Dispose(bool)` override for GPU resource cleanup
+
+**HipBackend.cs Bug Fix:**
+- Added missing `GemmBias()` method (GEMM + bias without activation)
+- Added missing `BiasAdd()` method (row-wise bias addition to matrix)
+- These methods are required by IDirectGpuBackend interface for FusedLinear operations
+
 **Next Steps:**
-- Phase 3: Refactor Priority 1 layers (DenseLayer, ConvolutionalLayer) to use fused operations
 - Phase 4: Update attention layers to use ScaledDotProductAttention/FlashAttention
-- Phase 5: Update remaining 117 layers
+- Phase 5: Update remaining 115 layers

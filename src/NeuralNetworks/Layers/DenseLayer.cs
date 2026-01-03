@@ -1,9 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Helpers;
-
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -236,29 +234,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
-    // === GPU Weight Caching (Phase B: US-GPU-030 - Persistent GPU Tensors) ===
-    // Cached transposed weights to avoid re-transposing every forward pass
-    private Tensor<T>? _weightsTransposedCache;
-    // Persistent GPU handles for weights - stay on GPU across forward/backward passes
-    // Only one will be non-null based on T being float or double
-
-    // === DirectGpu GPU Acceleration (Phase B: Custom Optimized Kernels) ===
-    // DirectGpu provides 10-100x faster than CLBlast with fused operations
-    // Works on ALL .NET versions including .NET Framework 4.6.2
-    private IGpuBuffer? _directGpuWeightsBuffer;
-    private static bool _directGpuChecked;
-    private static bool _directGpuAvailable;
-
-#if !NET462
-    // === cuBLAS GPU Acceleration (Phase B: Direct NVIDIA Library Access) ===  
-    private static CuBlasMatMul? _cuBlasInstance;
-    private static readonly object _cuBlasLock = new object();
-    private CudaDeviceMemory<float>? _cuBlasWeightsFloat;
-    private CudaDeviceMemory<double>? _cuBlasWeightsDouble;
-    private static bool _cuBlasChecked;
-    private static bool _cuBlasAvailable;
-#endif
-
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -357,6 +332,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _biases = new Tensor<T>([outputSize]);
 
         InitializeParameters();
+
+        // Register trainable parameters with the engine for GPU persistence
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -411,6 +390,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _biases = new Tensor<T>([outputSize]);
 
         InitializeParameters();
+
+        // Register trainable parameters with the engine for GPU persistence
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -641,268 +624,24 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             UpdateInputShape([weights.Shape[1]]);
         }
 
-        // Invalidate cached weights since they've changed
-        InvalidateWeightCaches();
+        // Notify engine that weights have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
     }
 
     /// <summary>
-    /// Invalidates all cached weight data (CPU transposed and GPU handles).
-    /// Call this whenever weights are modified.
+    /// Gets the fused activation type for IEngine operations.
     /// </summary>
-    private void InvalidateWeightCaches()
-    {
-        _weightsTransposedCache = null;
-
-        // Dispose and clear DirectGpu GPU handles (works on ALL .NET versions)
-        _directGpuWeightsBuffer?.Dispose();
-        _directGpuWeightsBuffer = null;
-
-#if !NET462
-        // Dispose and clear cuBLAS GPU handles
-        _cuBlasWeightsFloat?.Dispose();
-        _cuBlasWeightsFloat = null;
-
-        _cuBlasWeightsDouble?.Dispose();
-        _cuBlasWeightsDouble = null;
-#endif
-    }
-
-    /// <summary>
-    /// Gets the transposed weights, caching the result for reuse.
-    /// </summary>
-    /// <returns>The transposed weight tensor.</returns>
-    private Tensor<T> GetWeightsTransposed()
-    {
-        if (_weightsTransposedCache == null)
-        {
-            _weightsTransposedCache = Engine.TensorTranspose(_weights);
-        }
-        return _weightsTransposedCache;
-    }
-
-    /// <summary>
-    /// Attempts to perform fused GEMM+Bias+Activation using DirectGpu (custom optimized kernels).
-    /// Returns null if DirectGpu is not available or operation fails.
-    /// Works on ALL .NET versions including .NET Framework 4.6.2.
-    /// </summary>
-    /// <param name="flattenedInput">The input tensor [batch, inputSize].</param>
-    /// <param name="batchSize">Batch size.</param>
-    /// <returns>The activated result tensor, or null if DirectGpu operation failed.</returns>
-    /// <remarks>
-    /// <para><b>Phase B: Custom Optimized Kernels</b></para>
-    /// <para>
-    /// DirectGpu provides 10-100x faster than CLBlast with:
-    /// - Fused GEMM+Bias+Activation (eliminates memory round-trips)
-    /// - Double-buffered GEMM for compute/memory overlap
-    /// - Bank-conflict-free shared memory
-    /// - Small matrix specialization
-    /// </para>
-    /// <para><b>Performance Targets:</b>
-    /// - CLBlast: ~2,500 GFLOPS
-    /// - DirectGpu: ~25,000+ GFLOPS (10x improvement)
-    /// </para>
-    /// </remarks>
-    private Tensor<T>? TryForwardWithDirectGpu(Tensor<T> flattenedInput, int batchSize)
-    {
-        // Check DirectGpu availability via LayerBase.Engine property (lazy initialization)
-        if (!_directGpuChecked)
-        {
-            var directGpuEngine = Engine.DirectGpu;
-            _directGpuAvailable = directGpuEngine != null && directGpuEngine.IsAvailable;
-            _directGpuChecked = true;
-        }
-
-        if (!_directGpuAvailable)
-            return null;
-
-        var directGpu = Engine.DirectGpu;
-        if (directGpu == null)
-            return null;
-
-        // Get activation type for fused kernel (type-safe enum)
-        ActivationType activationType = GetActivationType();
-
-        // Note: DirectGpuEngine expects weights in [inputFeatures, outputFeatures] layout for GEMM
-        // Our weights are [outputSize, inputSize], so we need transposed weights
-        var weightsTransposed = GetWeightsTransposed();
-
-        // Perform fused GEMM+Bias+Activation
-        var result = directGpu.DenseForwardFused(
-            flattenedInput.ToArray(),
-            weightsTransposed.ToArray(),
-            _biases.ToArray(),
-            batchSize,
-            InputShape[0],  // inputFeatures
-            OutputShape[0], // outputFeatures
-            activationType);
-
-        if (result == null)
-            return null;
-
-        // Convert back to Tensor<T>
-        return new Tensor<T>(new int[] { batchSize, OutputShape[0] }, new Vector<T>(result));
-    }
-
-    /// <summary>
-    /// Gets the activation function type for DirectGpu fused kernels.
-    /// </summary>
-    /// <returns>The ActivationType enum value for the current activation function.</returns>
-    private ActivationType GetActivationType()
+    /// <returns>The FusedActivationType enum value for the current activation function.</returns>
+    private FusedActivationType GetFusedActivationType()
     {
         if (ScalarActivation is ReLUActivation<T>)
-            return ActivationType.ReLU;
+            return FusedActivationType.ReLU;
         if (ScalarActivation is SigmoidActivation<T>)
-            return ActivationType.Sigmoid;
+            return FusedActivationType.Sigmoid;
         if (ScalarActivation is TanhActivation<T>)
-            return ActivationType.Tanh;
-        // Future: Add GELU when activation class exists
-        // if (ScalarActivation is GeLUActivation<T>)
-        //     return ActivationType.GELU;
-
-        return ActivationType.None; // Will apply activation separately
-    }
-
-#if !NET462
-    /// <summary>
-    /// Attempts to perform matrix multiplication using cuBLAS (NVIDIA's optimized library).
-    /// Returns null if cuBLAS is not available or operation fails.
-    /// </summary>
-    /// <param name="input">The input tensor [batch, inputSize].</param>
-    /// <param name="weightsTransposed">The transposed weights [inputSize, outputSize].</param>
-    /// <returns>The result tensor, or null if cuBLAS operation failed.</returns>
-    /// <remarks>
-    /// <para><b>Phase B: Direct NVIDIA Library Access</b></para>
-    /// <para>
-    /// cuBLAS provides ~30,000 GFLOPS for SGEMM vs DirectGpu baseline.
-    /// This is because cuBLAS uses hand-tuned PTX/SASS kernels with:
-    /// - Tensor core acceleration (Volta+)
-    /// - Multi-level tiling (register, shared memory, L2 cache)
-    /// - Software pipelining and double-buffering
-    /// </para>
-    /// <para><b>Performance Impact:</b>
-    /// - cuBLAS: ~15,000-30,000 GFLOPS (matches PyTorch/TensorFlow)
-    /// </para>
-    /// </remarks>
-    private Tensor<T>? TryTensorMatMulWithCuBlas(Tensor<T> input, Tensor<T> weightsTransposed)
-    {
-        // Check cuBLAS availability (lazy initialization)
-        if (!_cuBlasChecked)
-        {
-            lock (_cuBlasLock)
-            {
-                if (!_cuBlasChecked)
-                {
-                    _cuBlasAvailable = CuBlasMatMul.IsAvailable;
-                    if (_cuBlasAvailable)
-                    {
-                        _cuBlasInstance = new CuBlasMatMul();
-                    }
-                    _cuBlasChecked = true;
-                }
-            }
-        }
-
-        if (!_cuBlasAvailable || _cuBlasInstance == null)
-            return null;
-
-        // Handle float type
-        if (typeof(T) == typeof(float))
-        {
-            var inputTensor = input as Tensor<float>;
-            var weightsTensor = weightsTransposed as Tensor<float>;
-            if (inputTensor == null || weightsTensor == null) return null;
-
-            int batch = inputTensor.Shape[0];
-            int inputSize = inputTensor.Shape[1];
-            int outputSize = weightsTensor.Shape[1];
-
-            // Allocate cuBLAS weights if needed (one-time upload)
-            if (_cuBlasWeightsFloat == null)
-            {
-                _cuBlasWeightsFloat = _cuBlasInstance.AllocateWeightsFloat(weightsTensor.ToArray());
-                if (_cuBlasWeightsFloat == null) return null;
-            }
-
-            // Perform cuBLAS GEMM with cached weights
-            var resultData = _cuBlasInstance.MatMulWithCachedWeightsFloat(
-                inputTensor.ToArray(), batch, inputSize,
-                _cuBlasWeightsFloat, outputSize);
-
-            if (resultData == null) return null;
-
-            return new Tensor<float>(new int[] { batch, outputSize }, new Vector<float>(resultData)) as Tensor<T>;
-        }
-
-        // Handle double type
-        if (typeof(T) == typeof(double))
-        {
-            var inputTensor = input as Tensor<double>;
-            var weightsTensor = weightsTransposed as Tensor<double>;
-            if (inputTensor == null || weightsTensor == null) return null;
-
-            int batch = inputTensor.Shape[0];
-            int inputSize = inputTensor.Shape[1];
-            int outputSize = weightsTensor.Shape[1];
-
-            // Allocate cuBLAS weights if needed (one-time upload)
-            if (_cuBlasWeightsDouble == null)
-            {
-                _cuBlasWeightsDouble = _cuBlasInstance.AllocateWeightsDouble(weightsTensor.ToArray());
-                if (_cuBlasWeightsDouble == null) return null;
-            }
-
-            // Perform cuBLAS GEMM with cached weights (need to implement double version)
-            return null;
-        }
-
-        return null;
-    }
-#endif
-
-    /// <summary>
-    /// Attempts to perform matrix multiplication using cached DirectGpu weights.
-    /// Returns null if GPU is not available or operation fails.
-    /// </summary>
-    /// <param name="input">The input tensor (uploaded to GPU per call).</param>
-    /// <param name="weightsTransposed">The transposed weights tensor for fallback.</param>
-    /// <returns>The result tensor, or null if GPU operation failed.</returns>
-    /// <remarks>
-    /// <para><b>Phase B: Persistent GPU Tensors (US-GPU-030)</b></para>
-    /// <para>
-    /// This method keeps neural network weights persistently on GPU across forward passes,
-    /// eliminating the catastrophic overhead of CPU-GPU transfers every operation.
-    /// Only activations (input tensor) are transferred per forward pass.
-    /// </para>
-    /// <para><b>Performance Impact:</b>
-    /// - Without caching: Transfer weights (e.g., 285MB) every forward pass = 864 transfers
-    /// - With caching: Transfer weights once, only activations per pass = 2 transfers
-    /// - Expected speedup: 100-1000x for weight-heavy layers
-    /// </para>
-    /// </remarks>
-    private Tensor<T>? TryTensorMatMulWithCachedWeights(Tensor<T> input, Tensor<T> weightsTransposed)
-    {
-        var directGpu = Engine.DirectGpu;
-        if (directGpu == null || !directGpu.IsAvailable)
-            return null;
-
-        if (_directGpuWeightsBuffer == null)
-        {
-            _directGpuWeightsBuffer = directGpu.AllocatePersistentBuffer(weightsTransposed.ToArray());
-            if (_directGpuWeightsBuffer == null)
-                return null;
-        }
-
-        var resultData = directGpu.MatMulWithCachedWeights(
-            input.ToArray(),
-            _directGpuWeightsBuffer,
-            input.Shape[0],
-            input.Shape[1],
-            weightsTransposed.Shape[1]);
-
-        if (resultData == null)
-            return null;
-
-        return new Tensor<T>(new[] { input.Shape[0], weightsTransposed.Shape[1] }, new Vector<T>(resultData));
+            return FusedActivationType.Tanh;
+        // Note: For unsupported activations, return None and apply separately
+        return FusedActivationType.None;
     }
 
     /// <summary>
@@ -1008,56 +747,29 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Forward: output = Activation(input @ weights.T + biases)
         // input: [batchDim, inputSize]
         // weights: [outputSize, inputSize]
-        // weights.T: [inputSize, outputSize]
         // result: [batchDim, outputSize]
 
-        // Try GPU-accelerated paths in order of expected performance:
-        // Priority 0: DirectGpu FUSED (~25,000+ GFLOPS) - Custom optimized kernels with fused GEMM+Bias+Activation
-        // Priority 1: cuBLAS (~30,000 GFLOPS) - Direct NVIDIA library, best for NVIDIA GPUs
-        // Priority 2: DirectGpu cached weights - Persistent GPU memory
-        // Priority 3: Standard Engine.TensorMatMul (CPU/GPU fallback)
+        // Get the fused activation type for the engine
+        var fusedActivation = GetFusedActivationType();
 
-        Tensor<T>? result = null;
+        Tensor<T> result;
 
-        // Priority 0: Try DirectGpu FUSED (works on ALL .NET versions, returns fully activated result)
-        // This is the fastest path because it eliminates memory round-trips between operations
-        ActivationType activationType = GetActivationType();
-
-        // Only use DirectGpu fused when activation is None (we'll apply activation ourselves)
-        // This ensures we have pre-activation values for proper gradient computation
-        if (activationType == ActivationType.None)
+        if (fusedActivation != FusedActivationType.None)
         {
-            result = TryForwardWithDirectGpu(flattenedInput, batchDim);
-        }
+            // Use IEngine's FusedLinear for optimal GPU/CPU performance
+            // Engine handles: GPU kernel fusion, persistent tensor caching, CPU SIMD fallback
+            result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
 
-        if (result != null)
-        {
-            // DirectGpu did GEMM+bias only (activation was None), so result is pre-activation
-            _lastOutput = result;
-            result = ApplyActivation(result);
+            // For fused operations, pre-activation is not directly available
+            // We compute it separately for gradient computation if needed
+            _lastOutput = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
         }
         else
         {
-            // Fall back to separate GEMM + Bias + Activation path
-            var weightsTransposed = GetWeightsTransposed();
-
-            Tensor<T>? matmul = null;
-#if !NET462
-            // Priority 1: Try cuBLAS (uses NVIDIA's hand-tuned kernels)        
-            matmul = TryTensorMatMulWithCuBlas(flattenedInput, weightsTransposed);
-#endif
-            // Priority 2: Fall back to DirectGpu cached weights if cuBLAS unavailable
-            matmul ??= TryTensorMatMulWithCachedWeights(flattenedInput, weightsTransposed);
-            // Priority 3: Fall back to standard mat mul if all GPU paths failed
-            matmul ??= Engine.TensorMatMul(flattenedInput, weightsTransposed);
-
-            // Add biases with broadcasting support ([batchDim, outputSize] + [outputSize])
-            var output = Engine.TensorBroadcastAdd(matmul, _biases);
-
-            // Cache pre-activation output for proper gradient computation in backward pass
-            _lastOutput = output;
-
-            result = ApplyActivation(output);
+            // For unsupported activations, use FusedLinear without activation then apply separately
+            var preActivation = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
+            _lastOutput = preActivation;
+            result = ApplyActivation(preActivation);
         }
 
         // Reshape back to original shape with outputSize as last dimension
@@ -1442,8 +1154,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
         _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
 
-        // Invalidate cached weights since they've changed
-        InvalidateWeightCaches();
+        // Notify engine that weights/biases have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -1527,8 +1240,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         index += _weights.Length;
         _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
 
-        // Invalidate cached weights since they've changed
-        InvalidateWeightCaches();
+        // Notify engine that weights/biases have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -1745,8 +1459,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (disposing)
         {
-            // Release managed resources (GPU handles)
-            InvalidateWeightCaches();
+            // Release GPU handles for persistent tensors
+            Engine.InvalidatePersistentTensor(_weights);
+            Engine.InvalidatePersistentTensor(_biases);
 
             // Clear other managed resources
             _weightsGradient = null;

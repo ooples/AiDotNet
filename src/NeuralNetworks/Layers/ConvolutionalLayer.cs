@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -366,6 +367,10 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _random = RandomHelper.CreateSecureRandom();
 
         InitializeWeights();
+
+        // Register trainable parameters with the engine for GPU persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -417,6 +422,10 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _random = RandomHelper.CreateSecureRandom();
 
         InitializeWeights();
+
+        // Register trainable parameters with the engine for GPU persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -1139,6 +1148,10 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             T update = NumOps.Multiply(learningRate, _biases[o]);
             _biases[o] = NumOps.Subtract(_biases[o], update);
         }
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -1294,6 +1307,10 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         {
             _biases[o] = parameters[index++];
         }
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -1434,5 +1451,25 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         metadata["Stride"] = Stride.ToString();
         metadata["Padding"] = Padding.ToString();
         return metadata;
+    }
+
+    /// <summary>
+    /// Releases resources used by this layer, including GPU tensor handles.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Release GPU handles for persistent tensors
+            Engine.InvalidatePersistentTensor(_kernels);
+            Engine.InvalidatePersistentTensor(_biases);
+
+            // Clear other managed resources
+            _kernelsGradient = null;
+            _biasesGradient = null;
+        }
+
+        base.Dispose(disposing);
     }
 }

@@ -747,6 +747,35 @@ public sealed class HipBackend : IDirectGpuBackend
         return output;
     }
 
+    public IGpuBuffer GemmBias(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
+    {
+        // GEMM + bias without activation
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias", A, B, bias, output, M, N, K);
+        return output;
+    }
+
+    public void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N)
+    {
+        // Add bias vector to each row of the matrix
+        // A: [M, N] input matrix
+        // bias: [N] bias vector
+        // C: [M, N] output matrix
+        var aData = DownloadBuffer(A);
+        var biasData = DownloadBuffer(bias);
+        var cData = new float[M * N];
+
+        for (int row = 0; row < M; row++)
+        {
+            for (int col = 0; col < N; col++)
+            {
+                cData[row * N + col] = aData[row * N + col] + biasData[col];
+            }
+        }
+
+        UploadToBuffer(C, cData);
+    }
+
     #endregion
 
     #region Element-wise Operations
