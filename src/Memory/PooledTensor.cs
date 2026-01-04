@@ -42,7 +42,7 @@ namespace AiDotNet.Memory;
 public sealed class PooledTensor<T> : IDisposable
 {
     private readonly TensorPool<T> _pool;
-    private bool _disposed;
+    private int _disposed; // 0 = not disposed, 1 = disposed (int for Interlocked)
 
     /// <summary>
     /// Gets the underlying tensor managed by this wrapper.
@@ -59,7 +59,7 @@ public sealed class PooledTensor<T> : IDisposable
     /// <summary>
     /// Gets whether this wrapper has been disposed and the tensor returned to the pool.
     /// </summary>
-    public bool IsDisposed => _disposed;
+    public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PooledTensor{T}"/> class.
@@ -77,7 +77,7 @@ public sealed class PooledTensor<T> : IDisposable
     {
         _pool = pool ?? throw new ArgumentNullException(nameof(pool));
         Tensor = tensor ?? throw new ArgumentNullException(nameof(tensor));
-        _disposed = false;
+        _disposed = 0;
     }
 
     /// <summary>
@@ -85,14 +85,21 @@ public sealed class PooledTensor<T> : IDisposable
     /// After disposal, the tensor should not be used as it may be rented by another operation.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This method is idempotent - calling it multiple times is safe and will only
     /// return the tensor to the pool on the first call.
+    /// </para>
+    /// <para>
+    /// Thread-safe: Uses atomic compare-and-swap to ensure only one thread
+    /// can successfully dispose and return the tensor, even under concurrent calls.
+    /// </para>
     /// </remarks>
     public void Dispose()
     {
-        if (!_disposed)
+        // Atomically transition from 0 (not disposed) to 1 (disposed)
+        // Only the thread that successfully makes this transition returns the tensor
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) == 0)
         {
-            _disposed = true;
             _pool.Return(Tensor);
         }
     }
