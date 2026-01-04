@@ -483,6 +483,8 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     /// <summary>
     /// GPU-accelerated fused linear transformation: output = activation(input @ weights + bias).
+    /// Uses cached GPU buffers for registered persistent tensors (weights/bias) to avoid
+    /// redundant CPU→GPU transfers on every forward pass.
     /// </summary>
     public new Tensor<T> FusedLinear<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, FusedActivationType activation)
     {
@@ -496,17 +498,26 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int inputFeatures = weights.Shape[0];
         int outputFeatures = weights.Shape[1];
 
-        // Convert to float arrays
+        // Check for cached GPU buffers (registered persistent tensors avoid CPU→GPU transfer)
+        IGpuBuffer? cachedWeightsBuffer = TryGetCachedBuffer(weights.Data);
+        IGpuBuffer? cachedBiasBuffer = bias != null ? TryGetCachedBuffer(bias.Data) : null;
+
+        // Only convert to float if not cached (saves CPU work and memory bandwidth)
         float[] inputFloat = DirectGpuEngine.ToFloatArray(input.Data);
-        float[] weightsFloat = DirectGpuEngine.ToFloatArray(weights.Data);
-        float[]? biasFloat = bias != null ? DirectGpuEngine.ToFloatArray(bias.Data) : null;
+        float[]? weightsFloat = cachedWeightsBuffer == null ? DirectGpuEngine.ToFloatArray(weights.Data) : null;
+        float[]? biasFloat = (bias != null && cachedBiasBuffer == null) ? DirectGpuEngine.ToFloatArray(bias.Data) : null;
 
-        // Allocate GPU buffers
+        // Input is always fresh per forward pass, so always allocate
         using var inputBuffer = backend.AllocateBuffer(inputFloat);
-        using var weightsBuffer = backend.AllocateBuffer(weightsFloat);
-        using var biasBuffer = biasFloat != null ? backend.AllocateBuffer(biasFloat) : null;
 
-        IGpuBuffer resultBuffer;
+        // Weights/bias: use cached or allocate (track ownership for disposal)
+        IGpuBuffer weightsBuffer = cachedWeightsBuffer ?? backend.AllocateBuffer(weightsFloat!);
+        bool disposeWeightsBuffer = cachedWeightsBuffer == null;
+
+        IGpuBuffer? biasBuffer = cachedBiasBuffer ?? (biasFloat != null ? backend.AllocateBuffer(biasFloat) : null);
+        bool disposeBiasBuffer = cachedBiasBuffer == null && biasBuffer != null;
+
+        IGpuBuffer? resultBuffer = null;
         try
         {
             // Use fused GPU kernels when available
@@ -541,6 +552,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             float[] resultFloat = new float[resultSize];
             backend.DownloadBuffer(resultBuffer, resultFloat);
             resultBuffer.Dispose();
+            resultBuffer = null; // Mark as disposed to prevent double-dispose in finally
             backend.Synchronize();
 
             // Convert back to T
@@ -551,6 +563,15 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             // Fall back to CPU on any GPU error
             return base.FusedLinear(input, weights, bias, activation);
+        }
+        finally
+        {
+            // Clean up owned buffers (cached buffers are not disposed)
+            if (disposeWeightsBuffer)
+                weightsBuffer.Dispose();
+            if (disposeBiasBuffer)
+                biasBuffer?.Dispose();
+            resultBuffer?.Dispose();
         }
     }
 
@@ -600,6 +621,8 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     /// <summary>
     /// GPU-accelerated fused 2D convolution with activation.
+    /// Uses cached GPU buffers for registered persistent tensors (kernel/bias) to avoid
+    /// redundant CPU→GPU transfers on every forward pass.
     /// </summary>
     public new Tensor<T> FusedConv2D<T>(
         Tensor<T> input,
@@ -636,17 +659,26 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (outHeight <= 0 || outWidth <= 0)
             return base.FusedConv2D(input, kernel, bias, strideH, strideW, padH, padW, dilationH, dilationW, activation);
 
+        // Check for cached GPU buffers (registered persistent tensors avoid CPU→GPU transfer)
+        IGpuBuffer? cachedKernelBuffer = TryGetCachedBuffer(kernel.Data);
+
+        // Only convert to float if not cached (saves CPU work and memory bandwidth)
+        float[] inputFloat = DirectGpuEngine.ToFloatArray(input.Data);
+        float[]? kernelFloat = cachedKernelBuffer == null ? DirectGpuEngine.ToFloatArray(kernel.Data) : null;
+        float[]? biasFloat = bias != null ? DirectGpuEngine.ToFloatArray(bias.Data) : null;
+
+        // Input is always fresh per forward pass, so always allocate
+        using var inputBuffer = backend.AllocateBuffer(inputFloat);
+
+        // Kernel: use cached or allocate (track ownership for disposal)
+        IGpuBuffer kernelBuffer = cachedKernelBuffer ?? backend.AllocateBuffer(kernelFloat!);
+        bool disposeKernelBuffer = cachedKernelBuffer == null;
+
+        // Output buffer is always newly allocated
+        var outputBuffer = backend.AllocateBuffer(batch * outChannels * outHeight * outWidth);
+
         try
         {
-            // Convert to float arrays
-            float[] inputFloat = DirectGpuEngine.ToFloatArray(input.Data);
-            float[] kernelFloat = DirectGpuEngine.ToFloatArray(kernel.Data);
-            float[]? biasFloat = bias != null ? DirectGpuEngine.ToFloatArray(bias.Data) : null;
-
-            // Allocate GPU buffers
-            using var inputBuffer = backend.AllocateBuffer(inputFloat);
-            using var kernelBuffer = backend.AllocateBuffer(kernelFloat);
-            using var outputBuffer = backend.AllocateBuffer(batch * outChannels * outHeight * outWidth);
 
             // Execute GPU convolution
             backend.Conv2D(inputBuffer, kernelBuffer, outputBuffer,
@@ -722,6 +754,13 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             // Fall back to CPU on any GPU error
             return base.FusedConv2D(input, kernel, bias, strideH, strideW, padH, padW, dilationH, dilationW, activation);
         }
+        finally
+        {
+            // Clean up owned buffers (cached buffers are not disposed)
+            if (disposeKernelBuffer)
+                kernelBuffer.Dispose();
+            outputBuffer.Dispose();
+        }
     }
 
     /// <summary>
@@ -762,6 +801,8 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     /// <summary>
     /// GPU-accelerated fused batch normalization with activation.
+    /// Uses cached GPU buffers for registered persistent tensors (gamma/beta/running stats)
+    /// to avoid redundant CPU→GPU transfers on every forward pass.
     /// </summary>
     public new Tensor<T> FusedBatchNorm<T>(
         Tensor<T> input,
@@ -785,24 +826,40 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int batchSize = input.Shape[0];
         int features = input.Shape[1];
 
+        // Check for cached GPU buffers (registered persistent tensors avoid CPU→GPU transfer)
+        IGpuBuffer? cachedGammaBuffer = TryGetCachedBuffer(gamma.Data);
+        IGpuBuffer? cachedBetaBuffer = TryGetCachedBuffer(beta.Data);
+        IGpuBuffer? cachedRunningMeanBuffer = TryGetCachedBuffer(runningMean.Data);
+        IGpuBuffer? cachedRunningVarBuffer = TryGetCachedBuffer(runningVar.Data);
+
+        // Only convert to float if not cached (saves CPU work and memory bandwidth)
+        float[] inputFloat = DirectGpuEngine.ToFloatArray(input.Data);
+        float[]? gammaFloat = cachedGammaBuffer == null ? DirectGpuEngine.ToFloatArray(gamma.Data) : null;
+        float[]? betaFloat = cachedBetaBuffer == null ? DirectGpuEngine.ToFloatArray(beta.Data) : null;
+        float[]? runningMeanFloat = cachedRunningMeanBuffer == null ? DirectGpuEngine.ToFloatArray(runningMean.Data) : null;
+        float[]? runningVarFloat = cachedRunningVarBuffer == null ? DirectGpuEngine.ToFloatArray(runningVar.Data) : null;
+
+        // Input is always fresh per forward pass, so always allocate
+        using var inputBuffer = backend.AllocateBuffer(inputFloat);
+        using var outputBuffer = backend.AllocateBuffer(batchSize * features);
+        using var saveMeanBuffer = backend.AllocateBuffer(features);
+        using var saveVarBuffer = backend.AllocateBuffer(features);
+
+        // Batch norm parameters: use cached or allocate (track ownership for disposal)
+        IGpuBuffer gammaBuffer = cachedGammaBuffer ?? backend.AllocateBuffer(gammaFloat!);
+        bool disposeGammaBuffer = cachedGammaBuffer == null;
+
+        IGpuBuffer betaBuffer = cachedBetaBuffer ?? backend.AllocateBuffer(betaFloat!);
+        bool disposeBetaBuffer = cachedBetaBuffer == null;
+
+        IGpuBuffer runningMeanBuffer = cachedRunningMeanBuffer ?? backend.AllocateBuffer(runningMeanFloat!);
+        bool disposeRunningMeanBuffer = cachedRunningMeanBuffer == null;
+
+        IGpuBuffer runningVarBuffer = cachedRunningVarBuffer ?? backend.AllocateBuffer(runningVarFloat!);
+        bool disposeRunningVarBuffer = cachedRunningVarBuffer == null;
+
         try
         {
-            // Convert to float arrays
-            float[] inputFloat = DirectGpuEngine.ToFloatArray(input.Data);
-            float[] gammaFloat = DirectGpuEngine.ToFloatArray(gamma.Data);
-            float[] betaFloat = DirectGpuEngine.ToFloatArray(beta.Data);
-            float[] runningMeanFloat = DirectGpuEngine.ToFloatArray(runningMean.Data);
-            float[] runningVarFloat = DirectGpuEngine.ToFloatArray(runningVar.Data);
-
-            // Allocate GPU buffers
-            using var inputBuffer = backend.AllocateBuffer(inputFloat);
-            using var outputBuffer = backend.AllocateBuffer(batchSize * features);
-            using var gammaBuffer = backend.AllocateBuffer(gammaFloat);
-            using var betaBuffer = backend.AllocateBuffer(betaFloat);
-            using var runningMeanBuffer = backend.AllocateBuffer(runningMeanFloat);
-            using var runningVarBuffer = backend.AllocateBuffer(runningVarFloat);
-            using var saveMeanBuffer = backend.AllocateBuffer(features);
-            using var saveVarBuffer = backend.AllocateBuffer(features);
 
             // Execute batch norm (spatialSize=1 for 2D tensors)
             backend.BatchNorm(inputBuffer, outputBuffer, gammaBuffer, betaBuffer,
@@ -838,6 +895,18 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         catch
         {
             return base.FusedBatchNorm(input, gamma, beta, runningMean, runningVar, epsilon, momentum, training, activation, out saveMean, out saveVar);
+        }
+        finally
+        {
+            // Clean up owned buffers (cached buffers are not disposed)
+            if (disposeGammaBuffer)
+                gammaBuffer.Dispose();
+            if (disposeBetaBuffer)
+                betaBuffer.Dispose();
+            if (disposeRunningMeanBuffer)
+                runningMeanBuffer.Dispose();
+            if (disposeRunningVarBuffer)
+                runningVarBuffer.Dispose();
         }
     }
 
