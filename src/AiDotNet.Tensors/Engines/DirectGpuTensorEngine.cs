@@ -581,7 +581,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             else if (bias != null && activation == FusedActivationType.None)
             {
                 // GEMM + Bias only (no activation) - use GPU GemmBias kernel
-                resultBuffer = backend.GemmBias(inputBuffer.Buffer, weightsBuffer.Buffer, biasBuffer!.Buffer, batchSize, outputFeatures, inputFeatures);
+                resultBuffer = backend.GemmBias(inputBuffer.Buffer, weightsBuffer.Buffer, biasBuffer.Buffer, batchSize, outputFeatures, inputFeatures);
             }
             else if (bias == null && activation == FusedActivationType.None)
             {

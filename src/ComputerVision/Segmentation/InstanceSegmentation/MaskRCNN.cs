@@ -4,6 +4,7 @@ using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -445,8 +446,7 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
             pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
             using var client = new System.Net.Http.HttpClient();
-            // Use single-argument overload for net471 compatibility
-            data = await client.GetByteArrayAsync(pathOrUrl);
+            data = await client.GetByteArrayWithCancellationAsync(pathOrUrl, cancellationToken);
         }
         else
         {

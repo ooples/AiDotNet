@@ -2,6 +2,7 @@ using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.TextDetection;
@@ -284,8 +285,7 @@ public class EAST<T> : TextDetectorBase<T>
             pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
             using var client = new System.Net.Http.HttpClient();
-            // Use single-argument overload for net471 compatibility
-            data = await client.GetByteArrayAsync(pathOrUrl);
+            data = await client.GetByteArrayWithCancellationAsync(pathOrUrl, cancellationToken);
         }
         else
         {
