@@ -4,9 +4,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes;
+using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -34,7 +37,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// - Small to medium datasets (< 100K documents)
 /// 
 /// Key characteristics:
-/// - O(n) similarity search using cosine distance
+/// - O(log n) similarity search using HNSW approximate nearest neighbor indexing
 /// - Thread-safe concurrent access
 /// - Low memory overhead with efficient storage
 /// - Simple serialization/deserialization support
@@ -45,6 +48,8 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
 {
     private readonly ConcurrentDictionary<string, VectorDocument<T>> _store;
     private readonly int _initialVectorDimension;
+    private readonly HNSWIndex<T> _hnswIndex;
+    private readonly INumericOperations<T> _numOps;
     private int _vectorDimension;
 
     /// <summary>
@@ -92,6 +97,11 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
         _store = new ConcurrentDictionary<string, VectorDocument<T>>();
         _initialVectorDimension = vectorDimension;
         _vectorDimension = vectorDimension;
+        _numOps = MathHelper.GetNumericOperations<T>();
+
+        // Initialize HNSW index for O(log n) approximate nearest neighbor search
+        // Default parameters: M=16 connections, efConstruction=200, efSearch=50
+        _hnswIndex = new HNSWIndex<T>(new CosineSimilarityMetric<T>(), maxConnections: 16, efConstruction: 200, efSearch: 50);
     }
 
     /// <summary>
@@ -107,6 +117,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
         _store[vectorDocument.Document.Id] = vectorDocument;
+        _hnswIndex.Add(vectorDocument.Document.Id, vectorDocument.Embedding);
     }
 
     /// <summary>
@@ -145,7 +156,8 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
             }
         }
 
-        // Validate all documents in batch
+        // Validate all documents in batch and add to stores
+        var hnswBatch = new Dictionary<string, Vector<T>>();
         foreach (var vd in vectorDocuments)
         {
             // Validate batch dimensions
@@ -156,7 +168,11 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
                     nameof(vectorDocuments));
             }
             _store[vd.Document.Id] = vd;
+            hnswBatch[vd.Document.Id] = vd.Embedding;
         }
+
+        // Add all vectors to HNSW index in batch
+        _hnswIndex.AddBatch(hnswBatch);
     }
 
     /// <summary>
@@ -171,16 +187,15 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// Performs vector similarity search using in-memory calculations. In real SQLite-VSS, this would use
     /// the vss_search() SQL function to efficiently find nearest neighbors.
     /// </para>
-    /// <para><b>For Beginners:</b> Finds the most similar documents in the SQLite database.
-    /// 
+    /// <para><b>For Beginners:</b> Finds the most similar documents using HNSW index.
+    ///
     /// How it works:
-    /// 1. Filter documents by metadata (like SQL WHERE clause)
-    /// 2. Calculate similarity for each document
-    /// 3. Sort by similarity (highest first, like SQL ORDER BY)
-    /// 4. Return top-k matches (like SQL LIMIT)
-    /// 
-    /// In real SQLite-VSS, this uses efficient indexing structures like HNSW
-    /// for fast approximate nearest neighbor search.
+    /// 1. Use HNSW graph to find approximate nearest neighbors in O(log n) time
+    /// 2. Apply metadata filters to the candidates
+    /// 3. Return top-k matches
+    ///
+    /// HNSW (Hierarchical Navigable Small World) provides ~100x faster search
+    /// compared to brute-force linear scan for large datasets.
     /// 
     /// Example:
     /// <code>
@@ -191,32 +206,40 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
-        var scoredDocuments = new List<(Document<T> doc, T score)>();
+        bool hasFilters = metadataFilters.Count > 0;
 
-        // Apply metadata filters
-        var filteredDocuments = _store.Values
-            .Where(vectorDoc => MatchesFilters(vectorDoc.Document, metadataFilters));
+        // Use HNSW for O(log n) approximate nearest neighbor search
+        // If there are metadata filters, over-fetch candidates to account for filtering
+        int fetchCount = hasFilters ? Math.Min(topK * 10, _store.Count) : topK;
 
-        foreach (var vd in filteredDocuments)
+        if (_hnswIndex.Count == 0)
+            return Enumerable.Empty<Document<T>>();
+
+        var hnswResults = _hnswIndex.Search(queryVector, fetchCount);
+        var results = new List<Document<T>>();
+
+        foreach (var (id, score) in hnswResults)
         {
-            var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vd.Embedding);
-            scoredDocuments.Add((vd.Document, similarity));
+            if (!_store.TryGetValue(id, out var vd))
+                continue;
+
+            // Apply metadata filters
+            if (hasFilters && !MatchesFilters(vd.Document, metadataFilters))
+                continue;
+
+            // Create a new Document instance to avoid mutating the cached one
+            var newDocument = new Document<T>(vd.Document.Id, vd.Document.Content, vd.Document.Metadata)
+            {
+                RelevanceScore = score,
+                HasRelevanceScore = true
+            };
+            results.Add(newDocument);
+
+            if (results.Count >= topK)
+                break;
         }
 
-        return scoredDocuments
-            .OrderByDescending(x => Convert.ToDouble(x.score))
-            .Take(topK)
-            .Select(x =>
-            {
-                // Create a new Document instance to avoid mutating the cached one
-                var newDocument = new Document<T>(x.doc.Id, x.doc.Content, x.doc.Metadata)
-                {
-                    RelevanceScore = x.score,
-                    HasRelevanceScore = true
-                };
-                return newDocument;
-            })
-            .ToList();
+        return results;
     }
 
     /// <summary>
@@ -260,7 +283,12 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override bool RemoveCore(string documentId)
     {
-        return _store.TryRemove(documentId, out _);
+        if (_store.TryRemove(documentId, out _))
+        {
+            _hnswIndex.Remove(documentId);
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -335,6 +363,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     public override void Clear()
     {
         _store.Clear();
+        _hnswIndex.Clear();
         Interlocked.Exchange(ref _vectorDimension, _initialVectorDimension);
     }
 }

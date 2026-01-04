@@ -5895,18 +5895,8 @@ public static class StatisticsHelper<T>
         if (v1.Length != v2.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        T dotProduct = _numOps.Zero;
-        T norm1 = _numOps.Zero;
-        T norm2 = _numOps.Zero;
-
-        for (int i = 0; i < v1.Length; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(v1[i], v2[i]));
-            norm1 = _numOps.Add(norm1, _numOps.Multiply(v1[i], v1[i]));
-            norm2 = _numOps.Add(norm2, _numOps.Multiply(v2[i], v2[i]));
-        }
-
-        return _numOps.Divide(dotProduct, _numOps.Multiply(_numOps.Sqrt(norm1), _numOps.Sqrt(norm2)));
+        // Use SIMD-optimized path through IVectorizedOperations (6-16x faster for float/double)
+        return _numOps.CosineSimilarity(v1.ToArray(), v2.ToArray());
     }
 
     /// <summary>
