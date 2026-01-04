@@ -341,15 +341,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
             for (int b = 0; b < batchSize; b++)
             {
-                // Extract batch features [numNodes, inputFeatures]
-                var batchFeatures = new Tensor<T>([numNodes, _inputFeatures]);
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _inputFeatures; f++)
-                    {
-                        batchFeatures[n, f] = processInput[b, n, f];
-                    }
-                }
+                // Extract batch features using Slice: [numNodes, inputFeatures]
+                var batchFeatures = processInput.Slice(b);
 
                 // Call Engine.MultiHeadGraphAttention
                 var batchOutput = Engine.MultiHeadGraphAttention(
@@ -363,14 +356,10 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     concatenate: false,  // Average heads
                     out var batchAttnCoeffs);
 
-                // Add bias and copy to output
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        output[b, n, f] = NumOps.Add(batchOutput[n, f], _bias[f]);
-                    }
-                }
+                // Add bias using broadcasting and set in output
+                var biasBroadcast = _bias.Reshape([1, _outputFeatures]);
+                var biasedOutput = Engine.TensorAdd(batchOutput, biasBroadcast);
+                output.SetSlice(b, biasedOutput);
             }
 
             // Store cached values for backward pass
@@ -423,17 +412,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // result: [batchSize, numNodes, outputFeatures]
             var transformed = BatchedMatMul3Dx2D(processInput, headWeight, batchSize, numNodes, _inputFeatures, _outputFeatures);
 
-            // Store in lastTransformed
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        _lastTransformed[b, h, n, f] = transformed[b, n, f];
-                    }
-                }
-            }
+            // Store in lastTransformed using efficient 4D slice helper
+            Set3DSliceIn4DForHead(_lastTransformed, h, transformed);
         }
 
         // Step 2: Compute attention scores using vectorized operations
@@ -454,15 +434,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // Compute attention scores for each batch
             for (int b = 0; b < batchSize; b++)
             {
-                // Extract transformed features for this batch and head: [numNodes, outputFeatures]
-                var transformedBatch = new Tensor<T>([numNodes, _outputFeatures]);
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        transformedBatch[n, f] = _lastTransformed[b, h, n, f];
-                    }
-                }
+                // Extract transformed features for this batch and head using helper: [numNodes, outputFeatures]
+                var transformedBatch = Get2DSliceFrom4D(_lastTransformed, b, h);
 
                 // Compute self attention scores: transformedBatch @ attnA -> [numNodes]
                 var selfScores = Engine.TensorMatMul(transformedBatch, attnA.Reshape([_outputFeatures, 1]))
@@ -486,59 +459,31 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         {
             for (int b = 0; b < batchSize; b++)
             {
-                // Extract attention coefficients for this batch/head: [numNodes, numNodes]
-                var attnCoeffs = new Tensor<T>([numNodes, numNodes]);
-                for (int i = 0; i < numNodes; i++)
-                {
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        attnCoeffs[i, j] = _lastAttentionCoefficients[b, h, i, j];
-                    }
-                }
+                // Extract attention coefficients using helper: [numNodes, numNodes]
+                var attnCoeffs = Get2DSliceFrom4D(_lastAttentionCoefficients, b, h);
 
-                // Extract transformed features: [numNodes, outputFeatures]
-                var transformedBatch = new Tensor<T>([numNodes, _outputFeatures]);
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        transformedBatch[n, f] = _lastTransformed[b, h, n, f];
-                    }
-                }
+                // Extract transformed features using helper: [numNodes, outputFeatures]
+                var transformedBatch = Get2DSliceFrom4D(_lastTransformed, b, h);
 
                 // Aggregate: attnCoeffs @ transformedBatch -> [numNodes, outputFeatures]
                 var aggregated = Engine.TensorMatMul(attnCoeffs, transformedBatch);
 
-                // Store result
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        _lastHeadOutputs[b, h, n, f] = aggregated[n, f];
-                    }
-                }
+                // Store result using helper
+                Set2DSliceIn4D(_lastHeadOutputs, b, h, aggregated);
             }
         }
 
-        // Step 5: Average across heads and add bias
-        output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+        // Step 5: Average across heads and add bias using Engine operations
+        // Sum over head dimension (axis 1): [batchSize, numHeads, numNodes, outputFeatures] -> [batchSize, numNodes, outputFeatures]
+        var sumOverHeads = Engine.ReduceSum(_lastHeadOutputs, [1], keepDims: false);
+
+        // Divide by number of heads using scalar divide
         T numHeadsT = NumOps.FromDouble(_numHeads);
+        var avgOverHeads = Engine.TensorDivideScalar(sumOverHeads, numHeadsT);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int f = 0; f < _outputFeatures; f++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int h = 0; h < _numHeads; h++)
-                    {
-                        sum = NumOps.Add(sum, _lastHeadOutputs[b, h, n, f]);
-                    }
-                    output[b, n, f] = NumOps.Add(NumOps.Divide(sum, numHeadsT), _bias[f]);
-                }
-            }
-        }
+        // Add bias with broadcasting: bias [outputFeatures] -> [1, 1, outputFeatures]
+        var biasExpanded = _bias.Reshape([1, 1, _outputFeatures]);
+        output = Engine.TensorAdd(avgOverHeads, biasExpanded);
 
         activatedOutput = ApplyActivation(output);
 
@@ -702,6 +647,62 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         return NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Multiply(_alpha, x);
     }
 
+    /// <summary>
+    /// Sets a 2D slice in a 4D tensor at position [batchIdx, headIdx, :, :] using direct memory copy.
+    /// </summary>
+    private void Set2DSliceIn4D(Tensor<T> tensor4D, int batchIdx, int headIdx, Tensor<T> slice2D)
+    {
+        int numHeads = tensor4D.Shape[1];
+        int numNodes = tensor4D.Shape[2];
+        int features = tensor4D.Shape[3];
+        int sliceSize = numNodes * features;
+
+        // Calculate flat offset: batch * (heads * nodes * features) + head * (nodes * features)
+        int offset = batchIdx * (numHeads * sliceSize) + headIdx * sliceSize;
+
+        // Copy data directly using indexer for cross-assembly compatibility
+        for (int i = 0; i < sliceSize; i++)
+        {
+            tensor4D.SetFlat(offset + i, slice2D.GetFlat(i));
+        }
+    }
+
+    /// <summary>
+    /// Extracts a 2D slice from a 4D tensor at position [batchIdx, headIdx, :, :] using direct memory copy.
+    /// </summary>
+    private Tensor<T> Get2DSliceFrom4D(Tensor<T> tensor4D, int batchIdx, int headIdx)
+    {
+        int numHeads = tensor4D.Shape[1];
+        int numNodes = tensor4D.Shape[2];
+        int features = tensor4D.Shape[3];
+        int sliceSize = numNodes * features;
+
+        // Calculate flat offset
+        int offset = batchIdx * (numHeads * sliceSize) + headIdx * sliceSize;
+
+        // Create result tensor and copy using indexer for cross-assembly compatibility
+        var result = new Tensor<T>([numNodes, features]);
+        for (int i = 0; i < sliceSize; i++)
+        {
+            result.SetFlat(i, tensor4D.GetFlat(offset + i));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Sets a 3D slice [h, :, :] into a 4D tensor at [b, h, :, :] for all batches.
+    /// </summary>
+    private void Set3DSliceIn4DForHead(Tensor<T> tensor4D, int headIdx, Tensor<T> slice3D)
+    {
+        int batchSize = tensor4D.Shape[0];
+        for (int b = 0; b < batchSize; b++)
+        {
+            var batch2D = slice3D.Slice(b);
+            Set2DSliceIn4D(tensor4D, b, headIdx, batch2D);
+        }
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
@@ -750,19 +751,14 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _biasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
 
         // Gradient from averaging heads: dL/d(headOutput) = dL/d(output) / numHeads
+        // Divide by numHeads and broadcast to all heads
+        var scaledGradient = Engine.TensorDivideScalar(activationGradient, numHeadsT);
+
+        // Expand [batchSize, numNodes, outputFeatures] to [batchSize, numHeads, numNodes, outputFeatures]
         var headOutputGrad = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
-        for (int b = 0; b < batchSize; b++)
+        for (int h = 0; h < _numHeads; h++)
         {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        headOutputGrad[b, h, n, f] = NumOps.Divide(activationGradient[b, n, f], numHeadsT);
-                    }
-                }
-            }
+            Set3DSliceIn4DForHead(headOutputGrad, h, scaledGradient);
         }
 
         // Backprop through attention aggregation for each head

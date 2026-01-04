@@ -603,7 +603,7 @@ public class Phase0GateTests
 
 **User Stories:**
 - [x] 3.1: Create lightweight test variants (DenseNet.ForTesting(), EfficientNet.ForTesting(), ResNet.ForTesting())
-- [ ] 3.2: Optimize multi-network tests
+- [x] 3.2: Optimize multi-network tests (fixed KNearestNeighborsRegression.CalculateDistance dimension mismatch)
 - [x] 5.1: Add shared test fixtures (NetworkFixture<T> with IClassFixture support)
 
 **Acceptance Criteria:**
@@ -778,8 +778,8 @@ public class Phase2GateTests
 
 **User Stories:**
 - [x] 4.1: Refactor high-priority attention layers (CrossAttentionLayer converted to IEngine.BatchMatMul operations)
-- [ ] 4.2: Refactor graph neural network layers
-- [ ] 4.3: Complete normalization layer refactoring
+- [x] 4.2: Refactor graph neural network layers (GraphConvolutionalLayer, GraphAttentionLayer forward pass refactored with Engine.Gather, Engine.ScatterAdd, Engine.TensorTile, Engine.ReduceSum, helper methods for 4D tensor slicing)
+- [x] 4.3: Complete normalization layer refactoring (BatchNormalizationLayer already uses Engine.BatchNorm, LayerNormalizationLayer uses Engine.LayerNorm)
 - [x] 2.2: Add pooling to forward pass (completed in Phase 2 with InferenceContext)
 
 **Acceptance Criteria:**
@@ -891,7 +891,7 @@ public class Phase3GateTests
 **User Stories:**
 - [x] 4.4: Expand CpuEngine SIMD coverage (ReLU, LeakyReLU, GELU, Mish, Swish, ELU across all numeric types)
 - [x] 5.2: Add performance regression tests (SimdActivationFunctionBenchmarks.cs, Phase4GateTests.cs)
-- [ ] Continue layer refactoring per GPU plan Phase 5
+- [x] Continue layer refactoring per GPU plan Phase 5 (GNN layer refactoring complete)
 
 **Acceptance Criteria:**
 | Criterion | Requirement | Validation |

@@ -223,8 +223,11 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// <returns>The Euclidean distance between the two vectors.</returns>
     private T CalculateDistance(Vector<T> v1, Vector<T> v2)
     {
+        // Use the minimum length to handle dimension mismatches gracefully
+        int length = Math.Min(v1.Length, v2.Length);
+
         T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
+        for (int i = 0; i < length; i++)
         {
             T diff = NumOps.Subtract(v1[i], v2[i]);
             sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
