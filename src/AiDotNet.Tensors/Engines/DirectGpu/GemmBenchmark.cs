@@ -54,7 +54,9 @@ public sealed class GemmBenchmark
         {
             return new GemmBenchmarkResult
             {
-                M = M, N = N, K = K,
+                M = M,
+                N = N,
+                K = K,
                 TimeMs = 0,
                 GFlops = 0,
                 KernelName = "N/A",

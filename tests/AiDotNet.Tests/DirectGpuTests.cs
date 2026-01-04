@@ -1231,7 +1231,7 @@ public class DirectGpuTests
                 if (speedup >= 1.0)
                     _output.WriteLine($"   >>> OUR KERNEL is {speedup:F2}x FASTER than CLBlast <<<");
                 else
-                    _output.WriteLine($"   >>> CLBlast is {1/speedup:F2}x faster than our kernel <<<");
+                    _output.WriteLine($"   >>> CLBlast is {1 / speedup:F2}x faster than our kernel <<<");
             }
             else
             {
