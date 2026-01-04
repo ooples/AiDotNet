@@ -501,7 +501,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             throw new ArgumentException("Size must be at least 1.", nameof(size));
 
         var tensor = new Tensor<T>([size, size]);
-        
+
         // Fill with zeros first (default), then set diagonal to 1
         for (int i = 0; i < size; i++)
         {

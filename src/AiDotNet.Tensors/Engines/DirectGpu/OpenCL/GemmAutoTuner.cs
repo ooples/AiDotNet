@@ -1257,14 +1257,24 @@ public sealed class GemmAutoTuner
         // Based on analysis: VWM=2 works best on RDNA1
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,   // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 8,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 1,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 16,
+            NdimbSize = 8,
             UseTrueVectorLDS = true,  // THE KEY!
             UseColumnMajorA = true,
             KernelName = "clblast_true_vec_64x64"
@@ -1275,14 +1285,24 @@ public sealed class GemmAutoTuner
         // STRM=0, STRN=1, SA=1, SB=1, MDIMA=16, NDIMB=8, KWI=2, KREG=1
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 8,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 1,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 16,
+            NdimbSize = 8,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "clblast_baseline_k0"
@@ -1292,14 +1312,24 @@ public sealed class GemmAutoTuner
         // GEMMK=1 expects KWG=1 and uses KREG for K blocking, no LDS caching
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 1,
-            ThreadTileM = 8, ThreadTileN = 8,
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 4, KUnroll = 1, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = false, CacheB = false,
-            MdimaSize = 8, NdimbSize = 8,
+            TileM = 64,
+            TileN = 64,
+            TileK = 1,
+            ThreadTileM = 8,
+            ThreadTileN = 8,
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 4,
+            KUnroll = 1,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = false,
+            CacheB = false,
+            MdimaSize = 8,
+            NdimbSize = 8,
             UseTrueVectorLDS = false,
             UseColumnMajorA = false,
             KernelName = "clblast_baseline_k1"
@@ -1308,14 +1338,24 @@ public sealed class GemmAutoTuner
         // CLBlast RX 5700 TRUE VECTORIZED: MWG=128, NWG=64, VWM=4, VWN=1
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 64, TileK = 32,
-            ThreadTileM = 16, ThreadTileN = 8,  // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 1,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = true, StrideN = false,
-            CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 16,
+            TileM = 128,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 16,
+            ThreadTileN = 8,  // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 1,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 1,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 16,
+            NdimbSize = 16,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "clblast_true_vec_128x64"
@@ -1324,11 +1364,18 @@ public sealed class GemmAutoTuner
         // 64x128 TRUE VECTORIZED - our best config with vectorized LDS
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,  // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,  // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "true_vec_64x128"
@@ -1337,11 +1384,18 @@ public sealed class GemmAutoTuner
         // 32x64 TRUE VECTORIZED - smaller tiles for 512x512
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,   // MWI=4, NWI=8
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            TileM = 32,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,   // MWI=4, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "true_vec_32x64"
@@ -1350,11 +1404,18 @@ public sealed class GemmAutoTuner
         // 64x64 TRUE VECTORIZED with float4
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,   // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "true_vec_64x64_v4"
@@ -1375,14 +1436,24 @@ public sealed class GemmAutoTuner
         // RX 5500 XT (gfx1012) has no CLBlast entry; reuse this seed.
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,  // MDIMC=8, NDIMC=8
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = true,  // STRM=0, STRN=1
-            CacheA = true, CacheB = true,     // SA=1, SB=1 local memory caching
-            MdimaSize = 16, NdimbSize = 8,    // MDIMA=16, NDIMB=8
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,  // MDIMC=8, NDIMC=8
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 1,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = true,  // STRM=0, STRN=1
+            CacheA = true,
+            CacheB = true,     // SA=1, SB=1 local memory caching
+            MdimaSize = 16,
+            NdimbSize = 8,    // MDIMA=16, NDIMB=8
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "clblast_rx5700xt_exact"
@@ -1391,14 +1462,24 @@ public sealed class GemmAutoTuner
         // Same config without stride for comparison
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,     // SA=1, SB=1 local memory caching
-            MdimaSize = 16, NdimbSize = 8,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 1,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,     // SA=1, SB=1 local memory caching
+            MdimaSize = 16,
+            NdimbSize = 8,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "clblast_rx5700xt_nostride"
@@ -1407,14 +1488,24 @@ public sealed class GemmAutoTuner
         // CLBlast RX 5700 exact (gfx1010 DB): MWG=128, NWG=64, KWG=32, MDIMC=16, NDIMC=8, VWM=4, VWN=1
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 64, TileK = 32,
-            ThreadTileM = 16, ThreadTileN = 8,
-            VectorWidthM = 4, VectorWidthN = 1,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = true, StrideN = false,
-            CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 16,
+            TileM = 128,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 16,
+            ThreadTileN = 8,
+            VectorWidthM = 4,
+            VectorWidthN = 1,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 1,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 16,
+            NdimbSize = 16,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "clblast_rx5700_exact"
@@ -1423,14 +1514,24 @@ public sealed class GemmAutoTuner
         // CLBlast gfx10 default (gfx1010 DB): MWG=64, NWG=64, KWG=32, MDIMC=16, NDIMC=16, VWM=4, VWN=4
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 32,
-            ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = false, CacheB = false,
-            MdimaSize = 16, NdimbSize = 16,
+            TileM = 64,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 16,
+            ThreadTileN = 16,
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 1,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = false,
+            CacheB = false,
+            MdimaSize = 16,
+            NdimbSize = 16,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
             KernelName = "clblast_gfx10_default"
@@ -1444,11 +1545,18 @@ public sealed class GemmAutoTuner
         // Our best cached config for 2048x2048: VW:2x2, no KREG
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 0, UseSubgroupOps = false,  // NO KREG - simpler is faster!
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 0,
+            UseSubgroupOps = false,  // NO KREG - simpler is faster!
             KernelName = "simple_vec_64x128"
         });
 
@@ -1460,77 +1568,126 @@ public sealed class GemmAutoTuner
         // 64x128 with VWN=4 (higher N vectorization like CLBlast)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
             KernelName = "vec_64x128_v2x4"
         });
 
         // 64x128 with VW:4x4 (both high)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
             KernelName = "vec_64x128_v4x4"
         });
 
         // 64x128 with smaller K=8 but VWN=4
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 8,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 128,
+            TileK = 8,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
             KernelName = "vec_64x128_k8_v2x4"
         });
 
         // 64x128 with VW:1x4 (minimal M vectorization, high N)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 1, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 1,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
             KernelName = "vec_64x128_v1x4"
         });
 
         // 64x256 with VW:2x4 (wider N tile)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 256, TileK = 8,
-            ThreadTileM = 8, ThreadTileN = 32,   // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 256,
+            TileK = 8,
+            ThreadTileM = 8,
+            ThreadTileN = 32,   // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
             KernelName = "vec_64x256_v2x4"
         });
 
         // 128x128 with VW:2x4 and no KREG
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 8,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            TileM = 128,
+            TileN = 128,
+            TileK = 8,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
             KernelName = "vec_128x128_k8"
         });
 
         // Our best for 1024x1024: VW:1x2, no KREG
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 128, TileK = 8,
-            ThreadTileM = 8, ThreadTileN = 16,
-            VectorWidthM = 1, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 0, UseSubgroupOps = false,
+            TileM = 32,
+            TileN = 128,
+            TileK = 8,
+            ThreadTileM = 8,
+            ThreadTileN = 16,
+            VectorWidthM = 1,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 0,
+            UseSubgroupOps = false,
             KernelName = "simple_vec_32x128"
         });
 
@@ -1543,55 +1700,90 @@ public sealed class GemmAutoTuner
         // Best config with larger K tile (16)
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 128, TileK = 16,  // K=16 instead of 8
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=4, NWI=8 (same pattern)
-            VectorWidthM = 1, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            TileM = 32,
+            TileN = 128,
+            TileK = 16,  // K=16 instead of 8
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=4, NWI=8 (same pattern)
+            VectorWidthM = 1,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
             KernelName = "simple_vec_32x128_k16"
         });
 
         // Best config with even larger K tile (32)
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 128, TileK = 32,  // K=32 for maximum K-loop reduction
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=4, NWI=8 (same pattern)
-            VectorWidthM = 2, VectorWidthN = 4,  // Higher vector widths for larger K
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 8, UseSubgroupOps = false,
+            TileM = 32,
+            TileN = 128,
+            TileK = 32,  // K=32 for maximum K-loop reduction
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=4, NWI=8 (same pattern)
+            VectorWidthM = 2,
+            VectorWidthN = 4,  // Higher vector widths for larger K
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 8,
+            UseSubgroupOps = false,
             KernelName = "simple_vec_32x128_k32"
         });
 
         // 64x128 with larger K tile (32) - more work per K iteration
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 32,  // K=32
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 8, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 128,
+            TileK = 32,  // K=32
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 8,
+            UseSubgroupOps = false,
             KernelName = "simple_vec_64x128_k32"
         });
 
         // 64x64 with large K tile (32) - balanced config
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 32,
-            ThreadTileM = 8, ThreadTileN = 8,    // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 8, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 8,
+            ThreadTileN = 8,    // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 8,
+            UseSubgroupOps = false,
             KernelName = "simple_64x64_k32"
         });
 
         // 128x64 asymmetric for M-heavy matrices (K=16)
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 64, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 8,   // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            TileM = 128,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
             KernelName = "simple_128x64_k16"
         });
 
@@ -1606,61 +1798,102 @@ public sealed class GemmAutoTuner
         // CLBlast Fiji-style: 64x64 with K=32, VWM=4, VWN=4
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 32,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=4, NWI=4
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=4, NWI=4
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "clblast_64x64_k32_v4"
         });
 
         // CLBlast Vega-style: 64x64 with K=32, VWM=2, VWN=4
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 32,
-            ThreadTileM = 8, ThreadTileN = 8,    // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 8,
+            ThreadTileN = 8,    // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "clblast_64x64_k32_v2x4"
         });
 
         // CLBlast RX580-style: 128x128 with K=16, VWM=2, VWN=4, STRM/STRN
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=8, NWI=8 (256 threads)
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,      // STRM=1, STRN=1 like CLBlast
-            CacheA = true, CacheB = true,
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=8, NWI=8 (256 threads)
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,      // STRM=1, STRN=1 like CLBlast
+            CacheA = true,
+            CacheB = true,
             KernelName = "clblast_128x128_str"
         });
 
         // Smaller tiles with larger K for better K-loop efficiency
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 64, TileK = 32,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=4, NWI=4
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            TileM = 32,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=4, NWI=4
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
             KernelName = "small_tile_k32"
         });
 
         // VWM=4 variant of best config (simple_vec_32x128)
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 128, TileK = 8,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=4, NWI=8
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            TileM = 32,
+            TileN = 128,
+            TileK = 8,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=4, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
             KernelName = "simple_vec_32x128_v4"
         });
 
@@ -1675,94 +1908,156 @@ public sealed class GemmAutoTuner
         // Best config WITH STRM/STRN stride patterns (bank conflict avoidance)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,      // STRM=1, STRN=1 for bank conflict avoidance!
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,      // STRM=1, STRN=1 for bank conflict avoidance!
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec_64x128_stride"
         });
 
         // 32x128 with STRM/STRN
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 128, TileK = 8,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=4, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
+            TileM = 32,
+            TileN = 128,
+            TileK = 8,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=4, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
             KernelName = "vec_32x128_stride"
         });
 
         // HIGH-OCCUPANCY with TRUE DOUBLE-BUFFERING (MWI*NWI=16 triggers ping-pong!)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=4, NWI=4 → 16 outputs/thread
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,  // TRIGGERS PING-PONG!
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=4, NWI=4 → 16 outputs/thread
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,  // TRIGGERS PING-PONG!
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
             KernelName = "double_buf_64x64_4x4"
         });
 
         // Even smaller tile for maximum double-buffering efficiency
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=4, NWI=4 → 16 outputs/thread
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            TileM = 32,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=4, NWI=4 → 16 outputs/thread
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
             KernelName = "double_buf_32x64"
         });
 
         // KREG=2 variant to test register tiling
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = false,  // KREG=2!
-            StrideM = true, StrideN = true,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 2,
+            KUnroll = 4,
+            UseSubgroupOps = false,  // KREG=2!
+            StrideM = true,
+            StrideN = true,
             KernelName = "vec_64x128_kreg2"
         });
 
         // CLBlast AMD pattern: MWG>NWG, VWM=4
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 64, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 8,   // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = false,
+            TileM = 128,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = false,
             KernelName = "amd_128x64_v4x2"
         });
 
         // Float4 vectorized WITHOUT KREG
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 0, UseSubgroupOps = false,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 0,
+            UseSubgroupOps = false,
             KernelName = "simple_vec4_64x128"
         });
 
         // Float8 vectorized WITHOUT KREG (test if KREG is the bottleneck)
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 8, VectorWidthN = 8,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 0, UseSubgroupOps = false,
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,
+            VectorWidthM = 8,
+            VectorWidthN = 8,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 0,
+            UseSubgroupOps = false,
             KernelName = "simple_vec8_128x128"
         });
 
@@ -1774,77 +2069,126 @@ public sealed class GemmAutoTuner
         // RX 5700 XT optimal with KREG=2 and subgroup ops (RDNA1)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 2,
+            KUnroll = 4,
+            UseSubgroupOps = capabilities.SupportsSubgroups,
             KernelName = "clblast_rdna1_optimal"
         });
 
         // High KREG variant for maximum compute density
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 32,
-            ThreadTileM = 8, ThreadTileN = 8,
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 4, KUnroll = 8, UseSubgroupOps = capabilities.SupportsSubgroups,
+            TileM = 64,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 8,
+            ThreadTileN = 8,
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 4,
+            KUnroll = 8,
+            UseSubgroupOps = capabilities.SupportsSubgroups,
             KernelName = "clblast_high_kreg"
         });
 
         // RX 5700 variant with more aggressive unrolling
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 64, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 8,
-            VectorWidthM = 4, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            TileM = 128,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 8,
+            VectorWidthM = 4,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 2,
+            KUnroll = 4,
+            UseSubgroupOps = capabilities.SupportsSubgroups,
             KernelName = "clblast_rdna1_alt1"
         });
 
         // AMD default with KREG
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 32,
-            ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            TileM = 64,
+            TileN = 64,
+            TileK = 32,
+            ThreadTileM = 16,
+            ThreadTileN = 16,
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 2,
+            KUnroll = 4,
+            UseSubgroupOps = capabilities.SupportsSubgroups,
             KernelName = "clblast_amd_default"
         });
 
         // Large tile with subgroup shuffling
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 2,
+            KUnroll = 4,
+            UseSubgroupOps = capabilities.SupportsSubgroups,
             KernelName = "clblast_large_tile"
         });
 
         // Extremely aggressive configuration for maximum throughput
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 32,
-            ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 4, KUnroll = 8, UseSubgroupOps = capabilities.SupportsSubgroups,
+            TileM = 128,
+            TileN = 128,
+            TileK = 32,
+            ThreadTileM = 16,
+            ThreadTileN = 16,
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 4,
+            KUnroll = 8,
+            UseSubgroupOps = capabilities.SupportsSubgroups,
             KernelName = "clblast_max_throughput"
         });
 
         // Balanced config for medium matrices
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = false,  // No subgroup for baseline
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 2,
+            KUnroll = 4,
+            UseSubgroupOps = false,  // No subgroup for baseline
             KernelName = "clblast_balanced"
         });
 
@@ -1857,52 +2201,88 @@ public sealed class GemmAutoTuner
         // Low register config 1: 4×4 outputs, 16 threads
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 32, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,  // MWI=NWI=4
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
+            TileM = 32,
+            TileN = 32,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,  // MWI=NWI=4
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
             KernelName = "low_reg_4x4"
         });
 
         // Low register config 2: 4×4 outputs, larger tiles
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=NWI=4
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=NWI=4
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
             KernelName = "low_reg_4x4_64"
         });
 
         // Low register config 3: 2×4 outputs, asymmetric
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 64, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=2, NWI=4
-            VectorWidthM = 1, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
+            TileM = 32,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=2, NWI=4
+            VectorWidthM = 1,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
             KernelName = "low_reg_2x4"
         });
 
         // Low register config 4: 2×2 outputs, minimal registers
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 32, TileK = 8,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=NWI=2
-            VectorWidthM = 1, VectorWidthN = 1,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 1, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 32,
+            TileN = 32,
+            TileK = 8,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=NWI=2
+            VectorWidthM = 1,
+            VectorWidthN = 1,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 1,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "low_reg_2x2"
         });
 
@@ -1915,130 +2295,220 @@ public sealed class GemmAutoTuner
         // High-occupancy 4x4 with 64x64 tiles (256 threads, 16 outputs/thread)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 8,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=NWI=4
-            VectorWidthM = 1, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,  // ENABLES PING-PONG!
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 8,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=NWI=4
+            VectorWidthM = 1,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,  // ENABLES PING-PONG!
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_4x4_64"
         });
 
         // High-occupancy 4x4 with 128x128 tiles, 32 threads/dim
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 8,
-            ThreadTileM = 32, ThreadTileN = 32,  // MWI=NWI=4, 1024 threads BUT max is 256
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 128,
+            TileN = 128,
+            TileK = 8,
+            ThreadTileM = 32,
+            ThreadTileN = 32,  // MWI=NWI=4, 1024 threads BUT max is 256
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_4x4_128_invalid"  // Will be filtered out by validation
         });
 
         // High-occupancy 4x2 with 64x64 tiles (128 threads)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 8,
-            ThreadTileM = 16, ThreadTileN = 32,  // MWI=4, NWI=2
-            VectorWidthM = 2, VectorWidthN = 1,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 8,
+            ThreadTileM = 16,
+            ThreadTileN = 32,  // MWI=4, NWI=2
+            VectorWidthM = 2,
+            VectorWidthN = 1,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_4x2_64"
         });
 
         // High-occupancy 2x4 with 64x64 tiles (128 threads)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 8,
-            ThreadTileM = 32, ThreadTileN = 16,  // MWI=2, NWI=4
-            VectorWidthM = 1, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 8,
+            ThreadTileM = 32,
+            ThreadTileN = 16,  // MWI=2, NWI=4
+            VectorWidthM = 1,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_2x4_64"
         });
 
         // High-occupancy 2x2 with 64x64 tiles (64 threads - very high occupancy)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 32, ThreadTileN = 32,  // MWI=NWI=2, BUT 1024 threads - INVALID
-            VectorWidthM = 1, VectorWidthN = 1,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 32,
+            ThreadTileN = 32,  // MWI=NWI=2, BUT 1024 threads - INVALID
+            VectorWidthM = 1,
+            VectorWidthN = 1,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_2x2_64_invalid"
         });
 
         // High-occupancy 4x4 with 32x32 tiles (64 threads, very high occupancy)
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 32, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,  // MWI=NWI=4, 64 threads
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 32,
+            TileN = 32,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,  // MWI=NWI=4, 64 threads
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_4x4_32"
         });
 
         // High-occupancy 4x4 with 64x64 tiles, larger K tile
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=NWI=4
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=NWI=4
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_4x4_64_k16"
         });
 
         // High-occupancy 4x4 with 128x64 tiles (asymmetric)
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 64, TileK = 8,
-            ThreadTileM = 32, ThreadTileN = 16,  // MWI=4, NWI=4, 512 threads - INVALID
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 128,
+            TileN = 64,
+            TileK = 8,
+            ThreadTileM = 32,
+            ThreadTileN = 16,  // MWI=4, NWI=4, 512 threads - INVALID
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_4x4_128x64_invalid"
         });
 
         // High-occupancy with 16x8 = 128 threads, 4x4 outputs
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 32, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 8,  // MWI=4, NWI=4, 128 threads
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 32,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 8,  // MWI=4, NWI=4, 128 threads
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_4x4_64x32"
         });
 
         // High-occupancy with 8x16 = 128 threads, 4x4 outputs
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,  // MWI=4, NWI=4, 128 threads
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 32,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,  // MWI=4, NWI=4, 128 threads
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = true,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "high_occ_4x4_32x64"
         });
 
@@ -2051,91 +2521,154 @@ public sealed class GemmAutoTuner
         // VWM=4, VWN=4 - 4x memory bandwidth for both A and B
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,   // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 4,  // 4x bandwidth for A and B
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 4,  // 4x bandwidth for A and B
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec4_64x64"
         });
 
         // VWM=8, VWN=8 - Maximum vectorization (CLBlast style)
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,   // MWI=8, NWI=8
-            VectorWidthM = 8, VectorWidthN = 8,  // 8x bandwidth - CLBlast's secret!
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 8,
+            VectorWidthN = 8,  // 8x bandwidth - CLBlast's secret!
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec8_64x64"
         });
 
         // VWM=4, VWN=4 with larger tiles
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec4_128x128"
         });
 
         // VWM=8, VWN=8 with larger tiles - matching CLBlast exactly
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=8, NWI=8
-            VectorWidthM = 8, VectorWidthN = 8,  // Maximum vectorization
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=8, NWI=8
+            VectorWidthM = 8,
+            VectorWidthN = 8,  // Maximum vectorization
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec8_128x128"
         });
 
         // VWM=4, VWN=4 with balanced tiles
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec4_64x128"
         });
 
         // VWM=8, VWN=4 - Heavy A vectorization
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 8, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 8,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec8x4_64x128"
         });
 
         // VWM=4, VWN=8 - Heavy B vectorization
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 8,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 8,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec4x8_64x128"
         });
 
@@ -2147,65 +2680,110 @@ public sealed class GemmAutoTuner
         // CLBlast 128x128 tiles WITHOUT KREG
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,  // NO KREG!
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,  // NO KREG!
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "clblast_128x128_nokr"
         });
 
         // CLBlast 128x128 tiles WITHOUT KREG, higher VWM
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MWI=8, NWI=8
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MWI=8, NWI=8
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "clblast_128x128_v4_nokr"
         });
 
         // 64x128 with larger K tile
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 32,
-            ThreadTileM = 8, ThreadTileN = 16,  // MWI=8, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 8, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 64,
+            TileN = 128,
+            TileK = 32,
+            ThreadTileM = 8,
+            ThreadTileN = 16,  // MWI=8, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 8,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec2x4_64x128_k32"
         });
 
         // Best-performing config variant with larger K tile
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,  // MWI=4, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 32,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,  // MWI=4, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec2x4_32x128_k16"
         });
 
         // Asymmetric tile with VWM=2
         configs.Add(new GemmConfig
         {
-            TileM = 32, TileN = 256, TileK = 8,
-            ThreadTileM = 8, ThreadTileN = 32,  // MWI=4, NWI=8
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = false, StrideN = false,
-            CacheA = true, CacheB = true,
+            TileM = 32,
+            TileN = 256,
+            TileK = 8,
+            ThreadTileM = 8,
+            ThreadTileN = 32,  // MWI=4, NWI=8
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = false,
+            StrideN = false,
+            CacheA = true,
+            CacheB = true,
             KernelName = "vec2x4_32x256"
         });
 
@@ -2347,84 +2925,144 @@ public sealed class GemmAutoTuner
         // But compute uses 16x16 threads - more threads for loading bandwidth
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,  // MDIMC=16, NDIMC=16 (256 threads for compute)
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 8, NdimbSize = 8,  // MDIMA=8, NDIMB=8 (different from MDIMC/NDIMC!)
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,  // MDIMC=16, NDIMC=16 (256 threads for compute)
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 8,
+            NdimbSize = 8,  // MDIMA=8, NDIMB=8 (different from MDIMC/NDIMC!)
             KernelName = "coop_128x128_md8_nd8"
         });
 
         // 128x128 with MDIMA=16, NDIMB=16 (same as MDIMC/NDIMC but wider vectors)
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 32, NdimbSize = 32,  // Larger than MDIMC/NDIMC - more cooperative loading
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 16,
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 32,
+            NdimbSize = 32,  // Larger than MDIMC/NDIMC - more cooperative loading
             KernelName = "coop_128x128_md32_nd32"
         });
 
         // 64x128 with cooperative loading
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 128, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 16,   // MDIMC=8, NDIMC=16 (128 threads)
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 32,  // MDIMA=16, NDIMB=32 (more threads for B loading)
+            TileM = 64,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 16,   // MDIMC=8, NDIMC=16 (128 threads)
+            VectorWidthM = 2,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 16,
+            NdimbSize = 32,  // MDIMA=16, NDIMB=32 (more threads for B loading)
             KernelName = "coop_64x128_md16_nd32"
         });
 
         // 128x64 with cooperative loading (M-heavy)
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 64, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 8,   // MDIMC=16, NDIMC=8 (128 threads)
-            VectorWidthM = 4, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 32, NdimbSize = 16,  // MDIMA=32 (more threads for A loading)
+            TileM = 128,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 8,   // MDIMC=16, NDIMC=8 (128 threads)
+            VectorWidthM = 4,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 32,
+            NdimbSize = 16,  // MDIMA=32 (more threads for A loading)
             KernelName = "coop_128x64_md32_nd16"
         });
 
         // 64x64 with cooperative loading
         configs.Add(new GemmConfig
         {
-            TileM = 64, TileN = 64, TileK = 16,
-            ThreadTileM = 8, ThreadTileN = 8,    // MDIMC=8, NDIMC=8 (64 threads)
-            VectorWidthM = 2, VectorWidthN = 2,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 16,  // MDIMA=16, NDIMB=16 (2x loading threads)
+            TileM = 64,
+            TileN = 64,
+            TileK = 16,
+            ThreadTileM = 8,
+            ThreadTileN = 8,    // MDIMC=8, NDIMC=8 (64 threads)
+            VectorWidthM = 2,
+            VectorWidthN = 2,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 16,
+            NdimbSize = 16,  // MDIMA=16, NDIMB=16 (2x loading threads)
             KernelName = "coop_64x64_md16_nd16"
         });
 
         // Large matrix optimized: 128x128 with VWN=8 and cooperative loading
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 32,
-            ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 4, VectorWidthN = 8,  // Heavy B vectorization
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 32, NdimbSize = 64,  // Very cooperative B loading
+            TileM = 128,
+            TileN = 128,
+            TileK = 32,
+            ThreadTileM = 16,
+            ThreadTileN = 16,
+            VectorWidthM = 4,
+            VectorWidthN = 8,  // Heavy B vectorization
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 4,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 32,
+            NdimbSize = 64,  // Very cooperative B loading
             KernelName = "coop_128x128_v8_md32_nd64"
         });
 
@@ -2432,28 +3070,48 @@ public sealed class GemmAutoTuner
         // (May exceed LDS for some GPUs, validation will filter)
         configs.Add(new GemmConfig
         {
-            TileM = 256, TileN = 256, TileK = 8,  // Small K to fit in LDS
-            ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 4, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 32, NdimbSize = 32,
+            TileM = 256,
+            TileN = 256,
+            TileK = 8,  // Small K to fit in LDS
+            ThreadTileM = 16,
+            ThreadTileN = 16,
+            VectorWidthM = 4,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 0,
+            KUnroll = 2,
+            UseSubgroupOps = false,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 32,
+            NdimbSize = 32,
             KernelName = "coop_256x256_md32_nd32"
         });
 
         // CLBlast RX 5700 style: cooperative loading variant with explicit MDIMA/NDIMB
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
-            ThreadTileM = 16, ThreadTileN = 8,   // MDIMC=16, NDIMC=8 (128 threads)
-            VectorWidthM = 8, VectorWidthN = 4,
-            UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 16,  // CLBlast-style MDIMA/NDIMB
+            TileM = 128,
+            TileN = 128,
+            TileK = 16,
+            ThreadTileM = 16,
+            ThreadTileN = 8,   // MDIMC=16, NDIMC=8 (128 threads)
+            VectorWidthM = 8,
+            VectorWidthN = 4,
+            UseDoubleBuffering = false,
+            UseVectorizedLoads = true,
+            KReg = 2,
+            KUnroll = 4,
+            UseSubgroupOps = capabilities.SupportsSubgroups,
+            StrideM = true,
+            StrideN = true,
+            CacheA = true,
+            CacheB = true,
+            MdimaSize = 16,
+            NdimbSize = 16,  // CLBlast-style MDIMA/NDIMB
             KernelName = "clblast_rx5700_coop_md16"
         });
 
@@ -2462,18 +3120,28 @@ public sealed class GemmAutoTuner
         {
             configs.Add(new GemmConfig
             {
-                TileM = 64, TileN = 64, TileK = 32,
-                ThreadTileM = 8, ThreadTileN = 8,
-                VectorWidthM = 4, VectorWidthN = 4,
-                UseDoubleBuffering = true, UseVectorizedLoads = true,
+                TileM = 64,
+                TileN = 64,
+                TileK = 32,
+                ThreadTileM = 8,
+                ThreadTileN = 8,
+                VectorWidthM = 4,
+                VectorWidthN = 4,
+                UseDoubleBuffering = true,
+                UseVectorizedLoads = true,
                 KernelName = "gemm_mixed_precision"
             });
             configs.Add(new GemmConfig
             {
-                TileM = 128, TileN = 128, TileK = 32,
-                ThreadTileM = 16, ThreadTileN = 16,
-                VectorWidthM = 4, VectorWidthN = 4,
-                UseDoubleBuffering = true, UseVectorizedLoads = true,
+                TileM = 128,
+                TileN = 128,
+                TileK = 32,
+                ThreadTileM = 16,
+                ThreadTileN = 16,
+                VectorWidthM = 4,
+                VectorWidthN = 4,
+                UseDoubleBuffering = true,
+                UseVectorizedLoads = true,
                 KernelName = "gemm_mixed_precision_large"
             });
         }

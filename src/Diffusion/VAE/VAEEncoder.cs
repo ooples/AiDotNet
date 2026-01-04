@@ -1,7 +1,7 @@
 using AiDotNet.ActivationFunctions;
-using AiDotNet.ModelLoading;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.VAE;

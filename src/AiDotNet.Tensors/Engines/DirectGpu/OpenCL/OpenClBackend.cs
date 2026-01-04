@@ -29,7 +29,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
     public sealed class OpenClBackend : IDirectGpuBackend
     {
         private DirectOpenClContext? _context;
-        private readonly Dictionary<string, DirectOpenClKernel> _kernelCache;   
+        private readonly Dictionary<string, DirectOpenClKernel> _kernelCache;
         private readonly List<DirectOpenClProgram> _programs;
         private DynamicGemmKernel? _dynamicGemm;
         private bool _disposed;
@@ -53,7 +53,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private bool _clblastDirectKernelsReady;
         private ClBlastCopyParameters _clblastCopyParams;
         private ClBlastPadParameters _clblastPadParams;
-        private ClBlastPadTransposeParameters _clblastPadTransposeParams;       
+        private ClBlastPadTransposeParameters _clblastPadTransposeParams;
         private ClBlastTransposeParameters _clblastTransposeParams;
         private ClBlastXgemmDirectParameters _clblastDirectParams;
         private int _clblastMinIndirectSize;
@@ -732,14 +732,24 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 // GEMMK=0, MWG=64, NWG=64, KWG=16, VWM=2, VWN=2, SA=1, SB=1
                 var defaultBaseline = new GemmConfig
                 {
-                    TileM = 64, TileN = 64, TileK = 16,
-                    ThreadTileM = 8, ThreadTileN = 8,
-                    VectorWidthM = 2, VectorWidthN = 2,
-                    UseDoubleBuffering = false, UseVectorizedLoads = true,
-                    KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-                    StrideM = false, StrideN = true,
-                    CacheA = true, CacheB = true,
-                    MdimaSize = 16, NdimbSize = 8,
+                    TileM = 64,
+                    TileN = 64,
+                    TileK = 16,
+                    ThreadTileM = 8,
+                    ThreadTileN = 8,
+                    VectorWidthM = 2,
+                    VectorWidthN = 2,
+                    UseDoubleBuffering = false,
+                    UseVectorizedLoads = true,
+                    KReg = 1,
+                    KUnroll = 2,
+                    UseSubgroupOps = false,
+                    StrideM = false,
+                    StrideN = true,
+                    CacheA = true,
+                    CacheB = true,
+                    MdimaSize = 16,
+                    NdimbSize = 8,
                     UseTrueVectorLDS = true,
                     UseColumnMajorA = true,
                     KernelName = "clblast_baseline_k0"
@@ -768,7 +778,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     _clblastCopyParams.DimX <= 0 ||
                     _clblastTransposeParams.Dim <= 0)
                 {
-                    var deviceInfo = ClBlastDeviceInfo.FromContext(_context);   
+                    var deviceInfo = ClBlastDeviceInfo.FromContext(_context);
                     _clblastCopyParams = ClBlastCopyDatabase.GetParameters(deviceInfo);
                     _clblastPadParams = ClBlastPadDatabase.GetParameters(deviceInfo);
                     _clblastPadTransposeParams = ClBlastPadTransposeDatabase.GetParameters(deviceInfo);
@@ -1224,7 +1234,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                         var total = allocTime + packATime + packBTime + packCTime + gemmTime + unpackCTime;
                         double flops = 2.0 * M * N * K;
                         double gflops = flops / (total / ticksPerMs) / 1e6;
-                        Console.WriteLine($"[TIMING-SWAP {M}x{N}x{K}] Alloc={allocTime/ticksPerMs:F2}ms PackA={packATime/ticksPerMs:F2}ms PackB={packBTime/ticksPerMs:F2}ms GEMM={gemmTime/ticksPerMs:F2}ms UnpackC={unpackCTime/ticksPerMs:F2}ms Total={total/ticksPerMs:F2}ms ({gflops:F0} GFLOPS)");
+                        Console.WriteLine($"[TIMING-SWAP {M}x{N}x{K}] Alloc={allocTime / ticksPerMs:F2}ms PackA={packATime / ticksPerMs:F2}ms PackB={packBTime / ticksPerMs:F2}ms GEMM={gemmTime / ticksPerMs:F2}ms UnpackC={unpackCTime / ticksPerMs:F2}ms Total={total / ticksPerMs:F2}ms ({gflops:F0} GFLOPS)");
                     }
 
                     return true;
@@ -1325,7 +1335,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     {
                         double ticksPerMs = System.Diagnostics.Stopwatch.Frequency / 1000.0;
                         var total = allocTime + packATime + packBTime + packCTime + gemmTime + unpackCTime;
-                        Console.WriteLine($"[TIMING {M}x{N}x{K}] Alloc={allocTime/ticksPerMs:F2}ms PackA={packATime/ticksPerMs:F2}ms PackB={packBTime/ticksPerMs:F2}ms GEMM={gemmTime/ticksPerMs:F2}ms UnpackC={unpackCTime/ticksPerMs:F2}ms Total={total/ticksPerMs:F2}ms");
+                        Console.WriteLine($"[TIMING {M}x{N}x{K}] Alloc={allocTime / ticksPerMs:F2}ms PackA={packATime / ticksPerMs:F2}ms PackB={packBTime / ticksPerMs:F2}ms GEMM={gemmTime / ticksPerMs:F2}ms UnpackC={unpackCTime / ticksPerMs:F2}ms Total={total / ticksPerMs:F2}ms");
                     }
 
                     return true;

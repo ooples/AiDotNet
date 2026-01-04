@@ -503,7 +503,7 @@ public sealed class CudaBackend : IDirectGpuBackend
         LaunchElementwiseKernel("subtract_vectors", A, B, C, size);
     }
 
-    public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)    
+    public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
         LaunchElementwiseKernel("multiply_vectors", A, B, C, size);
     }
@@ -523,7 +523,7 @@ public sealed class CudaBackend : IDirectGpuBackend
         LaunchElementwiseKernel("max_vectors", A, B, C, size);
     }
 
-    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)       
+    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)
     {
         LaunchScaleKernel(A, B, scalar, size);
     }
