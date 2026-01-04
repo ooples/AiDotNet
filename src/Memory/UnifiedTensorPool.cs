@@ -102,6 +102,10 @@ public class UnifiedTensorPool : IDisposable
         {
             while (pool.TryTake(out var entry))
             {
+                // Always decrement memory usage when removing entry from pool
+                // This prevents memory accounting leaks when entries are invalid
+                UpdateMemoryUsage(-entry.SizeBytes);
+
                 if (_options.UseWeakReferences)
                 {
                     if (entry.WeakArray is not null &&
@@ -109,17 +113,17 @@ public class UnifiedTensorPool : IDisposable
                         array is T[] typedArray &&
                         typedArray.Length >= minimumLength)
                     {
-                        UpdateMemoryUsage(-entry.SizeBytes);
                         return typedArray;
                     }
+                    // Entry was invalid (weak ref dead) - memory already decremented, continue
                 }
                 else
                 {
                     if (entry.StrongArray is T[] typedArray && typedArray.Length >= minimumLength)
                     {
-                        UpdateMemoryUsage(-entry.SizeBytes);
                         return typedArray;
                     }
+                    // Entry was invalid (wrong type) - memory already decremented, continue
                 }
             }
         }
@@ -219,12 +223,16 @@ public class UnifiedTensorPool : IDisposable
         {
             while (pool.TryTake(out var entry))
             {
+                // Always decrement memory usage when removing entry from pool
+                // This prevents memory accounting leaks when entries are invalid
+                UpdateMemoryUsage(-entry.SizeBytes);
+
                 if (entry.Tensor is Tensor<T> tensor && ShapeMatches(tensor.Shape, shape))
                 {
-                    UpdateMemoryUsage(-entry.SizeBytes);
                     ClearTensor(tensor);
                     return tensor;
                 }
+                // Entry was invalid (wrong type or shape mismatch) - memory already decremented, continue
             }
         }
 

@@ -260,7 +260,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// understanding the complexity of the layer.
     /// </para>
     /// <para><b>For Beginners:</b> This tells you how many individual numbers the layer can adjust during training.
-    /// 
+    ///
     /// The parameter count:
     /// - Equals (number of inputs × number of outputs) + number of outputs
     /// - First part counts the weights, second part counts the biases
@@ -270,7 +270,18 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// 100 × 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => (_weights.Shape[0] * _weights.Shape[1]) + _biases.Shape[0];
+    public override int ParameterCount
+    {
+        get
+        {
+            // For lazy initialization, compute from InputShape/OutputShape if not yet initialized
+            if (!_isInitialized)
+            {
+                return (InputShape[0] * OutputShape[0]) + OutputShape[0];
+            }
+            return (_weights.Shape[0] * _weights.Shape[1]) + _biases.Shape[0];
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -585,6 +596,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             return NumOps.Zero;
         }
 
+        // Ensure weights are initialized (supports lazy initialization)
+        EnsureInitialized();
+
         T regularizationLoss = NumOps.Zero;
 
         // === Vectorized L1 Regularization: Σ|w| (Phase B: US-GPU-015) ===
@@ -708,6 +722,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentNullException(nameof(weights));
         }
 
+        // Ensure weights are initialized before validation (supports lazy initialization)
+        EnsureInitialized();
+
         // Validate dimensions against current weights: [inputSize, outputSize]
         if (weights.Shape[0] != _weights.Shape[0] || weights.Shape[1] != _weights.Shape[1])
         {
@@ -734,6 +751,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The weight tensor connecting input neurons to output neurons.</returns>
     public override Tensor<T> GetWeights()
     {
+        // Ensure weights are initialized (supports lazy initialization)
+        EnsureInitialized();
         return _weights;
     }
 
@@ -743,6 +762,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The bias values added to each output neuron.</returns>
     public override Tensor<T> GetBiases()
     {
+        // Ensure biases are initialized (supports lazy initialization)
+        EnsureInitialized();
         return _biases;
     }
 
@@ -1261,21 +1282,23 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// on all parameters at once, or for saving and loading model weights.
     /// </para>
     /// <para><b>For Beginners:</b> This method gathers all the learned values from the layer.
-    /// 
+    ///
     /// The parameters include:
     /// - All weight values (connections between inputs and outputs)
     /// - All bias values (base values for each output)
-    /// 
+    ///
     /// These are combined into a single long list (vector), which can be used for:
     /// - Saving the model
     /// - Sharing parameters between layers
     /// - Advanced optimization techniques
-    /// 
+    ///
     /// This provides access to all the "knowledge" the layer has learned.
     /// </para>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Ensure weights and biases are initialized (supports lazy initialization)
+        EnsureInitialized();
         return Vector<T>.Concatenate(new Vector<T>(_weights.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
@@ -1305,21 +1328,24 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// vector. The vector must have the exact length required for all parameters of the layer.
     /// </para>
     /// <para><b>For Beginners:</b> This method updates all the layer's learned values at once.
-    /// 
+    ///
     /// When setting parameters:
     /// - The vector must have exactly the right number of values
     /// - The values are assigned to the weights and biases in a specific order
-    /// 
+    ///
     /// This is useful for:
     /// - Loading a previously saved model
     /// - Copying parameters from another model
     /// - Setting parameters that were optimized externally
-    /// 
+    ///
     /// It's like replacing all the "knowledge" in the layer with new information.
     /// </para>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Ensure weights and biases are initialized (supports lazy initialization)
+        EnsureInitialized();
+
         int expected = _weights.Length + _biases.Length;
         if (parameters.Length != expected)
         {
@@ -1458,11 +1484,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        if (_weights == null)
-            throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
-
-        if (_biases == null)
-            throw new InvalidOperationException("Layer biases not initialized. Call Initialize() or train the layer first.");
+        // Ensure weights and biases are initialized (supports lazy initialization)
+        EnsureInitialized();
 
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
