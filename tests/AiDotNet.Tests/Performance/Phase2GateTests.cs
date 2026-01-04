@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Memory;
 using AiDotNet.NeuralNetworks.Layers;

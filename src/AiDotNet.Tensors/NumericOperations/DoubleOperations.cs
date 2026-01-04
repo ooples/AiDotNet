@@ -1100,68 +1100,62 @@ public class DoubleOperations : INumericOperations<double>
     }
 
     /// <summary>
-    /// Computes LeakyReLU activation using SIMD-optimized operations.
+    /// Computes LeakyReLU activation using SIMD-optimized SimdKernels.
     /// </summary>
     public void LeakyReLU(ReadOnlySpan<double> x, double alpha, Span<double> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
-
         Engines.Simd.SimdKernels.LeakyReLU(x, alpha, destination);
     }
 
     /// <summary>
-    /// Computes GELU (Gaussian Error Linear Unit) activation using SIMD-optimized operations.
+    /// Computes GELU (Gaussian Error Linear Unit) activation using SIMD-optimized SimdKernels.
     /// </summary>
     public void GELU(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
-
         Engines.Simd.SimdKernels.GELU(x, destination);
     }
 
     /// <summary>
-    /// Computes Mish activation using SIMD-optimized operations.
+    /// Computes Mish activation using SIMD-optimized SimdKernels.
     /// </summary>
     public void Mish(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
-
         Engines.Simd.SimdKernels.Mish(x, destination);
     }
 
     /// <summary>
-    /// Computes Swish/SiLU activation using SIMD-optimized operations.
+    /// Computes Swish/SiLU activation using SIMD-optimized SimdKernels.
     /// </summary>
     public void Swish(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
-
         Engines.Simd.SimdKernels.Swish(x, destination);
     }
 
     /// <summary>
-    /// Computes ELU (Exponential Linear Unit) activation using SIMD-optimized operations.
+    /// Computes ELU (Exponential Linear Unit) activation using SIMD-optimized SimdKernels.
     /// </summary>
     public void ELU(ReadOnlySpan<double> x, double alpha, Span<double> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
-
         Engines.Simd.SimdKernels.ELU(x, alpha, destination);
     }
 
     /// <summary>
-    /// Computes ReLU activation using SIMD-optimized operations.
+    /// Computes ReLU activation using SIMD-optimized SimdKernels.
     /// </summary>
     public void ReLU(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
-
         Engines.Simd.SimdKernels.ReLU(x, destination);
     }
 

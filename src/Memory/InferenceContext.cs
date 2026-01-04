@@ -3,69 +3,79 @@ using System.Collections.Concurrent;
 namespace AiDotNet.Memory;
 
 /// <summary>
-/// Provides a scoped context for inference operations with automatic tensor pooling.
+/// Provides a scoped context for inference operations with automatic tensor pooling and lifecycle management.
+/// All tensors rented through this context are tracked and automatically returned to the pool when disposed.
 /// </summary>
+/// <typeparam name="T">The numeric type for tensor elements (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// InferenceContext manages temporary tensors during inference, automatically returning
-/// them to the pool when the context is disposed. This reduces GC pressure during
-/// repeated inference calls by reusing tensors instead of allocating new ones.
-/// </para>
-/// <para><b>For Beginners:</b> Think of this as a "workspace" for running neural networks.
-/// When you open a workspace (create context), all temporary tensors used during inference
-/// are tracked. When you close the workspace (dispose context), all those tensors are
-/// automatically cleaned up and returned to the pool for reuse.
+/// InferenceContext simplifies memory management during neural network inference by:
+/// - Tracking all rented tensors automatically
+/// - Returning all tensors to the pool on disposal (even if Release wasn't called)
+/// - Providing convenient rent methods for common tensor shapes
 /// </para>
 /// <para>
-/// <b>Thread Safety:</b> Each thread should use its own InferenceContext.
-/// The underlying UnifiedTensorPool is thread-safe, but the context itself tracks tensors
-/// per-scope and should not be shared across threads.
+/// Basic usage example:
+/// <code>
+/// using var context = new InferenceContext&lt;float&gt;();
+///
+/// var input = context.Rent2D(32, 784);    // Rent a batch of inputs
+/// var hidden = context.Rent2D(32, 256);   // Rent hidden layer buffer
+/// var output = context.Rent2D(32, 10);    // Rent output buffer
+///
+/// // Perform inference operations...
+///
+/// // All tensors automatically returned when context is disposed
+/// </code>
+/// </para>
+/// <para>
+/// For ambient context support (avoiding parameter threading), use <see cref="InferenceScope{T}"/>:
+/// <code>
+/// using var context = new InferenceContext&lt;float&gt;();
+/// using var scope = InferenceScope&lt;float&gt;.Begin(context);
+///
+/// // Now any code can access the context via InferenceScope&lt;float&gt;.Current
+/// var tensor = InferenceScope&lt;float&gt;.RentOrCreate(new[] { 32, 784 });
+/// </code>
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for tensor elements.</typeparam>
-/// <example>
-/// <code>
-/// var pool = new UnifiedTensorPool(new PoolingOptions { MaxPoolSizeMB = 256 });
-///
-/// // During inference loop
-/// for (int i = 0; i &lt; batchCount; i++)
-/// {
-///     using var context = new InferenceContext&lt;float&gt;(pool);
-///     var result = network.Forward(input, context);
-///     // Process result...
-///     // All temporary tensors are automatically returned to pool here
-/// }
-/// </code>
-/// </example>
 public class InferenceContext<T> : IDisposable
 {
-    private readonly UnifiedTensorPool _pool;
+    private readonly TensorPool<T> _pool;
     private readonly ConcurrentDictionary<Tensor<T>, byte> _rentedTensors;
     private readonly bool _ownsPool;
     private bool _disposed;
 
     /// <summary>
-    /// Gets the underlying tensor pool.
+    /// Gets the underlying tensor pool used by this context.
     /// </summary>
-    public UnifiedTensorPool Pool => _pool;
+    public TensorPool<T> Pool => _pool;
 
     /// <summary>
-    /// Gets the number of tensors currently rented in this context.
+    /// Gets the number of tensors currently rented from this context.
     /// </summary>
     public int RentedTensorCount => _rentedTensors.Count;
 
     /// <summary>
-    /// Gets or sets whether this context is active for pooling.
-    /// When false, Rent() creates new tensors instead of pooling.
+    /// Gets or sets whether pooling is enabled. When disabled, tensors are allocated
+    /// directly without pool reuse, which can be useful for debugging.
     /// </summary>
     public bool IsPoolingEnabled { get; set; } = true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InferenceContext{T}"/> class.
     /// </summary>
-    /// <param name="pool">The tensor pool to use for allocation. If null, a default pool is created.</param>
-    /// <param name="maxPoolSizeMB">Maximum pool size in MB when creating default pool. Default is 256 MB.</param>
-    public InferenceContext(UnifiedTensorPool? pool = null, int maxPoolSizeMB = 256)
+    /// <param name="pool">
+    /// An existing tensor pool to use. If null, a new pool is created and owned by this context.
+    /// </param>
+    /// <param name="maxPoolSizeMB">
+    /// The maximum pool size in MB if creating a new pool. Ignored if pool is provided.
+    /// </param>
+    /// <remarks>
+    /// When a pool is provided, the context does not own it and will not dispose it.
+    /// When no pool is provided, the context creates and owns its own pool.
+    /// </remarks>
+    public InferenceContext(TensorPool<T>? pool = null, int maxPoolSizeMB = 256)
     {
         if (pool is not null)
         {
@@ -74,7 +84,7 @@ public class InferenceContext<T> : IDisposable
         }
         else
         {
-            _pool = new UnifiedTensorPool(new PoolingOptions { MaxPoolSizeMB = maxPoolSizeMB });
+            _pool = new TensorPool<T>(maxPoolSizeMB);
             _ownsPool = true;
         }
         _rentedTensors = new ConcurrentDictionary<Tensor<T>, byte>();
@@ -82,105 +92,92 @@ public class InferenceContext<T> : IDisposable
 
     /// <summary>
     /// Rents a tensor with the specified shape from the pool.
+    /// The tensor is tracked and will be automatically returned when this context is disposed.
     /// </summary>
-    /// <param name="shape">The desired shape of the tensor.</param>
-    /// <returns>A tensor with the specified shape.</returns>
-    /// <remarks>
-    /// The returned tensor is tracked by this context and will be automatically
-    /// returned to the pool when the context is disposed.
-    /// </remarks>
+    /// <param name="shape">The shape of the tensor to rent.</param>
+    /// <returns>A tensor with the requested shape.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
     public Tensor<T> Rent(int[] shape)
     {
         if (_disposed)
-        {
             throw new ObjectDisposedException(nameof(InferenceContext<T>));
-        }
 
-        var tensor = IsPoolingEnabled ? _pool.RentTensor<T>(shape) : new Tensor<T>(shape);
+        var tensor = IsPoolingEnabled ? _pool.Rent(shape) : new Tensor<T>(shape);
         _rentedTensors.TryAdd(tensor, 0);
         return tensor;
     }
 
     /// <summary>
-    /// Rents a 1D tensor with the specified length from the pool.
+    /// Rents a 1D tensor (vector) with the specified length.
     /// </summary>
-    /// <param name="length">The length of the 1D tensor.</param>
-    /// <returns>A 1D tensor with the specified length.</returns>
+    /// <param name="length">The number of elements in the tensor.</param>
+    /// <returns>A 1D tensor with shape [length].</returns>
     public Tensor<T> Rent1D(int length) => Rent(new[] { length });
 
     /// <summary>
-    /// Rents a 2D tensor with the specified dimensions from the pool.
+    /// Rents a 2D tensor (matrix) with the specified dimensions.
     /// </summary>
-    /// <param name="rows">Number of rows.</param>
-    /// <param name="cols">Number of columns.</param>
-    /// <returns>A 2D tensor with the specified shape.</returns>
+    /// <param name="rows">The number of rows.</param>
+    /// <param name="cols">The number of columns.</param>
+    /// <returns>A 2D tensor with shape [rows, cols].</returns>
     public Tensor<T> Rent2D(int rows, int cols) => Rent(new[] { rows, cols });
 
     /// <summary>
-    /// Rents a 3D tensor with the specified dimensions from the pool.
+    /// Rents a 3D tensor with the specified dimensions.
     /// </summary>
-    /// <param name="dim0">Size of the first dimension.</param>
-    /// <param name="dim1">Size of the second dimension.</param>
-    /// <param name="dim2">Size of the third dimension.</param>
-    /// <returns>A 3D tensor with the specified shape.</returns>
+    /// <param name="dim0">The first dimension (e.g., batch size).</param>
+    /// <param name="dim1">The second dimension (e.g., sequence length).</param>
+    /// <param name="dim2">The third dimension (e.g., feature size).</param>
+    /// <returns>A 3D tensor with shape [dim0, dim1, dim2].</returns>
     public Tensor<T> Rent3D(int dim0, int dim1, int dim2) => Rent(new[] { dim0, dim1, dim2 });
 
     /// <summary>
-    /// Rents a 4D tensor with the specified dimensions from the pool.
+    /// Rents a 4D tensor with the specified dimensions (typically for image data).
     /// </summary>
-    /// <param name="batch">Batch size (first dimension).</param>
-    /// <param name="channels">Number of channels (second dimension).</param>
-    /// <param name="height">Height (third dimension).</param>
-    /// <param name="width">Width (fourth dimension).</param>
-    /// <returns>A 4D tensor with the specified shape.</returns>
-    public Tensor<T> Rent4D(int batch, int channels, int height, int width)
-        => Rent(new[] { batch, channels, height, width });
+    /// <param name="batch">The batch size.</param>
+    /// <param name="channels">The number of channels (e.g., RGB = 3).</param>
+    /// <param name="height">The image height.</param>
+    /// <param name="width">The image width.</param>
+    /// <returns>A 4D tensor with shape [batch, channels, height, width].</returns>
+    public Tensor<T> Rent4D(int batch, int channels, int height, int width) => Rent(new[] { batch, channels, height, width });
 
     /// <summary>
-    /// Rents a tensor with the same shape as an existing tensor.
+    /// Rents a tensor with the same shape as the template tensor.
     /// </summary>
-    /// <param name="template">The tensor whose shape to match.</param>
+    /// <param name="template">The tensor whose shape should be matched.</param>
     /// <returns>A tensor with the same shape as the template.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if template is null.</exception>
     public Tensor<T> RentLike(Tensor<T> template)
     {
         if (template == null)
-        {
             throw new ArgumentNullException(nameof(template));
-        }
-
         return Rent(template.Shape);
     }
 
     /// <summary>
-    /// Marks a tensor as no longer needed and returns it to the pool immediately.
+    /// Releases a tensor back to the pool before the context is disposed.
+    /// Use this for early release of tensors that are no longer needed.
     /// </summary>
-    /// <param name="tensor">The tensor to return.</param>
+    /// <param name="tensor">The tensor to release.</param>
+    /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
     /// <remarks>
-    /// This is optional - all tensors are automatically returned when the context
-    /// is disposed. Use this when you know a tensor is no longer needed to free
-    /// it for reuse earlier.
+    /// Releasing tensors early can reduce peak memory usage during long inference operations.
+    /// Tensors not explicitly released will be automatically returned when the context is disposed.
     /// </remarks>
     public void Release(Tensor<T> tensor)
     {
         if (_disposed)
-        {
             throw new ObjectDisposedException(nameof(InferenceContext<T>));
-        }
 
         if (tensor != null && _rentedTensors.TryRemove(tensor, out _))
         {
-            // Only return to pool if we successfully removed from tracking
-            // This prevents double-return if Release is called multiple times
-            // or if Dispose is called after Release
             if (IsPoolingEnabled)
-            {
-                _pool.ReturnTensor(tensor);
-            }
+                _pool.Return(tensor);
         }
     }
 
     /// <summary>
-    /// Returns all rented tensors to the pool and releases resources.
+    /// Disposes the context and returns all rented tensors to the pool.
     /// </summary>
     public void Dispose()
     {
@@ -189,27 +186,21 @@ public class InferenceContext<T> : IDisposable
     }
 
     /// <summary>
-    /// Returns all rented tensors to the pool and releases resources.
+    /// Disposes the context resources.
     /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposed)
         {
             if (disposing && IsPoolingEnabled)
             {
-                // Return all remaining rented tensors to the pool
-                // Tensors that were already released via Release() won't be in the dictionary
                 foreach (var kvp in _rentedTensors)
-                {
-                    _pool.ReturnTensor(kvp.Key);
-                }
+                    _pool.Return(kvp.Key);
                 _rentedTensors.Clear();
 
-                // Dispose pool if we own it
                 if (_ownsPool)
-                {
                     _pool.Dispose();
-                }
             }
             _disposed = true;
         }
@@ -217,19 +208,38 @@ public class InferenceContext<T> : IDisposable
 }
 
 /// <summary>
-/// Static class providing ambient context support for InferenceContext.
+/// Provides ambient (thread-local) context support for <see cref="InferenceContext{T}"/>.
+/// Allows code to access the current inference context without parameter threading.
 /// </summary>
+/// <typeparam name="T">The numeric type for tensor elements.</typeparam>
 /// <remarks>
 /// <para>
-/// This class provides thread-local storage for an ambient InferenceContext,
-/// allowing layers to access pooling without explicit parameter passing.
+/// InferenceScope enables the ambient context pattern, where a context is set once
+/// and then accessible throughout the call stack without passing it as a parameter.
 /// </para>
-/// <para><b>For Beginners:</b> This is like a "shared workspace" that layers
-/// can automatically use. Instead of passing the context to every method,
-/// you set it once and layers can find it automatically.
+/// <para>
+/// Usage example:
+/// <code>
+/// using var context = new InferenceContext&lt;float&gt;();
+/// using var scope = InferenceScope&lt;float&gt;.Begin(context);
+///
+/// // Deep in the call stack, any code can now do:
+/// if (InferenceScope&lt;float&gt;.IsActive)
+/// {
+///     var tensor = InferenceScope&lt;float&gt;.RentOrCreate(shape);
+/// }
+/// </code>
+/// </para>
+/// <para>
+/// Scopes can be nested. When disposed, the previous scope is automatically restored:
+/// <code>
+/// using var outer = InferenceScope&lt;float&gt;.Begin(outerContext);
+/// using var inner = InferenceScope&lt;float&gt;.Begin(innerContext);
+/// // Current is now innerContext
+/// // When inner is disposed, Current becomes outerContext again
+/// </code>
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for tensor elements.</typeparam>
 public static class InferenceScope<T>
 {
     [ThreadStatic]
@@ -237,10 +247,8 @@ public static class InferenceScope<T>
 
     /// <summary>
     /// Gets or sets the current inference context for this thread.
+    /// Returns null if no scope is active.
     /// </summary>
-    /// <value>
-    /// The current inference context, or null if no context is active.
-    /// </value>
     public static InferenceContext<T>? Current
     {
         get => _current;
@@ -248,25 +256,16 @@ public static class InferenceScope<T>
     }
 
     /// <summary>
-    /// Gets a value indicating whether an inference context is currently active.
+    /// Gets whether an inference scope is currently active on this thread.
     /// </summary>
     public static bool IsActive => _current != null;
 
     /// <summary>
     /// Begins a new inference scope with the specified context.
+    /// The previous context is saved and restored when the returned handle is disposed.
     /// </summary>
-    /// <param name="context">The inference context to use.</param>
-    /// <returns>A disposable scope that restores the previous context when disposed.</returns>
-    /// <example>
-    /// <code>
-    /// using var ctx = new InferenceContext&lt;float&gt;(pool);
-    /// using (InferenceScope&lt;float&gt;.Begin(ctx))
-    /// {
-    ///     // Layers can now access InferenceScope&lt;float&gt;.Current
-    ///     var result = network.Forward(input);
-    /// }
-    /// </code>
-    /// </example>
+    /// <param name="context">The inference context to make current.</param>
+    /// <returns>A handle that restores the previous context when disposed.</returns>
     public static InferenceScopeHandle<T> Begin(InferenceContext<T> context)
     {
         var previous = _current;
@@ -275,48 +274,51 @@ public static class InferenceScope<T>
     }
 
     /// <summary>
-    /// Rents a tensor from the current context, or creates a new one if no context is active.
+    /// Rents a tensor from the current context if active, otherwise creates a new tensor.
     /// </summary>
-    /// <param name="shape">The desired shape of the tensor.</param>
-    /// <returns>A tensor with the specified shape.</returns>
-    /// <remarks>
-    /// If an inference context is active, the tensor is rented from the pool.
-    /// Otherwise, a new tensor is allocated. This allows layers to use pooling
-    /// when available without requiring explicit context parameters.
-    /// </remarks>
+    /// <param name="shape">The shape of the tensor to rent or create.</param>
+    /// <returns>
+    /// A pooled tensor if a scope is active and pooling is enabled;
+    /// otherwise a newly allocated tensor.
+    /// </returns>
     public static Tensor<T> RentOrCreate(int[] shape)
     {
         if (_current != null && _current.IsPoolingEnabled)
-        {
             return _current.Rent(shape);
-        }
         return new Tensor<T>(shape);
     }
 
     /// <summary>
-    /// Rents a tensor with the same shape as an existing tensor.
+    /// Rents or creates a tensor with the same shape as the template.
     /// </summary>
-    /// <param name="template">The tensor whose shape to match.</param>
+    /// <param name="template">The tensor whose shape should be matched.</param>
     /// <returns>A tensor with the same shape as the template.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if template is null.</exception>
     public static Tensor<T> RentOrCreateLike(Tensor<T> template)
     {
         if (template == null)
-        {
             throw new ArgumentNullException(nameof(template));
-        }
-
         return RentOrCreate(template.Shape);
     }
 }
 
 /// <summary>
 /// A disposable handle that restores the previous inference context when disposed.
+/// Returned by <see cref="InferenceScope{T}.Begin"/> to enable proper scope nesting.
 /// </summary>
 /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+/// <remarks>
+/// This struct should be used with a using statement to ensure the previous context
+/// is properly restored even if an exception occurs.
+/// </remarks>
 public readonly struct InferenceScopeHandle<T> : IDisposable
 {
     private readonly InferenceContext<T>? _previous;
 
+    /// <summary>
+    /// Initializes a new handle that will restore the specified context on disposal.
+    /// </summary>
+    /// <param name="previous">The context to restore when this handle is disposed.</param>
     internal InferenceScopeHandle(InferenceContext<T>? previous)
     {
         _previous = previous;
