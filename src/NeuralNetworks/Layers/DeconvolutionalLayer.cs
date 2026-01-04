@@ -517,7 +517,15 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
             var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
             var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
 
-            _lastOutput = ApplyActivation(biasedOutput);
+            var result = ApplyActivation(biasedOutput);
+
+            // Only store for backward pass during training - skip during inference
+            if (IsTrainingMode)
+            {
+                _lastOutput = result;
+            }
+
+            return result;
         }
 
         return _lastOutput;

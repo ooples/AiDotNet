@@ -917,7 +917,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
         output = Engine.TensorBroadcastAdd(output, biasReshaped);
 
-        _lastOutput = ApplyActivation(output);
+        var result = ApplyActivation(output);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
 
         // Return with matching dimensions to preserve original tensor rank
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -927,18 +933,18 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             for (int d = 0; d < _originalInputShape.Length - 3; d++)
                 outputShape[d] = _originalInputShape[d];
             outputShape[_originalInputShape.Length - 3] = OutputDepth;
-            outputShape[_originalInputShape.Length - 2] = _lastOutput.Shape[2];
-            outputShape[_originalInputShape.Length - 1] = _lastOutput.Shape[3];
-            return _lastOutput.Reshape(outputShape);
+            outputShape[_originalInputShape.Length - 2] = result.Shape[2];
+            outputShape[_originalInputShape.Length - 1] = result.Shape[3];
+            return result.Reshape(outputShape);
         }
         if (_addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
             // Remove the batch dimension we added
-            return _lastOutput.Reshape([OutputDepth, _lastOutput.Shape[2], _lastOutput.Shape[3]]);
+            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
         }
 
-        return _lastOutput;
+        return result;
     }
 
     /// <summary>

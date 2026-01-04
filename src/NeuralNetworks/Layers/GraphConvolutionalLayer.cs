@@ -732,10 +732,15 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
         output = Engine.TensorAdd(output, biasBroadcast);
 
-        _lastOutput = ApplyActivation(output);
+        var result = ApplyActivation(output);
 
-        // Store node features for auxiliary loss computation
-        _lastNodeFeatures = _lastOutput;
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+            // Store node features for auxiliary loss computation
+            _lastNodeFeatures = result;
+        }
 
         // Restore original shape for any-rank tensor support
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -743,7 +748,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             if (_originalInputShape.Length == 2)
             {
                 // Was 2D, return [nodes, outputFeatures]
-                return _lastOutput.Reshape([numNodes, outputFeatures]);
+                return result.Reshape([numNodes, outputFeatures]);
             }
             else
             {
@@ -752,11 +757,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
                 for (int d = 0; d < _originalInputShape.Length - 1; d++)
                     newShape[d] = _originalInputShape[d];
                 newShape[_originalInputShape.Length - 1] = outputFeatures;
-                return _lastOutput.Reshape(newShape);
+                return result.Reshape(newShape);
             }
         }
 
-        return _lastOutput;
+        return result;
     }
 
     /// <summary>

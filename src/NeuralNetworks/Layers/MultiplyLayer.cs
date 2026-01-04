@@ -245,8 +245,15 @@ public class MultiplyLayer<T> : LayerBase<T>
         // This is production-grade: no loops, single optimized call that batches all multiplications
         var result = Engine.TensorMultiplyMany(inputs);
 
-        _lastOutput = ApplyActivation(result);
-        return _lastOutput;
+        var activated = ApplyActivation(result);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = activated;
+        }
+
+        return activated;
     }
 
     /// <summary>

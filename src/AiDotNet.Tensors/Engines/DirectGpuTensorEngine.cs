@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Tensors.Engines;
@@ -78,13 +79,22 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     {
         if (typeof(T) == typeof(float))
             return (float)(object)value!;
+        if (typeof(T) == typeof(double))
+            return (float)(double)(object)value!;
 
-        return DirectGpuEngine.ToFloatArray(new[] { value })[0];
+        // Use numeric operations directly instead of allocating a single-element array
+        return (float)MathHelper.GetNumericOperations<T>().ToDouble(value);
     }
 
     private static T FromFloatScalar<T>(float value)
     {
-        return DirectGpuEngine.FromFloatArray<T>(new[] { value })[0];
+        if (typeof(T) == typeof(float))
+            return (T)(object)value;
+        if (typeof(T) == typeof(double))
+            return (T)(object)(double)value;
+
+        // Use numeric operations directly instead of allocating a single-element array
+        return MathHelper.GetNumericOperations<T>().FromFloat(value);
     }
 
     /// <summary>
@@ -129,6 +139,19 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// Allocates a GPU buffer from span data (no caching, avoids ToArray() allocation).
+    /// </summary>
+    private OwnedBuffer AllocateBufferFromSpan<T>(IDirectGpuBackend backend, ReadOnlySpan<T> data)
+    {
+        // Convert via numeric operations directly to float array
+        // ToFloatSpan has built-in fast path for T=float
+        float[] result = new float[data.Length];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.ToFloatSpan(data, new Span<float>(result));
+        return new OwnedBuffer(backend.AllocateBuffer(result), ownsBuffer: true);
+    }
+
+    /// <summary>
     /// Allocates a new output buffer (always owned, never cached).
     /// </summary>
     private static OwnedBuffer AllocateOutputBuffer(IDirectGpuBackend backend, int size)
@@ -144,7 +167,8 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         using var bufferA = GetOrAllocateBuffer(backend, input);
         using var bufferB = AllocateOutputBuffer(backend, input.Length);
         op(backend, bufferA.Buffer, bufferB.Buffer, input.Length);
-        backend.Synchronize();
+        // Note: DownloadBuffer uses blocking read (clEnqueueReadBuffer blocking=true),
+        // so Synchronize() is redundant and has been removed for performance
         float[] resultFloat = backend.DownloadBuffer(bufferB.Buffer);
         return DirectGpuEngine.FromFloatArray<T>(resultFloat);
     }
@@ -160,7 +184,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         using var bufferB = GetOrAllocateBuffer(backend, right);
         using var bufferC = AllocateOutputBuffer(backend, left.Length);
         op(backend, bufferA.Buffer, bufferB.Buffer, bufferC.Buffer, left.Length);
-        backend.Synchronize();
+        // Note: DownloadBuffer uses blocking read, Synchronize() removed for performance
         float[] resultFloat = backend.DownloadBuffer(bufferC.Buffer);
         return DirectGpuEngine.FromFloatArray<T>(resultFloat);
     }
@@ -173,7 +197,42 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         using var bufferA = GetOrAllocateBuffer(backend, input);
         using var bufferB = AllocateOutputBuffer(backend, input.Length);
         op(backend, bufferA.Buffer, bufferB.Buffer, ToFloatScalar(scalar), input.Length);
-        backend.Synchronize();
+        // Note: DownloadBuffer uses blocking read, Synchronize() removed for performance
+        float[] resultFloat = backend.DownloadBuffer(bufferB.Buffer);
+        return DirectGpuEngine.FromFloatArray<T>(resultFloat);
+    }
+
+    /// <summary>
+    /// Span-based binary operation that avoids ToArray() allocation for matrix operations.
+    /// </summary>
+    private T[]? TryRunBinarySpan<T>(ReadOnlySpan<T> left, ReadOnlySpan<T> right, Action<IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, int> op)
+    {
+        if (!TryGetBackend(out var backend))
+            return null;
+        if (left.Length != right.Length)
+            return null;
+
+        using var bufferA = AllocateBufferFromSpan(backend, left);
+        using var bufferB = AllocateBufferFromSpan(backend, right);
+        using var bufferC = AllocateOutputBuffer(backend, left.Length);
+        op(backend, bufferA.Buffer, bufferB.Buffer, bufferC.Buffer, left.Length);
+        // Note: DownloadBuffer uses blocking read, Synchronize() removed for performance
+        float[] resultFloat = backend.DownloadBuffer(bufferC.Buffer);
+        return DirectGpuEngine.FromFloatArray<T>(resultFloat);
+    }
+
+    /// <summary>
+    /// Span-based scalar operation that avoids ToArray() allocation for matrix operations.
+    /// </summary>
+    private T[]? TryRunScalarSpan<T>(ReadOnlySpan<T> input, T scalar, Action<IDirectGpuBackend, IGpuBuffer, IGpuBuffer, float, int> op)
+    {
+        if (!TryGetBackend(out var backend))
+            return null;
+
+        using var bufferA = AllocateBufferFromSpan(backend, input);
+        using var bufferB = AllocateOutputBuffer(backend, input.Length);
+        op(backend, bufferA.Buffer, bufferB.Buffer, ToFloatScalar(scalar), input.Length);
+        // Note: DownloadBuffer uses blocking read, Synchronize() removed for performance
         float[] resultFloat = backend.DownloadBuffer(bufferB.Buffer);
         return DirectGpuEngine.FromFloatArray<T>(resultFloat);
     }
@@ -336,7 +395,8 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (a.Rows != b.Rows || a.Columns != b.Columns)
             return base.MatrixAdd(a, b);
 
-        var result = TryRunBinary(a.AsSpan().ToArray(), b.AsSpan().ToArray(), static (backend, left, right, output, size) => backend.Add(left, right, output, size));
+        // Use span-based method to avoid ToArray() allocation
+        var result = TryRunBinarySpan(a.AsSpan(), b.AsSpan(), static (backend, left, right, output, size) => backend.Add(left, right, output, size));
         if (result == null)
             return base.MatrixAdd(a, b);
 
@@ -350,7 +410,8 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (a.Rows != b.Rows || a.Columns != b.Columns)
             return base.MatrixSubtract(a, b);
 
-        var result = TryRunBinary(a.AsSpan().ToArray(), b.AsSpan().ToArray(), static (backend, left, right, output, size) => backend.Subtract(left, right, output, size));
+        // Use span-based method to avoid ToArray() allocation
+        var result = TryRunBinarySpan(a.AsSpan(), b.AsSpan(), static (backend, left, right, output, size) => backend.Subtract(left, right, output, size));
         if (result == null)
             return base.MatrixSubtract(a, b);
 
@@ -361,7 +422,8 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     Matrix<T> IEngine.MatrixMultiplyScalar<T>(Matrix<T> matrix, T scalar)
     {
-        var result = TryRunScalar(matrix.AsSpan().ToArray(), scalar, static (backend, input, output, value, size) => backend.Scale(input, output, value, size));
+        // Use span-based method to avoid ToArray() allocation
+        var result = TryRunScalarSpan(matrix.AsSpan(), scalar, static (backend, input, output, value, size) => backend.Scale(input, output, value, size));
         if (result == null)
             return base.MatrixMultiplyScalar(matrix, scalar);
 
@@ -601,10 +663,9 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 return base.FusedLinear(input, weights, bias, activation);
             }
 
-            // Download result - DownloadBuffer is blocking, no need for Synchronize after
+            // Download result - DownloadBuffer uses blocking read, Synchronize() removed for performance
             int resultSize = batchSize * outputFeatures;
             float[] resultFloat = new float[resultSize];
-            backend.Synchronize(); // Ensure GPU compute is complete before download
             backend.DownloadBuffer(resultBuffer, resultFloat);
             resultBuffer.Dispose();
 
@@ -756,9 +817,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                     ApplyGpuActivation(backend, biasedBuffer, outputSize, activation);
                 }
 
-                backend.Synchronize();
-
-                // Download final result
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] resultFloat = new float[outputSize];
                 backend.DownloadBuffer(biasedBuffer, resultFloat);
 
@@ -775,8 +834,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                     ApplyGpuActivation(backend, outputBuffer.Buffer, outputSize, activation);
                 }
 
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] resultFloat = new float[outputSize];
                 backend.DownloadBuffer(outputBuffer.Buffer, resultFloat);
 
@@ -885,8 +943,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                     ApplyGpuActivation(backend, biasedBuffer, outputSize, activation);
                 }
 
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] resultFloat = new float[outputSize];
                 backend.DownloadBuffer(biasedBuffer, resultFloat);
 
@@ -902,8 +959,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                     ApplyGpuActivation(backend, outputBuffer.Buffer, outputSize, activation);
                 }
 
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] resultFloat = new float[outputSize];
                 backend.DownloadBuffer(outputBuffer.Buffer, resultFloat);
 
@@ -1004,8 +1060,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                     ApplyGpuActivation(backend, biasedBuffer, outputSize, activation);
                 }
 
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] resultFloat = new float[outputSize];
                 backend.DownloadBuffer(biasedBuffer, resultFloat);
 
@@ -1021,8 +1076,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                     ApplyGpuActivation(backend, outputBuffer.Buffer, outputSize, activation);
                 }
 
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] resultFloat = new float[outputSize];
                 backend.DownloadBuffer(outputBuffer.Buffer, resultFloat);
 
@@ -1075,8 +1129,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 poolSize, poolSize,
                 stride, stride, padding, padding);
 
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             int outputSize = batch * channels * outHeight * outWidth;
             float[] resultFloat = new float[outputSize];
             backend.DownloadBuffer(outputBuffer.Buffer, resultFloat);
@@ -1125,8 +1178,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 poolSize[0], poolSize[1],
                 stride[0], stride[1], 0, 0);
 
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             int outputSize = batch * channels * outHeight * outWidth;
             float[] resultFloat = new float[outputSize];
             float[] indicesFloat = new float[outputSize];
@@ -1212,8 +1264,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 poolSize[0], poolSize[1],
                 stride[0], stride[1], 0, 0);
 
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             int inputSize = batch * channels * inHeight * inWidth;
             float[] resultFloat = new float[inputSize];
             backend.DownloadBuffer(gradInputBuffer.Buffer, resultFloat);
@@ -1267,8 +1318,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 stride, stride, padding, padding,
                 countIncludePad: true);
 
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             int outputSize = batch * channels * outHeight * outWidth;
             float[] resultFloat = new float[outputSize];
             backend.DownloadBuffer(outputBuffer.Buffer, resultFloat);
@@ -1316,8 +1366,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 stride[0], stride[1], 0, 0,
                 countIncludePad: true);
 
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             int outputSize = batch * channels * outHeight * outWidth;
             float[] resultFloat = new float[outputSize];
             backend.DownloadBuffer(outputBuffer.Buffer, resultFloat);
@@ -1362,8 +1411,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 stride[0], stride[1], 0, 0,
                 countIncludePad: true);
 
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             int inputSize = batch * channels * inHeight * inWidth;
             float[] resultFloat = new float[inputSize];
             backend.DownloadBuffer(gradInputBuffer.Buffer, resultFloat);
@@ -1422,8 +1470,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 kernelH, kernelW,
                 strideH, strideW, padH, padW);
 
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             int outputSize = batch * channels * outHeight * outWidth;
             float[] resultFloat = new float[outputSize];
             backend.DownloadBuffer(outputBuffer.Buffer, resultFloat);
@@ -1487,9 +1534,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 ApplyGpuActivation(backend, outputBuffer.Buffer, batchSize * features, activation);
             }
 
-            backend.Synchronize();
-
-            // Download results
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = new float[batchSize * features];
             float[] saveMeanFloat = new float[features];
             float[] saveVarFloat = new float[features];
@@ -1560,9 +1605,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             backend.FlashAttentionV2(queryBuffer.Buffer, keyBuffer.Buffer, valueBuffer.Buffer, outputBuffer.Buffer, statsBuffer.Buffer,
                 batch, heads, seqQ, seqK, headDim, scaleFloat, isCausal);
 
-            backend.Synchronize();
-
-            // Download results
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputFloat = new float[batch * heads * seqQ * headDim];
             float[] statsFloat = new float[batch * heads * seqQ];
             backend.DownloadBuffer(outputBuffer.Buffer, outputFloat);
@@ -1631,9 +1674,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 outputBuffer.Buffer, statsBuffer.Buffer, gradQBuffer.Buffer, gradKBuffer.Buffer, gradVBuffer.Buffer,
                 batch, heads, seqQ, seqK, headDim, (float)scale, isCausal);
 
-            backend.Synchronize();
-
-            // Download results
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] gradQFloat = new float[batch * heads * seqQ * headDim];
             float[] gradKFloat = new float[batch * heads * seqK * headDim];
             float[] gradVFloat = new float[batch * heads * seqK * headDim];
@@ -1699,9 +1740,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             backend.GroupedQueryAttention(queryBuffer.Buffer, keyBuffer.Buffer, valueBuffer.Buffer, outputBuffer.Buffer, attnWeightsBuffer.Buffer,
                 batch, numQHeads, numKVHeads, seqQ, seqK, headDim, scaleFloat, isCausal);
 
-            backend.Synchronize();
-
-            // Download results
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputFloat = new float[batch * numQHeads * seqQ * headDim];
             float[] attnWeightsFloat = new float[batch * numQHeads * seqQ * seqK];
             backend.DownloadBuffer(outputBuffer.Buffer, outputFloat);
@@ -1768,9 +1807,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 attnWeightsBuffer.Buffer, gradQBuffer.Buffer, gradKBuffer.Buffer, gradVBuffer.Buffer,
                 batch, numQHeads, numKVHeads, seqQ, seqK, headDim, (float)scale);
 
-            backend.Synchronize();
-
-            // Download results
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] gradQFloat = new float[batch * numQHeads * seqQ * headDim];
             float[] gradKFloat = new float[batch * numKVHeads * seqK * headDim];
             float[] gradVFloat = new float[batch * numKVHeads * seqK * headDim];
@@ -1938,8 +1975,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
             backend.FFT(inputRealBuffer.Buffer, inputImagBuffer.Buffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, n, inverse: false);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputRealFloat = new float[inputReal.Length];
             float[] outputImagFloat = new float[inputImag.Length];
             backend.DownloadBuffer(outputRealBuffer.Buffer, outputRealFloat);
@@ -1981,8 +2017,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
             backend.FFT(inputRealBuffer.Buffer, inputImagBuffer.Buffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, n, inverse: true);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputRealFloat = new float[inputReal.Length];
             float[] outputImagFloat = new float[inputImag.Length];
             backend.DownloadBuffer(outputRealBuffer.Buffer, outputRealFloat);
@@ -2026,8 +2061,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
             backend.FFT2D(inputRealBuffer.Buffer, inputImagBuffer.Buffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, height, width, inverse: false);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputRealFloat = new float[inputReal.Length];
             float[] outputImagFloat = new float[inputImag.Length];
             backend.DownloadBuffer(outputRealBuffer.Buffer, outputRealFloat);
@@ -2071,8 +2105,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
             backend.FFT2D(inputRealBuffer.Buffer, inputImagBuffer.Buffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, height, width, inverse: true);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputRealFloat = new float[inputReal.Length];
             float[] outputImagFloat = new float[inputImag.Length];
             backend.DownloadBuffer(outputRealBuffer.Buffer, outputRealFloat);
@@ -2359,8 +2392,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             {
                 using var dbBuffer = AllocateOutputBuffer(backend, numFrames * nMels);
                 backend.PowerToDb(melBuffer.Buffer, dbBuffer.Buffer, numFrames * nMels, 1.0f, -80.0f);
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] dbResult = new float[numFrames * nMels];
                 backend.DownloadBuffer(dbBuffer.Buffer, dbResult);
 
@@ -2372,8 +2404,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             }
             else
             {
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] melResult = new float[numFrames * nMels];
                 backend.DownloadBuffer(melBuffer.Buffer, melResult);
 
@@ -2518,8 +2549,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 using var outputBuffer = AllocateOutputBuffer(backend, input.Length);
 
                 backend.Softmax(inputBuffer.Buffer, outputBuffer.Buffer, batchSize, features);
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
                 return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), input.Shape.ToArray());
             }
@@ -2559,8 +2589,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 using var gradInputBuffer = AllocateOutputBuffer(backend, output.Length);
 
                 backend.SoftmaxBackward(gradOutBuffer.Buffer, outputBuffer.Buffer, gradInputBuffer.Buffer, batchSize, features);
-                backend.Synchronize();
-
+                // DownloadBuffer uses blocking read, Synchronize() removed for performance
                 float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
                 return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), output.Shape.ToArray());
             }
@@ -2599,8 +2628,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
             backend.LayerNorm(inputBuffer.Buffer, outputBuffer.Buffer, gammaBuffer.Buffer, betaBuffer.Buffer,
                 saveMeanBuffer.Buffer, saveVarBuffer.Buffer, batchSize, normalizedSize, (float)epsilon);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             float[] meanFloat = backend.DownloadBuffer(saveMeanBuffer.Buffer);
             float[] varFloat = backend.DownloadBuffer(saveVarBuffer.Buffer);
@@ -2643,8 +2671,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             backend.LayerNormBackward(gradOutBuffer.Buffer, inputBuffer.Buffer, gammaBuffer.Buffer,
                 saveMeanBuffer.Buffer, saveVarBuffer.Buffer, gradInputBuffer.Buffer, gradGammaBuffer.Buffer, gradBetaBuffer.Buffer,
                 batchSize, normalizedSize, (float)epsilon);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] gradInputFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             float[] gradGammaFloat = backend.DownloadBuffer(gradGammaBuffer.Buffer);
             float[] gradBetaFloat = backend.DownloadBuffer(gradBetaBuffer.Buffer);
@@ -2682,8 +2709,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
             backend.RmsNorm(inputBuffer.Buffer, outputBuffer.Buffer, gammaBuffer.Buffer, saveRmsBuffer.Buffer,
                 batchSize, normalizedSize, (float)epsilon);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             float[] rmsFloat = backend.DownloadBuffer(saveRmsBuffer.Buffer);
 
@@ -2721,8 +2747,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
             backend.RmsNormBackward(gradOutBuffer.Buffer, inputBuffer.Buffer, gammaBuffer.Buffer, saveRmsBuffer.Buffer,
                 gradInputBuffer.Buffer, gradGammaBuffer.Buffer, batchSize, normalizedSize, (float)epsilon);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] gradInputFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             float[] gradGammaFloat = backend.DownloadBuffer(gradGammaBuffer.Buffer);
 
@@ -2767,8 +2792,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
             backend.GroupNorm(inputBuffer.Buffer, outputBuffer.Buffer, gammaBuffer.Buffer, betaBuffer.Buffer,
                 saveMeanBuffer.Buffer, saveVarBuffer.Buffer, batch, numGroups, channels, spatialSize, (float)epsilon);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             float[] meanFloat = backend.DownloadBuffer(saveMeanBuffer.Buffer);
             float[] varFloat = backend.DownloadBuffer(saveVarBuffer.Buffer);
@@ -2812,8 +2836,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
             backend.InstanceNorm(inputBuffer.Buffer, outputBuffer.Buffer, gammaBuffer.Buffer, betaBuffer.Buffer,
                 saveMeanBuffer.Buffer, saveVarBuffer.Buffer, batch, channels, spatialSize, (float)epsilon);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             float[] meanFloat = backend.DownloadBuffer(saveMeanBuffer.Buffer);
             float[] varFloat = backend.DownloadBuffer(saveVarBuffer.Buffer);
@@ -2850,8 +2873,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var maskBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Dropout(inputBuffer.Buffer, outputBuffer.Buffer, maskBuffer.Buffer, size, (float)dropoutRate, seed, training);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             float[] maskFloat = backend.DownloadBuffer(maskBuffer.Buffer);
 
@@ -2881,8 +2903,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.DropoutBackward(gradOutBuffer.Buffer, maskBuffer.Buffer, gradInputBuffer.Buffer, size, (float)dropoutRate);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), gradOutput.Shape.ToArray());
         }
@@ -2914,8 +2935,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, numIndices * embeddingDim);
 
             backend.Embedding(indicesBuffer, tableBuffer.Buffer, outputBuffer.Buffer, numIndices, embeddingDim);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] outputFloat = backend.DownloadBuffer(outputBuffer.Buffer);
 
             // Output shape: indices.Shape + [embeddingDim]
@@ -2952,8 +2972,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             backend.Fill(gradEmbeddingBuffer.Buffer, 0f, vocabSize * embeddingDim);
 
             backend.EmbeddingBackward(gradOutBuffer.Buffer, indicesBuffer, gradEmbeddingBuffer.Buffer, numIndices, embeddingDim, vocabSize);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradEmbeddingBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), new[] { vocabSize, embeddingDim });
         }
@@ -3017,8 +3036,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var gradInputBuffer = AllocateOutputBuffer(backend, predictions.Length);
 
             backend.CrossEntropyBackward(predBuffer.Buffer, targetBuffer.Buffer, gradInputBuffer.Buffer, batchSize, numClasses);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), predictions.Shape.ToArray());
         }
@@ -3069,8 +3087,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.MseBackward(predBuffer.Buffer, targetBuffer.Buffer, gradInputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), predictions.Shape.ToArray());
         }
@@ -3101,8 +3118,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.ReluBackward(gradOutBuffer.Buffer, inputBuffer.Buffer, gradInputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), gradOutput.Shape.ToArray());
         }
@@ -3129,8 +3145,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.SigmoidBackward(gradOutBuffer.Buffer, outputBuffer.Buffer, gradInputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), gradOutput.Shape.ToArray());
         }
@@ -3157,8 +3172,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.TanhBackward(gradOutBuffer.Buffer, outputBuffer.Buffer, gradInputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), gradOutput.Shape.ToArray());
         }
@@ -3185,8 +3199,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.GeluBackward(gradOutBuffer.Buffer, inputBuffer.Buffer, gradInputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), gradOutput.Shape.ToArray());
         }
@@ -3214,8 +3227,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.LeakyRelu(inputBuffer.Buffer, outputBuffer.Buffer, negativeSlope, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), input.Shape.ToArray());
         }
@@ -3242,8 +3254,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.LeakyReluBackward(gradOutBuffer.Buffer, inputBuffer.Buffer, gradInputBuffer.Buffer, (float)negativeSlope, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), gradOutput.Shape.ToArray());
         }
@@ -3269,8 +3280,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Elu(inputBuffer.Buffer, outputBuffer.Buffer, (float)alpha, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), input.Shape.ToArray());
         }
@@ -3296,8 +3306,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Swish(inputBuffer.Buffer, outputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), input.Shape.ToArray());
         }
@@ -3323,8 +3332,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Mish(inputBuffer.Buffer, outputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), input.Shape.ToArray());
         }
@@ -3350,8 +3358,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Softplus(inputBuffer.Buffer, outputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), input.Shape.ToArray());
         }
@@ -3377,8 +3384,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Hardswish(inputBuffer.Buffer, outputBuffer.Buffer, size);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), input.Shape.ToArray());
         }
@@ -3432,8 +3438,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             backend.Conv2DBackwardInput(gradOutBuffer.Buffer, kernelBuffer.Buffer, gradInputBuffer.Buffer,
                 batch, inChannels, inHeight, inWidth, outChannels, outHeight, outWidth,
                 kernelH, kernelW, strideH, strideW, padH, padW, dilationH, dilationW);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradInputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), inputShape);
         }
@@ -3483,8 +3488,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             backend.Conv2DBackwardKernel(inputBuffer.Buffer, gradOutBuffer.Buffer, gradKernelBuffer.Buffer,
                 batch, inChannels, inHeight, inWidth, outChannels, outHeight, outWidth,
                 kernelH, kernelW, strideH, strideW, padH, padW, dilationH, dilationW);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(gradKernelBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), kernelShape);
         }
@@ -3520,8 +3524,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, batch * channels);
 
             backend.GlobalAvgPool2D(inputBuffer.Buffer, outputBuffer.Buffer, batch, channels, height, width);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), new[] { batch, channels, 1, 1 });
         }
@@ -3553,8 +3556,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, batch * channels);
 
             backend.GlobalMaxPool2D(inputBuffer.Buffer, outputBuffer.Buffer, batch, channels, height, width);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), new[] { batch, channels, 1, 1 });
         }
@@ -3586,8 +3588,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             using var outputBuffer = AllocateOutputBuffer(backend, batch * channels * outputHeight * outputWidth);
 
             backend.AdaptiveAvgPool2D(inputBuffer.Buffer, outputBuffer.Buffer, batch, channels, inHeight, inWidth, outputHeight, outputWidth);
-            backend.Synchronize();
-
+            // DownloadBuffer uses blocking read, Synchronize() removed for performance
             float[] resultFloat = backend.DownloadBuffer(outputBuffer.Buffer);
             return new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(resultFloat), new[] { batch, channels, outputHeight, outputWidth });
         }

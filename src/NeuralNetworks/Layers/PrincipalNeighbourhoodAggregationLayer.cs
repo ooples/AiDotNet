@@ -303,7 +303,13 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var preActivation = Engine.TensorAdd(_lastMlpOutput, selfContribution);
         preActivation = Engine.TensorAdd(preActivation, biasBroadcast);
 
-        _lastOutput = ApplyActivation(preActivation);
+        var result = ApplyActivation(preActivation);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
 
         // Restore output shape to match original input rank
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -311,12 +317,12 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             if (_originalInputShape.Length == 2)
             {
                 // 2D input [nodes, features] -> 2D output [nodes, outputFeatures]
-                return _lastOutput.Reshape([processNumNodes, _outputFeatures]);
+                return result.Reshape([processNumNodes, _outputFeatures]);
             }
             else if (_originalInputShape.Length == 1)
             {
                 // 1D input -> 1D output
-                return _lastOutput.Reshape([_outputFeatures]);
+                return result.Reshape([_outputFeatures]);
             }
             else
             {
@@ -326,11 +332,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                     outShape[d] = _originalInputShape[d];
                 outShape[_originalInputShape.Length - 2] = processNumNodes;
                 outShape[_originalInputShape.Length - 1] = _outputFeatures;
-                return _lastOutput.Reshape(outShape);
+                return result.Reshape(outShape);
             }
         }
 
-        return _lastOutput;
+        return result;
     }
 
     /// <summary>

@@ -519,9 +519,15 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var biasBroadcast = BroadcastBiases(_outputBias, batchSize);
         var output = Engine.TensorAdd(projected, biasBroadcast);
 
-        _lastOutput = ApplyActivation(output);
+        var result = ApplyActivation(output);
 
-        return _lastOutput;
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
+
+        return result;
     }
 
     /// <summary>

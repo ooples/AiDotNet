@@ -371,18 +371,24 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
         output = Engine.TensorAdd(output, biasBroadcast);
 
-        _lastOutput = ApplyActivation(output);
+        var result = ApplyActivation(output);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
 
         if (_originalInputShape != null && _originalInputShape.Length != 3)
         {
             if (_originalInputShape.Length == 2)
             {
-                return _lastOutput.Reshape([numNodes, _outputFeatures]);
+                return result.Reshape([numNodes, _outputFeatures]);
             }
 
             if (_originalInputShape.Length == 1)
             {
-                return _lastOutput.Reshape([_outputFeatures]);
+                return result.Reshape([_outputFeatures]);
             }
 
             var newShape = new int[_originalInputShape.Length];
@@ -391,10 +397,10 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
                 newShape[d] = _originalInputShape[d];
             }
             newShape[_originalInputShape.Length - 1] = _outputFeatures;
-            return _lastOutput.Reshape(newShape);
+            return result.Reshape(newShape);
         }
 
-        return _lastOutput;
+        return result;
     }
 
     /// <summary>
