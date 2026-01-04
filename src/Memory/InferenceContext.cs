@@ -40,7 +40,7 @@ namespace AiDotNet.Memory;
 public class InferenceContext<T> : IDisposable
 {
     private readonly TensorPool<T> _pool;
-    private readonly ConcurrentBag<Tensor<T>> _rentedTensors;
+    private readonly ConcurrentDictionary<Tensor<T>, byte> _rentedTensors;
     private bool _disposed;
 
     /// <summary>
@@ -67,7 +67,7 @@ public class InferenceContext<T> : IDisposable
     public InferenceContext(TensorPool<T>? pool = null, int maxPoolSizeMB = 256)
     {
         _pool = pool ?? new TensorPool<T>(maxPoolSizeMB);
-        _rentedTensors = new ConcurrentBag<Tensor<T>>();
+        _rentedTensors = new ConcurrentDictionary<Tensor<T>, byte>();
     }
 
     /// <summary>
@@ -86,17 +86,8 @@ public class InferenceContext<T> : IDisposable
             throw new ObjectDisposedException(nameof(InferenceContext<T>));
         }
 
-        Tensor<T> tensor;
-        if (IsPoolingEnabled)
-        {
-            tensor = _pool.Rent(shape);
-        }
-        else
-        {
-            tensor = new Tensor<T>(shape);
-        }
-
-        _rentedTensors.Add(tensor);
+        var tensor = IsPoolingEnabled ? _pool.Rent(shape) : new Tensor<T>(shape);
+        _rentedTensors.TryAdd(tensor, 0);
         return tensor;
     }
 
@@ -166,9 +157,15 @@ public class InferenceContext<T> : IDisposable
             throw new ObjectDisposedException(nameof(InferenceContext<T>));
         }
 
-        if (tensor != null && IsPoolingEnabled)
+        if (tensor != null && _rentedTensors.TryRemove(tensor, out _))
         {
-            _pool.Return(tensor);
+            // Only return to pool if we successfully removed from tracking
+            // This prevents double-return if Release is called multiple times
+            // or if Dispose is called after Release
+            if (IsPoolingEnabled)
+            {
+                _pool.Return(tensor);
+            }
         }
     }
 
@@ -190,11 +187,13 @@ public class InferenceContext<T> : IDisposable
         {
             if (disposing && IsPoolingEnabled)
             {
-                // Return all rented tensors to the pool
-                while (_rentedTensors.TryTake(out var tensor))
+                // Return all remaining rented tensors to the pool
+                // Tensors that were already released via Release() won't be in the dictionary
+                foreach (var kvp in _rentedTensors)
                 {
-                    _pool.Return(tensor);
+                    _pool.Return(kvp.Key);
                 }
+                _rentedTensors.Clear();
             }
             _disposed = true;
         }

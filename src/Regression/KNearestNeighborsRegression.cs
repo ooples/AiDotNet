@@ -221,13 +221,18 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// <param name="v1">The first feature vector.</param>
     /// <param name="v2">The second feature vector.</param>
     /// <returns>The Euclidean distance between the two vectors.</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different dimensions.</exception>
     private T CalculateDistance(Vector<T> v1, Vector<T> v2)
     {
-        // Use the minimum length to handle dimension mismatches gracefully
-        int length = Math.Min(v1.Length, v2.Length);
+        if (v1.Length != v2.Length)
+        {
+            throw new ArgumentException(
+                $"Feature vectors must have the same dimension. Expected {v1.Length} features but got {v2.Length}. " +
+                "Ensure the input features match the training data dimensions.");
+        }
 
         T sum = NumOps.Zero;
-        for (int i = 0; i < length; i++)
+        for (int i = 0; i < v1.Length; i++)
         {
             T diff = NumOps.Subtract(v1[i], v2[i]);
             sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
