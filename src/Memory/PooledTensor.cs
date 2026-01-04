@@ -29,10 +29,15 @@ namespace AiDotNet.Memory;
 /// Tensor&lt;float&gt; tensor = (Tensor&lt;float&gt;)pooled;
 /// </code>
 /// </para>
+/// <para>
+/// <b>Thread Safety:</b> The Dispose method is idempotent - calling it multiple times
+/// is safe and will only return the tensor to the pool once.
+/// </para>
 /// </remarks>
-public readonly struct PooledTensor<T> : IDisposable
+public struct PooledTensor<T> : IDisposable
 {
     private readonly TensorPool<T> _pool;
+    private bool _disposed;
 
     /// <summary>
     /// Gets the underlying tensor managed by this wrapper.
@@ -45,6 +50,11 @@ public readonly struct PooledTensor<T> : IDisposable
     /// Do not hold a reference to this tensor after the PooledTensor is disposed.
     /// </remarks>
     public Tensor<T> Tensor { get; }
+
+    /// <summary>
+    /// Gets whether this wrapper has been disposed and the tensor returned to the pool.
+    /// </summary>
+    public bool IsDisposed => _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PooledTensor{T}"/> struct.
@@ -62,13 +72,25 @@ public readonly struct PooledTensor<T> : IDisposable
     {
         _pool = pool ?? throw new ArgumentNullException(nameof(pool));
         Tensor = tensor ?? throw new ArgumentNullException(nameof(tensor));
+        _disposed = false;
     }
 
     /// <summary>
     /// Returns the tensor to the pool.
     /// After disposal, the tensor should not be used as it may be rented by another operation.
     /// </summary>
-    public void Dispose() => _pool.Return(Tensor);
+    /// <remarks>
+    /// This method is idempotent - calling it multiple times is safe and will only
+    /// return the tensor to the pool on the first call.
+    /// </remarks>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _disposed = true;
+            _pool.Return(Tensor);
+        }
+    }
 
     /// <summary>
     /// Explicitly converts a PooledTensor to its underlying Tensor.
