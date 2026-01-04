@@ -886,4 +886,46 @@ public class SByteOperations : INumericOperations<sbyte>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<sbyte> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<sbyte> x, sbyte alpha, Span<sbyte> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+    }
+
+    public void GELU(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.GELU(this, x, destination);
+    }
+
+    public void Mish(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.Mish(this, x, destination);
+    }
+
+    public void Swish(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.Swish(this, x, destination);
+    }
+
+    public void ELU(ReadOnlySpan<sbyte> x, sbyte alpha, Span<sbyte> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+    }
+
+    public void ReLU(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.ReLU(this, x, destination);
+    }
 }

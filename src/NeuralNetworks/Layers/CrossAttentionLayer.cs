@@ -354,6 +354,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     private Tensor<T> ReshapeNCHWToNLC(Tensor<T> input)
     {
+        // [B, C, H, W] -> [B, L, C] where L = H*W
+        // Use IEngine for GPU-accelerated permute and reshape
         var shape = input.Shape;
         int batch = shape[0];
         int channels = shape[1];
@@ -361,55 +363,23 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         int width = shape[3];
         int seqLen = height * width;
 
-        var output = new Tensor<T>(new[] { batch, seqLen, channels });
-        var inSpan = input.AsSpan();
-        var outSpan = output.AsWritableSpan();
+        // First permute NCHW to NHWC: [B, C, H, W] -> [B, H, W, C]
+        var nhwc = Engine.TensorPermute(input, new[] { 0, 2, 3, 1 });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int spatialIdx = h * width + w;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        int srcIdx = b * channels * height * width + c * height * width + h * width + w;
-                        int dstIdx = b * seqLen * channels + spatialIdx * channels + c;
-                        outSpan[dstIdx] = inSpan[srcIdx];
-                    }
-                }
-            }
-        }
-
-        return output;
+        // Then reshape to NLC: [B, H, W, C] -> [B, H*W, C]
+        return Engine.Reshape(nhwc, new[] { batch, seqLen, channels });
     }
 
     private Tensor<T> ReshapeNLCToNCHW(Tensor<T> input, int batch, int channels, int height, int width)
     {
-        int seqLen = height * width;
-        var output = new Tensor<T>(new[] { batch, channels, height, width });
-        var inSpan = input.AsSpan();
-        var outSpan = output.AsWritableSpan();
+        // [B, L, C] -> [B, C, H, W] where L = H*W
+        // Use IEngine for GPU-accelerated reshape and permute
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int spatialIdx = h * width + w;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        int srcIdx = b * seqLen * channels + spatialIdx * channels + c;
-                        int dstIdx = b * channels * height * width + c * height * width + h * width + w;
-                        outSpan[dstIdx] = inSpan[srcIdx];
-                    }
-                }
-            }
-        }
+        // First reshape NLC to NHWC: [B, H*W, C] -> [B, H, W, C]
+        var nhwc = Engine.Reshape(input, new[] { batch, height, width, channels });
 
-        return output;
+        // Then permute NHWC to NCHW: [B, H, W, C] -> [B, C, H, W]
+        return Engine.TensorPermute(nhwc, new[] { 0, 3, 1, 2 });
     }
     private Tensor<T> BroadcastContext(Tensor<T> context, int batch, int contextLen, int contextDim)
     {
@@ -418,21 +388,9 @@ public class CrossAttentionLayer<T> : LayerBase<T>
             throw new ArgumentException("Context tensor must have batch dimension 1 for broadcasting.");
         }
 
-        var output = new Tensor<T>(new[] { batch, contextLen, contextDim });
-        var inSpan = context.AsSpan();
-        var outSpan = output.AsWritableSpan();
-        int sliceSize = contextLen * contextDim;
-
-        for (int b = 0; b < batch; b++)
-        {
-            int dstOffset = b * sliceSize;
-            for (int i = 0; i < sliceSize; i++)
-            {
-                outSpan[dstOffset + i] = inSpan[i];
-            }
-        }
-
-        return output;
+        // Use IEngine for GPU-accelerated tensor tiling
+        // Tile the context along the batch dimension: [1, contextLen, contextDim] -> [batch, contextLen, contextDim]
+        return Engine.TensorTile(context, new[] { batch, 1, 1 });
     }
 
     private Tensor<T> ProjectTensor(Tensor<T> input, Tensor<T> weights)
@@ -440,234 +398,56 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         // input: [B, seqLen, inputDim]
         // weights: [inputDim, outputDim]
         // output: [B, seqLen, outputDim]
+        // Use IEngine for GPU-accelerated batched matrix multiplication
         var inputShape = input.Shape;
         int batch = inputShape[0];
         int seqLen = inputShape[1];
         int inputDim = inputShape[2];
         int outputDim = weights.Shape[1];
 
-        var output = new Tensor<T>(new[] { batch, seqLen, outputDim });
-        var inSpan = input.AsSpan();
-        var wSpan = weights.AsSpan();
-        var outSpan = output.AsWritableSpan();
+        // Reshape input to [B*seqLen, inputDim] for 2D matmul
+        var flatInput = Engine.Reshape(input, new[] { batch * seqLen, inputDim });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int o = 0; o < outputDim; o++)
-                {
-                    double sum = 0.0;
-                    for (int i = 0; i < inputDim; i++)
-                    {
-                        int inIdx = b * seqLen * inputDim + s * inputDim + i;
-                        int wIdx = i * outputDim + o;
-                        sum += NumOps.ToDouble(inSpan[inIdx]) * NumOps.ToDouble(wSpan[wIdx]);
-                    }
-                    int outIdx = b * seqLen * outputDim + s * outputDim + o;
-                    outSpan[outIdx] = NumOps.FromDouble(sum);
-                }
-            }
-        }
+        // Perform 2D matrix multiplication: [B*seqLen, inputDim] × [inputDim, outputDim] = [B*seqLen, outputDim]
+        var flatOutput = Engine.TensorMatMul(flatInput, weights);
 
-        return output;
+        // Reshape back to [B, seqLen, outputDim]
+        return Engine.Reshape(flatOutput, new[] { batch, seqLen, outputDim });
     }
 
     private Tensor<T> ReshapeToHeads(Tensor<T> input, int batch, int seqLen, int numHeads, int headDim)
     {
         // [B, seqLen, numHeads * headDim] -> [B, numHeads, seqLen, headDim]
-        var output = new Tensor<T>(new[] { batch, numHeads, seqLen, headDim });
-        var inSpan = input.AsSpan();
-        var outSpan = output.AsWritableSpan();
+        // Use IEngine for GPU-accelerated reshape and permute operations
 
-        int embDim = numHeads * headDim;
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int h = 0; h < numHeads; h++)
-                {
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        int srcIdx = b * seqLen * embDim + s * embDim + h * headDim + d;
-                        int dstIdx = b * numHeads * seqLen * headDim + h * seqLen * headDim + s * headDim + d;
-                        outSpan[dstIdx] = inSpan[srcIdx];
-                    }
-                }
-            }
-        }
+        // First reshape: [B, seqLen, numHeads * headDim] -> [B, seqLen, numHeads, headDim]
+        var reshaped = Engine.Reshape(input, new[] { batch, seqLen, numHeads, headDim });
 
-        return output;
+        // Then permute: [B, seqLen, numHeads, headDim] -> [B, numHeads, seqLen, headDim]
+        return Engine.TensorPermute(reshaped, new[] { 0, 2, 1, 3 });
     }
 
     private Tensor<T> ReshapeFromHeads(Tensor<T> input, int batch, int seqLen, int numHeads, int headDim)
     {
         // [B, numHeads, seqLen, headDim] -> [B, seqLen, numHeads * headDim]
+        // Use IEngine for GPU-accelerated permute and reshape operations
+
+        // First permute: [B, numHeads, seqLen, headDim] -> [B, seqLen, numHeads, headDim]
+        var permuted = Engine.TensorPermute(input, new[] { 0, 2, 1, 3 });
+
+        // Then reshape: [B, seqLen, numHeads, headDim] -> [B, seqLen, numHeads * headDim]
         int embDim = numHeads * headDim;
-        var output = new Tensor<T>(new[] { batch, seqLen, embDim });
-        var inSpan = input.AsSpan();
-        var outSpan = output.AsWritableSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int h = 0; h < numHeads; h++)
-                {
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        int srcIdx = b * numHeads * seqLen * headDim + h * seqLen * headDim + s * headDim + d;
-                        int dstIdx = b * seqLen * embDim + s * embDim + h * headDim + d;
-                        outSpan[dstIdx] = inSpan[srcIdx];
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ComputeAttentionScores(Tensor<T> Q, Tensor<T> K, int batch, int queryLen, int keyLen)
-    {
-        // Q: [B, numHeads, queryLen, headDim]
-        // K: [B, numHeads, keyLen, headDim]
-        // scores: [B, numHeads, queryLen, keyLen]
-        var scores = new Tensor<T>(new[] { batch, _headCount, queryLen, keyLen });
-        var qSpan = Q.AsSpan();
-        var kSpan = K.AsSpan();
-        var scoresSpan = scores.AsWritableSpan();
-
-        double scale = 1.0 / Math.Sqrt(_headDim);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < _headCount; h++)
-            {
-                for (int q = 0; q < queryLen; q++)
-                {
-                    for (int k = 0; k < keyLen; k++)
-                    {
-                        double dot = 0.0;
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            int qIdx = b * _headCount * queryLen * _headDim + h * queryLen * _headDim + q * _headDim + d;
-                            int kIdx = b * _headCount * keyLen * _headDim + h * keyLen * _headDim + k * _headDim + d;
-                            dot += NumOps.ToDouble(qSpan[qIdx]) * NumOps.ToDouble(kSpan[kIdx]);
-                        }
-                        int scoreIdx = b * _headCount * queryLen * keyLen + h * queryLen * keyLen + q * keyLen + k;
-                        scoresSpan[scoreIdx] = NumOps.FromDouble(dot * scale);
-                    }
-                }
-            }
-        }
-
-        return scores;
-    }
-
-    private Tensor<T> ApplySoftmax(Tensor<T> scores, int batch, int queryLen, int keyLen)
-    {
-        // Apply softmax along the last dimension (keyLen)
-        var output = new Tensor<T>(scores.Shape);
-        var inSpan = scores.AsSpan();
-        var outSpan = output.AsWritableSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < _headCount; h++)
-            {
-                for (int q = 0; q < queryLen; q++)
-                {
-                    // Find max for numerical stability
-                    double maxVal = double.MinValue;
-                    int baseIdx = b * _headCount * queryLen * keyLen + h * queryLen * keyLen + q * keyLen;
-                    for (int k = 0; k < keyLen; k++)
-                    {
-                        double val = NumOps.ToDouble(inSpan[baseIdx + k]);
-                        if (val > maxVal) maxVal = val;
-                    }
-
-                    // Compute exp and sum
-                    double expSum = 0.0;
-                    for (int k = 0; k < keyLen; k++)
-                    {
-                        double exp = Math.Exp(NumOps.ToDouble(inSpan[baseIdx + k]) - maxVal);
-                        outSpan[baseIdx + k] = NumOps.FromDouble(exp);
-                        expSum += exp;
-                    }
-
-                    // Normalize
-                    for (int k = 0; k < keyLen; k++)
-                    {
-                        outSpan[baseIdx + k] = NumOps.FromDouble(NumOps.ToDouble(outSpan[baseIdx + k]) / expSum);
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ApplyAttentionToValues(Tensor<T> scores, Tensor<T> V, int batch, int queryLen)
-    {
-        // scores: [B, numHeads, queryLen, keyLen]
-        // V: [B, numHeads, keyLen, headDim]
-        // output: [B, numHeads, queryLen, headDim]
-        int keyLen = V.Shape[2];
-        var output = new Tensor<T>(new[] { batch, _headCount, queryLen, _headDim });
-        var scoresSpan = scores.AsSpan();
-        var vSpan = V.AsSpan();
-        var outSpan = output.AsWritableSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < _headCount; h++)
-            {
-                for (int q = 0; q < queryLen; q++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        double sum = 0.0;
-                        for (int k = 0; k < keyLen; k++)
-                        {
-                            int scoreIdx = b * _headCount * queryLen * keyLen + h * queryLen * keyLen + q * keyLen + k;
-                            int vIdx = b * _headCount * keyLen * _headDim + h * keyLen * _headDim + k * _headDim + d;
-                            sum += NumOps.ToDouble(scoresSpan[scoreIdx]) * NumOps.ToDouble(vSpan[vIdx]);
-                        }
-                        int outIdx = b * _headCount * queryLen * _headDim + h * queryLen * _headDim + q * _headDim + d;
-                        outSpan[outIdx] = NumOps.FromDouble(sum);
-                    }
-                }
-            }
-        }
-
-        return output;
+        return Engine.Reshape(permuted, new[] { batch, seqLen, embDim });
     }
 
     private Tensor<T> AddBias(Tensor<T> input, Tensor<T> bias)
     {
-        var shape = input.Shape;
-        int batch = shape[0];
-        int seqLen = shape[1];
-        int dim = shape[2];
-
-        var output = new Tensor<T>(shape);
-        var inSpan = input.AsSpan();
-        var biasSpan = bias.AsSpan();
-        var outSpan = output.AsWritableSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int d = 0; d < dim; d++)
-                {
-                    int idx = b * seqLen * dim + s * dim + d;
-                    outSpan[idx] = NumOps.Add(inSpan[idx], biasSpan[d]);
-                }
-            }
-        }
-
-        return output;
+        // input: [B, seqLen, dim]
+        // bias: [dim]
+        // Use IEngine for GPU-accelerated broadcast addition
+        // Reshape bias to [1, 1, dim] for proper broadcasting
+        var biasReshaped = Engine.Reshape(bias, new[] { 1, 1, bias.Length });
+        return Engine.TensorBroadcastAdd(input, biasReshaped);
     }
 
     /// <inheritdoc/>
@@ -747,21 +527,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     private Tensor<T> TransposeWeights(Tensor<T> weights)
     {
-        int rows = weights.Shape[0];
-        int cols = weights.Shape[1];
-        var output = new Tensor<T>(new[] { cols, rows });
-        var inSpan = weights.AsSpan();
-        var outSpan = output.AsWritableSpan();
-
-        for (int r = 0; r < rows; r++)
-        {
-            for (int c = 0; c < cols; c++)
-            {
-                outSpan[c * rows + r] = inSpan[r * cols + c];
-            }
-        }
-
-        return output;
+        // Use IEngine for GPU-accelerated 2D tensor transpose
+        return Engine.TensorTranspose(weights);
     }
 
     /// <inheritdoc/>

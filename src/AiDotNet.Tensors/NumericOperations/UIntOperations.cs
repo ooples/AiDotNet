@@ -870,4 +870,32 @@ public class UIntOperations : INumericOperations<uint>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<uint> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<uint> x, uint alpha, Span<uint> destination)
+    {
+        // LeakyReLU for uint is effectively a copy since uint is always >= 0
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        x.CopyTo(destination);
+    }
+
+    public void GELU(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("GELU activation requires transcendental operations (exp, tanh) that are not meaningful for uint type. Use float or double instead.");
+
+    public void Mish(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("Mish activation requires transcendental operations (exp, tanh, log) that are not meaningful for uint type. Use float or double instead.");
+
+    public void Swish(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("Swish activation requires transcendental operations (exp) that are not meaningful for uint type. Use float or double instead.");
+
+    public void ELU(ReadOnlySpan<uint> x, uint alpha, Span<uint> destination)
+        => throw new NotSupportedException("ELU activation requires transcendental operations (exp) that are not meaningful for uint type. Use float or double instead.");
+
+    public void ReLU(ReadOnlySpan<uint> x, Span<uint> destination)
+    {
+        // ReLU for uint is effectively a copy since uint is always >= 0
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        x.CopyTo(destination);
+    }
 }

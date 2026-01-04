@@ -570,4 +570,22 @@ public class HalfOperations : INumericOperations<Half>
     /// </summary>
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<Half> destination)
         => source.CopyTo(destination);
+
+    public void LeakyReLU(ReadOnlySpan<Half> x, Half alpha, Span<Half> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<Half> x, Span<Half> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<Half> x, Span<Half> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<Half> x, Span<Half> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<Half> x, Half alpha, Span<Half> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<Half> x, Span<Half> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
 }

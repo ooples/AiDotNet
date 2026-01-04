@@ -264,7 +264,7 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
-            // ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?)
+            // ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)
             int kernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
@@ -276,12 +276,13 @@ public static class DeserializationHelper
             int outputDepth = outputShape.Length > 1 ? outputShape[1] : outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
+            var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
             }
-            instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, null });
+            instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, null, null });
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {
@@ -420,17 +421,18 @@ public static class DeserializationHelper
 
     private static object CreateDenseLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
     {
-        // DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
+        // DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null, IInitializationStrategy<T>? initializationStrategy = null)
         // Use specific constructor to avoid ambiguity with vector activation constructor.
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
+        var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType, initStrategyType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find DenseLayer constructor with (int, int, IActivationFunction<T>).");
+            throw new InvalidOperationException("Cannot find DenseLayer constructor with (int, int, IActivationFunction<T>, IInitializationStrategy<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { inputShape[0], outputShape[0], activation });
+        return ctor.Invoke(new object?[] { inputShape[0], outputShape[0], activation, null });
     }
 
     private static object CreateMultiHeadAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)

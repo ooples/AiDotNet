@@ -815,4 +815,22 @@ public class ByteOperations : INumericOperations<byte>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<byte> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<byte> x, byte alpha, Span<byte> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<byte> x, Span<byte> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<byte> x, Span<byte> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<byte> x, Span<byte> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<byte> x, byte alpha, Span<byte> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<byte> x, Span<byte> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
 }

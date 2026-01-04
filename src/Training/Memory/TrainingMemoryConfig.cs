@@ -1,4 +1,6 @@
 using AiDotNet.Diffusion.Memory;
+using AiDotNet.Initialization;
+using AiDotNet.Memory;
 
 namespace AiDotNet.Training.Memory;
 
@@ -148,6 +150,75 @@ public class TrainingMemoryConfig
 
     #endregion
 
+    #region Tensor Pooling
+
+    /// <summary>
+    /// Gets or sets whether tensor pooling is enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Tensor pooling reduces memory allocations by reusing
+    /// tensor buffers. When enabled, tensors are borrowed from and returned to a pool
+    /// instead of being allocated and garbage collected each time.
+    /// </para>
+    /// </remarks>
+    public bool UseTensorPooling { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the tensor pooling options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Configure advanced pooling behavior including:
+    /// - Maximum pool size in MB
+    /// - Maximum elements per buffer to pool
+    /// - Whether to use weak references (allows GC under memory pressure)
+    /// </para>
+    /// </remarks>
+    public PoolingOptions? TensorPoolOptions { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to use a shared global tensor pool.
+    /// </summary>
+    /// <remarks>
+    /// When true, uses TensorPoolManager.Shared for all pooling operations.
+    /// When false, each training session creates its own pool.
+    /// </remarks>
+    public bool UseSharedTensorPool { get; set; } = true;
+
+    #endregion
+
+    #region Weight Initialization
+
+    /// <summary>
+    /// Gets or sets the default initialization strategy type.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This controls how layer weights are initialized:
+    /// - <see cref="InitializationStrategyType.Eager"/>: Initialize immediately (traditional)
+    /// - <see cref="InitializationStrategyType.Lazy"/>: Defer until first use (faster construction)
+    /// - <see cref="InitializationStrategyType.Zero"/>: All zeros (for testing only)
+    /// - <see cref="InitializationStrategyType.FromFile"/>: Load from a file (transfer learning)
+    /// </para>
+    /// </remarks>
+    public InitializationStrategyType DefaultInitializationStrategy { get; set; } = InitializationStrategyType.Eager;
+
+    /// <summary>
+    /// Gets or sets the path to a weights file for FromFile initialization.
+    /// </summary>
+    /// <remarks>
+    /// Only used when <see cref="DefaultInitializationStrategy"/> is set to FromFile.
+    /// </remarks>
+    public string? WeightsFilePath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the format of the weights file.
+    /// </summary>
+    public WeightFileFormat WeightsFileFormat { get; set; } = WeightFileFormat.Auto;
+
+    #endregion
+
     #region Factory Methods
 
     /// <summary>
@@ -226,6 +297,67 @@ public class TrainingMemoryConfig
         CheckpointResidualBlocks = true,
         UseActivationPooling = true,
         MaxPoolMemoryMB = 2048
+    };
+
+    /// <summary>
+    /// Creates a configuration for transfer learning from a pre-trained model.
+    /// </summary>
+    /// <param name="weightsPath">Path to the pre-trained weights file.</param>
+    /// <param name="format">Format of the weights file. Default is auto-detect.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Transfer learning lets you start with a model that was
+    /// already trained on a similar task. This is much faster than training from scratch
+    /// and often produces better results, especially with limited data.
+    /// </para>
+    /// </remarks>
+    public static TrainingMemoryConfig ForTransferLearning(string weightsPath, WeightFileFormat format = WeightFileFormat.Auto) => new()
+    {
+        UseGradientCheckpointing = true,
+        CheckpointEveryNLayers = 2,
+        UseActivationPooling = true,
+        MaxPoolMemoryMB = 4096,
+        UseTensorPooling = true,
+        DefaultInitializationStrategy = InitializationStrategyType.FromFile,
+        WeightsFilePath = weightsPath,
+        WeightsFileFormat = format
+    };
+
+    /// <summary>
+    /// Creates a configuration for fast model construction (good for testing).
+    /// </summary>
+    /// <remarks>
+    /// Uses lazy initialization to defer weight allocation, making network construction fast.
+    /// Useful when you just want to inspect the network architecture or run tests.
+    /// </remarks>
+    public static TrainingMemoryConfig FastConstruction() => new()
+    {
+        UseGradientCheckpointing = false,
+        UseActivationPooling = false,
+        UseTensorPooling = false,
+        DefaultInitializationStrategy = InitializationStrategyType.Lazy
+    };
+
+    /// <summary>
+    /// Creates a configuration with aggressive memory pooling.
+    /// </summary>
+    /// <param name="maxPoolSizeMB">Maximum size of the tensor pool in MB.</param>
+    /// <remarks>
+    /// Maximizes tensor reuse to minimize garbage collection.
+    /// Best for training loops where the same tensor shapes are used repeatedly.
+    /// </remarks>
+    public static TrainingMemoryConfig AggressivePooling(int maxPoolSizeMB = 512) => new()
+    {
+        UseActivationPooling = true,
+        MaxPoolMemoryMB = maxPoolSizeMB,
+        UseTensorPooling = true,
+        UseSharedTensorPool = true,
+        TensorPoolOptions = new PoolingOptions
+        {
+            MaxPoolSizeMB = maxPoolSizeMB,
+            MaxItemsPerBucket = 20,
+            UseWeakReferences = false
+        }
     };
 
     #endregion

@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
+using AiDotNet.Initialization;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -245,6 +247,14 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
+    /// Tracks whether lazy initialization has been completed.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <inheritdoc />
+    public override bool IsInitialized => _isInitialized;
+
+    /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.
     /// </summary>
     /// <remarks>
@@ -349,7 +359,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride = 1, int padding = 0,
-                              IActivationFunction<T>? activationFunction = null)
+                              IActivationFunction<T>? activationFunction = null,
+                              IInitializationStrategy<T>? initializationStrategy = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
                    CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), activationFunction ?? new ReLUActivation<T>())
@@ -360,17 +371,37 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Stride = stride;
         Padding = padding;
 
-        _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _biases = new Tensor<T>([OutputDepth]);
-        _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _random = RandomHelper.CreateSecureRandom();
+        // Store the initialization strategy
+        InitializationStrategy = initializationStrategy;
 
-        InitializeWeights();
+        // Check if using lazy initialization
+        if (initializationStrategy is { IsLazy: true })
+        {
+            // Defer weight allocation until first Forward() call
+            _kernels = new Tensor<T>([0, 0, 0, 0]);
+            _biases = new Tensor<T>([0]);
+            _lastInput = new Tensor<T>([0, 0, 0, 0]);
+            _lastOutput = new Tensor<T>([0, 0, 0, 0]);
+            _random = RandomHelper.CreateSecureRandom();
+            _isInitialized = false;
+        }
+        else
+        {
+            // Eager initialization - allocate and initialize immediately
+            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            _biases = new Tensor<T>([OutputDepth]);
+            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
+            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
+            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
+            _random = RandomHelper.CreateSecureRandom();
 
-        // Register trainable parameters with the engine for GPU persistence
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            InitializeWeights();
+
+            // Register trainable parameters with the engine for GPU persistence
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -404,7 +435,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride, int padding,
-                              IVectorActivationFunction<T> vectorActivationFunction)
+                              IVectorActivationFunction<T> vectorActivationFunction,
+                              IInitializationStrategy<T>? initializationStrategy = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
                    CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivationFunction)
@@ -415,17 +447,37 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Stride = stride;
         Padding = padding;
 
-        _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _biases = new Tensor<T>([OutputDepth]);
-        _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _random = RandomHelper.CreateSecureRandom();
+        // Store the initialization strategy
+        InitializationStrategy = initializationStrategy;
 
-        InitializeWeights();
+        // Check if using lazy initialization
+        if (initializationStrategy is { IsLazy: true })
+        {
+            // Defer weight allocation until first Forward() call
+            _kernels = new Tensor<T>([0, 0, 0, 0]);
+            _biases = new Tensor<T>([0]);
+            _lastInput = new Tensor<T>([0, 0, 0, 0]);
+            _lastOutput = new Tensor<T>([0, 0, 0, 0]);
+            _random = RandomHelper.CreateSecureRandom();
+            _isInitialized = false;
+        }
+        else
+        {
+            // Eager initialization - allocate and initialize immediately
+            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            _biases = new Tensor<T>([OutputDepth]);
+            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
+            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
+            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
+            _random = RandomHelper.CreateSecureRandom();
 
-        // Register trainable parameters with the engine for GPU persistence
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            InitializeWeights();
+
+            // Register trainable parameters with the engine for GPU persistence
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -728,11 +780,41 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// - It helps the network learn faster
     /// - It prevents certain mathematical problems during training
     /// - It gives each pattern detector a different starting point
-    /// 
+    ///
     /// This uses a technique called "He initialization" which works well
     /// with modern neural networks.
     /// </para>
     /// </remarks>
+
+    /// <summary>
+    /// Ensures that kernels are allocated and initialized for lazy initialization.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+
+            // Allocate kernels and biases
+            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            _biases = new Tensor<T>([OutputDepth]);
+            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
+            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
+            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
+
+            // Initialize weights
+            InitializeWeights();
+
+            // Register trainable parameters with the engine for GPU persistence
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
+    }
+
     private void InitializeWeights()
     {
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth * KernelSize * KernelSize + OutputDepth)));
@@ -781,6 +863,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Ensure kernels are initialized (for lazy initialization)
+        EnsureInitialized();
+
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (input.Shape.Length < 3)
             throw new ArgumentException($"Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");

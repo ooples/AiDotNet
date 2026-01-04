@@ -1169,4 +1169,22 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<Complex<T>> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<Complex<T>> x, Complex<T> alpha, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<Complex<T>> x, Complex<T> alpha, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
 }

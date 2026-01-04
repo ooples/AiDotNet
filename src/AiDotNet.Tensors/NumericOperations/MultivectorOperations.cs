@@ -428,6 +428,24 @@ public class MultivectorOperations<T> : INumericOperations<Multivector<T>>
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<Multivector<T>> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 
+    public void LeakyReLU(ReadOnlySpan<Multivector<T>> x, Multivector<T> alpha, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<Multivector<T>> x, Multivector<T> alpha, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
+
     #endregion
 
     private void EnsureCompatible(Multivector<T> value)

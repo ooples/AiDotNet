@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Initialization;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -284,6 +286,78 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// These will be unregistered when the layer is disposed.
     /// </summary>
     private readonly List<object> _registeredTensors = new();
+
+    /// <summary>
+    /// Gets or sets the initialization strategy for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The initialization strategy controls when and how the layer's weights are allocated
+    /// and initialized. Lazy initialization defers weight allocation until the first forward
+    /// pass, which significantly speeds up network construction.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls when the layer sets up its internal weights.
+    ///
+    /// Lazy initialization:
+    /// - Defers weight allocation until the layer is actually used
+    /// - Makes network construction much faster
+    /// - Useful for tests and when comparing network architectures
+    ///
+    /// Eager initialization:
+    /// - Allocates weights immediately at construction time
+    /// - Traditional behavior, weights are ready immediately
+    /// </para>
+    /// </remarks>
+    public IInitializationStrategy<T>? InitializationStrategy { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer has been initialized.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For layers with lazy initialization, this indicates whether the weights have been
+    /// allocated and initialized. For eager initialization, this is always true after construction.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if the layer's weights are ready to use.
+    ///
+    /// A value of true means:
+    /// - Weights have been allocated
+    /// - The layer is ready for forward/backward passes
+    ///
+    /// A value of false means:
+    /// - Weights are not yet allocated (lazy initialization)
+    /// - The first Forward() call will initialize them
+    /// </para>
+    /// </remarks>
+    public virtual bool IsInitialized => true;
+
+    /// <summary>
+    /// Object used for thread-safe lazy initialization.
+    /// </summary>
+    protected readonly object InitializationLock = new();
+
+    /// <summary>
+    /// Ensures that the layer is initialized. Call this at the start of Forward() for lazy initialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For layers that support lazy initialization, this method should be called at the start
+    /// of Forward() to ensure weights are allocated before use. The default implementation
+    /// does nothing (for layers without lazy initialization support).
+    /// </para>
+    /// <para><b>For Beginners:</b> This makes sure the layer is ready before processing data.
+    ///
+    /// For lazy initialization:
+    /// - First call allocates and initializes weights
+    /// - Subsequent calls do nothing (weights already initialized)
+    /// - Thread-safe for parallel execution
+    /// </para>
+    /// </remarks>
+    protected virtual void EnsureInitialized()
+    {
+        // Default implementation does nothing.
+        // Layers with lazy initialization override this to allocate weights.
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

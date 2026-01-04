@@ -671,28 +671,18 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
             for (int b = 0; b < batchSize; b++)
             {
-                // Gather source node features for all edges: messages[e] = xw[b, src[e], :]
-                var messages = new Tensor<T>([numEdges, outputFeatures]);
-                for (int e = 0; e < numEdges; e++)
-                {
-                    int srcNode = _edgeSourceIndices.GetFlat(e);
-                    for (int f = 0; f < outputFeatures; f++)
-                    {
-                        messages[e, f] = xw[b, srcNode, f];
-                    }
-                }
+                // Get the slice for this batch: [numNodes, outputFeatures]
+                var batchSlice = xw.Slice(b);
+
+                // Gather source node features for all edges using Engine.Gather
+                // messages[e, :] = batchSlice[src[e], :]
+                var messages = Engine.Gather(batchSlice, _edgeSourceIndices, axis: 0);
 
                 // Scatter-add messages to target nodes
                 var aggregated = Engine.ScatterAdd(messages, _edgeTargetIndices, dim: 0, outputSize: numNodes);
 
-                // Copy to output batch
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < outputFeatures; f++)
-                    {
-                        output[b, n, f] = aggregated[n, f];
-                    }
-                }
+                // Set the aggregated results in output tensor for this batch
+                output.SetSlice(b, aggregated);
             }
 
             // Store for backward pass (null for sparse path)
@@ -720,18 +710,10 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
                 }
                 else
                 {
-                    // Broadcast: repeat adjacency matrix for each batch item
-                    adjForBatch = new Tensor<T>([batchSize, numNodes, numNodes]);
-                    for (int b = 0; b < batchSize; b++)
-                    {
-                        for (int i = 0; i < numNodes; i++)
-                        {
-                            for (int j = 0; j < numNodes; j++)
-                            {
-                                adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
-                            }
-                        }
-                    }
+                    // Broadcast: repeat adjacency matrix for each batch item using Engine.TensorTile
+                    // First reshape to [1, nodes, nodes] then tile along batch dimension
+                    var adjReshaped = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+                    adjForBatch = Engine.TensorTile(adjReshaped, [batchSize, 1, 1]);
                 }
             }
             else

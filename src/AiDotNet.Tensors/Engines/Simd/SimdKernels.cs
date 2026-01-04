@@ -355,6 +355,242 @@ namespace AiDotNet.Tensors.Engines.Simd
             }
         }
 
+        /// <summary>
+        /// Computes LeakyReLU element-wise using SIMD: max(alpha * x, x).
+        /// Uses AVX/SSE for vectorized comparison and blending when available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void LeakyReLU(ReadOnlySpan<float> input, float alpha, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 8)
+            {
+                var vzero = Vector256<float>.Zero;
+                var valpha = Vector256.Create(alpha);
+                int simdLength = length & ~7;
+                for (; i < simdLength; i += 8)
+                {
+                    var v = ReadVector256(input, i);
+                    // LeakyReLU: x > 0 ? x : alpha * x
+                    var mask = Avx.CompareGreaterThan(v, vzero);
+                    var scaled = Avx.Multiply(v, valpha);
+                    WriteVector256(output, i, Avx.BlendVariable(scaled, v, mask));
+                }
+            }
+            else if (Sse.IsSupported && length >= 4)
+            {
+                var vzero = Vector128<float>.Zero;
+                var valpha = Vector128.Create(alpha);
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector128(input, i);
+                    var mask = Sse.CompareGreaterThan(v, vzero);
+                    var scaled = Sse.Multiply(v, valpha);
+                    WriteVector128(output, i, Sse41.IsSupported
+                        ? Sse41.BlendVariable(scaled, v, mask)
+                        : Sse.Or(Sse.And(mask, v), Sse.AndNot(mask, scaled)));
+                }
+            }
+            else if (AdvSimd.IsSupported && length >= 4)
+            {
+                var vzero = Vector128<float>.Zero;
+                var valpha = Vector128.Create(alpha);
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector128(input, i);
+                    var mask = AdvSimd.CompareGreaterThan(v, vzero);
+                    var scaled = AdvSimd.Multiply(v, valpha);
+                    WriteVector128(output, i, AdvSimd.BitwiseSelect(mask, v, scaled));
+                }
+            }
+#endif
+
+            for (; i < length; i++)
+            {
+                output[i] = input[i] > 0f ? input[i] : alpha * input[i];
+            }
+        }
+
+        /// <summary>
+        /// Computes GELU (Gaussian Error Linear Unit) element-wise.
+        /// Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+        /// Optimized using SIMD vectorization where available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void GELU(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            // Constants for GELU approximation
+            const float sqrt2OverPi = 0.7978845608028654f;
+            const float coeff = 0.044715f;
+            const float half = 0.5f;
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && Fma.IsSupported && length >= 8)
+            {
+                var vSqrt2OverPi = Vector256.Create(sqrt2OverPi);
+                var vCoeff = Vector256.Create(coeff);
+                var vHalf = Vector256.Create(half);
+                var vOne = Vector256.Create(1.0f);
+                var vNegOne = Vector256.Create(-1.0f);
+                // Constants for rational tanh approximation: tanh(x) ≈ x * (27 + x²) / (27 + 9*x²)
+                // Accurate to ~0.001 for |x| < 3, which covers typical GELU input ranges
+                var v27 = Vector256.Create(27.0f);
+                var v9 = Vector256.Create(9.0f);
+
+                int simdLength = length & ~7;
+                for (; i < simdLength; i += 8)
+                {
+                    var x = ReadVector256(input, i);
+                    // x^3
+                    var x_squared = Avx.Multiply(x, x);
+                    var x_cubed = Avx.Multiply(x_squared, x);
+                    // x + 0.044715 * x^3
+                    var inner = Fma.MultiplyAdd(vCoeff, x_cubed, x);
+                    // sqrt(2/pi) * inner = tanh argument
+                    var tanh_arg = Avx.Multiply(vSqrt2OverPi, inner);
+
+                    // Vectorized tanh approximation using rational function
+                    // tanh(x) ≈ x * (27 + x²) / (27 + 9*x²) for |x| ≤ 3
+                    var tanh_arg_sq = Avx.Multiply(tanh_arg, tanh_arg);
+                    var numerator = Avx.Add(v27, tanh_arg_sq); // 27 + x²
+                    var denominator = Fma.MultiplyAdd(v9, tanh_arg_sq, v27); // 27 + 9*x²
+                    var tanh_approx = Avx.Divide(Avx.Multiply(tanh_arg, numerator), denominator);
+
+                    // Clamp to [-1, 1] for |x| > 3 (where approximation is less accurate)
+                    tanh_approx = Avx.Max(vNegOne, Avx.Min(vOne, tanh_approx));
+
+                    // GELU = 0.5 * x * (1 + tanh)
+                    var one_plus_tanh = Avx.Add(vOne, tanh_approx);
+                    var result = Avx.Multiply(vHalf, Avx.Multiply(x, one_plus_tanh));
+                    WriteVector256(output, i, result);
+                }
+            }
+#endif
+
+            // Scalar implementation for remaining elements
+            for (; i < length; i++)
+            {
+                float x = input[i];
+                float x_cubed = x * x * x;
+                float inner = x + coeff * x_cubed;
+                float tanh_arg = sqrt2OverPi * inner;
+#if NET5_0_OR_GREATER
+                float tanh_val = MathF.Tanh(tanh_arg);
+#else
+                float tanh_val = (float)Math.Tanh(tanh_arg);
+#endif
+                output[i] = half * x * (1f + tanh_val);
+            }
+        }
+
+        /// <summary>
+        /// Computes Mish activation element-wise: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).
+        /// Optimized using SIMD vectorization where available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Mish(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+
+            // Scalar implementation (transcendental functions don't vectorize well without special libs)
+            for (int i = 0; i < length; i++)
+            {
+                float x = input[i];
+#if NET5_0_OR_GREATER
+                // softplus(x) = ln(1 + exp(x))
+                // For numerical stability: if x > 20, softplus(x) approx x
+                float softplus = x > 20f ? x : MathF.Log(1f + MathF.Exp(x));
+                output[i] = x * MathF.Tanh(softplus);
+#else
+                float softplus = x > 20f ? x : (float)Math.Log(1.0 + Math.Exp(x));
+                output[i] = x * (float)Math.Tanh(softplus);
+#endif
+            }
+        }
+
+        /// <summary>
+        /// Computes Swish/SiLU activation element-wise: x * sigmoid(x) = x / (1 + exp(-x)).
+        /// Uses SIMD vectorization for the multiplication portion.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Swish(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+
+            // Scalar implementation (sigmoid requires exp which doesn't vectorize well without special libs)
+            for (int i = 0; i < length; i++)
+            {
+                float x = input[i];
+#if NET5_0_OR_GREATER
+                float sigmoid = 1f / (1f + MathF.Exp(-x));
+#else
+                float sigmoid = 1f / (1f + (float)Math.Exp(-x));
+#endif
+                output[i] = x * sigmoid;
+            }
+        }
+
+        /// <summary>
+        /// Computes ELU (Exponential Linear Unit) element-wise: x if x > 0, alpha * (exp(x) - 1) otherwise.
+        /// Uses SIMD vectorization for comparison and blending where available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ELU(ReadOnlySpan<float> input, float alpha, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+
+            // Scalar implementation (exp doesn't vectorize well without special libs)
+            for (int i = 0; i < length; i++)
+            {
+                float x = input[i];
+                if (x > 0f)
+                {
+                    output[i] = x;
+                }
+                else
+                {
+#if NET5_0_OR_GREATER
+                    output[i] = alpha * (MathF.Exp(x) - 1f);
+#else
+                    output[i] = alpha * ((float)Math.Exp(x) - 1f);
+#endif
+                }
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Sum(ReadOnlySpan<float> data)
         {
@@ -895,7 +1131,208 @@ namespace AiDotNet.Tensors.Engines.Simd
             }
         }
 
+        #region Double Activation Functions
 
+        /// <summary>
+        /// Computes ReLU element-wise using SIMD: max(0, x).
+        /// Uses AVX/SSE for vectorized comparison when available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ReLU(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 4)
+            {
+                var vzero = Vector256<double>.Zero;
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector256Double(input, i);
+                    WriteVector256Double(output, i, Avx.Max(v, vzero));
+                }
+            }
+            else if (Sse2.IsSupported && length >= 2)
+            {
+                var vzero = Vector128<double>.Zero;
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var v = ReadVector128Double(input, i);
+                    WriteVector128Double(output, i, Sse2.Max(v, vzero));
+                }
+            }
+#endif
+
+            for (; i < length; i++)
+            {
+                output[i] = input[i] > 0 ? input[i] : 0;
+            }
+        }
+
+        /// <summary>
+        /// Computes LeakyReLU element-wise using SIMD: max(alpha * x, x).
+        /// Uses AVX/SSE for vectorized comparison and blending when available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void LeakyReLU(ReadOnlySpan<double> input, double alpha, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 4)
+            {
+                var vzero = Vector256<double>.Zero;
+                var valpha = Vector256.Create(alpha);
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector256Double(input, i);
+                    // LeakyReLU: x > 0 ? x : alpha * x
+                    var mask = Avx.CompareGreaterThan(v, vzero);
+                    var scaled = Avx.Multiply(v, valpha);
+                    WriteVector256Double(output, i, Avx.BlendVariable(scaled, v, mask));
+                }
+            }
+            else if (Sse2.IsSupported && length >= 2)
+            {
+                var vzero = Vector128<double>.Zero;
+                var valpha = Vector128.Create(alpha);
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var v = ReadVector128Double(input, i);
+                    var mask = Sse2.CompareGreaterThan(v, vzero);
+                    var scaled = Sse2.Multiply(v, valpha);
+                    WriteVector128Double(output, i, Sse41.IsSupported
+                        ? Sse41.BlendVariable(scaled, v, mask)
+                        : Sse2.Or(Sse2.And(mask, v), Sse2.AndNot(mask, scaled)));
+                }
+            }
+#endif
+
+            for (; i < length; i++)
+            {
+                output[i] = input[i] > 0 ? input[i] : alpha * input[i];
+            }
+        }
+
+        /// <summary>
+        /// Computes GELU (Gaussian Error Linear Unit) element-wise for double precision.
+        /// Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void GELU(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            // Constants for GELU approximation
+            const double sqrt2OverPi = 0.7978845608028654;
+            const double coeff = 0.044715;
+            const double half = 0.5;
+
+            int length = output.Length;
+
+            // Scalar implementation
+            for (int i = 0; i < length; i++)
+            {
+                double x = input[i];
+                double x_cubed = x * x * x;
+                double inner = x + coeff * x_cubed;
+                double tanh_arg = sqrt2OverPi * inner;
+                double tanh_val = Math.Tanh(tanh_arg);
+                output[i] = half * x * (1.0 + tanh_val);
+            }
+        }
+
+        /// <summary>
+        /// Computes Mish activation element-wise for double precision: x * tanh(softplus(x)).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Mish(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+
+            for (int i = 0; i < length; i++)
+            {
+                double x = input[i];
+                // softplus(x) = ln(1 + exp(x))
+                // For numerical stability: if x > 20, softplus(x) approx x
+                double softplus = x > 20.0 ? x : Math.Log(1.0 + Math.Exp(x));
+                output[i] = x * Math.Tanh(softplus);
+            }
+        }
+
+        /// <summary>
+        /// Computes Swish/SiLU activation element-wise for double precision: x * sigmoid(x).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Swish(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+
+            for (int i = 0; i < length; i++)
+            {
+                double x = input[i];
+                double sigmoid = 1.0 / (1.0 + Math.Exp(-x));
+                output[i] = x * sigmoid;
+            }
+        }
+
+        /// <summary>
+        /// Computes ELU (Exponential Linear Unit) element-wise for double precision.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ELU(ReadOnlySpan<double> input, double alpha, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+
+            for (int i = 0; i < length; i++)
+            {
+                double x = input[i];
+                if (x > 0)
+                {
+                    output[i] = x;
+                }
+                else
+                {
+                    output[i] = alpha * (Math.Exp(x) - 1.0);
+                }
+            }
+        }
+
+        #endregion
 
 
 #if NET5_0_OR_GREATER

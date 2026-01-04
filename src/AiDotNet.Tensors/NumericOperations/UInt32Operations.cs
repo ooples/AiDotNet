@@ -854,4 +854,46 @@ public class UInt32Operations : INumericOperations<uint>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<uint> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<uint> x, uint alpha, Span<uint> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+    }
+
+    public void GELU(ReadOnlySpan<uint> x, Span<uint> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.GELU(this, x, destination);
+    }
+
+    public void Mish(ReadOnlySpan<uint> x, Span<uint> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.Mish(this, x, destination);
+    }
+
+    public void Swish(ReadOnlySpan<uint> x, Span<uint> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.Swish(this, x, destination);
+    }
+
+    public void ELU(ReadOnlySpan<uint> x, uint alpha, Span<uint> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+    }
+
+    public void ReLU(ReadOnlySpan<uint> x, Span<uint> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.ReLU(this, x, destination);
+    }
 }
