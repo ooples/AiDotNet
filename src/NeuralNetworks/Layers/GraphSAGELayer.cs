@@ -254,18 +254,9 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             }
             else
             {
-                // Broadcast: repeat adjacency matrix for each batch item
-                adjForBatch = new Tensor<T>([batchSize, numNodes, numNodes]);
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int i = 0; i < numNodes; i++)
-                    {
-                        for (int j = 0; j < numNodes; j++)
-                        {
-                            adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
-                        }
-                    }
-                }
+                // Broadcast: repeat adjacency matrix for each batch item using Engine.TensorTile
+                var adjReshaped = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+                adjForBatch = Engine.TensorTile(adjReshaped, [batchSize, 1, 1]);
             }
         }
         else
