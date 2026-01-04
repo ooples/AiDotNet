@@ -26,8 +26,8 @@ public class FromFileInitializationStrategy<T> : InitializationStrategyBase<T>
 {
     private readonly string _filePath;
     private readonly WeightFileFormat _format;
-    private Dictionary<string, T[]>? _loadedWeights;
-    private Dictionary<string, T[]>? _loadedBiases;
+    private volatile Dictionary<string, T[]>? _loadedWeights;
+    private volatile Dictionary<string, T[]>? _loadedBiases;
     private int _weightLayerIndex;
     private int _biasLayerIndex;
     private readonly object _loadLock = new();
@@ -59,23 +59,23 @@ public class FromFileInitializationStrategy<T> : InitializationStrategyBase<T>
     {
         EnsureWeightsLoaded();
 
-        var key = $"weights_{_weightLayerIndex}";
+        // Thread-safe layer index increment
+        int layerIndex = Interlocked.Increment(ref _weightLayerIndex) - 1;
+        var key = $"weights_{layerIndex}";
         if (_loadedWeights is not null && _loadedWeights.TryGetValue(key, out var weightData))
         {
             if (weightData.Length != weights.Length)
             {
                 throw new InvalidOperationException(
-                    $"Weight size mismatch for layer {_weightLayerIndex}. Expected {weights.Length}, got {weightData.Length}.");
+                    $"Weight size mismatch for layer {layerIndex}. Expected {weights.Length}, got {weightData.Length}.");
             }
 
             Array.Copy(weightData, weights.Data, weightData.Length);
-            _weightLayerIndex++;
         }
         else
         {
             // Fall back to Xavier initialization if weights not found
             XavierNormalInitialize(weights, inputSize, outputSize);
-            _weightLayerIndex++;
         }
     }
 
@@ -84,23 +84,23 @@ public class FromFileInitializationStrategy<T> : InitializationStrategyBase<T>
     {
         EnsureWeightsLoaded();
 
-        var key = $"biases_{_biasLayerIndex}";
+        // Thread-safe layer index increment
+        int layerIndex = Interlocked.Increment(ref _biasLayerIndex) - 1;
+        var key = $"biases_{layerIndex}";
         if (_loadedBiases is not null && _loadedBiases.TryGetValue(key, out var biasData))
         {
             if (biasData.Length != biases.Length)
             {
                 throw new InvalidOperationException(
-                    $"Bias size mismatch for layer {_biasLayerIndex}. Expected {biases.Length}, got {biasData.Length}.");
+                    $"Bias size mismatch for layer {layerIndex}. Expected {biases.Length}, got {biasData.Length}.");
             }
 
             Array.Copy(biasData, biases.Data, biasData.Length);
-            _biasLayerIndex++;
         }
         else
         {
             // Fall back to zero initialization if biases not found
             ZeroInitializeBiases(biases);
-            _biasLayerIndex++;
         }
     }
 
@@ -109,24 +109,28 @@ public class FromFileInitializationStrategy<T> : InitializationStrategyBase<T>
     /// </summary>
     /// <remarks>
     /// Call this method if you need to re-initialize a network with the same weights.
+    /// This method is thread-safe.
     /// </remarks>
     public void Reset()
     {
-        _weightLayerIndex = 0;
-        _biasLayerIndex = 0;
+        Interlocked.Exchange(ref _weightLayerIndex, 0);
+        Interlocked.Exchange(ref _biasLayerIndex, 0);
     }
 
     /// <summary>
     /// Clears the cached weights, forcing a reload on next initialization.
     /// </summary>
+    /// <remarks>
+    /// This method is thread-safe. All cached data is cleared atomically.
+    /// </remarks>
     public void ClearCache()
     {
         lock (_loadLock)
         {
             _loadedWeights = null;
             _loadedBiases = null;
-            _weightLayerIndex = 0;
-            _biasLayerIndex = 0;
+            Interlocked.Exchange(ref _weightLayerIndex, 0);
+            Interlocked.Exchange(ref _biasLayerIndex, 0);
         }
     }
 
