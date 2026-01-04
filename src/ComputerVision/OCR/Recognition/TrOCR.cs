@@ -573,12 +573,21 @@ public class TrOCR<T> : OCRBase<T>
         int startTokenId = reader.ReadInt32();
         int endTokenId = reader.ReadInt32();
 
-        if (hiddenDim != _hiddenDim || numHeads != _numHeads || numLayers != _numLayers || patchSize != _patchSize)
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"TrOCR configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads || numLayers != _numLayers || patchSize != _patchSize ||
+            vocabSize != VocabularySize || startTokenId != _startTokenId || endTokenId != _endTokenId)
         {
             throw new InvalidOperationException(
                 $"TrOCR configuration mismatch. Expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
-                $"numLayers={_numLayers}, patchSize={_patchSize}, " +
-                $"got hiddenDim={hiddenDim}, numHeads={numHeads}, numLayers={numLayers}, patchSize={patchSize}");
+                $"numLayers={_numLayers}, patchSize={_patchSize}, vocabSize={VocabularySize}, " +
+                $"startTokenId={_startTokenId}, endTokenId={_endTokenId}, " +
+                $"got hiddenDim={hiddenDim}, numHeads={numHeads}, numLayers={numLayers}, patchSize={patchSize}, " +
+                $"vocabSize={vocabSize}, startTokenId={startTokenId}, endTokenId={endTokenId}");
         }
 
         // Read component weights

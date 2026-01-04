@@ -182,10 +182,18 @@ internal class Conv2D<T>
         int padding = reader.ReadInt32();
         bool hasBias = reader.ReadBoolean();
 
+        // Validate all configuration matches, including bias flag
+        bool instanceHasBias = _bias is not null;
         if (inChannels != _inChannels || outChannels != _outChannels ||
-            kernelSize != _kernelSize || stride != _stride || padding != _padding)
+            kernelSize != _kernelSize || stride != _stride || padding != _padding ||
+            hasBias != instanceHasBias)
         {
-            throw new InvalidOperationException("Conv2D configuration mismatch during deserialization.");
+            throw new InvalidOperationException(
+                $"Conv2D configuration mismatch during deserialization. " +
+                $"Expected: inChannels={_inChannels}, outChannels={_outChannels}, kernelSize={_kernelSize}, " +
+                $"stride={_stride}, padding={_padding}, hasBias={instanceHasBias}. " +
+                $"Got: inChannels={inChannels}, outChannels={outChannels}, kernelSize={kernelSize}, " +
+                $"stride={stride}, padding={padding}, hasBias={hasBias}.");
         }
 
         // Read weights
@@ -194,8 +202,8 @@ internal class Conv2D<T>
             _weights[i] = _numOps.FromDouble(reader.ReadDouble());
         }
 
-        // Read bias if present
-        if (hasBias && _bias is not null)
+        // Read bias if present (guaranteed to match instance state due to validation above)
+        if (_bias is not null)
         {
             for (int i = 0; i < _bias.Length; i++)
             {

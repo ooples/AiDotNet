@@ -16633,6 +16633,7 @@ public class CpuEngine : IEngine
     /// <inheritdoc/>
     public Tensor<T> Embedding<T>(Tensor<int> indices, Tensor<T> embeddingTable)
     {
+        int vocabSize = embeddingTable.Shape[0];
         int embeddingDim = embeddingTable.Shape[^1];
         int numIndices = indices.Length;
         var tableData = embeddingTable.ToArray();
@@ -16642,6 +16643,13 @@ public class CpuEngine : IEngine
         for (int i = 0; i < numIndices; i++)
         {
             int idx = indicesData[i];
+            if (idx < 0 || idx >= vocabSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(indices),
+                    $"Embedding index {idx} at position {i} is out of bounds. Valid range: [0, {vocabSize - 1}].");
+            }
+
             int srcOffset = idx * embeddingDim;
             int dstOffset = i * embeddingDim;
             for (int j = 0; j < embeddingDim; j++)
@@ -16667,6 +16675,13 @@ public class CpuEngine : IEngine
         for (int i = 0; i < indices.Length; i++)
         {
             int idx = indicesData[i];
+            if (idx < 0 || idx >= vocabSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(indices),
+                    $"Embedding index {idx} at position {i} is out of bounds. Valid range: [0, {vocabSize - 1}].");
+            }
+
             int srcOffset = i * embeddingDim;
             int dstOffset = idx * embeddingDim;
             for (int j = 0; j < embeddingDim; j++)

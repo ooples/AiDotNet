@@ -67,7 +67,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     public class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
     {
-        private readonly IPDESpecification<T> _pdeSpecification;
+        /// <summary>
+        /// The PDE specification that defines the physics constraints.
+        /// Protected to allow derived classes (e.g., MultiFidelityPINN) to evaluate residuals on custom solutions.
+        /// </summary>
+        protected readonly IPDESpecification<T> _pdeSpecification;
         private readonly IBoundaryCondition<T>[] _boundaryConditions;
         private readonly IInitialCondition<T>? _initialCondition;
         private readonly PhysicsInformedLoss<T> _physicsLoss;
@@ -677,6 +681,89 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 _pdeSpecification.OutputDimension);
 
             return _pdeSpecification.ComputeResidual(point, output, derivatives);
+        }
+
+        /// <summary>
+        /// Sums two sets of PDE derivatives element-wise.
+        /// Used by derived classes (e.g., MultiFidelityPINN) to compute derivatives of combined solutions.
+        /// </summary>
+        /// <param name="a">First set of derivatives.</param>
+        /// <param name="b">Second set of derivatives.</param>
+        /// <returns>Combined derivatives where each element is the sum of corresponding elements.</returns>
+        protected PDEDerivatives<T> SumDerivatives(PDEDerivatives<T> a, PDEDerivatives<T> b)
+        {
+            var result = new PDEDerivatives<T>();
+
+            // Sum first derivatives
+            if (a.FirstDerivatives is not null && b.FirstDerivatives is not null)
+            {
+                int dim0 = a.FirstDerivatives.GetLength(0);
+                int dim1 = a.FirstDerivatives.GetLength(1);
+                result.FirstDerivatives = new T[dim0, dim1];
+                for (int i = 0; i < dim0; i++)
+                {
+                    for (int j = 0; j < dim1; j++)
+                    {
+                        result.FirstDerivatives[i, j] = NumOps.Add(a.FirstDerivatives[i, j], b.FirstDerivatives[i, j]);
+                    }
+                }
+            }
+            else
+            {
+                result.FirstDerivatives = a.FirstDerivatives ?? b.FirstDerivatives;
+            }
+
+            // Sum second derivatives
+            if (a.SecondDerivatives is not null && b.SecondDerivatives is not null)
+            {
+                int dim0 = a.SecondDerivatives.GetLength(0);
+                int dim1 = a.SecondDerivatives.GetLength(1);
+                int dim2 = a.SecondDerivatives.GetLength(2);
+                result.SecondDerivatives = new T[dim0, dim1, dim2];
+                for (int i = 0; i < dim0; i++)
+                {
+                    for (int j = 0; j < dim1; j++)
+                    {
+                        for (int k = 0; k < dim2; k++)
+                        {
+                            result.SecondDerivatives[i, j, k] = NumOps.Add(a.SecondDerivatives[i, j, k], b.SecondDerivatives[i, j, k]);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                result.SecondDerivatives = a.SecondDerivatives ?? b.SecondDerivatives;
+            }
+
+            // Sum third derivatives if present
+            if (a.ThirdDerivatives is not null && b.ThirdDerivatives is not null)
+            {
+                int dim0 = a.ThirdDerivatives.GetLength(0);
+                int dim1 = a.ThirdDerivatives.GetLength(1);
+                int dim2 = a.ThirdDerivatives.GetLength(2);
+                int dim3 = a.ThirdDerivatives.GetLength(3);
+                result.ThirdDerivatives = new T[dim0, dim1, dim2, dim3];
+                for (int i = 0; i < dim0; i++)
+                {
+                    for (int j = 0; j < dim1; j++)
+                    {
+                        for (int k = 0; k < dim2; k++)
+                        {
+                            for (int l = 0; l < dim3; l++)
+                            {
+                                result.ThirdDerivatives[i, j, k, l] = NumOps.Add(a.ThirdDerivatives[i, j, k, l], b.ThirdDerivatives[i, j, k, l]);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                result.ThirdDerivatives = a.ThirdDerivatives ?? b.ThirdDerivatives;
+            }
+
+            return result;
         }
 
         /// <summary>

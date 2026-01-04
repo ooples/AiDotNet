@@ -719,11 +719,17 @@ public class CRNN<T> : OCRBase<T>
         int seqFeatureDim = reader.ReadInt32();
         int vocabSize = reader.ReadInt32();
 
-        if (hiddenDim != _hiddenDim || seqFeatureDim != _sequenceFeatureDim)
+        if (name != Name)
         {
             throw new InvalidOperationException(
-                $"CRNN configuration mismatch. Expected hiddenDim={_hiddenDim}, seqFeatureDim={_sequenceFeatureDim}, " +
-                $"got hiddenDim={hiddenDim}, seqFeatureDim={seqFeatureDim}");
+                $"CRNN configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
+        if (hiddenDim != _hiddenDim || seqFeatureDim != _sequenceFeatureDim || vocabSize != VocabularySize)
+        {
+            throw new InvalidOperationException(
+                $"CRNN configuration mismatch. Expected hiddenDim={_hiddenDim}, seqFeatureDim={_sequenceFeatureDim}, vocabSize={VocabularySize}, " +
+                $"got hiddenDim={hiddenDim}, seqFeatureDim={seqFeatureDim}, vocabSize={vocabSize}");
         }
 
         // Read CNN weights

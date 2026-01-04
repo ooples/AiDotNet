@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -517,10 +518,11 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
 
         // Sample a batch of points for efficiency (max 256 points per epoch)
         int batchSize = Math.Min(256, numPoints);
-        var random = RandomHelper.CreateSeededRandom(DateTime.Now.Millisecond);
+        var random = RandomHelper.Shared;
 
         T loss = NumOps.Zero;
         int validPoints = 0;
+        int skippedPoints = 0;
 
         for (int i = 0; i < batchSize; i++)
         {
@@ -535,21 +537,44 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
 
             try
             {
-                // Get combined high-fidelity solution (LF + correction)
-                T[] output = GetHighFidelitySolution(point);
+                // Compute PDE residual on the combined high-fidelity solution (LF + correction)
+                // The combined solution's derivatives are: d(HF)/dx = d(LF)/dx + d(correction)/dx
+                T[] hfOutput = GetHighFidelitySolution(point);
 
-                // Evaluate PDE residual using base class method
-                T residual = EvaluatePDEResidual(point);
+                // Compute derivatives from both networks
+                var lfDerivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
+                    _lowFidelityNetwork,
+                    point,
+                    _pdeSpecification.OutputDimension);
+
+                var correctionDerivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
+                    this,
+                    point,
+                    _pdeSpecification.OutputDimension);
+
+                // Sum the derivatives: HF derivatives = LF derivatives + correction derivatives
+                var combinedDerivatives = SumDerivatives(lfDerivatives, correctionDerivatives);
+
+                // Compute PDE residual using the combined solution and derivatives
+                T residual = _pdeSpecification.ComputeResidual(point, hfOutput, combinedDerivatives);
 
                 // Accumulate squared residual
                 loss = NumOps.Add(loss, NumOps.Multiply(residual, residual));
                 validPoints++;
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip points where residual computation fails (e.g., at boundaries)
+                // Skip points where residual computation fails (e.g., at boundaries or numerical issues)
+                skippedPoints++;
+                System.Diagnostics.Debug.WriteLine($"Physics loss computation failed at point {idx}: {ex.Message}");
                 continue;
             }
+        }
+
+        // Log if too many points are being skipped
+        if (skippedPoints > batchSize / 2)
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: {skippedPoints}/{batchSize} points skipped in physics loss computation");
         }
 
         // Return mean squared residual

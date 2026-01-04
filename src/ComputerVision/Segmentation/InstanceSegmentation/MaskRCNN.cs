@@ -473,6 +473,12 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         string name = reader.ReadString();
         int roiPoolSize = reader.ReadInt32();
 
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"MaskRCNN configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
         if (roiPoolSize != _roiPoolSize)
         {
             throw new InvalidOperationException(

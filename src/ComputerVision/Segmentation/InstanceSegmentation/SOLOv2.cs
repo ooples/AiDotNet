@@ -269,6 +269,12 @@ public class SOLOv2<T> : InstanceSegmenterBase<T>
         string name = reader.ReadString();
         int kernelDim = reader.ReadInt32();
 
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"SOLOv2 configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
         if (kernelDim != _kernelDim)
         {
             throw new InvalidOperationException(

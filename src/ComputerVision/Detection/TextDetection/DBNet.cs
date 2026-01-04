@@ -299,10 +299,24 @@ public class DBNet<T> : TextDetectorBase<T>
         int hiddenDim = reader.ReadInt32();
         double k = reader.ReadDouble();
 
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"DBNet configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
         if (hiddenDim != _hiddenDim)
         {
             throw new InvalidOperationException(
                 $"DBNet configuration mismatch. Expected hiddenDim={_hiddenDim}, got hiddenDim={hiddenDim}");
+        }
+
+        // Validate k parameter within tolerance for floating point comparison
+        const double tolerance = 1e-12;
+        if (Math.Abs(k - _k) > tolerance)
+        {
+            throw new InvalidOperationException(
+                $"DBNet configuration mismatch. Expected k={_k}, got k={k}");
         }
 
         // Read component weights

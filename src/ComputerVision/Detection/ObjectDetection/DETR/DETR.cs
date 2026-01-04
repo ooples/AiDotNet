@@ -681,6 +681,14 @@ internal class LayerNorm<T>
                 $"LayerNorm configuration mismatch: expected hiddenDim={_hiddenDim}, got {hiddenDim}.");
         }
 
+        // Validate eps matches within a small tolerance for floating point comparison
+        const double tolerance = 1e-12;
+        if (Math.Abs(eps - _eps) > tolerance)
+        {
+            throw new InvalidOperationException(
+                $"LayerNorm configuration mismatch: expected eps={_eps}, got {eps}.");
+        }
+
         for (int i = 0; i < _hiddenDim; i++)
         {
             _gamma[i] = _numOps.FromDouble(reader.ReadDouble());

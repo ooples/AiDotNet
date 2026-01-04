@@ -69,7 +69,7 @@
 	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
 	</ItemGroup>
 
-	<!-- System.Net.Http only for .NET Framework (built-in for .NET 8.0) -->
+	<!-- System.Net.Http only for .NET Framework (built-in for .NET Core/.NET 5+) -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net471'">
 	  <Reference Include="System.Net.Http" />
 	</ItemGroup>

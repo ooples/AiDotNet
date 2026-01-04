@@ -205,11 +205,19 @@ public class RTDETR<T> : ObjectDetectorBase<T>
                 throw new InvalidDataException($"Weight file is for {modelName}, not RT-DETR.");
             }
 
-            // Read backbone parameters
-            if (Backbone is not null) Backbone.ReadParameters(reader);
+            // Read backbone parameters (always present in RT-DETR)
+            if (Backbone is null)
+            {
+                throw new InvalidOperationException("RT-DETR backbone must be initialized before loading weights.");
+            }
+            Backbone.ReadParameters(reader);
 
-            // Read neck parameters
-            if (Neck is not null) Neck.ReadParameters(reader);
+            // Read neck parameters (always present in RT-DETR)
+            if (Neck is null)
+            {
+                throw new InvalidOperationException("RT-DETR neck must be initialized before loading weights.");
+            }
+            Neck.ReadParameters(reader);
 
             // Read encoder parameters
             _encoder.ReadParameters(reader);
@@ -232,11 +240,19 @@ public class RTDETR<T> : ObjectDetectorBase<T>
         // Write model configuration
         writer.Write(Name);
 
-        // Write backbone parameters
-        Backbone!.WriteParameters(writer);
+        // Write backbone parameters (always present in RT-DETR)
+        if (Backbone is null)
+        {
+            throw new InvalidOperationException("RT-DETR backbone must be initialized before saving weights.");
+        }
+        Backbone.WriteParameters(writer);
 
-        // Write neck parameters
-        Neck!.WriteParameters(writer);
+        // Write neck parameters (always present in RT-DETR)
+        if (Neck is null)
+        {
+            throw new InvalidOperationException("RT-DETR neck must be initialized before saving weights.");
+        }
+        Neck.WriteParameters(writer);
 
         // Write encoder parameters
         _encoder.WriteParameters(writer);

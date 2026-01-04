@@ -263,6 +263,12 @@ public class CRAFT<T> : TextDetectorBase<T>
         string name = reader.ReadString();
         int hiddenDim = reader.ReadInt32();
 
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"CRAFT configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
         if (hiddenDim != _hiddenDim)
         {
             throw new InvalidOperationException(

@@ -445,6 +445,12 @@ public class YOLOSeg<T> : InstanceSegmenterBase<T>
         string name = reader.ReadString();
         int numPrototypes = reader.ReadInt32();
 
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"YOLOSeg configuration mismatch. Expected name={Name}, got {name}");
+        }
+
         if (numPrototypes != _numPrototypes)
         {
             throw new InvalidOperationException(

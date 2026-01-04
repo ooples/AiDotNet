@@ -313,6 +313,12 @@ public class EAST<T> : TextDetectorBase<T>
         bool useRotatedBoxes = reader.ReadBoolean();
         int hiddenDim = reader.ReadInt32();
 
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"EAST configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
         if (useRotatedBoxes != _useRotatedBoxes || hiddenDim != _hiddenDim)
         {
             throw new InvalidOperationException(

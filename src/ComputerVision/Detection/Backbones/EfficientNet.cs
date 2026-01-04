@@ -244,6 +244,22 @@ public class EfficientNet<T> : BackboneBase<T>
             throw new InvalidOperationException($"EfficientNet block count mismatch: expected {_blocks.Count}, got {blockCount}.");
         }
 
+        // Validate feature indices match
+        if (featureIndexCount != _featureIndices.Length)
+        {
+            throw new InvalidOperationException(
+                $"EfficientNet feature index count mismatch: expected {_featureIndices.Length}, got {featureIndexCount}.");
+        }
+
+        for (int i = 0; i < featureIndexCount; i++)
+        {
+            if (featureIndices[i] != _featureIndices[i])
+            {
+                throw new InvalidOperationException(
+                    $"EfficientNet feature index mismatch at position {i}: expected {_featureIndices[i]}, got {featureIndices[i]}.");
+            }
+        }
+
         // Read stem
         _stem.ReadParameters(reader);
 
