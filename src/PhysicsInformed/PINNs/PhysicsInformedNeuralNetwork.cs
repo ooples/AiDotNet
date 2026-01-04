@@ -699,6 +699,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
             {
                 int dim0 = a.FirstDerivatives.GetLength(0);
                 int dim1 = a.FirstDerivatives.GetLength(1);
+
+                if (b.FirstDerivatives.GetLength(0) != dim0 || b.FirstDerivatives.GetLength(1) != dim1)
+                {
+                    throw new ArgumentException(
+                        $"First derivatives dimension mismatch: a has [{dim0}, {dim1}], b has [{b.FirstDerivatives.GetLength(0)}, {b.FirstDerivatives.GetLength(1)}].");
+                }
+
                 result.FirstDerivatives = new T[dim0, dim1];
                 for (int i = 0; i < dim0; i++)
                 {
@@ -719,6 +726,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 int dim0 = a.SecondDerivatives.GetLength(0);
                 int dim1 = a.SecondDerivatives.GetLength(1);
                 int dim2 = a.SecondDerivatives.GetLength(2);
+
+                if (b.SecondDerivatives.GetLength(0) != dim0 || b.SecondDerivatives.GetLength(1) != dim1 || b.SecondDerivatives.GetLength(2) != dim2)
+                {
+                    throw new ArgumentException(
+                        $"Second derivatives dimension mismatch: a has [{dim0}, {dim1}, {dim2}], b has [{b.SecondDerivatives.GetLength(0)}, {b.SecondDerivatives.GetLength(1)}, {b.SecondDerivatives.GetLength(2)}].");
+                }
+
                 result.SecondDerivatives = new T[dim0, dim1, dim2];
                 for (int i = 0; i < dim0; i++)
                 {
@@ -743,6 +757,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 int dim1 = a.ThirdDerivatives.GetLength(1);
                 int dim2 = a.ThirdDerivatives.GetLength(2);
                 int dim3 = a.ThirdDerivatives.GetLength(3);
+
+                if (b.ThirdDerivatives.GetLength(0) != dim0 || b.ThirdDerivatives.GetLength(1) != dim1 ||
+                    b.ThirdDerivatives.GetLength(2) != dim2 || b.ThirdDerivatives.GetLength(3) != dim3)
+                {
+                    throw new ArgumentException(
+                        $"Third derivatives dimension mismatch: a has [{dim0}, {dim1}, {dim2}, {dim3}], b has [{b.ThirdDerivatives.GetLength(0)}, {b.ThirdDerivatives.GetLength(1)}, {b.ThirdDerivatives.GetLength(2)}, {b.ThirdDerivatives.GetLength(3)}].");
+                }
+
                 result.ThirdDerivatives = new T[dim0, dim1, dim2, dim3];
                 for (int i = 0; i < dim0; i++)
                 {

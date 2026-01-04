@@ -1,5 +1,8 @@
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Extensions;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Enums;
@@ -193,11 +196,21 @@ public class DETR<T> : ObjectDetectorBase<T>
     }
 
     /// <inheritdoc/>
-    public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
+    public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        byte[] data;
+        if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var client = new System.Net.Http.HttpClient();
+            data = await client.GetByteArrayWithCancellationAsync(pathOrUrl, cancellationToken);
+        }
+        else
+        {
+            data = await Task.Run(() => File.ReadAllBytes(pathOrUrl), cancellationToken);
+        }
 
-        using var stream = File.OpenRead(pathOrUrl);
+        using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
 
         // Read and verify magic number and version
@@ -221,7 +234,10 @@ public class DETR<T> : ObjectDetectorBase<T>
         }
 
         // Read backbone parameters
-        Backbone!.ReadParameters(reader);
+        if (Backbone is not null)
+        {
+            Backbone.ReadParameters(reader);
+        }
 
         // Read input projection
         _inputProj.ReadParameters(reader);
@@ -231,8 +247,6 @@ public class DETR<T> : ObjectDetectorBase<T>
 
         // Read decoder parameters
         _decoder.ReadParameters(reader);
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>

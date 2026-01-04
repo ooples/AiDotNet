@@ -17,11 +17,13 @@ foreach ($trx in $trxFiles) {
     $duration = $result.Node.duration
     if ($duration) {
       $ts = [TimeSpan]::Parse($duration)
+      $parts = $result.Node.testName -split '\.'
+      $className = if ($parts.Count -ge 2) { $parts[-2] } else { "Unknown" }
       $allTests += [PSCustomObject]@{
         Name = $result.Node.testName
         Duration = $ts.TotalSeconds
         Outcome = $result.Node.outcome
-        ClassName = ($result.Node.testName -split '\.')[-2]
+        ClassName = $className
       }
       $totalExecutionTime += $ts.TotalSeconds
     }
