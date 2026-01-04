@@ -177,16 +177,14 @@ public static class TensorPrimitivesHelper<T>
     /// Computes square root element-wise: sqrt(x).
     /// </summary>
     /// <remarks>
-    /// Falls back to scalar implementation using INumericOperations.Sqrt.
+    /// Uses SIMD-optimized vectorized operations for float/double types via TensorPrimitives.
     /// </remarks>
     public static Vector<T> Sqrt(Vector<T> x)
     {
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        // Use scalar Sqrt - no vectorized version available in the interface
-        for (int i = 0; i < xArray.Length; i++)
-            result[i] = NumOps.Sqrt(xArray[i]);
+        NumOps.Sqrt(xArray, result);
 
         return new Vector<T>(result);
     }
@@ -220,6 +218,9 @@ public static class TensorPrimitivesHelper<T>
     /// <summary>
     /// Computes LeakyReLU element-wise: x if x > 0, alpha * x otherwise.
     /// </summary>
+    /// <remarks>
+    /// Uses SIMD-optimized vectorized operations for float/double types via hardware intrinsics.
+    /// </remarks>
     /// <param name="x">Input vector.</param>
     /// <param name="alpha">Negative slope coefficient (typically 0.01).</param>
     public static Vector<T> LeakyReLU(Vector<T> x, double alpha = 0.01)
@@ -228,12 +229,7 @@ public static class TensorPrimitivesHelper<T>
         var result = new T[xArray.Length];
         T alphaT = NumOps.FromDouble(alpha);
 
-        for (int i = 0; i < xArray.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(xArray[i], NumOps.Zero)
-                ? xArray[i]
-                : NumOps.Multiply(alphaT, xArray[i]);
-        }
+        NumOps.LeakyReLU(xArray, alphaT, result);
 
         return new Vector<T>(result);
     }
@@ -242,35 +238,16 @@ public static class TensorPrimitivesHelper<T>
     /// Computes GELU (Gaussian Error Linear Unit) element-wise.
     /// Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
     /// </summary>
+    /// <remarks>
+    /// Uses SIMD-optimized vectorized operations for float/double types.
+    /// </remarks>
     /// <param name="x">Input vector.</param>
     public static Vector<T> GELU(Vector<T> x)
     {
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        T sqrt2OverPi = NumOps.FromDouble(0.7978845608028654); // sqrt(2/pi)
-        T coeff = NumOps.FromDouble(0.044715);
-        T half = NumOps.FromDouble(0.5);
-        T two = NumOps.FromDouble(2.0);
-
-        for (int i = 0; i < xArray.Length; i++)
-        {
-            T x_val = xArray[i];
-            T x_cubed = NumOps.Multiply(NumOps.Multiply(x_val, x_val), x_val);
-            T inner = NumOps.Add(x_val, NumOps.Multiply(coeff, x_cubed));
-            T tanh_arg = NumOps.Multiply(sqrt2OverPi, inner);
-
-            // tanh(tanh_arg)
-            T two_tanh_arg = NumOps.Multiply(two, tanh_arg);
-            T exp_val = NumOps.Exp(two_tanh_arg);
-            T tanh_val = NumOps.Divide(
-                NumOps.Subtract(exp_val, NumOps.One),
-                NumOps.Add(exp_val, NumOps.One)
-            );
-
-            T one_plus_tanh = NumOps.Add(NumOps.One, tanh_val);
-            result[i] = NumOps.Multiply(NumOps.Multiply(half, x_val), one_plus_tanh);
-        }
+        NumOps.GELU(xArray, result);
 
         return new Vector<T>(result);
     }
@@ -278,31 +255,16 @@ public static class TensorPrimitivesHelper<T>
     /// <summary>
     /// Computes Mish activation element-wise: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).
     /// </summary>
+    /// <remarks>
+    /// Uses SIMD-optimized vectorized operations for float/double types.
+    /// </remarks>
     /// <param name="x">Input vector.</param>
     public static Vector<T> Mish(Vector<T> x)
     {
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
-        T two = NumOps.FromDouble(2.0);
 
-        for (int i = 0; i < xArray.Length; i++)
-        {
-            // softplus(x) = ln(1 + exp(x))
-            T exp_x = NumOps.Exp(xArray[i]);
-            T one_plus_exp = NumOps.Add(NumOps.One, exp_x);
-            T softplus = NumOps.Log(one_plus_exp);
-
-            // tanh(softplus)
-            T two_softplus = NumOps.Multiply(two, softplus);
-            T exp_2softplus = NumOps.Exp(two_softplus);
-            T tanh_softplus = NumOps.Divide(
-                NumOps.Subtract(exp_2softplus, NumOps.One),
-                NumOps.Add(exp_2softplus, NumOps.One)
-            );
-
-            // x * tanh(softplus(x))
-            result[i] = NumOps.Multiply(xArray[i], tanh_softplus);
-        }
+        NumOps.Mish(xArray, result);
 
         return new Vector<T>(result);
     }
@@ -310,19 +272,16 @@ public static class TensorPrimitivesHelper<T>
     /// <summary>
     /// Computes Swish/SiLU activation element-wise: x * sigmoid(x) = x / (1 + exp(-x)).
     /// </summary>
+    /// <remarks>
+    /// Uses SIMD-optimized vectorized operations for float/double types.
+    /// </remarks>
     /// <param name="x">Input vector.</param>
     public static Vector<T> Swish(Vector<T> x)
     {
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        for (int i = 0; i < xArray.Length; i++)
-        {
-            T neg_x = NumOps.Negate(xArray[i]);
-            T exp_neg_x = NumOps.Exp(neg_x);
-            T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, exp_neg_x));
-            result[i] = NumOps.Multiply(xArray[i], sigmoid);
-        }
+        NumOps.Swish(xArray, result);
 
         return new Vector<T>(result);
     }
@@ -330,6 +289,9 @@ public static class TensorPrimitivesHelper<T>
     /// <summary>
     /// Computes ELU (Exponential Linear Unit) element-wise: x if x > 0, alpha * (exp(x) - 1) otherwise.
     /// </summary>
+    /// <remarks>
+    /// Uses SIMD-optimized vectorized operations for float/double types via hardware intrinsics.
+    /// </remarks>
     /// <param name="x">Input vector.</param>
     /// <param name="alpha">Scale factor for negative values (typically 1.0).</param>
     public static Vector<T> ELU(Vector<T> x, double alpha = 1.0)
@@ -338,19 +300,7 @@ public static class TensorPrimitivesHelper<T>
         var result = new T[xArray.Length];
         T alphaT = NumOps.FromDouble(alpha);
 
-        for (int i = 0; i < xArray.Length; i++)
-        {
-            if (NumOps.GreaterThan(xArray[i], NumOps.Zero))
-            {
-                result[i] = xArray[i];
-            }
-            else
-            {
-                T exp_x = NumOps.Exp(xArray[i]);
-                T exp_minus_one = NumOps.Subtract(exp_x, NumOps.One);
-                result[i] = NumOps.Multiply(alphaT, exp_minus_one);
-            }
-        }
+        NumOps.ELU(xArray, alphaT, result);
 
         return new Vector<T>(result);
     }

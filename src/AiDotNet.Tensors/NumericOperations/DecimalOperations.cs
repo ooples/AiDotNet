@@ -902,4 +902,22 @@ public class DecimalOperations : INumericOperations<decimal>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<decimal> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<decimal> x, decimal alpha, Span<decimal> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<decimal> x, Span<decimal> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<decimal> x, Span<decimal> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<decimal> x, Span<decimal> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<decimal> x, decimal alpha, Span<decimal> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<decimal> x, Span<decimal> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
 }

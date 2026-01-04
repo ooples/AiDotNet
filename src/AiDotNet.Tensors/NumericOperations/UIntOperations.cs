@@ -870,4 +870,22 @@ public class UIntOperations : INumericOperations<uint>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<uint> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<uint> x, uint alpha, Span<uint> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<uint> x, Span<uint> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<uint> x, Span<uint> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<uint> x, Span<uint> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<uint> x, uint alpha, Span<uint> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<uint> x, Span<uint> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
 }

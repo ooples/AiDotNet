@@ -524,4 +524,135 @@ internal static class VectorizedOperationsFallback
         for (int i = 0; i < source.Length; i++)
             destination[i] = ops.FromFloat((float)source[i]);
     }
+
+    #region Activation Function Fallbacks
+
+    /// <summary>
+    /// Computes ReLU activation element-wise: max(0, x).
+    /// </summary>
+    public static void ReLU<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            destination[i] = ops.GreaterThan(x[i], ops.Zero) ? x[i] : ops.Zero;
+        }
+    }
+
+    /// <summary>
+    /// Computes LeakyReLU activation element-wise: x > 0 ? x : alpha * x.
+    /// </summary>
+    public static void LeakyReLU<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, T alpha, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            destination[i] = ops.GreaterThan(x[i], ops.Zero) ? x[i] : ops.Multiply(alpha, x[i]);
+        }
+    }
+
+    /// <summary>
+    /// Computes GELU (Gaussian Error Linear Unit) activation element-wise.
+    /// Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+    /// </summary>
+    public static void GELU<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        T sqrt2OverPi = ops.FromDouble(0.7978845608028654);
+        T coeff = ops.FromDouble(0.044715);
+        T half = ops.FromDouble(0.5);
+        T two = ops.FromDouble(2.0);
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            T val = x[i];
+            T x_cubed = ops.Multiply(ops.Multiply(val, val), val);
+            T inner = ops.Add(val, ops.Multiply(coeff, x_cubed));
+            T tanh_arg = ops.Multiply(sqrt2OverPi, inner);
+
+            // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+            T twoX = ops.Multiply(two, tanh_arg);
+            T exp2x = ops.Exp(twoX);
+            T tanh_val = ops.Divide(ops.Subtract(exp2x, ops.One), ops.Add(exp2x, ops.One));
+
+            destination[i] = ops.Multiply(half, ops.Multiply(val, ops.Add(ops.One, tanh_val)));
+        }
+    }
+
+    /// <summary>
+    /// Computes Mish activation element-wise: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).
+    /// </summary>
+    public static void Mish<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        T two = ops.FromDouble(2.0);
+        T threshold = ops.FromDouble(20.0);
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            T val = x[i];
+            // softplus(x) = ln(1 + exp(x))
+            // For numerical stability: if x > 20, softplus(x) approx x
+            T softplus = ops.GreaterThan(val, threshold) ? val : ops.Log(ops.Add(ops.One, ops.Exp(val)));
+
+            // tanh(softplus) = (exp(2*softplus) - 1) / (exp(2*softplus) + 1)
+            T twoSp = ops.Multiply(two, softplus);
+            T exp2sp = ops.Exp(twoSp);
+            T tanh_softplus = ops.Divide(ops.Subtract(exp2sp, ops.One), ops.Add(exp2sp, ops.One));
+
+            destination[i] = ops.Multiply(val, tanh_softplus);
+        }
+    }
+
+    /// <summary>
+    /// Computes Swish/SiLU activation element-wise: x * sigmoid(x) = x / (1 + exp(-x)).
+    /// </summary>
+    public static void Swish<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            T val = x[i];
+            T negX = ops.Negate(val);
+            T expNegX = ops.Exp(negX);
+            T sigmoid = ops.Divide(ops.One, ops.Add(ops.One, expNegX));
+            destination[i] = ops.Multiply(val, sigmoid);
+        }
+    }
+
+    /// <summary>
+    /// Computes ELU (Exponential Linear Unit) activation element-wise: x > 0 ? x : alpha * (exp(x) - 1).
+    /// </summary>
+    public static void ELU<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, T alpha, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            T val = x[i];
+            if (ops.GreaterThan(val, ops.Zero))
+            {
+                destination[i] = val;
+            }
+            else
+            {
+                T expVal = ops.Exp(val);
+                T expMinusOne = ops.Subtract(expVal, ops.One);
+                destination[i] = ops.Multiply(alpha, expMinusOne);
+            }
+        }
+    }
+
+    #endregion
 }

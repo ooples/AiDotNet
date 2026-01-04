@@ -909,4 +909,22 @@ public class UInt64Operations : INumericOperations<ulong>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<ulong> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<ulong> x, ulong alpha, Span<ulong> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<ulong> x, ulong alpha, Span<ulong> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
 }

@@ -847,4 +847,22 @@ public class ShortOperations : INumericOperations<short>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<short> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<short> x, short alpha, Span<short> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<short> x, Span<short> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<short> x, Span<short> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<short> x, Span<short> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<short> x, short alpha, Span<short> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<short> x, Span<short> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
 }

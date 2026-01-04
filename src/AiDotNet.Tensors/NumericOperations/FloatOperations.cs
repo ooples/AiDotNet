@@ -1282,5 +1282,86 @@ public class FloatOperations : INumericOperations<float>
 #endif
     }
 
+    #region Vectorized Activation Functions
+
+    /// <summary>
+    /// Computes LeakyReLU element-wise using SIMD-optimized operations.
+    /// </summary>
+    public void LeakyReLU(ReadOnlySpan<float> x, float alpha, Span<float> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        // Use SIMD kernels for vectorized computation
+        Engines.Simd.SimdKernels.LeakyReLU(x, alpha, destination);
+    }
+
+    /// <summary>
+    /// Computes GELU (Gaussian Error Linear Unit) element-wise using SIMD-optimized operations.
+    /// Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+    /// </summary>
+    public void GELU(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        // Use SIMD kernels for vectorized GELU computation
+        Engines.Simd.SimdKernels.GELU(x, destination);
+    }
+
+    /// <summary>
+    /// Computes Mish activation element-wise using SIMD-optimized operations.
+    /// x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x)))
+    /// </summary>
+    public void Mish(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        // Use SIMD kernels for vectorized Mish computation
+        Engines.Simd.SimdKernels.Mish(x, destination);
+    }
+
+    /// <summary>
+    /// Computes Swish/SiLU activation element-wise using SIMD-optimized operations.
+    /// x * sigmoid(x) = x / (1 + exp(-x))
+    /// </summary>
+    public void Swish(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        // Use SIMD kernels for vectorized Swish computation
+        Engines.Simd.SimdKernels.Swish(x, destination);
+    }
+
+    /// <summary>
+    /// Computes ELU (Exponential Linear Unit) element-wise using SIMD-optimized operations.
+    /// x if x > 0, alpha * (exp(x) - 1) otherwise
+    /// </summary>
+    public void ELU(ReadOnlySpan<float> x, float alpha, Span<float> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        // Use SIMD kernels for vectorized ELU computation
+        Engines.Simd.SimdKernels.ELU(x, alpha, destination);
+    }
+
+    /// <summary>
+    /// Computes ReLU (Rectified Linear Unit) element-wise using SIMD-optimized operations.
+    /// max(0, x)
+    /// </summary>
+    public void ReLU(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        // Use SIMD kernels for vectorized ReLU computation
+        Engines.Simd.SimdKernels.ReLU(x, destination);
+    }
+
+    #endregion
+
     #endregion
 }

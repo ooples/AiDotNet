@@ -428,5 +428,23 @@ public class OctonionOperations<T> : INumericOperations<Octonion<T>>
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<Octonion<T>> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 
+    public void LeakyReLU(ReadOnlySpan<Octonion<T>> x, Octonion<T> alpha, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<Octonion<T>> x, Octonion<T> alpha, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
+
     #endregion
 }

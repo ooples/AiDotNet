@@ -886,4 +886,22 @@ public class SByteOperations : INumericOperations<sbyte>
 
     public void FromHalfSpan(ReadOnlySpan<Half> source, Span<sbyte> destination)
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
+    public void LeakyReLU(ReadOnlySpan<sbyte> x, sbyte alpha, Span<sbyte> destination)
+        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+
+    public void GELU(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => VectorizedOperationsFallback.GELU(this, x, destination);
+
+    public void Mish(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => VectorizedOperationsFallback.Mish(this, x, destination);
+
+    public void Swish(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => VectorizedOperationsFallback.Swish(this, x, destination);
+
+    public void ELU(ReadOnlySpan<sbyte> x, sbyte alpha, Span<sbyte> destination)
+        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+
+    public void ReLU(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => VectorizedOperationsFallback.ReLU(this, x, destination);
 }
