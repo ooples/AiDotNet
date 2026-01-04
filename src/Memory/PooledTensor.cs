@@ -2,13 +2,18 @@ namespace AiDotNet.Memory;
 
 /// <summary>
 /// A RAII wrapper that automatically returns a pooled tensor to its pool when disposed.
-/// This struct ensures tensors are properly returned to the pool even if an exception occurs.
+/// This class ensures tensors are properly returned to the pool even if an exception occurs.
 /// </summary>
 /// <typeparam name="T">The element type of the tensor (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
 /// PooledTensor provides a safe way to use pooled tensors with the using statement,
 /// ensuring the tensor is returned to the pool when it goes out of scope.
+/// </para>
+/// <para>
+/// This is implemented as a class (not struct) to ensure reference semantics.
+/// Multiple references to the same PooledTensor share disposal state, preventing
+/// double-dispose issues that could corrupt the pool.
 /// </para>
 /// <para>
 /// Example usage:
@@ -34,7 +39,7 @@ namespace AiDotNet.Memory;
 /// is safe and will only return the tensor to the pool once.
 /// </para>
 /// </remarks>
-public struct PooledTensor<T> : IDisposable
+public sealed class PooledTensor<T> : IDisposable
 {
     private readonly TensorPool<T> _pool;
     private bool _disposed;
@@ -57,7 +62,7 @@ public struct PooledTensor<T> : IDisposable
     public bool IsDisposed => _disposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="PooledTensor{T}"/> struct.
+    /// Initializes a new instance of the <see cref="PooledTensor{T}"/> class.
     /// </summary>
     /// <param name="pool">The tensor pool that owns this tensor and will receive it back on disposal.</param>
     /// <param name="tensor">The tensor being wrapped.</param>
@@ -97,9 +102,15 @@ public struct PooledTensor<T> : IDisposable
     /// </summary>
     /// <param name="pooled">The pooled tensor wrapper.</param>
     /// <returns>The underlying tensor.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="pooled"/> is null.</exception>
     /// <remarks>
     /// This cast is explicit to remind users that they are responsible for the tensor's lifecycle.
     /// The returned tensor reference should not outlive the PooledTensor wrapper.
     /// </remarks>
-    public static explicit operator Tensor<T>(PooledTensor<T> pooled) => pooled.Tensor;
+    public static explicit operator Tensor<T>(PooledTensor<T> pooled)
+    {
+        if (pooled == null)
+            throw new ArgumentNullException(nameof(pooled));
+        return pooled.Tensor;
+    }
 }
