@@ -199,9 +199,15 @@ public readonly struct PooledTensorHandle<T> : IDisposable
     }
 
     /// <summary>
-    /// Implicit conversion to the underlying tensor.
+    /// Explicit conversion to the underlying tensor.
     /// </summary>
-    public static implicit operator Tensor<T>(PooledTensorHandle<T> handle) => handle.Tensor;
+    /// <remarks>
+    /// This conversion is explicit to prevent accidental use-after-return bugs.
+    /// Using implicit conversion like <c>Tensor&lt;T&gt; t = pool.RentPooled(shape);</c>
+    /// would dispose the handle immediately and return the tensor to the pool.
+    /// Use the <see cref="Tensor"/> property directly instead.
+    /// </remarks>
+    public static explicit operator Tensor<T>(PooledTensorHandle<T> handle) => handle.Tensor;
 }
 
 /// <summary>
