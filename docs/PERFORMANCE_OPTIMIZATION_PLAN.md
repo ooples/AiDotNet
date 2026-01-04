@@ -527,9 +527,9 @@ public class NetworkConstructionBenchmarks
 ### Phase 0: Critical GPU Backend Fixes (IMMEDIATE)
 
 **User Stories:**
-- [ ] 0.1: Fix OpenCL attention kernel compilation errors
-- [ ] 0.2: Fix HIP backend header dependencies
-- [ ] 0.3: Ensure at least one GPU backend works
+- [x] 0.1: Fix OpenCL attention kernel compilation errors (fixed atomic_add ambiguity, -INFINITY macro)
+- [x] 0.2: Fix HIP backend header dependencies (removed hip/hip_runtime.h includes from HIPRTC kernels)
+- [x] 0.3: Ensure at least one GPU backend works (added GpuEngine.GetAvailableBackends() and GetDiagnosticReport())
 
 **Acceptance Criteria:**
 | Criterion | Requirement | Validation |
@@ -602,9 +602,9 @@ public class Phase0GateTests
 ### Phase 1: Quick Wins (1-2 weeks)
 
 **User Stories:**
-- [ ] 3.1: Create lightweight test variants
+- [x] 3.1: Create lightweight test variants (DenseNet.ForTesting(), EfficientNet.ForTesting(), ResNet.ForTesting())
 - [ ] 3.2: Optimize multi-network tests
-- [ ] 5.1: Add shared test fixtures
+- [x] 5.1: Add shared test fixtures (NetworkFixture<T> with IClassFixture support)
 
 **Acceptance Criteria:**
 | Criterion | Requirement | Validation |
@@ -676,9 +676,10 @@ public class Phase1GateTests
 ### Phase 2: Core Optimization (2-3 weeks)
 
 **User Stories:**
-- [ ] 1.1: Implement lazy weight initialization
-- [ ] 1.2: Add initialization strategy interface
+- [x] 1.1: Implement lazy weight initialization (LayerBase.EnsureInitialized(), integrated into DenseLayer and ConvolutionalLayer)
+- [x] 1.2: Add initialization strategy interface (IInitializationStrategy<T> with Lazy/Eager/FromFile modes)
 - [x] 2.1: Implement tensor pool (TensorPool<T> with Rent/Return, CAS-based thread safety, configurable size limits)
+- [x] 2.2: Add pooling to forward pass (InferenceContext for pooled tensor allocation during inference)
 
 **Acceptance Criteria:**
 | Criterion | Requirement | Validation |
@@ -776,10 +777,10 @@ public class Phase2GateTests
 ### Phase 3: Layer Refactoring (3-4 weeks)
 
 **User Stories:**
-- [ ] 4.1: Refactor high-priority attention layers
+- [x] 4.1: Refactor high-priority attention layers (CrossAttentionLayer converted to IEngine.BatchMatMul operations)
 - [ ] 4.2: Refactor graph neural network layers
 - [ ] 4.3: Complete normalization layer refactoring
-- [ ] 2.2: Add pooling to forward pass
+- [x] 2.2: Add pooling to forward pass (completed in Phase 2 with InferenceContext)
 
 **Acceptance Criteria:**
 | Criterion | Requirement | Validation |
