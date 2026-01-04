@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -49,7 +48,6 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     private readonly ConcurrentDictionary<string, VectorDocument<T>> _store;
     private readonly int _initialVectorDimension;
     private readonly HNSWIndex<T> _hnswIndex;
-    private readonly INumericOperations<T> _numOps;
     private int _vectorDimension;
 
     /// <summary>
@@ -68,28 +66,38 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// <param name="vectorDimension">The dimension of vector embeddings.</param>
     /// <param name="databasePath">Optional logical identifier for this store instance (for debugging/logging).</param>
     /// <param name="tableName">Optional logical name for the document collection (for debugging/logging).</param>
+    /// <param name="hnswMaxConnections">HNSW M parameter: max connections per node. Higher = better recall, more memory. Default: 16.</param>
+    /// <param name="hnswEfConstruction">HNSW efConstruction: search depth during index building. Higher = better quality, slower build. Default: 200.</param>
+    /// <param name="hnswEfSearch">HNSW efSearch: search depth during queries. Higher = better recall, slower search. Default: 50.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when vectorDimension is less than or equal to zero.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new in-memory vector store that keeps all data in RAM.
-    /// 
+    ///
     /// Example:
     /// <code>
     /// // Create a store with 384-dimensional embeddings
     /// var store = new InMemoryDocumentStore&lt;float&gt;(vectorDimension: 384);
-    /// 
-    /// // With optional identifiers for logging
+    ///
+    /// // With custom HNSW parameters for high-recall use case
     /// var store2 = new InMemoryDocumentStore&lt;float&gt;(
     ///     vectorDimension: 384,
-    ///     databasePath: "session-cache",
-    ///     tableName: "documents"
+    ///     hnswMaxConnections: 32,      // More connections for better recall
+    ///     hnswEfConstruction: 400,     // Higher quality index
+    ///     hnswEfSearch: 100            // More thorough search
     /// );
     /// </code>
-    /// 
+    ///
     /// All data is stored in memory and will be lost when the program exits.
     /// Vector dimension must match your embedding model's output dimension.
     /// </para>
     /// </remarks>
-    public InMemoryDocumentStore(int vectorDimension, string? databasePath = null, string? tableName = null)
+    public InMemoryDocumentStore(
+        int vectorDimension,
+        string? databasePath = null,
+        string? tableName = null,
+        int hnswMaxConnections = 16,
+        int hnswEfConstruction = 200,
+        int hnswEfSearch = 50)
     {
         if (vectorDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension must be positive");
@@ -97,11 +105,13 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
         _store = new ConcurrentDictionary<string, VectorDocument<T>>();
         _initialVectorDimension = vectorDimension;
         _vectorDimension = vectorDimension;
-        _numOps = MathHelper.GetNumericOperations<T>();
 
         // Initialize HNSW index for O(log n) approximate nearest neighbor search
-        // Default parameters: M=16 connections, efConstruction=200, efSearch=50
-        _hnswIndex = new HNSWIndex<T>(new CosineSimilarityMetric<T>(), maxConnections: 16, efConstruction: 200, efSearch: 50);
+        _hnswIndex = new HNSWIndex<T>(
+            new CosineSimilarityMetric<T>(),
+            maxConnections: hnswMaxConnections,
+            efConstruction: hnswEfConstruction,
+            efSearch: hnswEfSearch);
     }
 
     /// <summary>
