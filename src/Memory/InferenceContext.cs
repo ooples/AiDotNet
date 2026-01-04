@@ -18,14 +18,14 @@ namespace AiDotNet.Memory;
 /// </para>
 /// <para>
 /// <b>Thread Safety:</b> Each thread should use its own InferenceContext.
-/// The underlying TensorPool is thread-safe, but the context itself tracks tensors
+/// The underlying UnifiedTensorPool is thread-safe, but the context itself tracks tensors
 /// per-scope and should not be shared across threads.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
 /// <example>
 /// <code>
-/// var pool = new TensorPool&lt;float&gt;(maxPoolSizeMB: 256);
+/// var pool = new UnifiedTensorPool(new PoolingOptions { MaxPoolSizeMB = 256 });
 ///
 /// // During inference loop
 /// for (int i = 0; i &lt; batchCount; i++)
@@ -39,14 +39,15 @@ namespace AiDotNet.Memory;
 /// </example>
 public class InferenceContext<T> : IDisposable
 {
-    private readonly TensorPool<T> _pool;
+    private readonly UnifiedTensorPool _pool;
     private readonly ConcurrentDictionary<Tensor<T>, byte> _rentedTensors;
+    private readonly bool _ownsPool;
     private bool _disposed;
 
     /// <summary>
     /// Gets the underlying tensor pool.
     /// </summary>
-    public TensorPool<T> Pool => _pool;
+    public UnifiedTensorPool Pool => _pool;
 
     /// <summary>
     /// Gets the number of tensors currently rented in this context.
@@ -64,9 +65,18 @@ public class InferenceContext<T> : IDisposable
     /// </summary>
     /// <param name="pool">The tensor pool to use for allocation. If null, a default pool is created.</param>
     /// <param name="maxPoolSizeMB">Maximum pool size in MB when creating default pool. Default is 256 MB.</param>
-    public InferenceContext(TensorPool<T>? pool = null, int maxPoolSizeMB = 256)
+    public InferenceContext(UnifiedTensorPool? pool = null, int maxPoolSizeMB = 256)
     {
-        _pool = pool ?? new TensorPool<T>(maxPoolSizeMB);
+        if (pool is not null)
+        {
+            _pool = pool;
+            _ownsPool = false;
+        }
+        else
+        {
+            _pool = new UnifiedTensorPool(new PoolingOptions { MaxPoolSizeMB = maxPoolSizeMB });
+            _ownsPool = true;
+        }
         _rentedTensors = new ConcurrentDictionary<Tensor<T>, byte>();
     }
 
@@ -86,7 +96,7 @@ public class InferenceContext<T> : IDisposable
             throw new ObjectDisposedException(nameof(InferenceContext<T>));
         }
 
-        var tensor = IsPoolingEnabled ? _pool.Rent(shape) : new Tensor<T>(shape);
+        var tensor = IsPoolingEnabled ? _pool.RentTensor<T>(shape) : new Tensor<T>(shape);
         _rentedTensors.TryAdd(tensor, 0);
         return tensor;
     }
@@ -164,7 +174,7 @@ public class InferenceContext<T> : IDisposable
             // or if Dispose is called after Release
             if (IsPoolingEnabled)
             {
-                _pool.Return(tensor);
+                _pool.ReturnTensor(tensor);
             }
         }
     }
@@ -191,9 +201,15 @@ public class InferenceContext<T> : IDisposable
                 // Tensors that were already released via Release() won't be in the dictionary
                 foreach (var kvp in _rentedTensors)
                 {
-                    _pool.Return(kvp.Key);
+                    _pool.ReturnTensor(kvp.Key);
                 }
                 _rentedTensors.Clear();
+
+                // Dispose pool if we own it
+                if (_ownsPool)
+                {
+                    _pool.Dispose();
+                }
             }
             _disposed = true;
         }
