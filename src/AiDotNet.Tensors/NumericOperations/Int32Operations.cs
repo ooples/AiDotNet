@@ -944,20 +944,44 @@ public class Int32Operations : INumericOperations<int>
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 
     public void LeakyReLU(ReadOnlySpan<int> x, int alpha, Span<int> destination)
-        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+    }
 
     public void GELU(ReadOnlySpan<int> x, Span<int> destination)
-        => VectorizedOperationsFallback.GELU(this, x, destination);
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.GELU(this, x, destination);
+    }
 
     public void Mish(ReadOnlySpan<int> x, Span<int> destination)
-        => VectorizedOperationsFallback.Mish(this, x, destination);
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.Mish(this, x, destination);
+    }
 
     public void Swish(ReadOnlySpan<int> x, Span<int> destination)
-        => VectorizedOperationsFallback.Swish(this, x, destination);
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.Swish(this, x, destination);
+    }
 
     public void ELU(ReadOnlySpan<int> x, int alpha, Span<int> destination)
-        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+    }
 
     public void ReLU(ReadOnlySpan<int> x, Span<int> destination)
-        => VectorizedOperationsFallback.ReLU(this, x, destination);
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        VectorizedOperationsFallback.ReLU(this, x, destination);
+    }
 }

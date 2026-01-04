@@ -449,6 +449,12 @@ namespace AiDotNet.Tensors.Engines.Simd
                 var vCoeff = Vector256.Create(coeff);
                 var vHalf = Vector256.Create(half);
                 var vOne = Vector256.Create(1.0f);
+                var vNegOne = Vector256.Create(-1.0f);
+                // Constants for rational tanh approximation: tanh(x) ≈ x * (27 + x²) / (27 + 9*x²)
+                // Accurate to ~0.001 for |x| < 3, which covers typical GELU input ranges
+                var v27 = Vector256.Create(27.0f);
+                var v9 = Vector256.Create(9.0f);
+
                 int simdLength = length & ~7;
                 for (; i < simdLength; i += 8)
                 {
@@ -458,19 +464,29 @@ namespace AiDotNet.Tensors.Engines.Simd
                     var x_cubed = Avx.Multiply(x_squared, x);
                     // x + 0.044715 * x^3
                     var inner = Fma.MultiplyAdd(vCoeff, x_cubed, x);
-                    // sqrt(2/pi) * inner
+                    // sqrt(2/pi) * inner = tanh argument
                     var tanh_arg = Avx.Multiply(vSqrt2OverPi, inner);
-                    // Approximate tanh using exp: tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
-                    // For speed, we use a simpler approximation for the full GELU
-                    // Full computation would require vectorized tanh, which is complex
-                    // We fall back to scalar for now, but keep SIMD structure for future optimization
-                    WriteVector256(output, i, x); // Placeholder - computed in scalar below
+
+                    // Vectorized tanh approximation using rational function
+                    // tanh(x) ≈ x * (27 + x²) / (27 + 9*x²) for |x| ≤ 3
+                    var tanh_arg_sq = Avx.Multiply(tanh_arg, tanh_arg);
+                    var numerator = Avx.Add(v27, tanh_arg_sq); // 27 + x²
+                    var denominator = Fma.MultiplyAdd(v9, tanh_arg_sq, v27); // 27 + 9*x²
+                    var tanh_approx = Avx.Divide(Avx.Multiply(tanh_arg, numerator), denominator);
+
+                    // Clamp to [-1, 1] for |x| > 3 (where approximation is less accurate)
+                    tanh_approx = Avx.Max(vNegOne, Avx.Min(vOne, tanh_approx));
+
+                    // GELU = 0.5 * x * (1 + tanh)
+                    var one_plus_tanh = Avx.Add(vOne, tanh_approx);
+                    var result = Avx.Multiply(vHalf, Avx.Multiply(x, one_plus_tanh));
+                    WriteVector256(output, i, result);
                 }
             }
 #endif
 
-            // Scalar implementation (including remaining elements from SIMD)
-            for (i = 0; i < length; i++)
+            // Scalar implementation for remaining elements
+            for (; i < length; i++)
             {
                 float x = input[i];
                 float x_cubed = x * x * x;

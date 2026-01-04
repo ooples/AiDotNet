@@ -220,14 +220,25 @@ public sealed class DirectGpuEngine : IDisposable
                 Console.WriteLine("[DirectGpuEngine] CUDA is not available on this system");
             }
         }
-        catch (Exception ex)
+        catch (DllNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] CUDA backend initialization failed: {ex.GetType().Name}: {ex.Message}");
-            if (ex.InnerException != null)
-            {
-                Console.WriteLine($"[DirectGpuEngine] Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
-            }
-            System.Diagnostics.Debug.WriteLine($"CUDA backend initialization failed: {ex.Message}");
+            Console.WriteLine($"[DirectGpuEngine] CUDA library not found: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"CUDA library not found: {ex.Message}");
+        }
+        catch (TypeInitializationException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] CUDA type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"CUDA type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] CUDA initialization failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"CUDA initialization failed: {ex.Message}");
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] CUDA function not found: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"CUDA function not found: {ex.Message}");
         }
 
         return null;
@@ -253,14 +264,25 @@ public sealed class DirectGpuEngine : IDisposable
             Console.WriteLine("[DirectGpuEngine] OpenCL backend created but not available, disposing...");
             openClBackend.Dispose();
         }
-        catch (Exception ex)
+        catch (DllNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] OpenCL backend initialization failed: {ex.GetType().Name}: {ex.Message}");
-            if (ex.InnerException != null)
-            {
-                Console.WriteLine($"[DirectGpuEngine] Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
-            }
-            System.Diagnostics.Debug.WriteLine($"OpenCL backend initialization failed: {ex.Message}");
+            Console.WriteLine($"[DirectGpuEngine] OpenCL library not found: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"OpenCL library not found: {ex.Message}");
+        }
+        catch (TypeInitializationException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] OpenCL type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"OpenCL type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] OpenCL initialization failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"OpenCL initialization failed: {ex.Message}");
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] OpenCL function not found: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"OpenCL function not found: {ex.Message}");
         }
 
         return null;
@@ -289,10 +311,25 @@ public sealed class DirectGpuEngine : IDisposable
                 Console.WriteLine("[DirectGpuEngine] HIP is not available on this system");
             }
         }
-        catch (Exception ex)
+        catch (DllNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] HIP backend initialization failed: {ex.GetType().Name}: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"HIP backend initialization failed: {ex.Message}");
+            Console.WriteLine($"[DirectGpuEngine] HIP library not found: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"HIP library not found: {ex.Message}");
+        }
+        catch (TypeInitializationException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] HIP type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"HIP type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] HIP initialization failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"HIP initialization failed: {ex.Message}");
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] HIP function not found: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"HIP function not found: {ex.Message}");
         }
 
         return null;

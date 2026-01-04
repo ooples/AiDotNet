@@ -872,20 +872,30 @@ public class UIntOperations : INumericOperations<uint>
         => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 
     public void LeakyReLU(ReadOnlySpan<uint> x, uint alpha, Span<uint> destination)
-        => VectorizedOperationsFallback.LeakyReLU(this, x, alpha, destination);
+    {
+        // LeakyReLU for uint is effectively a copy since uint is always >= 0
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        x.CopyTo(destination);
+    }
 
     public void GELU(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.GELU(this, x, destination);
+        => throw new NotSupportedException("GELU activation requires transcendental operations (exp, tanh) that are not meaningful for uint type. Use float or double instead.");
 
     public void Mish(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.Mish(this, x, destination);
+        => throw new NotSupportedException("Mish activation requires transcendental operations (exp, tanh, log) that are not meaningful for uint type. Use float or double instead.");
 
     public void Swish(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.Swish(this, x, destination);
+        => throw new NotSupportedException("Swish activation requires transcendental operations (exp) that are not meaningful for uint type. Use float or double instead.");
 
     public void ELU(ReadOnlySpan<uint> x, uint alpha, Span<uint> destination)
-        => VectorizedOperationsFallback.ELU(this, x, alpha, destination);
+        => throw new NotSupportedException("ELU activation requires transcendental operations (exp) that are not meaningful for uint type. Use float or double instead.");
 
     public void ReLU(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.ReLU(this, x, destination);
+    {
+        // ReLU for uint is effectively a copy since uint is always >= 0
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Input and destination spans must have the same length.");
+        x.CopyTo(destination);
+    }
 }
