@@ -313,7 +313,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// <returns>An enumerable of all documents without their vector embeddings.</returns>
     /// <remarks>
     /// <para>
-    /// Returns all documents from the SQLite table in no particular order (like SQL SELECT * FROM table).
+    /// Returns all documents from the in-memory store in no particular order.
     /// Vector embeddings are not included in the results.
     /// </para>
     /// <para><b>For Beginners:</b> Gets every document from the database.
@@ -352,8 +352,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Clears all documents from the SQLite table (like SQL DELETE FROM table or DROP TABLE) and
-    /// resets the vector dimension to 0. The database file remains but is empty.
+    /// Clears all documents from the in-memory store and resets the vector dimension to 0.
     /// </para>
     /// <para><b>For Beginners:</b> Completely empties the database.
     /// 
