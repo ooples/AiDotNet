@@ -16440,73 +16440,21 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// This method delegates to <see cref="RMSNorm{T}"/> to ensure consistent behavior
+    /// and correct gradient computation. Both API variants now use the same underlying implementation.
+    /// </remarks>
     public Tensor<T> RmsNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int normalizedSize = gamma.Length;
-        int batchSize = input.Length / normalizedSize;
-
-        var inputData = input.ToArray();
-        var gammaData = gamma.ToArray();
-        var rmsData = new T[batchSize];
-        var resultData = new T[input.Length];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            double sumSq = 0;
-            for (int i = 0; i < normalizedSize; i++)
-            {
-                double val = numOps.ToDouble(inputData[b * normalizedSize + i]);
-                sumSq += val * val;
-            }
-            double rmsVal = Math.Sqrt(sumSq / normalizedSize + epsilon);
-            rmsData[b] = numOps.FromDouble(rmsVal);
-
-            for (int i = 0; i < normalizedSize; i++)
-            {
-                double val = numOps.ToDouble(inputData[b * normalizedSize + i]);
-                double g = numOps.ToDouble(gammaData[i]);
-                resultData[b * normalizedSize + i] = numOps.FromDouble((val / rmsVal) * g);
-            }
-        }
-
-        rms = new Tensor<T>([batchSize], new Vector<T>(rmsData));
-        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
-    }
+        => RMSNorm(input, gamma, epsilon, out rms);
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// This method delegates to <see cref="RMSNormBackward{T}"/> to ensure correct gradient computation.
+    /// The RMSNormBackward implementation properly accounts for the dependency of rms on input (∂rms/∂x),
+    /// which is essential for mathematically correct backpropagation.
+    /// </remarks>
     public Tensor<T> RmsNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int normalizedSize = gamma.Length;
-        int batchSize = input.Length / normalizedSize;
-
-        var gradOutData = gradOutput.ToArray();
-        var inputData = input.ToArray();
-        var gammaData = gamma.ToArray();
-        var rmsData = rms.ToArray();
-        var gradInputData = new T[input.Length];
-        var gradGammaData = new T[normalizedSize];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            double rmsVal = numOps.ToDouble(rmsData[b]);
-            double invRms = 1.0 / rmsVal;
-
-            for (int i = 0; i < normalizedSize; i++)
-            {
-                double go = numOps.ToDouble(gradOutData[b * normalizedSize + i]);
-                double x = numOps.ToDouble(inputData[b * normalizedSize + i]);
-                double g = numOps.ToDouble(gammaData[i]);
-
-                gradGammaData[i] = numOps.Add(gradGammaData[i], numOps.FromDouble(go * x * invRms));
-                gradInputData[b * normalizedSize + i] = numOps.FromDouble(go * g * invRms);
-            }
-        }
-
-        gradGamma = new Tensor<T>(gamma.Shape, new Vector<T>(gradGammaData));
-        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
-    }
+        => RMSNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
 
     /// <inheritdoc/>
     public Tensor<T> InstanceNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
@@ -16578,6 +16526,11 @@ public class CpuEngine : IEngine
         var gradGammaData = new T[channels];
         var gradBetaData = new T[channels];
 
+        // Instance normalization backward pass with correct gradient computation.
+        // The gradient includes correction terms for the dependency of mean and variance on input.
+        // Formula: dx = (1/N) * invStd * (N * δ - sum(δ) - xNorm * sum(δ * xNorm))
+        // where δ = gradOutput * γ, N = spatialSize
+
         for (int b = 0; b < batch; b++)
         {
             for (int c = 0; c < channels; c++)
@@ -16588,14 +16541,35 @@ public class CpuEngine : IEngine
                 double invStd = 1.0 / Math.Sqrt(varVal + epsilon);
                 double g = numOps.ToDouble(gammaData[c]);
 
+                // First pass: compute gradGamma, gradBeta, and accumulate sums for gradient correction
+                double sumDelta = 0.0;
+                double sumDeltaXNorm = 0.0;
                 for (int s = 0; s < spatialSize; s++)
                 {
                     double go = numOps.ToDouble(gradOutData[offset + s]);
                     double x = numOps.ToDouble(inputData[offset + s]);
                     double xNorm = (x - meanVal) * invStd;
+                    double delta = go * g;
+
                     gradGammaData[c] = numOps.Add(gradGammaData[c], numOps.FromDouble(go * xNorm));
                     gradBetaData[c] = numOps.Add(gradBetaData[c], numOps.FromDouble(go));
-                    gradInputData[offset + s] = numOps.FromDouble(go * g * invStd);
+
+                    sumDelta += delta;
+                    sumDeltaXNorm += delta * xNorm;
+                }
+
+                // Second pass: compute gradInput with proper correction terms
+                double invN = 1.0 / spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    double go = numOps.ToDouble(gradOutData[offset + s]);
+                    double x = numOps.ToDouble(inputData[offset + s]);
+                    double xNorm = (x - meanVal) * invStd;
+                    double delta = go * g;
+
+                    // dx = invStd * invN * (N * δ - sum(δ) - xNorm * sum(δ * xNorm))
+                    double gradInput = invStd * invN * (spatialSize * delta - sumDelta - xNorm * sumDeltaXNorm);
+                    gradInputData[offset + s] = numOps.FromDouble(gradInput);
                 }
             }
         }
