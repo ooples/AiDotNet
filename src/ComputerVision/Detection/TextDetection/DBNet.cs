@@ -270,11 +270,13 @@ public class DBNet<T> : TextDetectorBase<T>
             pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
             using var client = new System.Net.Http.HttpClient();
-            data = await client.GetByteArrayAsync(pathOrUrl, cancellationToken);
+            // Use single-argument overload for net471 compatibility
+            data = await client.GetByteArrayAsync(pathOrUrl);
         }
         else
         {
-            data = await File.ReadAllBytesAsync(pathOrUrl, cancellationToken);
+            // Use Task.Run for net471 compatibility (ReadAllBytesAsync not available)
+            data = await Task.Run(() => File.ReadAllBytes(pathOrUrl), cancellationToken);
         }
 
         using var stream = new MemoryStream(data);
