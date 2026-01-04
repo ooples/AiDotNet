@@ -523,12 +523,11 @@ internal class ReinforcementLearner<T>
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"Checkpoint file not found: {filePath}", filePath);
 
-        byte[] bytes;
-        using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true))
-        {
-            bytes = new byte[fileStream.Length];
-            await fileStream.ReadAsync(bytes, 0, bytes.Length, cancellationToken);
-        }
+#if NET7_0_OR_GREATER
+        byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+#else
+        byte[] bytes = await Task.Run(() => File.ReadAllBytes(filePath), cancellationToken);
+#endif
 
         string json = Encoding.UTF8.GetString(bytes);
         var checkpoint = JsonConvert.DeserializeObject<TrainingCheckpoint<T>>(json);

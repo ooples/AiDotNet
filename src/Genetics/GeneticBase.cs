@@ -1272,20 +1272,16 @@ public abstract class GeneticBase<T, TInput, TOutput> :
             throw new FileNotFoundException("Population file not found.", filePath);
         }
 
-        using (FileStream fs = new FileStream(filePath, FileMode.Open))
+        byte[] data = File.ReadAllBytes(filePath);
+
+        Population = DeserializePopulation(data).ToList();
+
+        if (Population.Count > 0)
         {
-            byte[] data = new byte[fs.Length];
-            fs.Read(data, 0, data.Length);
-
-            Population = DeserializePopulation(data).ToList();
-
-            if (Population.Count > 0)
-            {
-                BestIndividual = FindBestIndividual();
-            }
-
-            return Population;
+            BestIndividual = FindBestIndividual();
         }
+
+        return Population;
     }
 
     /// <summary>

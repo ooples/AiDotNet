@@ -1,7 +1,7 @@
 name: Build & SonarCloud
 
 # Primary build workflow - other workflows depend on this
-# Runs on Windows to support both net8.0 and net471 targets
+# Runs on Windows to support both net10.0 and net471 targets
 on:
   push:
     branches:
@@ -36,7 +36,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
-  # CodeQL runs on Ubuntu with net8.0 only - parallel with SonarCloud
+  # CodeQL runs on Ubuntu with net10.0 only - parallel with SonarCloud
   # Runs on PRs, pushes to master/main, and weekly schedule for security analysis
   codeql:
     name: CodeQL Analysis
@@ -53,10 +53,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup .NET 8.0
+      - name: Setup .NET 10.0
         uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v4
@@ -78,8 +78,8 @@ jobs:
 
       # CodeQL needs to trace the build - can't reuse artifacts
       # Build only the main library to avoid file lock issues with AiDotNet.Serving's static web assets
-      - name: Build for CodeQL (net8.0)
-        run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net8.0
+      - name: Build for CodeQL (net10.0)
+        run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
 
       - name: Perform CodeQL Analysis (no SARIF upload for huge PRs)
         if: github.event_name == 'pull_request' && github.event.pull_request.changed_files > 250
@@ -95,7 +95,7 @@ jobs:
           category: "/language:csharp"
           upload: always
 
-  # Build once on Windows (net8.0 + net471), then run tests in parallel shards.
+  # Build once on Windows (net10.0 + net471), then run tests in parallel shards.
   build-windows:
     name: Build (Windows)
     runs-on: windows-latest
@@ -108,10 +108,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup .NET 8.0
+      - name: Setup .NET 10.0
         uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v4
@@ -145,10 +145,10 @@ jobs:
           name: nuget-packages
           path: ./artifacts/*.nupkg
 
-  # Sharded test execution for fast, parallel feedback and coverage generation (net8.0).
+  # Sharded test execution for fast, parallel feedback and coverage generation (net10.0).
   # Coverage artifacts are consumed by the SonarCloud analysis job below.
-  test-net8-sharded:
-    name: Tests (net8.0) - ${{ matrix.shard.name }}
+  test-net10-sharded:
+    name: Tests (net10.0) - ${{ matrix.shard.name }}
     runs-on: windows-latest
     needs: build-windows
     timeout-minutes: 45
@@ -159,7 +159,7 @@ jobs:
         shard:
           - name: AiDotNet.Tests - Unit - 01 Core
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: >-
               Category!=GPU&Category!=Integration&Category!=Stress&
               FullyQualifiedName~AiDotNet.Tests.UnitTests&
@@ -200,111 +200,111 @@ jobs:
               FullyQualifiedName!~AiDotNet.Tests.UnitTests.TransferLearning
           - name: AiDotNet.Tests - Unit - 02 Activation/Attention
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ActivationFunctions|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Attention'
           - name: AiDotNet.Tests - Unit - 03 Autodiff/AutoML/Data
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Autodiff|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.AutoML|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Data'
           - name: AiDotNet.Tests - Unit - 04 Diagnostics/Diffusion/Encoding
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Diagnostics|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Encoding'
           - name: AiDotNet.Tests - Unit - 05 Feature/Fit/Fitness
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FeatureSelectors|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FitDetectors|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FitnessCalculators'
           - name: AiDotNet.Tests - Unit - 06 Genetics/Helpers/Inference
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Genetics|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Helpers|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Inference'
           - name: AiDotNet.Tests - Unit - 07 Interpretability/JIT/KD
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Interpretability|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.JitCompiler|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.KnowledgeDistillation'
           - name: AiDotNet.Tests - Unit - 08 Schedulers/LA/Logging/Loss
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LearningRateSchedulers|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LinearAlgebra|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Logging|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LossFunctions'
           - name: AiDotNet.Tests - Unit - 09 Meta/Mixed/Compression
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression'
           # NeuralNetworks split into 3 shards to avoid timeouts (was taking 45+ min)
           - name: AiDotNet.Tests - Unit - 10a1 NN-Classic
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
           - name: AiDotNet.Tests - Unit - 10a2 NN-Efficient
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
           # VLM tests split individually due to 45+ min timeout when combined
           - name: AiDotNet.Tests - Unit - 10a3a1 NN-Blip
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~BlipNeuralNetworkTests'
           - name: AiDotNet.Tests - Unit - 10a3a2 NN-Blip2
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~Blip2NeuralNetworkTests'
           - name: AiDotNet.Tests - Unit - 10a3a3 NN-Clip
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~ClipNeuralNetworkTests'
           - name: AiDotNet.Tests - Unit - 10a3b NN-Adapters
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           - name: AiDotNet.Tests - Unit - 10b Optimizers
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers'
           - name: AiDotNet.Tests - Unit - 10c RAG
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG'
           - name: AiDotNet.Tests - Unit - 11 Regularization/RL/RAG2
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Regularization|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ReinforcementLearning|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration'
           - name: AiDotNet.Tests - Unit - 12 Serving/TimeSeries/Token/Transfer
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning'
           - name: AiDotNet.Tests - Unit - 13 ProgramSynthesis/Reasoning
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ProgramSynthesis|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Reasoning'
           - name: AiDotNet.Tests - Other - 13 InferenceOptimization
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization
           - name: AiDotNet.Tests - Other - 14 PromptEngineering
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.PromptEngineering
           - name: AiDotNet.Tests - Other - 15 Recovery/Concurrency
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Recovery|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Concurrency'
           - name: AiDotNet.Tensors.Tests
             project: tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: Category!=GPU&Category!=Integration&Category!=Stress
           - name: AiDotNet.Serving.Tests
             project: tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
-            framework: net8.0
+            framework: net10.0
             filter: Category!=GPU&Category!=Integration&Category!=Stress
 
     steps:
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
-      - name: Setup .NET 8.0
+      - name: Setup .NET 10.0
         uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v4
@@ -363,7 +363,7 @@ jobs:
     if: github.event.pull_request.draft != true
     needs:
       - build-windows
-      - test-net8-sharded
+      - test-net10-sharded
 
     steps:
       - name: Set up JDK 17
@@ -377,10 +377,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup .NET 8.0
+      - name: Setup .NET 10.0
         uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v4
@@ -473,8 +473,8 @@ jobs:
           ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
 
   # Sharded net471 test execution for parallel, faster feedback
-  # Note: Coverage not collected here as SonarCloud analysis uses only net8.0 coverage
-  # Only run AiDotNet.Tests as AiDotNet.Serving.Tests only targets net8.0
+  # Note: Coverage not collected here as SonarCloud analysis uses only net10.0 coverage
+  # Only run AiDotNet.Tests as AiDotNet.Serving.Tests only targets net10.0
   test-net471-sharded:
     name: Tests (net471) - ${{ matrix.shard.name }}
     runs-on: windows-latest
@@ -517,10 +517,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
-      - name: Setup .NET 8.0
+      - name: Setup .NET 10.0
         uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v4
@@ -580,10 +580,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
-      - name: Setup .NET 8.0
+      - name: Setup .NET 10.0
         uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v4
@@ -596,7 +596,7 @@ jobs:
       - name: Restore and publish for size analysis
         run: |
           dotnet restore
-          dotnet publish src/AiDotNet.csproj -c Release -f net8.0 -o publish
+          dotnet publish src/AiDotNet.csproj -c Release -f net10.0 -o publish
 
       - name: Analyze artifact size
         id: size
