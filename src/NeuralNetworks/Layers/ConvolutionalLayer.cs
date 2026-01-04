@@ -390,8 +390,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             // Eager initialization - allocate and initialize immediately
             _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
-            _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
+            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
+            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
             _random = RandomHelper.CreateSecureRandom();
 
             InitializeWeights();
@@ -465,8 +466,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             // Eager initialization - allocate and initialize immediately
             _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
-            _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
+            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
+            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
             _random = RandomHelper.CreateSecureRandom();
 
             InitializeWeights();
@@ -798,8 +800,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             // Allocate kernels and biases
             _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
-            _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
+            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
+            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
 
             // Initialize weights
             InitializeWeights();

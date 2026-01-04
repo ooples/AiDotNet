@@ -89,6 +89,12 @@ public class UnifiedTensorPool : IDisposable
             return Array.Empty<T>();
         }
 
+        // Bypass pooling when disabled
+        if (!_options.Enabled)
+        {
+            return new T[minimumLength];
+        }
+
         // Don't pool arrays larger than the threshold
         if (minimumLength > _options.MaxElementsToPool)
         {
@@ -210,6 +216,12 @@ public class UnifiedTensorPool : IDisposable
                 throw new ArgumentException("All dimensions must be positive.", nameof(shape));
             }
             checked { totalElements *= dim; }
+        }
+
+        // Bypass pooling when disabled
+        if (!_options.Enabled)
+        {
+            return new Tensor<T>(shape);
         }
 
         if (totalElements > _options.MaxElementsToPool)
