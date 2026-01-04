@@ -678,7 +678,7 @@ public class Phase1GateTests
 **User Stories:**
 - [ ] 1.1: Implement lazy weight initialization
 - [ ] 1.2: Add initialization strategy interface
-- [ ] 2.1: Implement tensor pool
+- [x] 2.1: Implement tensor pool (TensorPool<T> with Rent/Return, CAS-based thread safety, configurable size limits)
 
 **Acceptance Criteria:**
 | Criterion | Requirement | Validation |
@@ -888,8 +888,8 @@ public class Phase3GateTests
 ### Phase 4: Polish and Maintenance (ongoing)
 
 **User Stories:**
-- [ ] 4.4: Expand CpuEngine SIMD coverage
-- [ ] 5.2: Add performance regression tests
+- [x] 4.4: Expand CpuEngine SIMD coverage (ReLU, LeakyReLU, GELU, Mish, Swish, ELU across all numeric types)
+- [x] 5.2: Add performance regression tests (SimdActivationFunctionBenchmarks.cs, Phase4GateTests.cs)
 - [ ] Continue layer refactoring per GPU plan Phase 5
 
 **Acceptance Criteria:**
