@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -136,6 +137,72 @@ internal class Conv2D<T>
         }
         return count;
     }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        // Write layer configuration
+        writer.Write(_inChannels);
+        writer.Write(_outChannels);
+        writer.Write(_kernelSize);
+        writer.Write(_stride);
+        writer.Write(_padding);
+        writer.Write(_bias is not null);
+
+        // Write weights
+        for (int i = 0; i < _weights.Length; i++)
+        {
+            writer.Write(_numOps.ToDouble(_weights[i]));
+        }
+
+        // Write bias if present
+        if (_bias is not null)
+        {
+            for (int i = 0; i < _bias.Length; i++)
+            {
+                writer.Write(_numOps.ToDouble(_bias[i]));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    public void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration (already set in constructor)
+        int inChannels = reader.ReadInt32();
+        int outChannels = reader.ReadInt32();
+        int kernelSize = reader.ReadInt32();
+        int stride = reader.ReadInt32();
+        int padding = reader.ReadInt32();
+        bool hasBias = reader.ReadBoolean();
+
+        if (inChannels != _inChannels || outChannels != _outChannels ||
+            kernelSize != _kernelSize || stride != _stride || padding != _padding)
+        {
+            throw new InvalidOperationException("Conv2D configuration mismatch during deserialization.");
+        }
+
+        // Read weights
+        for (int i = 0; i < _weights.Length; i++)
+        {
+            _weights[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Read bias if present
+        if (hasBias && _bias is not null)
+        {
+            for (int i = 0; i < _bias.Length; i++)
+            {
+                _bias[i] = _numOps.FromDouble(reader.ReadDouble());
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -243,6 +310,57 @@ internal class Dense<T>
         Array.Copy(shape, newShape, shape.Length);
         newShape[^1] = newLastDim;
         return newShape;
+    }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        // Write layer configuration
+        writer.Write(_inFeatures);
+        writer.Write(_outFeatures);
+
+        // Write weights
+        for (int i = 0; i < _weights.Length; i++)
+        {
+            writer.Write(_numOps.ToDouble(_weights[i]));
+        }
+
+        // Write bias
+        for (int i = 0; i < _bias.Length; i++)
+        {
+            writer.Write(_numOps.ToDouble(_bias[i]));
+        }
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    public void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        int inFeatures = reader.ReadInt32();
+        int outFeatures = reader.ReadInt32();
+
+        if (inFeatures != _inFeatures || outFeatures != _outFeatures)
+        {
+            throw new InvalidOperationException("Dense configuration mismatch during deserialization.");
+        }
+
+        // Read weights
+        for (int i = 0; i < _weights.Length; i++)
+        {
+            _weights[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Read bias
+        for (int i = 0; i < _bias.Length; i++)
+        {
+            _bias[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
     }
 }
 
@@ -380,5 +498,45 @@ internal class MultiHeadSelfAttention<T>
     {
         // Each Dense layer has dim*dim weights plus dim bias terms
         return 4 * (_dim * _dim + _dim); // Q, K, V, Out projections with biases
+    }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write(_dim);
+        writer.Write(_numHeads);
+
+        // Write projection layer parameters
+        _queryProj.WriteParameters(writer);
+        _keyProj.WriteParameters(writer);
+        _valueProj.WriteParameters(writer);
+        _outProj.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    public void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        int dim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+
+        if (dim != _dim || numHeads != _numHeads)
+        {
+            throw new InvalidOperationException(
+                $"MultiHeadSelfAttention configuration mismatch: expected dim={_dim}, numHeads={_numHeads}, got dim={dim}, numHeads={numHeads}.");
+        }
+
+        // Read projection layer parameters
+        _queryProj.ReadParameters(reader);
+        _keyProj.ReadParameters(reader);
+        _valueProj.ReadParameters(reader);
+        _outProj.ReadParameters(reader);
     }
 }

@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Weights;
 using AiDotNet.Tensors;
@@ -391,7 +392,24 @@ public class TrOCR<T> : OCRBase<T>
             localPath = await downloader.DownloadIfNeededAsync(pathOrUrl, fileName, null, cancellationToken);
         }
 
-        // Load weights
+        // Check if this is our native format (starts with TROC magic number)
+        if (File.Exists(localPath))
+        {
+            using var checkStream = File.OpenRead(localPath);
+            using var checkReader = new BinaryReader(checkStream);
+            if (checkStream.Length >= 4)
+            {
+                int magic = checkReader.ReadInt32();
+                if (magic == 0x54524F43) // "TROC"
+                {
+                    checkStream.Close();
+                    LoadWeightsFromFile(localPath);
+                    return;
+                }
+            }
+        }
+
+        // Fallback to external weight format
         var loader = new WeightLoader();
         var weights = loader.LoadWeights(localPath);
 
@@ -493,7 +511,91 @@ public class TrOCR<T> : OCRBase<T>
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write header
+        writer.Write(0x54524F43); // "TROC" in ASCII
+        writer.Write(1); // Version 1
+        writer.Write(Name);
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+        writer.Write(_numLayers);
+        writer.Write(_patchSize);
+        writer.Write(VocabularySize);
+        writer.Write(_startTokenId);
+        writer.Write(_endTokenId);
+
+        // Write component weights
+        _patchEmbed.WriteParameters(writer);
+        _tokenEmbedding.WriteParameters(writer);
+
+        foreach (var layer in _encoderLayers)
+        {
+            layer.WriteParameters(writer);
+        }
+
+        foreach (var layer in _decoderLayers)
+        {
+            layer.WriteParameters(writer);
+        }
+
+        _outputProjection.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Loads weights from a native TrOCR file format.
+    /// </summary>
+    private void LoadWeightsFromFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify header
+        int magic = reader.ReadInt32();
+        if (magic != 0x54524F43) // "TROC"
+        {
+            throw new InvalidDataException($"Invalid TrOCR model file. Expected magic 0x54524F43, got 0x{magic:X8}");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported TrOCR model version: {version}");
+        }
+
+        string name = reader.ReadString();
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+        int numLayers = reader.ReadInt32();
+        int patchSize = reader.ReadInt32();
+        int vocabSize = reader.ReadInt32();
+        int startTokenId = reader.ReadInt32();
+        int endTokenId = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads || numLayers != _numLayers || patchSize != _patchSize)
+        {
+            throw new InvalidOperationException(
+                $"TrOCR configuration mismatch. Expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
+                $"numLayers={_numLayers}, patchSize={_patchSize}, " +
+                $"got hiddenDim={hiddenDim}, numHeads={numHeads}, numLayers={numLayers}, patchSize={patchSize}");
+        }
+
+        // Read component weights
+        _patchEmbed.ReadParameters(reader);
+        _tokenEmbedding.ReadParameters(reader);
+
+        foreach (var layer in _encoderLayers)
+        {
+            layer.ReadParameters(reader);
+        }
+
+        foreach (var layer in _decoderLayers)
+        {
+            layer.ReadParameters(reader);
+        }
+
+        _outputProjection.ReadParameters(reader);
     }
 }
 
@@ -755,6 +857,40 @@ internal class TrOCREncoderLayer<T>
                _ffn2.GetParameterCount() +
                _norm1.GetParameterCount() +
                _norm2.GetParameterCount();
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+        _queryProj.WriteParameters(writer);
+        _keyProj.WriteParameters(writer);
+        _valueProj.WriteParameters(writer);
+        _outputProj.WriteParameters(writer);
+        _ffn1.WriteParameters(writer);
+        _ffn2.WriteParameters(writer);
+        _norm1.WriteParameters(writer);
+        _norm2.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads)
+        {
+            throw new InvalidOperationException(
+                $"TrOCREncoderLayer configuration mismatch. Expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
+                $"got hiddenDim={hiddenDim}, numHeads={numHeads}");
+        }
+        _queryProj.ReadParameters(reader);
+        _keyProj.ReadParameters(reader);
+        _valueProj.ReadParameters(reader);
+        _outputProj.ReadParameters(reader);
+        _ffn1.ReadParameters(reader);
+        _ffn2.ReadParameters(reader);
+        _norm1.ReadParameters(reader);
+        _norm2.ReadParameters(reader);
     }
 }
 
@@ -1147,6 +1283,50 @@ internal class TrOCRDecoderLayer<T>
                _norm2.GetParameterCount() +
                _norm3.GetParameterCount();
     }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+        _selfQueryProj.WriteParameters(writer);
+        _selfKeyProj.WriteParameters(writer);
+        _selfValueProj.WriteParameters(writer);
+        _selfOutputProj.WriteParameters(writer);
+        _crossQueryProj.WriteParameters(writer);
+        _crossKeyProj.WriteParameters(writer);
+        _crossValueProj.WriteParameters(writer);
+        _crossOutputProj.WriteParameters(writer);
+        _ffn1.WriteParameters(writer);
+        _ffn2.WriteParameters(writer);
+        _norm1.WriteParameters(writer);
+        _norm2.WriteParameters(writer);
+        _norm3.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads)
+        {
+            throw new InvalidOperationException(
+                $"TrOCRDecoderLayer configuration mismatch. Expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
+                $"got hiddenDim={hiddenDim}, numHeads={numHeads}");
+        }
+        _selfQueryProj.ReadParameters(reader);
+        _selfKeyProj.ReadParameters(reader);
+        _selfValueProj.ReadParameters(reader);
+        _selfOutputProj.ReadParameters(reader);
+        _crossQueryProj.ReadParameters(reader);
+        _crossKeyProj.ReadParameters(reader);
+        _crossValueProj.ReadParameters(reader);
+        _crossOutputProj.ReadParameters(reader);
+        _ffn1.ReadParameters(reader);
+        _ffn2.ReadParameters(reader);
+        _norm1.ReadParameters(reader);
+        _norm2.ReadParameters(reader);
+        _norm3.ReadParameters(reader);
+    }
 }
 
 /// <summary>
@@ -1235,5 +1415,35 @@ internal class TrOCRLayerNorm<T>
     public long GetParameterCount()
     {
         return 2 * _hiddenDim; // gamma + beta
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_gamma[i]));
+        }
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_beta[i]));
+        }
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        if (hiddenDim != _hiddenDim)
+        {
+            throw new InvalidOperationException($"TrOCRLayerNorm configuration mismatch. Expected hiddenDim={_hiddenDim}, got {hiddenDim}");
+        }
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _gamma[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _beta[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
     }
 }

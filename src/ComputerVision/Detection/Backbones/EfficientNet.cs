@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
@@ -198,6 +199,61 @@ public class EfficientNet<T> : BackboneBase<T>
         return count;
     }
 
+    /// <inheritdoc/>
+    public override void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write((int)_variant);
+        writer.Write(_blocks.Count);
+        writer.Write(_featureIndices.Length);
+        foreach (int idx in _featureIndices)
+        {
+            writer.Write(idx);
+        }
+
+        // Write stem
+        _stem.WriteParameters(writer);
+
+        // Write blocks
+        foreach (var block in _blocks)
+        {
+            block.WriteParameters(writer);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        var variant = (EfficientNetVariant)reader.ReadInt32();
+        int blockCount = reader.ReadInt32();
+        int featureIndexCount = reader.ReadInt32();
+        var featureIndices = new int[featureIndexCount];
+        for (int i = 0; i < featureIndexCount; i++)
+        {
+            featureIndices[i] = reader.ReadInt32();
+        }
+
+        if (variant != _variant)
+        {
+            throw new InvalidOperationException($"EfficientNet variant mismatch: expected {_variant}, got {variant}.");
+        }
+
+        if (blockCount != _blocks.Count)
+        {
+            throw new InvalidOperationException($"EfficientNet block count mismatch: expected {_blocks.Count}, got {blockCount}.");
+        }
+
+        // Read stem
+        _stem.ReadParameters(reader);
+
+        // Read blocks
+        foreach (var block in _blocks)
+        {
+            block.ReadParameters(reader);
+        }
+    }
+
     private Tensor<T> ApplySwish(Tensor<T> x)
     {
         var result = new Tensor<T>(x.Shape);
@@ -364,6 +420,60 @@ internal class MBConvBlock<T>
         return count;
     }
 
+    public void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write(_expandRatio != 1);
+        writer.Write(_se is not null);
+
+        // Write expand conv
+        if (_expand is not null)
+        {
+            _expand.WriteParameters(writer);
+        }
+
+        // Write depthwise conv
+        _depthwise.WriteParameters(writer);
+
+        // Write SE
+        if (_se is not null)
+        {
+            _se.WriteParameters(writer);
+        }
+
+        // Write project conv
+        _project.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        bool hasExpand = reader.ReadBoolean();
+        bool hasSE = reader.ReadBoolean();
+
+        if (hasExpand != (_expand is not null))
+        {
+            throw new InvalidOperationException("MBConvBlock expand configuration mismatch.");
+        }
+        if (hasSE != (_se is not null))
+        {
+            throw new InvalidOperationException("MBConvBlock SE configuration mismatch.");
+        }
+
+        if (_expand is not null)
+        {
+            _expand.ReadParameters(reader);
+        }
+
+        _depthwise.ReadParameters(reader);
+
+        if (_se is not null)
+        {
+            _se.ReadParameters(reader);
+        }
+
+        _project.ReadParameters(reader);
+    }
+
     private Tensor<T> ApplySwish(Tensor<T> x)
     {
         var result = new Tensor<T>(x.Shape);
@@ -469,5 +579,17 @@ internal class SqueezeExcitation<T>
             result[i] = _numOps.FromDouble(sigmoid);
         }
         return result;
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        _fc1.WriteParameters(writer);
+        _fc2.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        _fc1.ReadParameters(reader);
+        _fc2.ReadParameters(reader);
     }
 }

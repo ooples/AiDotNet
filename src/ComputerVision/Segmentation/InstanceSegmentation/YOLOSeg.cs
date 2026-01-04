@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -409,14 +410,70 @@ public class YOLOSeg<T> : InstanceSegmenterBase<T>
     }
 
     /// <inheritdoc/>
-    public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
+    public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        byte[] data;
+        if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var client = new System.Net.Http.HttpClient();
+            data = await client.GetByteArrayAsync(pathOrUrl, cancellationToken);
+        }
+        else
+        {
+            data = await File.ReadAllBytesAsync(pathOrUrl, cancellationToken);
+        }
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify header
+        int magic = reader.ReadInt32();
+        if (magic != 0x594F5347) // "YOSG" in ASCII
+        {
+            throw new InvalidDataException($"Invalid YOLOSeg model file. Expected magic 0x594F5347, got 0x{magic:X8}");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported YOLOSeg model version: {version}");
+        }
+
+        string name = reader.ReadString();
+        int numPrototypes = reader.ReadInt32();
+
+        if (numPrototypes != _numPrototypes)
+        {
+            throw new InvalidOperationException(
+                $"YOLOSeg configuration mismatch. Expected numPrototypes={_numPrototypes}, got {numPrototypes}");
+        }
+
+        // Read component weights
+        _backbone.ReadParameters(reader);
+        _neck.ReadParameters(reader);
+        _detectionHead.ReadParameters(reader);
+        _protoHead.ReadParameters(reader);
+        _coeffHead.ReadParameters(reader);
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write header
+        writer.Write(0x594F5347); // "YOSG" in ASCII
+        writer.Write(1); // Version 1
+        writer.Write(Name);
+        writer.Write(_numPrototypes);
+
+        // Write component weights
+        _backbone.WriteParameters(writer);
+        _neck.WriteParameters(writer);
+        _detectionHead.WriteParameters(writer);
+        _protoHead.WriteParameters(writer);
+        _coeffHead.WriteParameters(writer);
     }
 }

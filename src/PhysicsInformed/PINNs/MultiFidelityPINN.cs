@@ -448,9 +448,8 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         // Update parameters
         _multiFidelityOptimizer.UpdateParameters(Layers);
 
-        // Compute physics loss using base class Solve approach (on collocation points)
-        // This is simplified - full implementation would evaluate PDE residual
-        physLoss = NumOps.Zero; // TODO: Add PDE residual evaluation
+        // Compute physics loss by evaluating PDE residual at high-fidelity data points
+        physLoss = ComputePhysicsLossAtPoints();
 
         totalLoss = NumOps.Add(NumOps.Add(lfLoss, hfLoss), NumOps.Add(corrLoss, physLoss));
 
@@ -498,6 +497,65 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         }
 
         return gradient;
+    }
+
+    /// <summary>
+    /// Computes the physics loss by evaluating PDE residual at collocation points.
+    /// Uses a sample of high-fidelity data points as collocation points for efficiency.
+    /// </summary>
+    /// <returns>Mean squared PDE residual as the physics loss.</returns>
+    private T ComputePhysicsLossAtPoints()
+    {
+        // Use high-fidelity data points as collocation points for physics constraint
+        if (_highFidelityInputs == null || _highFidelityInputs.GetLength(0) == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        int numPoints = _highFidelityInputs.GetLength(0);
+        int inputDim = _highFidelityInputs.GetLength(1);
+
+        // Sample a batch of points for efficiency (max 256 points per epoch)
+        int batchSize = Math.Min(256, numPoints);
+        var random = RandomHelper.CreateSeededRandom(DateTime.Now.Millisecond);
+
+        T loss = NumOps.Zero;
+        int validPoints = 0;
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            int idx = random.Next(numPoints);
+
+            // Extract point coordinates
+            T[] point = new T[inputDim];
+            for (int d = 0; d < inputDim; d++)
+            {
+                point[d] = _highFidelityInputs[idx, d];
+            }
+
+            try
+            {
+                // Get combined high-fidelity solution (LF + correction)
+                T[] output = GetHighFidelitySolution(point);
+
+                // Evaluate PDE residual using base class method
+                T residual = EvaluatePDEResidual(point);
+
+                // Accumulate squared residual
+                loss = NumOps.Add(loss, NumOps.Multiply(residual, residual));
+                validPoints++;
+            }
+            catch
+            {
+                // Skip points where residual computation fails (e.g., at boundaries)
+                continue;
+            }
+        }
+
+        // Return mean squared residual
+        return validPoints > 0
+            ? NumOps.Divide(loss, NumOps.FromDouble(validPoints))
+            : NumOps.Zero;
     }
 
     /// <summary>

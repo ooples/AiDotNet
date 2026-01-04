@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -197,13 +198,88 @@ public class YOLOv11<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var stream = File.OpenRead(pathOrUrl);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify magic number and version
+        int magic = reader.ReadInt32();
+        if (magic != 0x594F4C4F) // "YOLO" in ASCII
+        {
+            throw new InvalidDataException("Invalid weight file format: incorrect magic number.");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+        }
+
+        // Read model configuration
+        string modelName = reader.ReadString();
+        if (!modelName.StartsWith("YOLOv11"))
+        {
+            throw new InvalidDataException($"Weight file is for {modelName}, not YOLOv11.");
+        }
+
+        // Read backbone parameters
+        Backbone!.ReadParameters(reader);
+
+        // Read SPPF parameters
+        _sppf.ReadParameters(reader);
+
+        // Read neck parameters
+        Neck!.ReadParameters(reader);
+
+        // Read attention block parameters
+        int attnCount = reader.ReadInt32();
+        if (attnCount != _attentionBlocks.Count)
+        {
+            throw new InvalidDataException($"Attention block count mismatch: expected {_attentionBlocks.Count}, got {attnCount}.");
+        }
+        foreach (var block in _attentionBlocks)
+        {
+            block.ReadParameters(reader);
+        }
+
+        // Read head parameters
+        _head.ReadParameters(reader);
+
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write magic number and version for identification
+        writer.Write(0x594F4C4F); // "YOLO" in ASCII
+        writer.Write(1); // Version 1
+
+        // Write model configuration
+        writer.Write(Name);
+
+        // Write backbone parameters
+        Backbone!.WriteParameters(writer);
+
+        // Write SPPF parameters
+        _sppf.WriteParameters(writer);
+
+        // Write neck parameters
+        Neck!.WriteParameters(writer);
+
+        // Write attention block parameters
+        writer.Write(_attentionBlocks.Count);
+        foreach (var block in _attentionBlocks)
+        {
+            block.WriteParameters(writer);
+        }
+
+        // Write head parameters
+        _head.WriteParameters(writer);
     }
 }
 
@@ -255,6 +331,33 @@ internal class SPPFBlock<T>
         int hiddenChannels = _channels / 2;
         return _channels * hiddenChannels + hiddenChannels + // conv1
                hiddenChannels * 4 * _channels + _channels;    // conv2
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_channels);
+        writer.Write(_kernelSize);
+        _conv1.WriteParameters(writer);
+        _conv2.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int channels = reader.ReadInt32();
+        int kernelSize = reader.ReadInt32();
+
+        if (channels != _channels)
+        {
+            throw new InvalidDataException($"SPPFBlock channels mismatch: expected {_channels}, got {channels}.");
+        }
+
+        if (kernelSize != _kernelSize)
+        {
+            throw new InvalidDataException($"SPPFBlock kernelSize mismatch: expected {_kernelSize}, got {kernelSize}.");
+        }
+
+        _conv1.ReadParameters(reader);
+        _conv2.ReadParameters(reader);
     }
 
     private Tensor<T> MaxPool(Tensor<T> x, int kernelSize)
@@ -436,5 +539,29 @@ internal class AttentionBlock<T>
     public long GetParameterCount()
     {
         return 4 * _channels * _channels + 4 * _channels; // 4 conv1x1 with bias
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_channels);
+        _query.WriteParameters(writer);
+        _key.WriteParameters(writer);
+        _value.WriteParameters(writer);
+        _proj.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int channels = reader.ReadInt32();
+
+        if (channels != _channels)
+        {
+            throw new InvalidDataException($"AttentionBlock channels mismatch: expected {_channels}, got {channels}.");
+        }
+
+        _query.ReadParameters(reader);
+        _key.ReadParameters(reader);
+        _value.ReadParameters(reader);
+        _proj.ReadParameters(reader);
     }
 }

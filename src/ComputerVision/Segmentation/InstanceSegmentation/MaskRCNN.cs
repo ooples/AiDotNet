@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -437,14 +438,72 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
     }
 
     /// <inheritdoc/>
-    public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
+    public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        byte[] data;
+        if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var client = new System.Net.Http.HttpClient();
+            data = await client.GetByteArrayAsync(pathOrUrl, cancellationToken);
+        }
+        else
+        {
+            data = await File.ReadAllBytesAsync(pathOrUrl, cancellationToken);
+        }
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify header
+        int magic = reader.ReadInt32();
+        if (magic != 0x4D524E4E) // "MRNN" (Mask RCNN) in ASCII
+        {
+            throw new InvalidDataException($"Invalid MaskRCNN model file. Expected magic 0x4D524E4E, got 0x{magic:X8}");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported MaskRCNN model version: {version}");
+        }
+
+        string name = reader.ReadString();
+        int roiPoolSize = reader.ReadInt32();
+
+        if (roiPoolSize != _roiPoolSize)
+        {
+            throw new InvalidOperationException(
+                $"MaskRCNN configuration mismatch. Expected roiPoolSize={_roiPoolSize}, got {roiPoolSize}");
+        }
+
+        // Read component weights
+        _backbone.ReadParameters(reader);
+        _fpn.ReadParameters(reader);
+        _rpn.ReadParameters(reader);
+        _boxHead.ReadParameters(reader);
+        _classHead.ReadParameters(reader);
+        _maskHead.ReadParameters(reader);
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write header
+        writer.Write(0x4D524E4E); // "MRNN" (Mask RCNN) in ASCII
+        writer.Write(1); // Version 1
+        writer.Write(Name);
+        writer.Write(_roiPoolSize);
+
+        // Write component weights
+        _backbone.WriteParameters(writer);
+        _fpn.WriteParameters(writer);
+        _rpn.WriteParameters(writer);
+        _boxHead.WriteParameters(writer);
+        _classHead.WriteParameters(writer);
+        _maskHead.WriteParameters(writer);
     }
 }

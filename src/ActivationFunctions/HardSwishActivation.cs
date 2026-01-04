@@ -128,13 +128,7 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>
     /// <returns>A new tensor with the Hard Swish function applied to each element.</returns>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        return input.Transform((x, _) =>
-        {
-            T xPlusThree = NumOps.Add(x, _three);
-            T clamped = MathHelper.Min(_six, MathHelper.Max(NumOps.Zero, xPlusThree));
-            T scaled = NumOps.Multiply(clamped, _oneSixth);
-            return NumOps.Multiply(x, scaled);
-        });
+        return Engine.HardSwish(input);
     }
 
     /// <summary>

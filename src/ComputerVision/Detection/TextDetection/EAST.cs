@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Enums;
@@ -276,15 +277,78 @@ public class EAST<T> : TextDetectorBase<T>
     }
 
     /// <inheritdoc/>
-    public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
+    public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        byte[] data;
+        if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var client = new System.Net.Http.HttpClient();
+            data = await client.GetByteArrayAsync(pathOrUrl, cancellationToken);
+        }
+        else
+        {
+            data = await File.ReadAllBytesAsync(pathOrUrl, cancellationToken);
+        }
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify header
+        int magic = reader.ReadInt32();
+        if (magic != 0x45415354) // "EAST" in ASCII
+        {
+            throw new InvalidDataException($"Invalid EAST model file. Expected magic 0x45415354, got 0x{magic:X8}");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported EAST model version: {version}");
+        }
+
+        string name = reader.ReadString();
+        bool useRotatedBoxes = reader.ReadBoolean();
+        int hiddenDim = reader.ReadInt32();
+
+        if (useRotatedBoxes != _useRotatedBoxes || hiddenDim != _hiddenDim)
+        {
+            throw new InvalidOperationException(
+                $"EAST configuration mismatch. Expected useRotatedBoxes={_useRotatedBoxes}, hiddenDim={_hiddenDim}, " +
+                $"got useRotatedBoxes={useRotatedBoxes}, hiddenDim={hiddenDim}");
+        }
+
+        // Read component weights
+        Backbone!.ReadParameters(reader);
+        _mergeConv1.ReadParameters(reader);
+        _mergeConv2.ReadParameters(reader);
+        _mergeConv3.ReadParameters(reader);
+        _mergeConv4.ReadParameters(reader);
+        _scoreHead.ReadParameters(reader);
+        _geometryHead.ReadParameters(reader);
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write header
+        writer.Write(0x45415354); // "EAST" in ASCII
+        writer.Write(1); // Version 1
+        writer.Write(Name);
+        writer.Write(_useRotatedBoxes);
+        writer.Write(_hiddenDim);
+
+        // Write component weights
+        Backbone!.WriteParameters(writer);
+        _mergeConv1.WriteParameters(writer);
+        _mergeConv2.WriteParameters(writer);
+        _mergeConv3.WriteParameters(writer);
+        _mergeConv4.WriteParameters(writer);
+        _scoreHead.WriteParameters(writer);
+        _geometryHead.WriteParameters(writer);
     }
 
     private Tensor<T> ApplyBatchNormReLU(Tensor<T> x)

@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -285,13 +286,72 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var stream = File.OpenRead(pathOrUrl);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify magic number and version
+        int magic = reader.ReadInt32();
+        if (magic != 0x52434E4E) // "RCNN" in ASCII
+        {
+            throw new InvalidDataException("Invalid weight file format: incorrect magic number.");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+        }
+
+        // Read model configuration
+        string modelName = reader.ReadString();
+        if (!modelName.StartsWith("Faster-RCNN"))
+        {
+            throw new InvalidDataException($"Weight file is for {modelName}, not Faster-RCNN.");
+        }
+
+        // Read backbone parameters
+        Backbone!.ReadParameters(reader);
+
+        // Read neck parameters
+        Neck!.ReadParameters(reader);
+
+        // Read RPN parameters
+        _rpn.ReadParameters(reader);
+
+        // Read detection head parameters
+        _fcClassifier.ReadParameters(reader);
+        _fcBoxRegressor.ReadParameters(reader);
+
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write magic number and version for identification
+        writer.Write(0x52434E4E); // "RCNN" in ASCII
+        writer.Write(1); // Version 1
+
+        // Write model configuration
+        writer.Write(Name);
+
+        // Write backbone parameters
+        Backbone!.WriteParameters(writer);
+
+        // Write neck parameters
+        Neck!.WriteParameters(writer);
+
+        // Write RPN parameters
+        _rpn.WriteParameters(writer);
+
+        // Write detection head parameters
+        _fcClassifier.WriteParameters(writer);
+        _fcBoxRegressor.WriteParameters(writer);
     }
 
     private Tensor<T> FlattenRoIFeatures(Tensor<T> roiFeatures)

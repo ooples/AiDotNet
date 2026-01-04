@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Tensors;
 
@@ -182,6 +183,42 @@ public class MaskHead<T>
                _deconv.GetParameterCount() +
                _predictor.GetParameterCount();
     }
+
+    /// <summary>
+    /// Writes parameters to binary writer.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_numClasses);
+        writer.Write(_maskResolution);
+        _conv1.WriteParameters(writer);
+        _conv2.WriteParameters(writer);
+        _conv3.WriteParameters(writer);
+        _conv4.WriteParameters(writer);
+        _deconv.WriteParameters(writer);
+        _predictor.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from binary reader.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int numClasses = reader.ReadInt32();
+        int maskRes = reader.ReadInt32();
+        if (numClasses != _numClasses || maskRes != _maskResolution)
+        {
+            throw new InvalidOperationException(
+                $"MaskHead configuration mismatch. Expected numClasses={_numClasses}, maskRes={_maskResolution}, " +
+                $"got numClasses={numClasses}, maskRes={maskRes}");
+        }
+        _conv1.ReadParameters(reader);
+        _conv2.ReadParameters(reader);
+        _conv3.ReadParameters(reader);
+        _conv4.ReadParameters(reader);
+        _deconv.ReadParameters(reader);
+        _predictor.ReadParameters(reader);
+    }
 }
 
 /// <summary>
@@ -326,5 +363,34 @@ public class PrototypeMaskHead<T>
                _protoConv2.GetParameterCount() +
                _protoConv3.GetParameterCount() +
                _protoOut.GetParameterCount();
+    }
+
+    /// <summary>
+    /// Writes parameters to binary writer.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_numPrototypes);
+        _protoConv1.WriteParameters(writer);
+        _protoConv2.WriteParameters(writer);
+        _protoConv3.WriteParameters(writer);
+        _protoOut.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from binary reader.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int numProtos = reader.ReadInt32();
+        if (numProtos != _numPrototypes)
+        {
+            throw new InvalidOperationException(
+                $"PrototypeMaskHead configuration mismatch. Expected numPrototypes={_numPrototypes}, got {numProtos}");
+        }
+        _protoConv1.ReadParameters(reader);
+        _protoConv2.ReadParameters(reader);
+        _protoConv3.ReadParameters(reader);
+        _protoOut.ReadParameters(reader);
     }
 }

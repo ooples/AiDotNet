@@ -104,6 +104,26 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
         return NumOps.Divide(NumOps.One, denominator);
     }
 
+    /// <summary>
+    /// Applies the SoftPlus activation function to each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to activate.</param>
+    /// <returns>A new tensor with the SoftPlus function applied to each element.</returns>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        return Engine.Softplus(input);
+    }
+
+    /// <summary>
+    /// Calculates the derivative of the SoftPlus function for each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to calculate the derivative for.</param>
+    /// <returns>A new tensor containing the derivatives (sigmoid values) for each input element.</returns>
+    public override Tensor<T> Derivative(Tensor<T> input)
+    {
+        // SoftPlus derivative is sigmoid: 1 / (1 + e^(-x))
+        return Engine.Sigmoid(input);
+    }
 
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.

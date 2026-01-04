@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -156,6 +157,96 @@ public class FPN<T> : NeckBase<T>
         }
 
         return count;
+    }
+
+    /// <inheritdoc/>
+    public override void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write(_numLevels);
+        writer.Write(_outputChannels);
+        foreach (int ic in _inputChannels)
+        {
+            writer.Write(ic);
+        }
+
+        // Write weights
+        for (int i = 0; i < _numLevels; i++)
+        {
+            WriteTensor(writer, _lateralWeights[i]);
+            WriteTensor(writer, _lateralBiases[i]);
+            WriteTensor(writer, _outputWeights[i]);
+            WriteTensor(writer, _outputBiases[i]);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        int numLevels = reader.ReadInt32();
+        int outputChannels = reader.ReadInt32();
+        var inputChannels = new int[numLevels];
+        for (int i = 0; i < numLevels; i++)
+        {
+            inputChannels[i] = reader.ReadInt32();
+        }
+
+        if (numLevels != _numLevels || outputChannels != _outputChannels)
+        {
+            throw new InvalidOperationException($"FPN configuration mismatch: expected {_numLevels} levels with {_outputChannels} channels, got {numLevels} levels with {outputChannels} channels.");
+        }
+
+        for (int i = 0; i < numLevels; i++)
+        {
+            if (inputChannels[i] != _inputChannels[i])
+            {
+                throw new InvalidOperationException($"FPN input channel mismatch at level {i}: expected {_inputChannels[i]}, got {inputChannels[i]}.");
+            }
+        }
+
+        // Read weights
+        for (int i = 0; i < _numLevels; i++)
+        {
+            ReadTensor(reader, _lateralWeights[i]);
+            ReadTensor(reader, _lateralBiases[i]);
+            ReadTensor(reader, _outputWeights[i]);
+            ReadTensor(reader, _outputBiases[i]);
+        }
+    }
+
+    private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
+    {
+        writer.Write(tensor.Rank);
+        foreach (int dim in tensor.Shape)
+        {
+            writer.Write(dim);
+        }
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(tensor[i]));
+        }
+    }
+
+    private void ReadTensor(BinaryReader reader, Tensor<T> tensor)
+    {
+        int rank = reader.ReadInt32();
+        if (rank != tensor.Rank)
+        {
+            throw new InvalidOperationException($"Tensor rank mismatch: expected {tensor.Rank}, got {rank}.");
+        }
+        for (int i = 0; i < rank; i++)
+        {
+            int dim = reader.ReadInt32();
+            if (dim != tensor.Shape[i])
+            {
+                throw new InvalidOperationException($"Tensor shape mismatch at dimension {i}: expected {tensor.Shape[i]}, got {dim}.");
+            }
+        }
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)

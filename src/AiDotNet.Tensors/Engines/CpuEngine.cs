@@ -16307,4 +16307,649 @@ public class CpuEngine : IEngine
     #endregion
 
     #endregion
+
+    #region GPU-Accelerated Operations (CPU Fallback Implementations)
+
+    /// <inheritdoc/>
+    public Tensor<T> Softplus<T>(Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var data = input.ToArray();
+        var result = new T[data.Length];
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            double x = numOps.ToDouble(data[i]);
+            result[i] = numOps.FromDouble(Math.Log(1.0 + Math.Exp(x)));
+        }
+
+        return new Tensor<T>(input.Shape, new Vector<T>(result));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> HardSwish<T>(Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var data = input.ToArray();
+        var result = new T[data.Length];
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            double x = numOps.ToDouble(data[i]);
+            double clip = Math.Min(Math.Max(x + 3.0, 0.0), 6.0);
+            result[i] = numOps.FromDouble(x * clip / 6.0);
+        }
+
+        return new Tensor<T>(input.Shape, new Vector<T>(result));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReluBackward<T>(Tensor<T> gradOutput, Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var result = new T[gradData.Length];
+
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            double inputVal = numOps.ToDouble(inputData[i]);
+            result[i] = inputVal > 0 ? gradData[i] : numOps.Zero;
+        }
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(result));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SigmoidBackward<T>(Tensor<T> gradOutput, Tensor<T> output)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradData = gradOutput.ToArray();
+        var outData = output.ToArray();
+        var result = new T[gradData.Length];
+
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            double s = numOps.ToDouble(outData[i]);
+            double grad = numOps.ToDouble(gradData[i]);
+            result[i] = numOps.FromDouble(grad * s * (1.0 - s));
+        }
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(result));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TanhBackward<T>(Tensor<T> gradOutput, Tensor<T> output)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradData = gradOutput.ToArray();
+        var outData = output.ToArray();
+        var result = new T[gradData.Length];
+
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            double t = numOps.ToDouble(outData[i]);
+            double grad = numOps.ToDouble(gradData[i]);
+            result[i] = numOps.FromDouble(grad * (1.0 - t * t));
+        }
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(result));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GeluBackward<T>(Tensor<T> gradOutput, Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var result = new T[gradData.Length];
+
+        const double sqrtTwoPi = 0.7978845608028654;
+        const double coeff = 0.044715;
+
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            double x = numOps.ToDouble(inputData[i]);
+            double grad = numOps.ToDouble(gradData[i]);
+            double tanhArg = sqrtTwoPi * (x + coeff * x * x * x);
+            double tanhVal = Math.Tanh(tanhArg);
+            double sechSq = 1.0 - tanhVal * tanhVal;
+            double derivative = 0.5 * (1.0 + tanhVal) + 0.5 * x * sechSq * sqrtTwoPi * (1.0 + 3.0 * coeff * x * x);
+            result[i] = numOps.FromDouble(grad * derivative);
+        }
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(result));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LeakyReluBackward<T>(Tensor<T> gradOutput, Tensor<T> input, double negativeSlope)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var result = new T[gradData.Length];
+
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            double inputVal = numOps.ToDouble(inputData[i]);
+            double grad = numOps.ToDouble(gradData[i]);
+            result[i] = numOps.FromDouble(inputVal > 0 ? grad : grad * negativeSlope);
+        }
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(result));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> RmsNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int normalizedSize = gamma.Length;
+        int batchSize = input.Length / normalizedSize;
+
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var rmsData = new T[batchSize];
+        var resultData = new T[input.Length];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            double sumSq = 0;
+            for (int i = 0; i < normalizedSize; i++)
+            {
+                double val = numOps.ToDouble(inputData[b * normalizedSize + i]);
+                sumSq += val * val;
+            }
+            double rmsVal = Math.Sqrt(sumSq / normalizedSize + epsilon);
+            rmsData[b] = numOps.FromDouble(rmsVal);
+
+            for (int i = 0; i < normalizedSize; i++)
+            {
+                double val = numOps.ToDouble(inputData[b * normalizedSize + i]);
+                double g = numOps.ToDouble(gammaData[i]);
+                resultData[b * normalizedSize + i] = numOps.FromDouble((val / rmsVal) * g);
+            }
+        }
+
+        rms = new Tensor<T>([batchSize], new Vector<T>(rmsData));
+        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> RmsNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int normalizedSize = gamma.Length;
+        int batchSize = input.Length / normalizedSize;
+
+        var gradOutData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var rmsData = rms.ToArray();
+        var gradInputData = new T[input.Length];
+        var gradGammaData = new T[normalizedSize];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            double rmsVal = numOps.ToDouble(rmsData[b]);
+            double invRms = 1.0 / rmsVal;
+
+            for (int i = 0; i < normalizedSize; i++)
+            {
+                double go = numOps.ToDouble(gradOutData[b * normalizedSize + i]);
+                double x = numOps.ToDouble(inputData[b * normalizedSize + i]);
+                double g = numOps.ToDouble(gammaData[i]);
+
+                gradGammaData[i] = numOps.Add(gradGammaData[i], numOps.FromDouble(go * x * invRms));
+                gradInputData[b * normalizedSize + i] = numOps.FromDouble(go * g * invRms);
+            }
+        }
+
+        gradGamma = new Tensor<T>(gamma.Shape, new Vector<T>(gradGammaData));
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> InstanceNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int spatialSize = 1;
+        for (int i = 2; i < input.Rank; i++) spatialSize *= input.Shape[i];
+
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var betaData = beta.ToArray();
+        var meanData = new T[batch * channels];
+        var varData = new T[batch * channels];
+        var resultData = new T[input.Length];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int offset = (b * channels + c) * spatialSize;
+                double sum = 0;
+                for (int s = 0; s < spatialSize; s++)
+                    sum += numOps.ToDouble(inputData[offset + s]);
+                double meanVal = sum / spatialSize;
+                meanData[b * channels + c] = numOps.FromDouble(meanVal);
+
+                double sumSq = 0;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    double diff = numOps.ToDouble(inputData[offset + s]) - meanVal;
+                    sumSq += diff * diff;
+                }
+                double varVal = sumSq / spatialSize;
+                varData[b * channels + c] = numOps.FromDouble(varVal);
+                double invStd = 1.0 / Math.Sqrt(varVal + epsilon);
+
+                double g = numOps.ToDouble(gammaData[c]);
+                double be = numOps.ToDouble(betaData[c]);
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    double x = numOps.ToDouble(inputData[offset + s]);
+                    resultData[offset + s] = numOps.FromDouble((x - meanVal) * invStd * g + be);
+                }
+            }
+        }
+
+        mean = new Tensor<T>([batch, channels], new Vector<T>(meanData));
+        variance = new Tensor<T>([batch, channels], new Vector<T>(varData));
+        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> InstanceNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int spatialSize = 1;
+        for (int i = 2; i < input.Rank; i++) spatialSize *= input.Shape[i];
+
+        var gradOutData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var meanData = mean.ToArray();
+        var varData = variance.ToArray();
+        var gradInputData = new T[input.Length];
+        var gradGammaData = new T[channels];
+        var gradBetaData = new T[channels];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int offset = (b * channels + c) * spatialSize;
+                double meanVal = numOps.ToDouble(meanData[b * channels + c]);
+                double varVal = numOps.ToDouble(varData[b * channels + c]);
+                double invStd = 1.0 / Math.Sqrt(varVal + epsilon);
+                double g = numOps.ToDouble(gammaData[c]);
+
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    double go = numOps.ToDouble(gradOutData[offset + s]);
+                    double x = numOps.ToDouble(inputData[offset + s]);
+                    double xNorm = (x - meanVal) * invStd;
+                    gradGammaData[c] = numOps.Add(gradGammaData[c], numOps.FromDouble(go * xNorm));
+                    gradBetaData[c] = numOps.Add(gradBetaData[c], numOps.FromDouble(go));
+                    gradInputData[offset + s] = numOps.FromDouble(go * g * invStd);
+                }
+            }
+        }
+
+        gradGamma = new Tensor<T>([channels], new Vector<T>(gradGammaData));
+        gradBeta = new Tensor<T>([channels], new Vector<T>(gradBetaData));
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Dropout<T>(Tensor<T> input, double dropoutRate, bool training, out Tensor<T> mask)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputData = input.ToArray();
+        var maskData = new T[inputData.Length];
+        var resultData = new T[inputData.Length];
+
+        if (!training || dropoutRate <= 0)
+        {
+            Array.Copy(inputData, resultData, inputData.Length);
+            for (int i = 0; i < maskData.Length; i++)
+                maskData[i] = numOps.One;
+        }
+        else
+        {
+            var rand = RandomHelper.CreateSeededRandom((int)(DateTime.UtcNow.Ticks % int.MaxValue));
+            double scale = 1.0 / (1.0 - dropoutRate);
+            for (int i = 0; i < inputData.Length; i++)
+            {
+                if (rand.NextDouble() >= dropoutRate)
+                {
+                    maskData[i] = numOps.FromDouble(scale);
+                    resultData[i] = numOps.FromDouble(numOps.ToDouble(inputData[i]) * scale);
+                }
+                else
+                {
+                    maskData[i] = numOps.Zero;
+                    resultData[i] = numOps.Zero;
+                }
+            }
+        }
+
+        mask = new Tensor<T>(input.Shape, new Vector<T>(maskData));
+        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DropoutBackward<T>(Tensor<T> gradOutput, Tensor<T> mask, double dropoutRate)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradData = gradOutput.ToArray();
+        var maskData = mask.ToArray();
+        var resultData = new T[gradData.Length];
+
+        for (int i = 0; i < gradData.Length; i++)
+            resultData[i] = numOps.Multiply(gradData[i], maskData[i]);
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(resultData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Embedding<T>(Tensor<int> indices, Tensor<T> embeddingTable)
+    {
+        int embeddingDim = embeddingTable.Shape[^1];
+        int numIndices = indices.Length;
+        var tableData = embeddingTable.ToArray();
+        var indicesData = indices.ToArray();
+        var resultData = new T[numIndices * embeddingDim];
+
+        for (int i = 0; i < numIndices; i++)
+        {
+            int idx = indicesData[i];
+            int srcOffset = idx * embeddingDim;
+            int dstOffset = i * embeddingDim;
+            for (int j = 0; j < embeddingDim; j++)
+                resultData[dstOffset + j] = tableData[srcOffset + j];
+        }
+
+        var outputShape = new int[indices.Shape.Length + 1];
+        for (int i = 0; i < indices.Shape.Length; i++)
+            outputShape[i] = indices.Shape[i];
+        outputShape[^1] = embeddingDim;
+
+        return new Tensor<T>(outputShape, new Vector<T>(resultData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> EmbeddingBackward<T>(Tensor<T> gradOutput, Tensor<int> indices, int vocabSize, int embeddingDim)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradData = gradOutput.ToArray();
+        var indicesData = indices.ToArray();
+        var resultData = new T[vocabSize * embeddingDim];
+
+        for (int i = 0; i < indices.Length; i++)
+        {
+            int idx = indicesData[i];
+            int srcOffset = i * embeddingDim;
+            int dstOffset = idx * embeddingDim;
+            for (int j = 0; j < embeddingDim; j++)
+                resultData[dstOffset + j] = numOps.Add(resultData[dstOffset + j], gradData[srcOffset + j]);
+        }
+
+        return new Tensor<T>([vocabSize, embeddingDim], new Vector<T>(resultData));
+    }
+
+    /// <inheritdoc/>
+    public T CrossEntropyLoss<T>(Tensor<T> predictions, Tensor<T> targets)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batchSize = predictions.Shape[0];
+        int numClasses = predictions.Shape[1];
+
+        var predData = predictions.ToArray();
+        var targetData = targets.ToArray();
+        double totalLoss = 0;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute softmax
+            double maxVal = double.NegativeInfinity;
+            for (int c = 0; c < numClasses; c++)
+            {
+                double val = numOps.ToDouble(predData[b * numClasses + c]);
+                if (val > maxVal) maxVal = val;
+            }
+
+            double sumExp = 0;
+            for (int c = 0; c < numClasses; c++)
+            {
+                double val = numOps.ToDouble(predData[b * numClasses + c]) - maxVal;
+                sumExp += Math.Exp(val);
+            }
+            double logSumExp = maxVal + Math.Log(sumExp);
+
+            // Cross entropy
+            if (targets.Rank == 1)
+            {
+                int targetClass = (int)numOps.ToDouble(targetData[b]);
+                double logProb = numOps.ToDouble(predData[b * numClasses + targetClass]) - logSumExp;
+                totalLoss -= logProb;
+            }
+            else
+            {
+                for (int c = 0; c < numClasses; c++)
+                {
+                    double targetVal = numOps.ToDouble(targetData[b * numClasses + c]);
+                    if (targetVal > 0)
+                    {
+                        double logProb = numOps.ToDouble(predData[b * numClasses + c]) - logSumExp;
+                        totalLoss -= targetVal * logProb;
+                    }
+                }
+            }
+        }
+
+        return numOps.FromDouble(totalLoss / batchSize);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> CrossEntropyBackward<T>(Tensor<T> predictions, Tensor<T> targets)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batchSize = predictions.Shape[0];
+        int numClasses = predictions.Shape[1];
+
+        var predData = predictions.ToArray();
+        var targetData = targets.ToArray();
+        var gradData = new T[predictions.Length];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute softmax
+            double maxVal = double.NegativeInfinity;
+            for (int c = 0; c < numClasses; c++)
+            {
+                double val = numOps.ToDouble(predData[b * numClasses + c]);
+                if (val > maxVal) maxVal = val;
+            }
+
+            var probs = new double[numClasses];
+            double sumExp = 0;
+            for (int c = 0; c < numClasses; c++)
+            {
+                probs[c] = Math.Exp(numOps.ToDouble(predData[b * numClasses + c]) - maxVal);
+                sumExp += probs[c];
+            }
+            for (int c = 0; c < numClasses; c++)
+                probs[c] /= sumExp;
+
+            // Gradient
+            if (targets.Rank == 1)
+            {
+                int targetClass = (int)numOps.ToDouble(targetData[b]);
+                for (int c = 0; c < numClasses; c++)
+                {
+                    double grad = probs[c] - (c == targetClass ? 1.0 : 0.0);
+                    gradData[b * numClasses + c] = numOps.FromDouble(grad / batchSize);
+                }
+            }
+            else
+            {
+                for (int c = 0; c < numClasses; c++)
+                {
+                    double targetVal = numOps.ToDouble(targetData[b * numClasses + c]);
+                    double grad = probs[c] - targetVal;
+                    gradData[b * numClasses + c] = numOps.FromDouble(grad / batchSize);
+                }
+            }
+        }
+
+        return new Tensor<T>(predictions.Shape, new Vector<T>(gradData));
+    }
+
+    /// <inheritdoc/>
+    public T MseLoss<T>(Tensor<T> predictions, Tensor<T> targets)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var predData = predictions.ToArray();
+        var targetData = targets.ToArray();
+        double sumSq = 0;
+
+        for (int i = 0; i < predData.Length; i++)
+        {
+            double diff = numOps.ToDouble(predData[i]) - numOps.ToDouble(targetData[i]);
+            sumSq += diff * diff;
+        }
+
+        return numOps.FromDouble(sumSq / predData.Length);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MseBackward<T>(Tensor<T> predictions, Tensor<T> targets)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var predData = predictions.ToArray();
+        var targetData = targets.ToArray();
+        var gradData = new T[predData.Length];
+        double scale = 2.0 / predData.Length;
+
+        for (int i = 0; i < predData.Length; i++)
+        {
+            double diff = numOps.ToDouble(predData[i]) - numOps.ToDouble(targetData[i]);
+            gradData[i] = numOps.FromDouble(diff * scale);
+        }
+
+        return new Tensor<T>(predictions.Shape, new Vector<T>(gradData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GlobalAvgPool2D<T>(Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        int spatialSize = height * width;
+
+        var inputData = input.ToArray();
+        var resultData = new T[batch * channels];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                double sum = 0;
+                int offset = (b * channels + c) * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                    sum += numOps.ToDouble(inputData[offset + s]);
+                resultData[b * channels + c] = numOps.FromDouble(sum / spatialSize);
+            }
+        }
+
+        return new Tensor<T>([batch, channels, 1, 1], new Vector<T>(resultData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GlobalMaxPool2D<T>(Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        int spatialSize = height * width;
+
+        var inputData = input.ToArray();
+        var resultData = new T[batch * channels];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int offset = (b * channels + c) * spatialSize;
+                double maxVal = numOps.ToDouble(inputData[offset]);
+                for (int s = 1; s < spatialSize; s++)
+                {
+                    double val = numOps.ToDouble(inputData[offset + s]);
+                    if (val > maxVal) maxVal = val;
+                }
+                resultData[b * channels + c] = numOps.FromDouble(maxVal);
+            }
+        }
+
+        return new Tensor<T>([batch, channels, 1, 1], new Vector<T>(resultData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AdaptiveAvgPool2D<T>(Tensor<T> input, int outputHeight, int outputWidth)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        var inputData = input.ToArray();
+        var resultData = new T[batch * channels * outputHeight * outputWidth];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    int startH = (int)Math.Floor((double)oh * inHeight / outputHeight);
+                    int endH = (int)Math.Ceiling((double)(oh + 1) * inHeight / outputHeight);
+
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        int startW = (int)Math.Floor((double)ow * inWidth / outputWidth);
+                        int endW = (int)Math.Ceiling((double)(ow + 1) * inWidth / outputWidth);
+
+                        double sum = 0;
+                        int count = 0;
+                        for (int ih = startH; ih < endH; ih++)
+                        {
+                            for (int iw = startW; iw < endW; iw++)
+                            {
+                                int idx = ((b * channels + c) * inHeight + ih) * inWidth + iw;
+                                sum += numOps.ToDouble(inputData[idx]);
+                                count++;
+                            }
+                        }
+                        int outIdx = ((b * channels + c) * outputHeight + oh) * outputWidth + ow;
+                        resultData[outIdx] = numOps.FromDouble(sum / count);
+                    }
+                }
+            }
+        }
+
+        return new Tensor<T>([batch, channels, outputHeight, outputWidth], new Vector<T>(resultData));
+    }
+
+    #endregion
 }

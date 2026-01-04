@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Enums;
@@ -227,15 +228,75 @@ public class CRAFT<T> : TextDetectorBase<T>
     }
 
     /// <inheritdoc/>
-    public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
+    public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        byte[] data;
+        if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var client = new System.Net.Http.HttpClient();
+            data = await client.GetByteArrayAsync(pathOrUrl, cancellationToken);
+        }
+        else
+        {
+            data = await File.ReadAllBytesAsync(pathOrUrl, cancellationToken);
+        }
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify header
+        int magic = reader.ReadInt32();
+        if (magic != 0x43524146) // "CRAF" in ASCII
+        {
+            throw new InvalidDataException($"Invalid CRAFT model file. Expected magic 0x43524146, got 0x{magic:X8}");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported CRAFT model version: {version}");
+        }
+
+        string name = reader.ReadString();
+        int hiddenDim = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim)
+        {
+            throw new InvalidOperationException(
+                $"CRAFT configuration mismatch. Expected hiddenDim={_hiddenDim}, got hiddenDim={hiddenDim}");
+        }
+
+        // Read component weights
+        Backbone!.ReadParameters(reader);
+        _upConv1.ReadParameters(reader);
+        _upConv2.ReadParameters(reader);
+        _upConv3.ReadParameters(reader);
+        _upConv4.ReadParameters(reader);
+        _regionHead.ReadParameters(reader);
+        _affinityHead.ReadParameters(reader);
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write header
+        writer.Write(0x43524146); // "CRAF" in ASCII
+        writer.Write(1); // Version 1
+        writer.Write(Name);
+        writer.Write(_hiddenDim);
+
+        // Write component weights
+        Backbone!.WriteParameters(writer);
+        _upConv1.WriteParameters(writer);
+        _upConv2.WriteParameters(writer);
+        _upConv3.WriteParameters(writer);
+        _upConv4.WriteParameters(writer);
+        _regionHead.WriteParameters(writer);
+        _affinityHead.WriteParameters(writer);
     }
 
     private Tensor<T> ApplyReLU(Tensor<T> x)

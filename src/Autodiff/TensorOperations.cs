@@ -8181,28 +8181,104 @@ public static class TensorOperations<T>
 
             void BackwardFunction(Tensor<T> gradient)
             {
-                // Simplified gradient (full complex matrix multiplication gradient is complex)
-                if (a.RequiresGradient || b.RequiresGradient)
-                {
-                    // For now, approximate gradient
-                    // Full implementation requires transposing and conjugating
-                    if (a.RequiresGradient)
-                    {
-                        var gradA = new Tensor<T>(shapeA);
-                        // gradient @ b^H (conjugate transpose)
-                        // Simplified: just pass through gradient
-                        var existingGrad = a.Gradient;
-                        a.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
-                    }
+                // Complex matrix multiplication gradient with split format
+                // For C = A @ B (complex), dL/dA = dL/dC @ B^H, dL/dB = A^H @ dL/dC
+                // Where ^H is conjugate transpose
 
-                    if (b.RequiresGradient)
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shapeA);
+                    // Compute gradient @ conjugate(B)^T
+                    for (int b_idx = 0; b_idx < (batch > 1 ? batch : 1); b_idx++)
                     {
-                        var gradB = new Tensor<T>(shapeB);
-                        // a^H @ gradient
-                        // Simplified: just pass through gradient
-                        var existingGrad = b.Gradient;
-                        b.Gradient = existingGrad == null ? gradB : existingGrad.Add(gradB);
+                        for (int i = 0; i < m; i++)
+                        {
+                            for (int k_idx = 0; k_idx < k; k_idx++)
+                            {
+                                T gradRealSum = numOps.Zero;
+                                T gradImagSum = numOps.Zero;
+
+                                for (int j = 0; j < n; j++)
+                                {
+                                    // Get gradient components
+                                    var gradIdxReal = batch > 1 ? new[] { b_idx, i, j } : new[] { i, j };
+                                    var gradIdxImag = batch > 1 ? new[] { b_idx, i, n + j } : new[] { i, n + j };
+                                    T g_real = gradient[gradIdxReal];
+                                    T g_imag = gradient[gradIdxImag];
+
+                                    // Get B conjugate transpose components (transpose: k_idx, j -> j, k_idx; conjugate: negate imag)
+                                    var bIdxReal = batch > 1 ? new[] { b_idx, k_idx, j } : new[] { k_idx, j };
+                                    var bIdxImag = batch > 1 ? new[] { b_idx, k + k_idx, j } : new[] { k + k_idx, j };
+                                    T b_real = b.Value[bIdxReal];
+                                    T b_imag = numOps.Negate(b.Value[bIdxImag]); // Conjugate
+
+                                    // (g_real + i*g_imag) * (b_real + i*b_imag)
+                                    T rr = numOps.Multiply(g_real, b_real);
+                                    T ii = numOps.Multiply(g_imag, b_imag);
+                                    T ri = numOps.Multiply(g_real, b_imag);
+                                    T ir = numOps.Multiply(g_imag, b_real);
+
+                                    gradRealSum = numOps.Add(gradRealSum, numOps.Subtract(rr, ii));
+                                    gradImagSum = numOps.Add(gradImagSum, numOps.Add(ri, ir));
+                                }
+
+                                var aIdxReal = batch > 1 ? new[] { b_idx, i, k_idx } : new[] { i, k_idx };
+                                var aIdxImag = batch > 1 ? new[] { b_idx, i, k + k_idx } : new[] { i, k + k_idx };
+                                gradA[aIdxReal] = gradRealSum;
+                                gradA[aIdxImag] = gradImagSum;
+                            }
+                        }
                     }
+                    var existingGrad = a.Gradient;
+                    a.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
+                }
+
+                if (b.RequiresGradient)
+                {
+                    var gradB = new Tensor<T>(shapeB);
+                    // Compute conjugate(A)^T @ gradient
+                    for (int b_idx = 0; b_idx < (batch > 1 ? batch : 1); b_idx++)
+                    {
+                        for (int k_idx = 0; k_idx < k; k_idx++)
+                        {
+                            for (int j = 0; j < n; j++)
+                            {
+                                T gradRealSum = numOps.Zero;
+                                T gradImagSum = numOps.Zero;
+
+                                for (int i = 0; i < m; i++)
+                                {
+                                    // Get A conjugate transpose components (transpose: i, k_idx -> k_idx, i; conjugate: negate imag)
+                                    var aIdxReal = batch > 1 ? new[] { b_idx, i, k_idx } : new[] { i, k_idx };
+                                    var aIdxImag = batch > 1 ? new[] { b_idx, i, k + k_idx } : new[] { i, k + k_idx };
+                                    T a_real = a.Value[aIdxReal];
+                                    T a_imag = numOps.Negate(a.Value[aIdxImag]); // Conjugate
+
+                                    // Get gradient components
+                                    var gradIdxReal = batch > 1 ? new[] { b_idx, i, j } : new[] { i, j };
+                                    var gradIdxImag = batch > 1 ? new[] { b_idx, i, n + j } : new[] { i, n + j };
+                                    T g_real = gradient[gradIdxReal];
+                                    T g_imag = gradient[gradIdxImag];
+
+                                    // (a_real + i*a_imag) * (g_real + i*g_imag)
+                                    T rr = numOps.Multiply(a_real, g_real);
+                                    T ii = numOps.Multiply(a_imag, g_imag);
+                                    T ri = numOps.Multiply(a_real, g_imag);
+                                    T ir = numOps.Multiply(a_imag, g_real);
+
+                                    gradRealSum = numOps.Add(gradRealSum, numOps.Subtract(rr, ii));
+                                    gradImagSum = numOps.Add(gradImagSum, numOps.Add(ri, ir));
+                                }
+
+                                var bIdxReal = batch > 1 ? new[] { b_idx, k_idx, j } : new[] { k_idx, j };
+                                var bIdxImag = batch > 1 ? new[] { b_idx, k + k_idx, j } : new[] { k + k_idx, j };
+                                gradB[bIdxReal] = gradRealSum;
+                                gradB[bIdxImag] = gradImagSum;
+                            }
+                        }
+                    }
+                    var existingGrad = b.Gradient;
+                    b.Gradient = existingGrad == null ? gradB : existingGrad.Add(gradB);
                 }
             }
 
@@ -8473,24 +8549,75 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient || b.RequiresGradient)
             {
-                // ∂(a*b)/∂a = b* (conjugate)
-                // ∂(a*b)/∂b = a* (conjugate)
+                // For complex multiplication c = a * b:
+                // ∂L/∂a = ∂L/∂c * b* (gradient times conjugate of b)
+                // ∂L/∂b = ∂L/∂c * a* (gradient times conjugate of a)
 
-                if (a.RequiresGradient)
+                void ComputeGradient(int[] indices, int dim)
                 {
-                    var gradA = new Tensor<T>(shape);
-                    // Simplified gradient
-                    var existingGrad = a.Gradient;
-                    a.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
+                    if (dim == shape.Length - 1)
+                    {
+                        for (int i = 0; i < n; i++)
+                        {
+                            var idxReal = indices.Take(indices.Length - 1).Concat(new[] { i }).ToArray();
+                            var idxImag = indices.Take(indices.Length - 1).Concat(new[] { n + i }).ToArray();
+
+                            // Get gradient components
+                            T g_real = gradient[idxReal];
+                            T g_imag = gradient[idxImag];
+
+                            if (a.RequiresGradient)
+                            {
+                                // ∂L/∂a = g * b* = (g_real + i*g_imag) * (b_real - i*b_imag)
+                                T b_real = b.Value[idxReal];
+                                T b_imag_neg = numOps.Negate(b.Value[idxImag]); // Conjugate
+
+                                // (g_real + i*g_imag) * (b_real + i*b_imag_neg)
+                                T gradA_real = numOps.Subtract(
+                                    numOps.Multiply(g_real, b_real),
+                                    numOps.Multiply(g_imag, b_imag_neg));
+                                T gradA_imag = numOps.Add(
+                                    numOps.Multiply(g_real, b_imag_neg),
+                                    numOps.Multiply(g_imag, b_real));
+
+                                if (a.Gradient == null)
+                                    a.Gradient = new Tensor<T>(shape);
+                                a.Gradient[idxReal] = numOps.Add(a.Gradient[idxReal], gradA_real);
+                                a.Gradient[idxImag] = numOps.Add(a.Gradient[idxImag], gradA_imag);
+                            }
+
+                            if (b.RequiresGradient)
+                            {
+                                // ∂L/∂b = g * a* = (g_real + i*g_imag) * (a_real - i*a_imag)
+                                T a_real = a.Value[idxReal];
+                                T a_imag_neg = numOps.Negate(a.Value[idxImag]); // Conjugate
+
+                                // (g_real + i*g_imag) * (a_real + i*a_imag_neg)
+                                T gradB_real = numOps.Subtract(
+                                    numOps.Multiply(g_real, a_real),
+                                    numOps.Multiply(g_imag, a_imag_neg));
+                                T gradB_imag = numOps.Add(
+                                    numOps.Multiply(g_real, a_imag_neg),
+                                    numOps.Multiply(g_imag, a_real));
+
+                                if (b.Gradient == null)
+                                    b.Gradient = new Tensor<T>(shape);
+                                b.Gradient[idxReal] = numOps.Add(b.Gradient[idxReal], gradB_real);
+                                b.Gradient[idxImag] = numOps.Add(b.Gradient[idxImag], gradB_imag);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < shape[dim]; i++)
+                        {
+                            indices[dim] = i;
+                            ComputeGradient(indices, dim + 1);
+                        }
+                    }
                 }
 
-                if (b.RequiresGradient)
-                {
-                    var gradB = new Tensor<T>(shape);
-                    // Simplified gradient
-                    var existingGrad = b.Gradient;
-                    b.Gradient = existingGrad == null ? gradB : existingGrad.Add(gradB);
-                }
+                ComputeGradient(new int[shape.Length], 0);
             }
         }
 

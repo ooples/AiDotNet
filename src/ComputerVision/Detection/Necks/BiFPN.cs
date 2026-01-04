@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -327,6 +328,152 @@ public class BiFPN<T> : NeckBase<T>
 
         // Weights are shared across all repeat blocks, so no multiplication needed
         return count;
+    }
+
+    /// <inheritdoc/>
+    public override void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write(_numLevels);
+        writer.Write(_outputChannels);
+        writer.Write(_numRepeats);
+        foreach (int ic in _inputChannels)
+        {
+            writer.Write(ic);
+        }
+
+        // Write lateral connections
+        for (int i = 0; i < _numLevels; i++)
+        {
+            WriteTensor(writer, _lateralWeights[i]);
+            WriteTensor(writer, _lateralBiases[i]);
+        }
+
+        // Write top-down pathway
+        for (int i = 0; i < _numLevels - 1; i++)
+        {
+            writer.Write(_topDownFusionWeights[i].Count);
+            foreach (var fusionWeight in _topDownFusionWeights[i])
+            {
+                WriteTensor(writer, fusionWeight);
+            }
+            WriteTensor(writer, _topDownConvWeights[i]);
+            WriteTensor(writer, _topDownConvBiases[i]);
+        }
+
+        // Write bottom-up pathway
+        for (int i = 1; i < _numLevels; i++)
+        {
+            int idx = i - 1;
+            writer.Write(_bottomUpFusionWeights[idx].Count);
+            foreach (var fusionWeight in _bottomUpFusionWeights[idx])
+            {
+                WriteTensor(writer, fusionWeight);
+            }
+            WriteTensor(writer, _bottomUpConvWeights[idx]);
+            WriteTensor(writer, _bottomUpConvBiases[idx]);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        int numLevels = reader.ReadInt32();
+        int outputChannels = reader.ReadInt32();
+        int numRepeats = reader.ReadInt32();
+        var inputChannels = new int[numLevels];
+        for (int i = 0; i < numLevels; i++)
+        {
+            inputChannels[i] = reader.ReadInt32();
+        }
+
+        if (numLevels != _numLevels || outputChannels != _outputChannels || numRepeats != _numRepeats)
+        {
+            throw new InvalidOperationException($"BiFPN configuration mismatch: expected {_numLevels} levels, {_outputChannels} channels, {_numRepeats} repeats; got {numLevels} levels, {outputChannels} channels, {numRepeats} repeats.");
+        }
+
+        for (int i = 0; i < numLevels; i++)
+        {
+            if (inputChannels[i] != _inputChannels[i])
+            {
+                throw new InvalidOperationException($"BiFPN input channel mismatch at level {i}: expected {_inputChannels[i]}, got {inputChannels[i]}.");
+            }
+        }
+
+        // Read lateral connections
+        for (int i = 0; i < _numLevels; i++)
+        {
+            ReadTensor(reader, _lateralWeights[i]);
+            ReadTensor(reader, _lateralBiases[i]);
+        }
+
+        // Read top-down pathway
+        for (int i = 0; i < _numLevels - 1; i++)
+        {
+            int fusionCount = reader.ReadInt32();
+            if (fusionCount != _topDownFusionWeights[i].Count)
+            {
+                throw new InvalidOperationException($"BiFPN top-down fusion weight count mismatch at level {i}.");
+            }
+            foreach (var fusionWeight in _topDownFusionWeights[i])
+            {
+                ReadTensor(reader, fusionWeight);
+            }
+            ReadTensor(reader, _topDownConvWeights[i]);
+            ReadTensor(reader, _topDownConvBiases[i]);
+        }
+
+        // Read bottom-up pathway
+        for (int i = 1; i < _numLevels; i++)
+        {
+            int idx = i - 1;
+            int fusionCount = reader.ReadInt32();
+            if (fusionCount != _bottomUpFusionWeights[idx].Count)
+            {
+                throw new InvalidOperationException($"BiFPN bottom-up fusion weight count mismatch at level {i}.");
+            }
+            foreach (var fusionWeight in _bottomUpFusionWeights[idx])
+            {
+                ReadTensor(reader, fusionWeight);
+            }
+            ReadTensor(reader, _bottomUpConvWeights[idx]);
+            ReadTensor(reader, _bottomUpConvBiases[idx]);
+        }
+    }
+
+    private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
+    {
+        writer.Write(tensor.Rank);
+        foreach (int dim in tensor.Shape)
+        {
+            writer.Write(dim);
+        }
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(tensor[i]));
+        }
+    }
+
+    private void ReadTensor(BinaryReader reader, Tensor<T> tensor)
+    {
+        int rank = reader.ReadInt32();
+        if (rank != tensor.Rank)
+        {
+            throw new InvalidOperationException($"Tensor rank mismatch: expected {tensor.Rank}, got {rank}.");
+        }
+        for (int i = 0; i < rank; i++)
+        {
+            int dim = reader.ReadInt32();
+            if (dim != tensor.Shape[i])
+            {
+                throw new InvalidOperationException($"Tensor shape mismatch at dimension {i}: expected {tensor.Shape[i]}, got {dim}.");
+            }
+        }
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)

@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -220,12 +221,81 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var stream = File.OpenRead(pathOrUrl);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify magic number and version
+        int magic = reader.ReadInt32();
+        if (magic != 0x594F4C4F) // "YOLO" in ASCII
+        {
+            throw new InvalidDataException("Invalid weight file format: incorrect magic number.");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+        }
+
+        // Read model configuration
+        string modelName = reader.ReadString();
+        if (!modelName.StartsWith("YOLOv9"))
+        {
+            throw new InvalidDataException($"Weight file is for {modelName}, not YOLOv9.");
+        }
+
+        // Read backbone parameters
+        Backbone!.ReadParameters(reader);
+
+        // Read neck parameters
+        Neck!.ReadParameters(reader);
+
+        // Read GELAN block parameters
+        int gelanCount = reader.ReadInt32();
+        if (gelanCount != _gelanBlocks.Count)
+        {
+            throw new InvalidDataException($"GELAN block count mismatch: expected {_gelanBlocks.Count}, got {gelanCount}.");
+        }
+        foreach (var block in _gelanBlocks)
+        {
+            block.ReadParameters(reader);
+        }
+
+        // Read head parameters
+        _head.ReadParameters(reader);
+
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write magic number and version for identification
+        writer.Write(0x594F4C4F); // "YOLO" in ASCII
+        writer.Write(1); // Version 1
+
+        // Write model configuration
+        writer.Write(Name);
+
+        // Write backbone parameters
+        Backbone!.WriteParameters(writer);
+
+        // Write neck parameters
+        Neck!.WriteParameters(writer);
+
+        // Write GELAN block parameters
+        writer.Write(_gelanBlocks.Count);
+        foreach (var block in _gelanBlocks)
+        {
+            block.WriteParameters(writer);
+        }
+
+        // Write head parameters
+        _head.WriteParameters(writer);
     }
 }

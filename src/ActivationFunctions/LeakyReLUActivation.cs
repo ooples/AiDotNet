@@ -135,14 +135,14 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method calculates how the output vector changes when we slightly change each input value.
-    /// 
+    ///
     /// The result is a special matrix called a "Jacobian matrix" where:
     /// - Values on the main diagonal (top-left to bottom-right) are the derivatives for each input
     /// - All other values are 0
-    /// 
+    ///
     /// This diagonal structure indicates that each output is affected only by its corresponding input,
     /// with no cross-interactions between different elements.
-    /// 
+    ///
     /// For Leaky ReLU, each diagonal value will be either:
     /// - 1 (for inputs > 0)
     /// - alpha (for inputs = 0)
@@ -171,6 +171,45 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
         return jacobian;
     }
 
+    /// <summary>
+    /// Applies the Leaky ReLU activation function to each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to activate.</param>
+    /// <returns>A new tensor with the Leaky ReLU function applied to each element.</returns>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        return Engine.LeakyReLU(input, _alpha);
+    }
+
+    /// <summary>
+    /// Calculates the derivative of the Leaky ReLU function for each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to calculate the derivative for.</param>
+    /// <returns>A new tensor containing the derivatives of the Leaky ReLU function for each input element.</returns>
+    public override Tensor<T> Derivative(Tensor<T> input)
+    {
+        Tensor<T> output = new Tensor<T>(input.Shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            output[i] = Derivative(input[i]);
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Calculates the backward pass gradient for Leaky ReLU using GPU-accelerated fused operation.
+    /// </summary>
+    /// <param name="input">The input tensor that was used in the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
+    /// which is faster than computing derivative and gradient multiplication separately.
+    /// </remarks>
+    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
+    {
+        return Engine.LeakyReluBackward(outputGradient, input, NumOps.ToDouble(_alpha));
+    }
 
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
@@ -204,7 +243,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
             throw new ArgumentNullException(nameof(input));
 
         // Convert alpha to double for TensorOperations
-        double alphaDouble = Convert.ToDouble(_alpha);
+        double alphaDouble = NumOps.ToDouble(_alpha);
         return TensorOperations<T>.LeakyReLU(input, alphaDouble);
     }
 }
