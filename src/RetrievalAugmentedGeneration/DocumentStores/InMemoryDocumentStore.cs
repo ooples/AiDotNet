@@ -116,8 +116,9 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
-        _store[vectorDocument.Document.Id] = vectorDocument;
+        // Add to HNSW first - if it fails, don't add to store to maintain consistency
         _hnswIndex.Add(vectorDocument.Document.Id, vectorDocument.Embedding);
+        _store[vectorDocument.Document.Id] = vectorDocument;
     }
 
     /// <summary>
@@ -156,7 +157,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
             }
         }
 
-        // Validate all documents in batch and add to stores
+        // Validate all documents and build HNSW batch first
         var hnswBatch = new Dictionary<string, Vector<T>>();
         foreach (var vd in vectorDocuments)
         {
@@ -167,12 +168,17 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
                     $"Vector dimension mismatch in batch. Expected {_vectorDimension}, got {vd.Embedding.Length} for document {vd.Document.Id}",
                     nameof(vectorDocuments));
             }
-            _store[vd.Document.Id] = vd;
             hnswBatch[vd.Document.Id] = vd.Embedding;
         }
 
-        // Add all vectors to HNSW index in batch
+        // Add to HNSW first - if it fails, don't add to store to maintain consistency
         _hnswIndex.AddBatch(hnswBatch);
+
+        // Only add to store after HNSW succeeds
+        foreach (var vd in vectorDocuments)
+        {
+            _store[vd.Document.Id] = vd;
+        }
     }
 
     /// <summary>
