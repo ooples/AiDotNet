@@ -5,8 +5,8 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using AiDotNet.Tensors.Engines.DirectGpu.Sparsity;
 using AiDotNet.Tensors.Engines.DirectGpu.HIP.Kernels;
+using AiDotNet.Tensors.Engines.DirectGpu.Sparsity;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.HIP;
 
@@ -805,7 +805,7 @@ public sealed class HipBackend : IDirectGpuBackend
         UploadToBuffer(C, cData);
     }
 
-    public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)    
+    public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
         var aData = DownloadBuffer(A);
         var bData = DownloadBuffer(B);
@@ -853,7 +853,7 @@ public sealed class HipBackend : IDirectGpuBackend
         UploadToBuffer(C, cData);
     }
 
-    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)       
+    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)
     {
         var aData = DownloadBuffer(A);
         var bData = new float[size];

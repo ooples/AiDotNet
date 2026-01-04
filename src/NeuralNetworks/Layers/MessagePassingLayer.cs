@@ -435,7 +435,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-// Check that adjacency matrix is set
+        // Check that adjacency matrix is set
         // NOTE: Sparse aggregation via edge indices is not yet implemented for MessagePassingLayer
         if (_adjacencyMatrix == null)
         {
@@ -1092,7 +1092,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => 
+    public override bool SupportsJitCompilation =>
         _messageWeights1 != null && _messageWeights2 != null &&
         _messageBias1 != null && _messageBias2 != null &&
         _updateWeights != null && _updateMessageWeights != null && _updateBias != null &&
@@ -1135,7 +1135,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             TensorOperations<T>.MatrixMultiply(inputNode, msgW1Node),
             msgB1Node);
         msgHidden = TensorOperations<T>.ReLU(msgHidden);
-        
+
         var messages = TensorOperations<T>.Add(
             TensorOperations<T>.MatrixMultiply(msgHidden, msgW2Node),
             msgB2Node);
@@ -1143,7 +1143,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Step 2: Aggregation using adjacency matrix (graph convolution style)
         // aggregated = adjacency @ messages
-        var aggregated = TensorOperations<T>.GraphConv(messages, adjNode, 
+        var aggregated = TensorOperations<T>.GraphConv(messages, adjNode,
             TensorOperations<T>.Constant(
                 Tensor<T>.CreateIdentity(_messageFeatures), "identity"));
 
@@ -1173,7 +1173,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var onesConst = TensorOperations<T>.Constant(
             Tensor<T>.CreateOnes(updateGate.Value.Shape), "ones");
         var oneMinusZ = TensorOperations<T>.Subtract(onesConst, updateGate);
-        
+
         var output = TensorOperations<T>.Add(
             TensorOperations<T>.ElementwiseMultiply(oneMinusZ, inputNode),
             TensorOperations<T>.ElementwiseMultiply(updateGate, candidate));

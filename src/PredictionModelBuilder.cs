@@ -1,13 +1,13 @@
 
 
 global using AiDotNet.Agents;
-global using AiDotNet.Extensions;
 global using AiDotNet.Configuration;
 global using AiDotNet.DataProcessor;
 global using AiDotNet.Deployment.Configuration;
 global using AiDotNet.Diagnostics;
 global using AiDotNet.DistributedTraining;
 global using AiDotNet.Enums;
+global using AiDotNet.Extensions;
 global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.FitnessCalculators;

@@ -504,17 +504,17 @@ internal sealed class DynamicGemmKernel : IDisposable
             switch (variant)
             {
                 case 1:
-                    // XOR swizzling - eliminates LDS bank conflicts without padding overhead
+                // XOR swizzling - eliminates LDS bank conflicts without padding overhead
+                {
+                    var source = ClBlastXgemmKernel.BuildSourceWithSwizzle(config, gemmK, 0x0F);
+                    if (EnableDiagnostics)
                     {
-                        var source = ClBlastXgemmKernel.BuildSourceWithSwizzle(config, gemmK, 0x0F);
-                        if (EnableDiagnostics)
-                        {
-                            Console.WriteLine($"[DynamicGemm] SELECTED XOR SWIZZLE kernel: {config.KernelName} GEMMK={gemmK}");
-                            Console.WriteLine($"[DynamicGemm] Swizzle defines present: LDS_SWIZZLE_A={source.Contains("LDS_SWIZZLE_A(kg, mg)")}, LDS_STRIDE_A={source.Contains("LDS_STRIDE_A")}");
-                            Console.WriteLine($"[DynamicGemm] Original pattern present: alm[kg*(MWG/VWM)={source.Contains("alm[kg*(MWG/VWM)")}");
-                        }
-                        return source;
+                        Console.WriteLine($"[DynamicGemm] SELECTED XOR SWIZZLE kernel: {config.KernelName} GEMMK={gemmK}");
+                        Console.WriteLine($"[DynamicGemm] Swizzle defines present: LDS_SWIZZLE_A={source.Contains("LDS_SWIZZLE_A(kg, mg)")}, LDS_STRIDE_A={source.Contains("LDS_STRIDE_A")}");
+                        Console.WriteLine($"[DynamicGemm] Original pattern present: alm[kg*(MWG/VWM)={source.Contains("alm[kg*(MWG/VWM)")}");
                     }
+                    return source;
+                }
 
                 case 2:
                     // RDNA1 optimized - XOR swizzle + Wave32 hints

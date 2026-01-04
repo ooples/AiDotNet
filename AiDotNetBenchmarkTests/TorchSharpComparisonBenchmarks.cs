@@ -105,7 +105,7 @@ public class TorchSharpComparisonBenchmarks
 
         _torchConvInput?.Dispose();
         _torchConvKernel?.Dispose();
-}
+    }
 
     private void Warmup()
     {
