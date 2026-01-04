@@ -1297,21 +1297,19 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         try
         {
-            float[] inputRealFloat = DirectGpuEngine.ToFloatArray(inputReal.Data);
-            float[] inputImagFloat = DirectGpuEngine.ToFloatArray(inputImag.Data);
+            // Use cache-aware buffer allocation for inputs
+            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.Data);
+            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.Data);
+            using var outputRealBuffer = AllocateOutputBuffer(backend, inputReal.Length);
+            using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
-            using var inputRealBuffer = backend.AllocateBuffer(inputRealFloat);
-            using var inputImagBuffer = backend.AllocateBuffer(inputImagFloat);
-            using var outputRealBuffer = backend.AllocateBuffer(inputReal.Length);
-            using var outputImagBuffer = backend.AllocateBuffer(inputImag.Length);
-
-            backend.FFT(inputRealBuffer, inputImagBuffer, outputRealBuffer, outputImagBuffer, n, inverse: false);
+            backend.FFT(inputRealBuffer.Buffer, inputImagBuffer.Buffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, n, inverse: false);
             backend.Synchronize();
 
             float[] outputRealFloat = new float[inputReal.Length];
             float[] outputImagFloat = new float[inputImag.Length];
-            backend.DownloadBuffer(outputRealBuffer, outputRealFloat);
-            backend.DownloadBuffer(outputImagBuffer, outputImagFloat);
+            backend.DownloadBuffer(outputRealBuffer.Buffer, outputRealFloat);
+            backend.DownloadBuffer(outputImagBuffer.Buffer, outputImagFloat);
 
             outputReal = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputRealFloat), inputReal.Shape.ToArray());
             outputImag = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputImagFloat), inputImag.Shape.ToArray());
@@ -1342,21 +1340,19 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         try
         {
-            float[] inputRealFloat = DirectGpuEngine.ToFloatArray(inputReal.Data);
-            float[] inputImagFloat = DirectGpuEngine.ToFloatArray(inputImag.Data);
+            // Use cache-aware buffer allocation for inputs
+            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.Data);
+            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.Data);
+            using var outputRealBuffer = AllocateOutputBuffer(backend, inputReal.Length);
+            using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
-            using var inputRealBuffer = backend.AllocateBuffer(inputRealFloat);
-            using var inputImagBuffer = backend.AllocateBuffer(inputImagFloat);
-            using var outputRealBuffer = backend.AllocateBuffer(inputReal.Length);
-            using var outputImagBuffer = backend.AllocateBuffer(inputImag.Length);
-
-            backend.FFT(inputRealBuffer, inputImagBuffer, outputRealBuffer, outputImagBuffer, n, inverse: true);
+            backend.FFT(inputRealBuffer.Buffer, inputImagBuffer.Buffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, n, inverse: true);
             backend.Synchronize();
 
             float[] outputRealFloat = new float[inputReal.Length];
             float[] outputImagFloat = new float[inputImag.Length];
-            backend.DownloadBuffer(outputRealBuffer, outputRealFloat);
-            backend.DownloadBuffer(outputImagBuffer, outputImagFloat);
+            backend.DownloadBuffer(outputRealBuffer.Buffer, outputRealFloat);
+            backend.DownloadBuffer(outputImagBuffer.Buffer, outputImagFloat);
 
             outputReal = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputRealFloat), inputReal.Shape.ToArray());
             outputImag = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputImagFloat), inputImag.Shape.ToArray());
@@ -1389,21 +1385,19 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         try
         {
-            float[] inputRealFloat = DirectGpuEngine.ToFloatArray(inputReal.Data);
-            float[] inputImagFloat = DirectGpuEngine.ToFloatArray(inputImag.Data);
+            // Use cache-aware buffer allocation for inputs
+            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.Data);
+            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.Data);
+            using var outputRealBuffer = AllocateOutputBuffer(backend, inputReal.Length);
+            using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
-            using var inputRealBuffer = backend.AllocateBuffer(inputRealFloat);
-            using var inputImagBuffer = backend.AllocateBuffer(inputImagFloat);
-            using var outputRealBuffer = backend.AllocateBuffer(inputReal.Length);
-            using var outputImagBuffer = backend.AllocateBuffer(inputImag.Length);
-
-            backend.FFT2D(inputRealBuffer, inputImagBuffer, outputRealBuffer, outputImagBuffer, height, width, inverse: false);
+            backend.FFT2D(inputRealBuffer.Buffer, inputImagBuffer.Buffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, height, width, inverse: false);
             backend.Synchronize();
 
             float[] outputRealFloat = new float[inputReal.Length];
             float[] outputImagFloat = new float[inputImag.Length];
-            backend.DownloadBuffer(outputRealBuffer, outputRealFloat);
-            backend.DownloadBuffer(outputImagBuffer, outputImagFloat);
+            backend.DownloadBuffer(outputRealBuffer.Buffer, outputRealFloat);
+            backend.DownloadBuffer(outputImagBuffer.Buffer, outputImagFloat);
 
             outputReal = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputRealFloat), inputReal.Shape.ToArray());
             outputImag = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputImagFloat), inputImag.Shape.ToArray());
@@ -1436,21 +1430,19 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         try
         {
-            float[] inputRealFloat = DirectGpuEngine.ToFloatArray(inputReal.Data);
-            float[] inputImagFloat = DirectGpuEngine.ToFloatArray(inputImag.Data);
+            // Use cache-aware buffer allocation for inputs
+            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.Data);
+            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.Data);
+            using var outputRealBuffer = AllocateOutputBuffer(backend, inputReal.Length);
+            using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
-            using var inputRealBuffer = backend.AllocateBuffer(inputRealFloat);
-            using var inputImagBuffer = backend.AllocateBuffer(inputImagFloat);
-            using var outputRealBuffer = backend.AllocateBuffer(inputReal.Length);
-            using var outputImagBuffer = backend.AllocateBuffer(inputImag.Length);
-
-            backend.FFT2D(inputRealBuffer, inputImagBuffer, outputRealBuffer, outputImagBuffer, height, width, inverse: true);
+            backend.FFT2D(inputRealBuffer.Buffer, inputImagBuffer.Buffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, height, width, inverse: true);
             backend.Synchronize();
 
             float[] outputRealFloat = new float[inputReal.Length];
             float[] outputImagFloat = new float[inputImag.Length];
-            backend.DownloadBuffer(outputRealBuffer, outputRealFloat);
-            backend.DownloadBuffer(outputImagBuffer, outputImagFloat);
+            backend.DownloadBuffer(outputRealBuffer.Buffer, outputRealFloat);
+            backend.DownloadBuffer(outputImagBuffer.Buffer, outputImagFloat);
 
             outputReal = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputRealFloat), inputReal.Shape.ToArray());
             outputImag = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputImagFloat), inputImag.Shape.ToArray());
@@ -1503,20 +1495,15 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             }
 
             float[] inputFloat = DirectGpuEngine.ToFloatArray(inputData);
-            float[] windowFloat = DirectGpuEngine.ToFloatArray(window.Data);
 
-            // Allocate GPU buffers
-            using var inputBuffer = backend.AllocateBuffer(inputFloat);
-            using var windowBuffer = backend.AllocateBuffer(windowFloat);
-            using var frameBuffer = backend.AllocateBuffer(nFft);
-            using var windowedBuffer = backend.AllocateBuffer(nFft);
-            using var fftRealBuffer = backend.AllocateBuffer(nFft);
-            using var fftImagBuffer = backend.AllocateBuffer(nFft);
-            using var zeroBuffer = backend.AllocateBuffer(nFft);
-
-            // Initialize zero buffer for imaginary part of real input
-            float[] zeros = new float[nFft];
-            var tempZeroBuffer = backend.AllocateBuffer(zeros);
+            // Use cache-aware allocation for window (likely persistent)
+            using var windowBuffer = GetOrAllocateBuffer(backend, window.Data);
+            // Allocate working buffers
+            using var frameBuffer = AllocateOutputBuffer(backend, nFft);
+            using var windowedBuffer = AllocateOutputBuffer(backend, nFft);
+            using var fftRealBuffer = AllocateOutputBuffer(backend, nFft);
+            using var fftImagBuffer = AllocateOutputBuffer(backend, nFft);
+            using var zeroBuffer = AllocateOutputBuffer(backend, nFft);
 
             float[] magnitudeData = new float[numFrames * numFreqs];
             float[] phaseData = new float[numFrames * numFreqs];
@@ -1533,16 +1520,16 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 using var currentFrameBuffer = backend.AllocateBuffer(frameData);
 
                 // Apply window
-                backend.ApplyWindow(currentFrameBuffer, windowBuffer, windowedBuffer, nFft);
+                backend.ApplyWindow(currentFrameBuffer, windowBuffer.Buffer, windowedBuffer.Buffer, nFft);
 
                 // Perform FFT (windowed signal as real input, zeros as imaginary)
-                backend.FFT(windowedBuffer, tempZeroBuffer, fftRealBuffer, fftImagBuffer, nFft, inverse: false);
+                backend.FFT(windowedBuffer.Buffer, zeroBuffer.Buffer, fftRealBuffer.Buffer, fftImagBuffer.Buffer, nFft, inverse: false);
 
                 // Download FFT results
                 float[] fftReal = new float[nFft];
                 float[] fftImag = new float[nFft];
-                backend.DownloadBuffer(fftRealBuffer, fftReal);
-                backend.DownloadBuffer(fftImagBuffer, fftImag);
+                backend.DownloadBuffer(fftRealBuffer.Buffer, fftReal);
+                backend.DownloadBuffer(fftImagBuffer.Buffer, fftImag);
 
                 // Compute magnitude and phase for positive frequencies only
                 for (int k = 0; k < numFreqs; k++)
@@ -1553,8 +1540,6 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                     phaseData[frame * numFreqs + k] = (float)Math.Atan2(imag, real);
                 }
             }
-
-            tempZeroBuffer.Dispose();
             backend.Synchronize();
 
             int[] outputShape = input.Rank == 1
@@ -1601,11 +1586,11 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             float[] output = new float[outputSamples];
             float[] windowSum = new float[outputSamples];
 
-            using var windowBuffer = backend.AllocateBuffer(windowFloat);
-            using var realBuffer = backend.AllocateBuffer(nFft);
-            using var imagBuffer = backend.AllocateBuffer(nFft);
-            using var outputRealBuffer = backend.AllocateBuffer(nFft);
-            using var outputImagBuffer = backend.AllocateBuffer(nFft);
+            // Use cache-aware allocation for window (likely persistent)
+            using var windowBuffer = GetOrAllocateBuffer(backend, window.Data);
+            // Allocate working buffers
+            using var outputRealBuffer = AllocateOutputBuffer(backend, nFft);
+            using var outputImagBuffer = AllocateOutputBuffer(backend, nFft);
 
             for (int frame = 0; frame < numFrames; frame++)
             {
@@ -1637,11 +1622,11 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 using var frameImagBuffer = backend.AllocateBuffer(frameImag);
 
                 // Perform inverse FFT
-                backend.FFT(frameRealBuffer, frameImagBuffer, outputRealBuffer, outputImagBuffer, nFft, inverse: true);
+                backend.FFT(frameRealBuffer, frameImagBuffer, outputRealBuffer.Buffer, outputImagBuffer.Buffer, nFft, inverse: true);
 
                 // Download result
                 float[] ifftResult = new float[nFft];
-                backend.DownloadBuffer(outputRealBuffer, ifftResult);
+                backend.DownloadBuffer(outputRealBuffer.Buffer, ifftResult);
 
                 // Overlap-add with window
                 int frameStart = frame * hopLength;
@@ -1728,21 +1713,23 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 powerSpec[i] = magnitudeFloat[i] * magnitudeFloat[i];
             }
 
+            // Use cache-aware allocation for filterbank (likely persistent)
+            using var filterbankBuffer = GetOrAllocateBuffer(backend, filterbank.Data);
+            // Allocate working buffers
             using var powerBuffer = backend.AllocateBuffer(powerSpec);
-            using var filterbankBuffer = backend.AllocateBuffer(filterbankFloat);
-            using var melBuffer = backend.AllocateBuffer(numFrames * nMels);
+            using var melBuffer = AllocateOutputBuffer(backend, numFrames * nMels);
 
             // Apply Mel filterbank
-            backend.ApplyMelFilterbank(powerBuffer, filterbankBuffer, melBuffer, numFrames, numFreqs, nMels);
+            backend.ApplyMelFilterbank(powerBuffer, filterbankBuffer.Buffer, melBuffer.Buffer, numFrames, numFreqs, nMels);
 
             if (powerToDb)
             {
-                using var dbBuffer = backend.AllocateBuffer(numFrames * nMels);
-                backend.PowerToDb(melBuffer, dbBuffer, numFrames * nMels, 1.0f, -80.0f);
+                using var dbBuffer = AllocateOutputBuffer(backend, numFrames * nMels);
+                backend.PowerToDb(melBuffer.Buffer, dbBuffer.Buffer, numFrames * nMels, 1.0f, -80.0f);
                 backend.Synchronize();
 
                 float[] dbResult = new float[numFrames * nMels];
-                backend.DownloadBuffer(dbBuffer, dbResult);
+                backend.DownloadBuffer(dbBuffer.Buffer, dbResult);
 
                 int[] outputShape = input.Rank == 1
                     ? new[] { numFrames, nMels }
@@ -1755,7 +1742,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 backend.Synchronize();
 
                 float[] melResult = new float[numFrames * nMels];
-                backend.DownloadBuffer(melBuffer, melResult);
+                backend.DownloadBuffer(melBuffer.Buffer, melResult);
 
                 int[] outputShape = input.Rank == 1
                     ? new[] { numFrames, nMels }
