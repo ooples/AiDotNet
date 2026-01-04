@@ -2660,12 +2660,12 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
-    /// GPU-accelerated RmsNorm operation.
+    /// GPU-accelerated RMSNorm operation.
     /// </summary>
-    Tensor<T> IEngine.RmsNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms)
+    Tensor<T> IEngine.RMSNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms)
     {
         if (!TryGetBackend(out var backend))
-            return base.RmsNorm(input, gamma, epsilon, out rms);
+            return base.RMSNorm(input, gamma, epsilon, out rms);
 
         try
         {
@@ -2673,7 +2673,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int batchSize = input.Length / normalizedSize;
 
             if (batchSize * normalizedSize != input.Length)
-                return base.RmsNorm(input, gamma, epsilon, out rms);
+                return base.RMSNorm(input, gamma, epsilon, out rms);
 
             using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
             using var gammaBuffer = GetOrAllocateBuffer(backend, gamma.Data);
@@ -2692,17 +2692,17 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
         catch
         {
-            return base.RmsNorm(input, gamma, epsilon, out rms);
+            return base.RMSNorm(input, gamma, epsilon, out rms);
         }
     }
 
     /// <summary>
-    /// GPU-accelerated RmsNorm backward operation.
+    /// GPU-accelerated RMSNorm backward operation.
     /// </summary>
-    Tensor<T> IEngine.RmsNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma)
+    Tensor<T> IEngine.RMSNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma)
     {
         if (!TryGetBackend(out var backend))
-            return base.RmsNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
+            return base.RMSNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
 
         try
         {
@@ -2710,7 +2710,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int batchSize = input.Length / normalizedSize;
 
             if (batchSize * normalizedSize != input.Length)
-                return base.RmsNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
+                return base.RMSNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
 
             using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
             using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
@@ -2731,7 +2731,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
         catch
         {
-            return base.RmsNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
+            return base.RMSNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
         }
     }
 

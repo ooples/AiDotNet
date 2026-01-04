@@ -16440,23 +16440,6 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// This method delegates to <see cref="RMSNorm{T}"/> to ensure consistent behavior
-    /// and correct gradient computation. Both API variants now use the same underlying implementation.
-    /// </remarks>
-    public Tensor<T> RmsNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms)
-        => RMSNorm(input, gamma, epsilon, out rms);
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// This method delegates to <see cref="RMSNormBackward{T}"/> to ensure correct gradient computation.
-    /// The RMSNormBackward implementation properly accounts for the dependency of rms on input (∂rms/∂x),
-    /// which is essential for mathematically correct backpropagation.
-    /// </remarks>
-    public Tensor<T> RmsNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma)
-        => RMSNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
-
-    /// <inheritdoc/>
     public Tensor<T> InstanceNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
     {
         var numOps = MathHelper.GetNumericOperations<T>();

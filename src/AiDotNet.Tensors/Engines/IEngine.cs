@@ -4377,34 +4377,6 @@ public interface IEngine
     Tensor<T> GroupNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int numGroups, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
 
     /// <summary>
-    /// Applies Root Mean Square Layer Normalization (RMSNorm) to the input tensor.
-    /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="gamma">Scale parameter with shape matching the normalized dimensions.</param>
-    /// <param name="epsilon">Small constant for numerical stability.</param>
-    /// <param name="rms">Output: computed RMS values per batch.</param>
-    /// <returns>The normalized tensor with the same shape as input.</returns>
-    /// <remarks>
-    /// RMSNorm normalizes by the root mean square rather than mean and variance.
-    /// Used in modern transformers like LLaMA and Gemma for improved efficiency.
-    /// </remarks>
-    Tensor<T> RmsNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms);
-
-    /// <summary>
-    /// Computes the backward pass for RMS normalization.
-    /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="gradOutput">The gradient from the next layer.</param>
-    /// <param name="input">The original input tensor.</param>
-    /// <param name="gamma">Scale parameter.</param>
-    /// <param name="rms">The RMS computed during forward pass.</param>
-    /// <param name="epsilon">Small constant used during forward pass.</param>
-    /// <param name="gradGamma">Output: gradient with respect to gamma.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    Tensor<T> RmsNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma);
-
-    /// <summary>
     /// Applies Instance Normalization to the input tensor.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
