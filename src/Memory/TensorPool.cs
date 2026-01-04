@@ -121,7 +121,10 @@ public class TensorPool<T> : IDisposable
             {
                 throw new ArgumentException("All dimensions must be positive.", nameof(shape));
             }
-            totalElements *= dim;
+            checked
+            {
+                totalElements *= dim;
+            }
         }
 
         int sizeClass = GetSizeClass(totalElements);
@@ -171,11 +174,27 @@ public class TensorPool<T> : IDisposable
 
         long tensorSize = GetTensorSizeBytes(tensor);
 
-        // Check if we have room in the pool
-        if (Interlocked.Read(ref _currentPoolSizeBytes) + tensorSize > _maxPoolSizeBytes)
+        // Use optimistic CAS to atomically check and reserve space
+        // This prevents TOCTOU race conditions
+        while (true)
         {
-            // Pool is full, let GC handle this tensor
-            return;
+            long currentSize = Interlocked.Read(ref _currentPoolSizeBytes);
+            long newSize = currentSize + tensorSize;
+
+            // Check if we have room in the pool
+            if (newSize > _maxPoolSizeBytes)
+            {
+                // Pool is full, let GC handle this tensor
+                return;
+            }
+
+            // Attempt to atomically reserve the space
+            if (Interlocked.CompareExchange(ref _currentPoolSizeBytes, newSize, currentSize) == currentSize)
+            {
+                // Successfully reserved space, now add tensor to pool
+                break;
+            }
+            // Another thread modified the value, retry
         }
 
         // Clear tensor data for security
@@ -183,7 +202,6 @@ public class TensorPool<T> : IDisposable
 
         int sizeClass = GetSizeClass(tensor.Length);
         _pools[sizeClass].Add(tensor);
-        Interlocked.Add(ref _currentPoolSizeBytes, tensorSize);
     }
 
     /// <summary>

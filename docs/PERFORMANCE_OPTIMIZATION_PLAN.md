@@ -552,40 +552,43 @@ public class NetworkConstructionBenchmarks
 public class Phase0GateTests
 {
     [Fact]
-    public void OpenCL_Kernels_Compile_Without_Errors()
+    public void OpenCL_Backend_Handles_Gracefully()
     {
-        var engine = new GpuEngine();
-        var backends = engine.GetAvailableBackends();
-        // OpenCL should either be available or have clear error (not crash)
-        Assert.NotNull(backends["OpenCL"].Status);
+        var backends = GpuEngine.GetAvailableBackends();
+        var openCl = backends.FirstOrDefault(b => b.BackendType == GpuBackendType.OpenCl);
+        // OpenCL should either be available or have clear error message (not crash)
+        Assert.NotNull(openCl);
+        Assert.True(openCl.IsAvailable || !string.IsNullOrEmpty(openCl.ErrorMessage));
     }
 
     [Fact]
     public void HIP_Backend_Graceful_When_SDK_Missing()
     {
-        // Should not throw, should report "SDK not found"
-        var engine = new GpuEngine();
-        var backends = engine.GetAvailableBackends();
-        Assert.Contains(backends["HIP"].Status, new[] { "Available", "SDK not installed" });
+        // Should not throw, should report appropriate error if unavailable
+        var backends = GpuEngine.GetAvailableBackends();
+        var hip = backends.FirstOrDefault(b => b.BackendType == GpuBackendType.Hip);
+        Assert.NotNull(hip);
+        // HIP should be available or have descriptive error message
+        Assert.True(hip.IsAvailable || !string.IsNullOrEmpty(hip.ErrorMessage));
     }
 
     [Fact]
     public void AtLeastOneGpuBackend_IsAvailable_OnGpuSystem()
     {
-        var engine = new GpuEngine();
         // On CI with GPU, at least one backend should work
         // On CPU-only systems, this test is skipped
         if (Environment.GetEnvironmentVariable("HAS_GPU") == "true")
         {
-            Assert.True(engine.IsAvailable, engine.GetDiagnosticReport());
+            var backends = GpuEngine.GetAvailableBackends();
+            var anyAvailable = backends.Any(b => b.IsAvailable);
+            Assert.True(anyAvailable, GpuEngine.GetDiagnosticReport());
         }
     }
 
     [Fact]
     public void GpuEngine_Reports_Fallback_Reason()
     {
-        var engine = new GpuEngine();
-        var report = engine.GetDiagnosticReport();
+        var report = GpuEngine.GetDiagnosticReport();
         Assert.False(string.IsNullOrEmpty(report));
         // Report should explain why each backend is/isn't available
     }
@@ -953,7 +956,7 @@ public class Phase4GateTests
 ## Dependencies and Risks
 
 ### Dependencies
-- .NET 8.0 for latest SIMD intrinsics (already in use)
+- .NET 8.0 or .NET Framework 4.7.1 (multi-targeting supported with SIMD fallbacks)
 - BenchmarkDotNet for performance testing
 - Existing IEngine infrastructure (see `GPU_ENGINE_OPTIMIZATION_PLAN.md`)
 

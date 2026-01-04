@@ -66,23 +66,31 @@ public sealed class GpuEngine : DirectGpuTensorEngine
         {
             if (!CudaBackend.IsCudaAvailable)
             {
-                return new GpuBackendInfo("CUDA", false, "CUDA driver not available or NVRTC not found");
+                return new GpuBackendInfo(GpuBackendType.Cuda, false, "CUDA driver not available or NVRTC not found");
             }
 
             using var backend = new CudaBackend();
             if (backend.IsAvailable)
             {
-                return new GpuBackendInfo("CUDA", true,
+                return new GpuBackendInfo(GpuBackendType.Cuda, true,
                     deviceName: backend.DeviceName,
                     vendor: backend.DeviceVendor,
                     computeUnits: backend.ComputeUnits,
                     globalMemoryBytes: backend.GlobalMemoryBytes);
             }
-            return new GpuBackendInfo("CUDA", false, "CUDA backend initialization failed");
+            return new GpuBackendInfo(GpuBackendType.Cuda, false, "CUDA backend initialization failed");
         }
-        catch (Exception ex)
+        catch (DllNotFoundException ex)
         {
-            return new GpuBackendInfo("CUDA", false, $"Exception: {ex.Message}");
+            return new GpuBackendInfo(GpuBackendType.Cuda, false, $"CUDA library not found: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new GpuBackendInfo(GpuBackendType.Cuda, false, $"CUDA initialization failed: {ex.Message}");
+        }
+        catch (TypeInitializationException ex)
+        {
+            return new GpuBackendInfo(GpuBackendType.Cuda, false, $"CUDA type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
         }
     }
 
@@ -92,23 +100,31 @@ public sealed class GpuEngine : DirectGpuTensorEngine
         {
             if (!OpenClBackend.IsOpenClAvailable)
             {
-                return new GpuBackendInfo("OpenCL", false, "OpenCL runtime not available");
+                return new GpuBackendInfo(GpuBackendType.OpenCl, false, "OpenCL runtime not available");
             }
 
             using var backend = new OpenClBackend();
             if (backend.IsAvailable)
             {
-                return new GpuBackendInfo("OpenCL", true,
+                return new GpuBackendInfo(GpuBackendType.OpenCl, true,
                     deviceName: backend.DeviceName,
                     vendor: backend.DeviceVendor,
                     computeUnits: backend.ComputeUnits,
                     globalMemoryBytes: backend.GlobalMemoryBytes);
             }
-            return new GpuBackendInfo("OpenCL", false, "OpenCL backend initialization failed - no suitable GPU device found");
+            return new GpuBackendInfo(GpuBackendType.OpenCl, false, "OpenCL backend initialization failed - no suitable GPU device found");
         }
-        catch (Exception ex)
+        catch (DllNotFoundException ex)
         {
-            return new GpuBackendInfo("OpenCL", false, $"Exception: {ex.Message}");
+            return new GpuBackendInfo(GpuBackendType.OpenCl, false, $"OpenCL library not found: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new GpuBackendInfo(GpuBackendType.OpenCl, false, $"OpenCL initialization failed: {ex.Message}");
+        }
+        catch (TypeInitializationException ex)
+        {
+            return new GpuBackendInfo(GpuBackendType.OpenCl, false, $"OpenCL type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
         }
     }
 
@@ -118,25 +134,33 @@ public sealed class GpuEngine : DirectGpuTensorEngine
         {
             if (!HipBackend.IsHipAvailable)
             {
-                return new GpuBackendInfo("HIP", false,
+                return new GpuBackendInfo(GpuBackendType.Hip, false,
                     "HIP runtime not available. Install AMD ROCm SDK from https://rocm.docs.amd.com/");
             }
 
             using var backend = new HipBackend();
             if (backend.IsAvailable)
             {
-                return new GpuBackendInfo("HIP", true,
+                return new GpuBackendInfo(GpuBackendType.Hip, true,
                     deviceName: backend.DeviceName,
                     vendor: backend.DeviceVendor,
                     computeUnits: backend.ComputeUnits,
                     globalMemoryBytes: backend.GlobalMemoryBytes,
                     additionalInfo: $"Architecture: {backend.Architecture}");
             }
-            return new GpuBackendInfo("HIP", false, "HIP backend initialization failed - kernel compilation may have failed");
+            return new GpuBackendInfo(GpuBackendType.Hip, false, "HIP backend initialization failed - kernel compilation may have failed");
         }
-        catch (Exception ex)
+        catch (DllNotFoundException ex)
         {
-            return new GpuBackendInfo("HIP", false, $"Exception: {ex.Message}");
+            return new GpuBackendInfo(GpuBackendType.Hip, false, $"HIP library not found: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new GpuBackendInfo(GpuBackendType.Hip, false, $"HIP initialization failed: {ex.Message}");
+        }
+        catch (TypeInitializationException ex)
+        {
+            return new GpuBackendInfo(GpuBackendType.Hip, false, $"HIP type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
         }
     }
 
@@ -217,7 +241,16 @@ public sealed class GpuEngine : DirectGpuTensorEngine
 /// </summary>
 public sealed class GpuBackendInfo
 {
-    public string Name { get; }
+    /// <summary>
+    /// Gets the backend type.
+    /// </summary>
+    public GpuBackendType BackendType { get; }
+
+    /// <summary>
+    /// Gets the display name of the backend.
+    /// </summary>
+    public string Name => BackendType.ToString();
+
     public bool IsAvailable { get; }
     public string? ErrorMessage { get; }
     public string? DeviceName { get; }
@@ -226,11 +259,11 @@ public sealed class GpuBackendInfo
     public long GlobalMemoryBytes { get; }
     public string? AdditionalInfo { get; }
 
-    public GpuBackendInfo(string name, bool isAvailable, string? errorMessage = null,
+    public GpuBackendInfo(GpuBackendType backendType, bool isAvailable, string? errorMessage = null,
         string? deviceName = null, string? vendor = null, int computeUnits = 0,
         long globalMemoryBytes = 0, string? additionalInfo = null)
     {
-        Name = name;
+        BackendType = backendType;
         IsAvailable = isAvailable;
         ErrorMessage = errorMessage;
         DeviceName = deviceName;
