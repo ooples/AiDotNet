@@ -1,7 +1,9 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
@@ -233,14 +235,77 @@ public class SOLOv2<T> : InstanceSegmenterBase<T>
     }
 
     /// <inheritdoc/>
-    public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
+    public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        byte[] data;
+        if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var client = new System.Net.Http.HttpClient();
+            data = await client.GetByteArrayWithCancellationAsync(pathOrUrl, cancellationToken);
+        }
+        else
+        {
+            // Use Task.Run for net471 compatibility (ReadAllBytesAsync not available)
+            data = await Task.Run(() => File.ReadAllBytes(pathOrUrl), cancellationToken);
+        }
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify header
+        int magic = reader.ReadInt32();
+        if (magic != 0x534F4C32) // "SOL2" in ASCII
+        {
+            throw new InvalidDataException($"Invalid SOLOv2 model file. Expected magic 0x534F4C32, got 0x{magic:X8}");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported SOLOv2 model version: {version}");
+        }
+
+        string name = reader.ReadString();
+        int kernelDim = reader.ReadInt32();
+
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"SOLOv2 configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
+        if (kernelDim != _kernelDim)
+        {
+            throw new InvalidOperationException(
+                $"SOLOv2 configuration mismatch. Expected kernelDim={_kernelDim}, got {kernelDim}");
+        }
+
+        // Read component weights
+        _backbone.ReadParameters(reader);
+        _fpn.ReadParameters(reader);
+        _categoryHead.ReadParameters(reader);
+        _kernelHead.ReadParameters(reader);
+        _maskBranch.ReadParameters(reader);
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write header
+        writer.Write(0x534F4C32); // "SOL2" in ASCII
+        writer.Write(1); // Version 1
+        writer.Write(Name);
+        writer.Write(_kernelDim);
+
+        // Write component weights
+        _backbone.WriteParameters(writer);
+        _fpn.WriteParameters(writer);
+        _categoryHead.WriteParameters(writer);
+        _kernelHead.WriteParameters(writer);
+        _maskBranch.WriteParameters(writer);
     }
 }

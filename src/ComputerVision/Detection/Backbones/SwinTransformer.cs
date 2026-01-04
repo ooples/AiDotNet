@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors;
 
@@ -192,6 +193,64 @@ public class SwinTransformer<T> : BackboneBase<T>
         }
         return count;
     }
+
+    /// <inheritdoc/>
+    public override void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write((int)_variant);
+        writer.Write(_embedDim);
+        writer.Write(_windowSize);
+        writer.Write(_stages.Count);
+
+        // Write patch embedding
+        _patchEmbed.WriteParameters(writer);
+
+        // Write stages
+        foreach (var stage in _stages)
+        {
+            stage.WriteParameters(writer);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        var variant = (SwinVariant)reader.ReadInt32();
+        int embedDim = reader.ReadInt32();
+        int windowSize = reader.ReadInt32();
+        int stageCount = reader.ReadInt32();
+
+        if (variant != _variant)
+        {
+            throw new InvalidOperationException($"SwinTransformer variant mismatch: expected {_variant}, got {variant}.");
+        }
+
+        if (embedDim != _embedDim)
+        {
+            throw new InvalidOperationException($"SwinTransformer embed dim mismatch: expected {_embedDim}, got {embedDim}.");
+        }
+
+        if (windowSize != _windowSize)
+        {
+            throw new InvalidOperationException($"SwinTransformer window size mismatch: expected {_windowSize}, got {windowSize}.");
+        }
+
+        if (stageCount != _stages.Count)
+        {
+            throw new InvalidOperationException($"SwinTransformer stage count mismatch: expected {_stages.Count}, got {stageCount}.");
+        }
+
+        // Read patch embedding
+        _patchEmbed.ReadParameters(reader);
+
+        // Read stages
+        foreach (var stage in _stages)
+        {
+            stage.ReadParameters(reader);
+        }
+    }
 }
 
 /// <summary>
@@ -268,6 +327,16 @@ internal class PatchEmbeddingBlock<T>
     {
         return _proj.GetParameterCount();
     }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        _proj.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        _proj.ReadParameters(reader);
+    }
 }
 
 /// <summary>
@@ -336,6 +405,48 @@ internal class SwinStage<T>
             count += _patchMerge.GetParameterCount();
         }
         return count;
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_blocks.Count);
+        writer.Write(_patchMerge is not null);
+
+        foreach (var block in _blocks)
+        {
+            block.WriteParameters(writer);
+        }
+
+        if (_patchMerge is not null)
+        {
+            _patchMerge.WriteParameters(writer);
+        }
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int blockCount = reader.ReadInt32();
+        bool hasPatchMerge = reader.ReadBoolean();
+
+        if (blockCount != _blocks.Count)
+        {
+            throw new InvalidOperationException($"SwinStage block count mismatch: expected {_blocks.Count}, got {blockCount}.");
+        }
+
+        if (hasPatchMerge != (_patchMerge is not null))
+        {
+            throw new InvalidOperationException("SwinStage patch merge configuration mismatch.");
+        }
+
+        foreach (var block in _blocks)
+        {
+            block.ReadParameters(reader);
+        }
+
+        if (_patchMerge is not null)
+        {
+            _patchMerge.ReadParameters(reader);
+        }
     }
 }
 
@@ -927,6 +1038,56 @@ internal class SwinTransformerBlock<T>
 
         return normParams + qkvParams + outProjParams + biasParams + mlpParams;
     }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        // Write layer norms
+        _norm1.WriteParameters(writer);
+        _norm2.WriteParameters(writer);
+
+        // Write projections
+        _qkvProj.WriteParameters(writer);
+        _outProj.WriteParameters(writer);
+
+        // Write relative position bias table
+        writer.Write(_relativePositionBiasTable.Shape[0]);
+        writer.Write(_relativePositionBiasTable.Shape[1]);
+        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
+        {
+            writer.Write(_numOps.ToDouble(_relativePositionBiasTable[i]));
+        }
+
+        // Write MLP
+        _mlpFc1.WriteParameters(writer);
+        _mlpFc2.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        // Read layer norms
+        _norm1.ReadParameters(reader);
+        _norm2.ReadParameters(reader);
+
+        // Read projections
+        _qkvProj.ReadParameters(reader);
+        _outProj.ReadParameters(reader);
+
+        // Read relative position bias table
+        int biasTableDim0 = reader.ReadInt32();
+        int biasTableDim1 = reader.ReadInt32();
+        if (biasTableDim0 != _relativePositionBiasTable.Shape[0] || biasTableDim1 != _relativePositionBiasTable.Shape[1])
+        {
+            throw new InvalidOperationException("SwinTransformerBlock relative position bias table shape mismatch.");
+        }
+        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
+        {
+            _relativePositionBiasTable[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Read MLP
+        _mlpFc1.ReadParameters(reader);
+        _mlpFc2.ReadParameters(reader);
+    }
 }
 
 /// <summary>
@@ -1002,6 +1163,36 @@ internal class SwinLayerNorm<T>
     }
 
     public long GetParameterCount() => 2 * _dim;
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_dim);
+        for (int i = 0; i < _dim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_gamma[i]));
+        }
+        for (int i = 0; i < _dim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_beta[i]));
+        }
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int dim = reader.ReadInt32();
+        if (dim != _dim)
+        {
+            throw new InvalidOperationException($"SwinLayerNorm dim mismatch: expected {_dim}, got {dim}.");
+        }
+        for (int i = 0; i < _dim; i++)
+        {
+            _gamma[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+        for (int i = 0; i < _dim; i++)
+        {
+            _beta[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+    }
 }
 
 /// <summary>
@@ -1128,5 +1319,21 @@ internal class PatchMergingBlock<T>
     public long GetParameterCount()
     {
         return _dim * 4 * _dim * 2 + _dim * 2; // Dense layer params
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_dim);
+        _reduction.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int dim = reader.ReadInt32();
+        if (dim != _dim)
+        {
+            throw new InvalidOperationException($"PatchMergingBlock dim mismatch: expected {_dim}, got {dim}.");
+        }
+        _reduction.ReadParameters(reader);
     }
 }

@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Anchors;
 using AiDotNet.ComputerVision.Detection.Backbones;
@@ -252,6 +253,41 @@ public class RPN<T>
         return _conv.GetParameterCount() +
                _clsHead.GetParameterCount() +
                _regHead.GetParameterCount();
+    }
+
+    /// <summary>
+    /// Writes the RPN parameters to a binary stream.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numAnchors);
+        _conv.WriteParameters(writer);
+        _clsHead.WriteParameters(writer);
+        _regHead.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads the RPN parameters from a binary stream.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numAnchors = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim)
+        {
+            throw new InvalidDataException($"RPN hiddenDim mismatch: expected {_hiddenDim}, got {hiddenDim}.");
+        }
+
+        if (numAnchors != _numAnchors)
+        {
+            throw new InvalidDataException($"RPN numAnchors mismatch: expected {_numAnchors}, got {numAnchors}.");
+        }
+
+        _conv.ReadParameters(reader);
+        _clsHead.ReadParameters(reader);
+        _regHead.ReadParameters(reader);
     }
 
     private Tensor<T> ReshapeRPNOutput(Tensor<T> x, int batch, int height, int width, int outputDim)

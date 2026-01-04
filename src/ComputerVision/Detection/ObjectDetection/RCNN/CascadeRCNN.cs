@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -301,13 +302,82 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var stream = File.OpenRead(pathOrUrl);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify magic number and version
+        int magic = reader.ReadInt32();
+        if (magic != 0x43524E4E) // "CRNN" in ASCII (Cascade RCNN)
+        {
+            throw new InvalidDataException("Invalid weight file format: incorrect magic number.");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+        }
+
+        // Read model configuration
+        string modelName = reader.ReadString();
+        if (!modelName.StartsWith("Cascade-RCNN"))
+        {
+            throw new InvalidDataException($"Weight file is for {modelName}, not Cascade-RCNN.");
+        }
+
+        // Read backbone parameters
+        Backbone!.ReadParameters(reader);
+
+        // Read neck parameters
+        Neck!.ReadParameters(reader);
+
+        // Read RPN parameters
+        _rpn.ReadParameters(reader);
+
+        // Read cascade stage parameters
+        int stageCount = reader.ReadInt32();
+        if (stageCount != _stages.Count)
+        {
+            throw new InvalidDataException($"Stage count mismatch: expected {_stages.Count}, got {stageCount}.");
+        }
+        foreach (var stage in _stages)
+        {
+            stage.ReadParameters(reader);
+        }
+
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write magic number and version for identification
+        writer.Write(0x43524E4E); // "CRNN" in ASCII (Cascade RCNN)
+        writer.Write(1); // Version 1
+
+        // Write model configuration
+        writer.Write(Name);
+
+        // Write backbone parameters
+        Backbone!.WriteParameters(writer);
+
+        // Write neck parameters
+        Neck!.WriteParameters(writer);
+
+        // Write RPN parameters
+        _rpn.WriteParameters(writer);
+
+        // Write cascade stage parameters
+        writer.Write(_stages.Count);
+        foreach (var stage in _stages)
+        {
+            stage.WriteParameters(writer);
+        }
     }
 
     private Tensor<T> FlattenRoIFeatures(Tensor<T> roiFeatures)
@@ -435,6 +505,37 @@ internal class CascadeStage<T>
                _fc2.GetParameterCount() +
                _clsHead.GetParameterCount() +
                _regHead.GetParameterCount();
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numClasses);
+        _fc1.WriteParameters(writer);
+        _fc2.WriteParameters(writer);
+        _clsHead.WriteParameters(writer);
+        _regHead.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numClasses = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim)
+        {
+            throw new InvalidDataException($"CascadeStage hiddenDim mismatch: expected {_hiddenDim}, got {hiddenDim}.");
+        }
+
+        if (numClasses != _numClasses)
+        {
+            throw new InvalidDataException($"CascadeStage numClasses mismatch: expected {_numClasses}, got {numClasses}.");
+        }
+
+        _fc1.ReadParameters(reader);
+        _fc2.ReadParameters(reader);
+        _clsHead.ReadParameters(reader);
+        _regHead.ReadParameters(reader);
     }
 
     private Tensor<T> ApplyReLU(Tensor<T> x)

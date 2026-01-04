@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
 
@@ -138,6 +139,50 @@ public class ResNet<T> : BackboneBase<T>
         return count;
     }
 
+    /// <inheritdoc/>
+    public override void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write((int)_variant);
+        writer.Write(_stages.Count);
+
+        // Write stem conv parameters
+        _conv1.WriteParameters(writer);
+
+        // Write stage parameters
+        foreach (var stage in _stages)
+        {
+            stage.WriteParameters(writer);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        var variant = (ResNetVariant)reader.ReadInt32();
+        int stageCount = reader.ReadInt32();
+
+        if (variant != _variant)
+        {
+            throw new InvalidOperationException($"ResNet variant mismatch: expected {_variant}, got {variant}.");
+        }
+
+        if (stageCount != _stages.Count)
+        {
+            throw new InvalidOperationException($"ResNet stage count mismatch: expected {_stages.Count}, got {stageCount}.");
+        }
+
+        // Read stem conv parameters
+        _conv1.ReadParameters(reader);
+
+        // Read stage parameters
+        foreach (var stage in _stages)
+        {
+            stage.ReadParameters(reader);
+        }
+    }
+
     private Tensor<T> ApplyReLU(Tensor<T> x)
     {
         var result = new Tensor<T>(x.Shape);
@@ -246,6 +291,28 @@ internal class ResNetStage<T>
             count += block.GetParameterCount();
         }
         return count;
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_blocks.Count);
+        foreach (var block in _blocks)
+        {
+            block.WriteParameters(writer);
+        }
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        int blockCount = reader.ReadInt32();
+        if (blockCount != _blocks.Count)
+        {
+            throw new InvalidOperationException($"ResNetStage block count mismatch: expected {_blocks.Count}, got {blockCount}.");
+        }
+        foreach (var block in _blocks)
+        {
+            block.ReadParameters(reader);
+        }
     }
 }
 
@@ -377,6 +444,54 @@ internal class ResidualBlock<T>
             count += _downsample.GetParameterCount();
         }
         return count;
+    }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_useBottleneck);
+        writer.Write(_downsample is not null);
+
+        _conv1.WriteParameters(writer);
+        _conv2.WriteParameters(writer);
+
+        if (_useBottleneck && _conv3 is not null)
+        {
+            _conv3.WriteParameters(writer);
+        }
+
+        if (_downsample is not null)
+        {
+            _downsample.WriteParameters(writer);
+        }
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        bool useBottleneck = reader.ReadBoolean();
+        bool hasDownsample = reader.ReadBoolean();
+
+        if (useBottleneck != _useBottleneck)
+        {
+            throw new InvalidOperationException($"ResidualBlock bottleneck mismatch.");
+        }
+
+        if (hasDownsample != (_downsample is not null))
+        {
+            throw new InvalidOperationException($"ResidualBlock downsample mismatch.");
+        }
+
+        _conv1.ReadParameters(reader);
+        _conv2.ReadParameters(reader);
+
+        if (_useBottleneck && _conv3 is not null)
+        {
+            _conv3.ReadParameters(reader);
+        }
+
+        if (_downsample is not null)
+        {
+            _downsample.ReadParameters(reader);
+        }
     }
 
     private Tensor<T> ApplyReLU(Tensor<T> x)

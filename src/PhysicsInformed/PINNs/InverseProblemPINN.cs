@@ -359,7 +359,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
             // Sample a batch of collocation points
             int batchSize = Math.Min(256, numPoints);
-            var random = RandomHelper.CreateSeededRandom(DateTime.Now.Millisecond);
+            var random = RandomHelper.Shared;
 
             for (int i = 0; i < batchSize; i++)
             {

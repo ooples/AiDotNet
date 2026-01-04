@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Weights;
@@ -487,7 +488,24 @@ public class CRNN<T> : OCRBase<T>
             localPath = await downloader.DownloadIfNeededAsync(pathOrUrl, fileName, null, cancellationToken);
         }
 
-        // Load weights
+        // Check if this is our native format (starts with CRNN magic number)
+        if (File.Exists(localPath))
+        {
+            using var checkStream = File.OpenRead(localPath);
+            using var checkReader = new BinaryReader(checkStream);
+            if (checkStream.Length >= 4)
+            {
+                int magic = checkReader.ReadInt32();
+                if (magic == 0x43524E4E) // "CRNN"
+                {
+                    checkStream.Close();
+                    LoadWeightsFromFile(localPath);
+                    return;
+                }
+            }
+        }
+
+        // Fallback to external weight format
         var loader = new WeightLoader();
         var weights = loader.LoadWeights(localPath);
 
@@ -645,7 +663,92 @@ public class CRNN<T> : OCRBase<T>
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write header
+        writer.Write(0x43524E4E); // "CRNN" in ASCII
+        writer.Write(1); // Version 1
+        writer.Write(Name);
+        writer.Write(_hiddenDim);
+        writer.Write(_sequenceFeatureDim);
+        writer.Write(VocabularySize);
+
+        // Write CNN weights
+        _conv1.WriteParameters(writer);
+        _conv2.WriteParameters(writer);
+        _conv3.WriteParameters(writer);
+        _conv4.WriteParameters(writer);
+        _conv5.WriteParameters(writer);
+        _conv6.WriteParameters(writer);
+        _conv7.WriteParameters(writer);
+
+        // Write LSTM weights using existing Serialize method
+        _lstm1Forward.Serialize(writer);
+        _lstm1Backward.Serialize(writer);
+        _lstm2Forward.Serialize(writer);
+        _lstm2Backward.Serialize(writer);
+
+        // Write output layer
+        _outputLayer.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Loads weights from a file.
+    /// </summary>
+    private void LoadWeightsFromFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify header
+        int magic = reader.ReadInt32();
+        if (magic != 0x43524E4E) // "CRNN"
+        {
+            throw new InvalidDataException($"Invalid CRNN model file. Expected magic 0x43524E4E, got 0x{magic:X8}");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported CRNN model version: {version}");
+        }
+
+        string name = reader.ReadString();
+        int hiddenDim = reader.ReadInt32();
+        int seqFeatureDim = reader.ReadInt32();
+        int vocabSize = reader.ReadInt32();
+
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"CRNN configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
+        if (hiddenDim != _hiddenDim || seqFeatureDim != _sequenceFeatureDim || vocabSize != VocabularySize)
+        {
+            throw new InvalidOperationException(
+                $"CRNN configuration mismatch. Expected hiddenDim={_hiddenDim}, seqFeatureDim={_sequenceFeatureDim}, vocabSize={VocabularySize}, " +
+                $"got hiddenDim={hiddenDim}, seqFeatureDim={seqFeatureDim}, vocabSize={vocabSize}");
+        }
+
+        // Read CNN weights
+        _conv1.ReadParameters(reader);
+        _conv2.ReadParameters(reader);
+        _conv3.ReadParameters(reader);
+        _conv4.ReadParameters(reader);
+        _conv5.ReadParameters(reader);
+        _conv6.ReadParameters(reader);
+        _conv7.ReadParameters(reader);
+
+        // Read LSTM weights using existing Deserialize method
+        _lstm1Forward.Deserialize(reader);
+        _lstm1Backward.Deserialize(reader);
+        _lstm2Forward.Deserialize(reader);
+        _lstm2Backward.Deserialize(reader);
+
+        // Read output layer
+        _outputLayer.ReadParameters(reader);
     }
 
     private Tensor<T> ApplyReLU(Tensor<T> x)

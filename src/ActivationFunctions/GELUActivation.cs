@@ -122,6 +122,46 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
         );
     }
 
+    /// <summary>
+    /// Applies the GELU activation function to each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to activate.</param>
+    /// <returns>A new tensor with the GELU function applied to each element.</returns>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        return Engine.GELU(input);
+    }
+
+    /// <summary>
+    /// Calculates the derivative of the GELU function for each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to calculate the derivative for.</param>
+    /// <returns>A new tensor containing the derivatives of the GELU function for each input element.</returns>
+    public override Tensor<T> Derivative(Tensor<T> input)
+    {
+        // Use the tensor-level derivative computation
+        Tensor<T> output = new Tensor<T>(input.Shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            output[i] = Derivative(input[i]);
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Calculates the backward pass gradient for GELU using GPU-accelerated fused operation.
+    /// </summary>
+    /// <param name="input">The input tensor that was used in the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
+    /// which is faster than computing derivative and gradient multiplication separately.
+    /// </remarks>
+    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
+    {
+        return Engine.GeluBackward(outputGradient, input);
+    }
 
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.

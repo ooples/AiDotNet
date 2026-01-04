@@ -1574,6 +1574,68 @@ public interface IEngine
     /// <returns>Gradient with respect to the input.</returns>
     Tensor<T> ReGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
 
+    /// <summary>
+    /// Computes the Softplus activation: softplus(x) = log(1 + exp(x)).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A new tensor with Softplus applied element-wise.</returns>
+    Tensor<T> Softplus<T>(Tensor<T> input);
+
+    /// <summary>
+    /// Computes the HardSwish activation: x * min(max(x + 3, 0), 6) / 6.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A new tensor with HardSwish applied element-wise.</returns>
+    Tensor<T> HardSwish<T>(Tensor<T> input);
+
+    /// <summary>
+    /// Computes the backward pass for ReLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ReluBackward<T>(Tensor<T> gradOutput, Tensor<T> input);
+
+    /// <summary>
+    /// Computes the backward pass for Sigmoid.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="output">The sigmoid output from forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> SigmoidBackward<T>(Tensor<T> gradOutput, Tensor<T> output);
+
+    /// <summary>
+    /// Computes the backward pass for Tanh.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="output">The tanh output from forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> TanhBackward<T>(Tensor<T> gradOutput, Tensor<T> output);
+
+    /// <summary>
+    /// Computes the backward pass for GELU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> GeluBackward<T>(Tensor<T> gradOutput, Tensor<T> input);
+
+    /// <summary>
+    /// Computes the backward pass for LeakyReLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="negativeSlope">The slope for negative values.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> LeakyReluBackward<T>(Tensor<T> gradOutput, Tensor<T> input, double negativeSlope);
+
     #endregion
 
     #region Matrix Operations (Phase B: Epic 2)
@@ -4313,6 +4375,157 @@ public interface IEngine
     /// <param name="gradBeta">Output: gradient with respect to beta.</param>
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> GroupNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int numGroups, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
+
+    /// <summary>
+    /// Applies Instance Normalization to the input tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, spatial...].</param>
+    /// <param name="gamma">Scale parameter with shape [channels].</param>
+    /// <param name="beta">Shift parameter with shape [channels].</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="mean">Output: computed mean per instance with shape [batch, channels].</param>
+    /// <param name="variance">Output: computed variance per instance with shape [batch, channels].</param>
+    /// <returns>The normalized tensor with the same shape as input.</returns>
+    /// <remarks>
+    /// Instance normalization normalizes each channel of each sample independently.
+    /// Commonly used in style transfer and generative models.
+    /// </remarks>
+    Tensor<T> InstanceNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance);
+
+    /// <summary>
+    /// Computes the backward pass for instance normalization.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="gamma">Scale parameter.</param>
+    /// <param name="mean">The mean computed during forward pass.</param>
+    /// <param name="variance">The variance computed during forward pass.</param>
+    /// <param name="epsilon">Small constant used during forward pass.</param>
+    /// <param name="gradGamma">Output: gradient with respect to gamma.</param>
+    /// <param name="gradBeta">Output: gradient with respect to beta.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> InstanceNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
+
+    #endregion
+
+    #region Dropout Operations
+
+    /// <summary>
+    /// Applies dropout during training, scaling retained values.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="dropoutRate">The probability of dropping each element (0 to 1).</param>
+    /// <param name="training">If true, applies dropout; if false, returns input unchanged.</param>
+    /// <param name="mask">Output: the binary mask used for dropout (for backward pass).</param>
+    /// <returns>The tensor with dropout applied during training.</returns>
+    Tensor<T> Dropout<T>(Tensor<T> input, double dropoutRate, bool training, out Tensor<T> mask);
+
+    /// <summary>
+    /// Computes the backward pass for dropout.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="mask">The mask from forward pass.</param>
+    /// <param name="dropoutRate">The dropout rate used during forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> DropoutBackward<T>(Tensor<T> gradOutput, Tensor<T> mask, double dropoutRate);
+
+    #endregion
+
+    #region Embedding Operations
+
+    /// <summary>
+    /// Performs embedding lookup from an embedding table.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of embedding values.</typeparam>
+    /// <param name="indices">The indices to look up.</param>
+    /// <param name="embeddingTable">The embedding table with shape [vocabSize, embeddingDim].</param>
+    /// <returns>The embeddings for the given indices with shape [indices.Shape..., embeddingDim].</returns>
+    Tensor<T> Embedding<T>(Tensor<int> indices, Tensor<T> embeddingTable);
+
+    /// <summary>
+    /// Computes the backward pass for embedding lookup.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of embedding values.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="indices">The indices used during forward pass.</param>
+    /// <param name="vocabSize">The size of the vocabulary.</param>
+    /// <param name="embeddingDim">The dimension of each embedding vector.</param>
+    /// <returns>The gradient with respect to the embedding table.</returns>
+    Tensor<T> EmbeddingBackward<T>(Tensor<T> gradOutput, Tensor<int> indices, int vocabSize, int embeddingDim);
+
+    #endregion
+
+    #region Loss Function Operations
+
+    /// <summary>
+    /// Computes cross-entropy loss for classification tasks.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="predictions">The predicted logits with shape [batch, numClasses].</param>
+    /// <param name="targets">The target class indices or one-hot encoded targets.</param>
+    /// <returns>The scalar loss value.</returns>
+    T CrossEntropyLoss<T>(Tensor<T> predictions, Tensor<T> targets);
+
+    /// <summary>
+    /// Computes the gradient of cross-entropy loss.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="predictions">The predicted logits.</param>
+    /// <param name="targets">The target values.</param>
+    /// <returns>The gradient with respect to predictions.</returns>
+    Tensor<T> CrossEntropyBackward<T>(Tensor<T> predictions, Tensor<T> targets);
+
+    /// <summary>
+    /// Computes mean squared error loss.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="predictions">The predicted values.</param>
+    /// <param name="targets">The target values.</param>
+    /// <returns>The scalar loss value.</returns>
+    T MseLoss<T>(Tensor<T> predictions, Tensor<T> targets);
+
+    /// <summary>
+    /// Computes the gradient of mean squared error loss.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="predictions">The predicted values.</param>
+    /// <param name="targets">The target values.</param>
+    /// <returns>The gradient with respect to predictions.</returns>
+    Tensor<T> MseBackward<T>(Tensor<T> predictions, Tensor<T> targets);
+
+    #endregion
+
+    #region Global Pooling Operations
+
+    /// <summary>
+    /// Performs global average pooling over spatial dimensions.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
+    /// <returns>The pooled tensor with shape [batch, channels, 1, 1].</returns>
+    Tensor<T> GlobalAvgPool2D<T>(Tensor<T> input);
+
+    /// <summary>
+    /// Performs global max pooling over spatial dimensions.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
+    /// <returns>The pooled tensor with shape [batch, channels, 1, 1].</returns>
+    Tensor<T> GlobalMaxPool2D<T>(Tensor<T> input);
+
+    /// <summary>
+    /// Performs adaptive average pooling to a target output size.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
+    /// <param name="outputHeight">The target output height.</param>
+    /// <param name="outputWidth">The target output width.</param>
+    /// <returns>The pooled tensor with shape [batch, channels, outputHeight, outputWidth].</returns>
+    Tensor<T> AdaptiveAvgPool2D<T>(Tensor<T> input, int outputHeight, int outputWidth);
 
     #endregion
 

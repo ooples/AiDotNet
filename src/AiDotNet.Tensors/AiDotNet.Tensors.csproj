@@ -1,20 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net471</TargetFrameworks>
+    <TargetFrameworks>net10.0;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Version>1.0.0-preview</Version>
     <Title>AiDotNet.Tensors</Title>
-    <Description>High-performance tensor operations with SIMD acceleration for .NET. Provides Vector, Matrix, and Tensor types with hardware-accelerated operations (Sin, Cos, Exp, Log, etc.) that work across .NET Framework 4.7.1 and .NET 8.0. Supports any numeric type via generic INumericOperations interface. GPU acceleration available.</Description>
+    <Description>High-performance tensor operations with SIMD acceleration for .NET. Provides Vector, Matrix, and Tensor types with hardware-accelerated operations (Sin, Cos, Exp, Log, etc.) that work across .NET Framework 4.7.1 and .NET 10.0. Supports any numeric type via generic INumericOperations interface. GPU acceleration available.</Description>
     <Company>Ooples Finance</Company>
     <Authors>ooples</Authors>
     <Copyright>Ooples Finance LLC 2025</Copyright>
     <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
-    <PackageTags>tensors; simd; vectorization; linear-algebra; matrix; vector; performance; net471; net8; avx2; avx512; gpu</PackageTags>
+    <PackageTags>tensors; simd; vectorization; linear-algebra; matrix; vector; performance; net471; net10; avx2; avx512; gpu</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <LangVersion>latest</LangVersion>
@@ -55,7 +55,7 @@
 
   <ItemGroup>
     <PackageReference Include="System.Numerics.Tensors" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
 
   <!-- System.Text.Json is needed for net471 as it's not built-in like net8.0 -->

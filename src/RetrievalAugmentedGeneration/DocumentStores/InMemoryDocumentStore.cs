@@ -7,6 +7,8 @@ using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes;
+using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -34,7 +36,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// - Small to medium datasets (< 100K documents)
 /// 
 /// Key characteristics:
-/// - O(n) similarity search using cosine distance
+/// - O(log n) similarity search using HNSW approximate nearest neighbor indexing
 /// - Thread-safe concurrent access
 /// - Low memory overhead with efficient storage
 /// - Simple serialization/deserialization support
@@ -45,6 +47,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
 {
     private readonly ConcurrentDictionary<string, VectorDocument<T>> _store;
     private readonly int _initialVectorDimension;
+    private readonly HNSWIndex<T> _hnswIndex;
     private int _vectorDimension;
 
     /// <summary>
@@ -63,28 +66,38 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// <param name="vectorDimension">The dimension of vector embeddings.</param>
     /// <param name="databasePath">Optional logical identifier for this store instance (for debugging/logging).</param>
     /// <param name="tableName">Optional logical name for the document collection (for debugging/logging).</param>
+    /// <param name="hnswMaxConnections">HNSW M parameter: max connections per node. Higher = better recall, more memory. Default: 16.</param>
+    /// <param name="hnswEfConstruction">HNSW efConstruction: search depth during index building. Higher = better quality, slower build. Default: 200.</param>
+    /// <param name="hnswEfSearch">HNSW efSearch: search depth during queries. Higher = better recall, slower search. Default: 50.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when vectorDimension is less than or equal to zero.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new in-memory vector store that keeps all data in RAM.
-    /// 
+    ///
     /// Example:
     /// <code>
     /// // Create a store with 384-dimensional embeddings
     /// var store = new InMemoryDocumentStore&lt;float&gt;(vectorDimension: 384);
-    /// 
-    /// // With optional identifiers for logging
+    ///
+    /// // With custom HNSW parameters for high-recall use case
     /// var store2 = new InMemoryDocumentStore&lt;float&gt;(
     ///     vectorDimension: 384,
-    ///     databasePath: "session-cache",
-    ///     tableName: "documents"
+    ///     hnswMaxConnections: 32,      // More connections for better recall
+    ///     hnswEfConstruction: 400,     // Higher quality index
+    ///     hnswEfSearch: 100            // More thorough search
     /// );
     /// </code>
-    /// 
+    ///
     /// All data is stored in memory and will be lost when the program exits.
     /// Vector dimension must match your embedding model's output dimension.
     /// </para>
     /// </remarks>
-    public InMemoryDocumentStore(int vectorDimension, string? databasePath = null, string? tableName = null)
+    public InMemoryDocumentStore(
+        int vectorDimension,
+        string? databasePath = null,
+        string? tableName = null,
+        int hnswMaxConnections = 16,
+        int hnswEfConstruction = 200,
+        int hnswEfSearch = 50)
     {
         if (vectorDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension must be positive");
@@ -92,6 +105,13 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
         _store = new ConcurrentDictionary<string, VectorDocument<T>>();
         _initialVectorDimension = vectorDimension;
         _vectorDimension = vectorDimension;
+
+        // Initialize HNSW index for O(log n) approximate nearest neighbor search
+        _hnswIndex = new HNSWIndex<T>(
+            new CosineSimilarityMetric<T>(),
+            maxConnections: hnswMaxConnections,
+            efConstruction: hnswEfConstruction,
+            efSearch: hnswEfSearch);
     }
 
     /// <summary>
@@ -106,6 +126,8 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
+        // Add to HNSW first - if it fails, don't add to store to maintain consistency
+        _hnswIndex.Add(vectorDocument.Document.Id, vectorDocument.Embedding);
         _store[vectorDocument.Document.Id] = vectorDocument;
     }
 
@@ -145,7 +167,8 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
             }
         }
 
-        // Validate all documents in batch
+        // Validate all documents and build HNSW batch first
+        var hnswBatch = new Dictionary<string, Vector<T>>();
         foreach (var vd in vectorDocuments)
         {
             // Validate batch dimensions
@@ -155,6 +178,15 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
                     $"Vector dimension mismatch in batch. Expected {_vectorDimension}, got {vd.Embedding.Length} for document {vd.Document.Id}",
                     nameof(vectorDocuments));
             }
+            hnswBatch[vd.Document.Id] = vd.Embedding;
+        }
+
+        // Add to HNSW first - if it fails, don't add to store to maintain consistency
+        _hnswIndex.AddBatch(hnswBatch);
+
+        // Only add to store after HNSW succeeds
+        foreach (var vd in vectorDocuments)
+        {
             _store[vd.Document.Id] = vd;
         }
     }
@@ -171,16 +203,15 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// Performs vector similarity search using in-memory calculations. In real SQLite-VSS, this would use
     /// the vss_search() SQL function to efficiently find nearest neighbors.
     /// </para>
-    /// <para><b>For Beginners:</b> Finds the most similar documents in the SQLite database.
-    /// 
+    /// <para><b>For Beginners:</b> Finds the most similar documents using HNSW index.
+    ///
     /// How it works:
-    /// 1. Filter documents by metadata (like SQL WHERE clause)
-    /// 2. Calculate similarity for each document
-    /// 3. Sort by similarity (highest first, like SQL ORDER BY)
-    /// 4. Return top-k matches (like SQL LIMIT)
-    /// 
-    /// In real SQLite-VSS, this uses efficient indexing structures like HNSW
-    /// for fast approximate nearest neighbor search.
+    /// 1. Use HNSW graph to find approximate nearest neighbors in O(log n) time
+    /// 2. Apply metadata filters to the candidates
+    /// 3. Return top-k matches
+    ///
+    /// HNSW (Hierarchical Navigable Small World) provides ~100x faster search
+    /// compared to brute-force linear scan for large datasets.
     /// 
     /// Example:
     /// <code>
@@ -191,32 +222,40 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
-        var scoredDocuments = new List<(Document<T> doc, T score)>();
+        bool hasFilters = metadataFilters.Count > 0;
 
-        // Apply metadata filters
-        var filteredDocuments = _store.Values
-            .Where(vectorDoc => MatchesFilters(vectorDoc.Document, metadataFilters));
+        // Use HNSW for O(log n) approximate nearest neighbor search
+        // If there are metadata filters, over-fetch candidates to account for filtering
+        int fetchCount = hasFilters ? Math.Min(topK * 10, _store.Count) : topK;
 
-        foreach (var vd in filteredDocuments)
+        if (_hnswIndex.Count == 0)
+            return Enumerable.Empty<Document<T>>();
+
+        var hnswResults = _hnswIndex.Search(queryVector, fetchCount);
+        var results = new List<Document<T>>();
+
+        foreach (var (id, score) in hnswResults)
         {
-            var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vd.Embedding);
-            scoredDocuments.Add((vd.Document, similarity));
+            if (!_store.TryGetValue(id, out var vd))
+                continue;
+
+            // Apply metadata filters
+            if (hasFilters && !MatchesFilters(vd.Document, metadataFilters))
+                continue;
+
+            // Create a new Document instance to avoid mutating the cached one
+            var newDocument = new Document<T>(vd.Document.Id, vd.Document.Content, vd.Document.Metadata)
+            {
+                RelevanceScore = score,
+                HasRelevanceScore = true
+            };
+            results.Add(newDocument);
+
+            if (results.Count >= topK)
+                break;
         }
 
-        return scoredDocuments
-            .OrderByDescending(x => Convert.ToDouble(x.score))
-            .Take(topK)
-            .Select(x =>
-            {
-                // Create a new Document instance to avoid mutating the cached one
-                var newDocument = new Document<T>(x.doc.Id, x.doc.Content, x.doc.Metadata)
-                {
-                    RelevanceScore = x.score,
-                    HasRelevanceScore = true
-                };
-                return newDocument;
-            })
-            .ToList();
+        return results;
     }
 
     /// <summary>
@@ -260,7 +299,12 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override bool RemoveCore(string documentId)
     {
-        return _store.TryRemove(documentId, out _);
+        if (_store.TryRemove(documentId, out _))
+        {
+            _hnswIndex.Remove(documentId);
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -269,7 +313,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// <returns>An enumerable of all documents without their vector embeddings.</returns>
     /// <remarks>
     /// <para>
-    /// Returns all documents from the SQLite table in no particular order (like SQL SELECT * FROM table).
+    /// Returns all documents from the in-memory store in no particular order.
     /// Vector embeddings are not included in the results.
     /// </para>
     /// <para><b>For Beginners:</b> Gets every document from the database.
@@ -308,8 +352,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Clears all documents from the SQLite table (like SQL DELETE FROM table or DROP TABLE) and
-    /// resets the vector dimension to 0. The database file remains but is empty.
+    /// Clears all documents from the in-memory store and resets the vector dimension to 0.
     /// </para>
     /// <para><b>For Beginners:</b> Completely empties the database.
     /// 
@@ -335,6 +378,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     public override void Clear()
     {
         _store.Clear();
+        _hnswIndex.Clear();
         Interlocked.Exchange(ref _vectorDimension, _initialVectorDimension);
     }
 }

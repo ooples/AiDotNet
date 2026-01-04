@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -177,13 +178,87 @@ public class RTDETR<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("Weight loading not yet implemented for RT-DETR");
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using var stream = File.OpenRead(pathOrUrl);
+            using var reader = new BinaryReader(stream);
+
+            // Read and verify magic number and version
+            int magic = reader.ReadInt32();
+            if (magic != 0x52544452) // "RTDR" in ASCII
+            {
+                throw new InvalidDataException("Invalid weight file format: incorrect magic number.");
+            }
+
+            int version = reader.ReadInt32();
+            if (version != 1)
+            {
+                throw new InvalidDataException($"Unsupported weight file version: {version}.");
+            }
+
+            // Read model configuration
+            string modelName = reader.ReadString();
+            if (!modelName.StartsWith("RT-DETR"))
+            {
+                throw new InvalidDataException($"Weight file is for {modelName}, not RT-DETR.");
+            }
+
+            // Read backbone parameters (always present in RT-DETR)
+            if (Backbone is null)
+            {
+                throw new InvalidOperationException("RT-DETR backbone must be initialized before loading weights.");
+            }
+            Backbone.ReadParameters(reader);
+
+            // Read neck parameters (always present in RT-DETR)
+            if (Neck is null)
+            {
+                throw new InvalidOperationException("RT-DETR neck must be initialized before loading weights.");
+            }
+            Neck.ReadParameters(reader);
+
+            // Read encoder parameters
+            _encoder.ReadParameters(reader);
+
+            // Read decoder parameters
+            _decoder.ReadParameters(reader);
+        }, cancellationToken);
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write magic number and version
+        writer.Write(0x52544452); // "RTDR" in ASCII
+        writer.Write(1); // Version 1
+
+        // Write model configuration
+        writer.Write(Name);
+
+        // Write backbone parameters (always present in RT-DETR)
+        if (Backbone is null)
+        {
+            throw new InvalidOperationException("RT-DETR backbone must be initialized before saving weights.");
+        }
+        Backbone.WriteParameters(writer);
+
+        // Write neck parameters (always present in RT-DETR)
+        if (Neck is null)
+        {
+            throw new InvalidOperationException("RT-DETR neck must be initialized before saving weights.");
+        }
+        Neck.WriteParameters(writer);
+
+        // Write encoder parameters
+        _encoder.WriteParameters(writer);
+
+        // Write decoder parameters
+        _decoder.WriteParameters(writer);
     }
 
     private (Tensor<T> flattened, int[] levelStarts, int[][] spatialShapes) FlattenMultiScale(List<Tensor<T>> features)
@@ -250,6 +325,50 @@ internal class RTDETREncoder<T>
         count += _crossScaleModule.GetParameterCount();
         return count;
     }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+        writer.Write(_numLayers);
+        writer.Write(_numLevels);
+
+        foreach (var layer in _intrascaleLayers)
+        {
+            layer.WriteParameters(writer);
+        }
+
+        _crossScaleModule.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+        int numLayers = reader.ReadInt32();
+        int numLevels = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads ||
+            numLayers != _numLayers || numLevels != _numLevels)
+        {
+            throw new InvalidOperationException(
+                $"RTDETREncoder configuration mismatch: expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
+                $"numLayers={_numLayers}, numLevels={_numLevels}.");
+        }
+
+        foreach (var layer in _intrascaleLayers)
+        {
+            layer.ReadParameters(reader);
+        }
+
+        _crossScaleModule.ReadParameters(reader);
+    }
 }
 
 /// <summary>
@@ -299,6 +418,40 @@ internal class RTDETREncoderLayer<T>
                _ffn2.GetParameterCount() +
                _norm1.GetParameterCount() +
                _norm2.GetParameterCount();
+    }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+
+        _selfAttn.WriteParameters(writer);
+        _ffn1.WriteParameters(writer);
+        _ffn2.WriteParameters(writer);
+        _norm1.WriteParameters(writer);
+        _norm2.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim)
+        {
+            throw new InvalidOperationException(
+                $"RTDETREncoderLayer configuration mismatch: expected hiddenDim={_hiddenDim}, got {hiddenDim}.");
+        }
+
+        _selfAttn.ReadParameters(reader);
+        _ffn1.ReadParameters(reader);
+        _ffn2.ReadParameters(reader);
+        _norm1.ReadParameters(reader);
+        _norm2.ReadParameters(reader);
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
@@ -463,6 +616,40 @@ internal class CrossScaleModule<T>
         return count;
     }
 
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numLevels);
+
+        foreach (var layer in _fusionLayers)
+        {
+            layer.WriteParameters(writer);
+        }
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numLevels = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim || numLevels != _numLevels)
+        {
+            throw new InvalidOperationException(
+                $"CrossScaleModule configuration mismatch: expected hiddenDim={_hiddenDim}, numLevels={_numLevels}.");
+        }
+
+        foreach (var layer in _fusionLayers)
+        {
+            layer.ReadParameters(reader);
+        }
+    }
+
     private Tensor<T> ExtractRow(Tensor<T> x, int row)
     {
         int cols = x.Shape[1];
@@ -616,6 +803,68 @@ internal class RTDETRDecoder<T>
         count += _boxHead.GetParameterCount();
 
         return count;
+    }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+        writer.Write(_numLayers);
+        writer.Write(_numQueries);
+
+        // Write query embeddings
+        for (int i = 0; i < _queryEmbed.Length; i++)
+        {
+            writer.Write(_numOps.ToDouble(_queryEmbed[i]));
+        }
+
+        // Write decoder layers
+        foreach (var layer in _layers)
+        {
+            layer.WriteParameters(writer);
+        }
+
+        // Write prediction heads
+        _classHead.WriteParameters(writer);
+        _boxHead.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+        int numLayers = reader.ReadInt32();
+        int numQueries = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads ||
+            numLayers != _numLayers || numQueries != _numQueries)
+        {
+            throw new InvalidOperationException(
+                $"RTDETRDecoder configuration mismatch: expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
+                $"numLayers={_numLayers}, numQueries={_numQueries}.");
+        }
+
+        // Read query embeddings
+        for (int i = 0; i < _queryEmbed.Length; i++)
+        {
+            _queryEmbed[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Read decoder layers
+        foreach (var layer in _layers)
+        {
+            layer.ReadParameters(reader);
+        }
+
+        // Read prediction heads
+        _classHead.ReadParameters(reader);
+        _boxHead.ReadParameters(reader);
     }
 
     private Tensor<T> InitializeQueries(int numQueries, int hiddenDim)

@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
@@ -231,6 +232,75 @@ internal class YOLOHead<T>
             count += _inputChannels[i] * outputChannels + outputChannels; // 1x1 conv + bias
         }
         return count;
+    }
+
+    /// <summary>
+    /// Writes the head parameters to a binary stream.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration for verification
+        writer.Write(_numClasses);
+        writer.Write(_numAnchors);
+        writer.Write(_inputChannels.Length);
+        foreach (int ic in _inputChannels)
+        {
+            writer.Write(ic);
+        }
+
+        // Write conv layer parameters
+        writer.Write(_convLayers.Count);
+        foreach (var conv in _convLayers)
+        {
+            conv.WriteParameters(writer);
+        }
+    }
+
+    /// <summary>
+    /// Reads the head parameters from a binary stream.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        int numClasses = reader.ReadInt32();
+        int numAnchors = reader.ReadInt32();
+        int numChannels = reader.ReadInt32();
+
+        if (numClasses != _numClasses)
+        {
+            throw new InvalidOperationException($"YOLOHead numClasses mismatch: expected {_numClasses}, got {numClasses}.");
+        }
+
+        if (numAnchors != _numAnchors)
+        {
+            throw new InvalidOperationException($"YOLOHead numAnchors mismatch: expected {_numAnchors}, got {numAnchors}.");
+        }
+
+        if (numChannels != _inputChannels.Length)
+        {
+            throw new InvalidOperationException($"YOLOHead inputChannels length mismatch: expected {_inputChannels.Length}, got {numChannels}.");
+        }
+
+        for (int i = 0; i < numChannels; i++)
+        {
+            int ic = reader.ReadInt32();
+            if (ic != _inputChannels[i])
+            {
+                throw new InvalidOperationException($"YOLOHead inputChannels[{i}] mismatch: expected {_inputChannels[i]}, got {ic}.");
+            }
+        }
+
+        // Read conv layer parameters
+        int convCount = reader.ReadInt32();
+        if (convCount != _convLayers.Count)
+        {
+            throw new InvalidOperationException($"YOLOHead convLayers count mismatch: expected {_convLayers.Count}, got {convCount}.");
+        }
+
+        foreach (var conv in _convLayers)
+        {
+            conv.ReadParameters(reader);
+        }
     }
 
     private static double Sigmoid(double x)
@@ -514,6 +584,98 @@ internal class YOLOv8Head<T>
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// Writes the head parameters to a binary stream.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration for verification
+        writer.Write(_numClasses);
+        writer.Write(_regMax);
+        writer.Write(_inputChannels.Length);
+        foreach (int ic in _inputChannels)
+        {
+            writer.Write(ic);
+        }
+
+        // Write classification branch parameters
+        writer.Write(_clsConvs.Count);
+        for (int i = 0; i < _clsConvs.Count; i++)
+        {
+            _clsConvs[i].WriteParameters(writer);
+            _clsHeads[i].WriteParameters(writer);
+        }
+
+        // Write regression branch parameters
+        writer.Write(_regConvs.Count);
+        for (int i = 0; i < _regConvs.Count; i++)
+        {
+            _regConvs[i].WriteParameters(writer);
+            _regHeads[i].WriteParameters(writer);
+        }
+    }
+
+    /// <summary>
+    /// Reads the head parameters from a binary stream.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        int numClasses = reader.ReadInt32();
+        int regMax = reader.ReadInt32();
+        int numChannels = reader.ReadInt32();
+
+        if (numClasses != _numClasses)
+        {
+            throw new InvalidOperationException($"YOLOv8Head numClasses mismatch: expected {_numClasses}, got {numClasses}.");
+        }
+
+        if (regMax != _regMax)
+        {
+            throw new InvalidOperationException($"YOLOv8Head regMax mismatch: expected {_regMax}, got {regMax}.");
+        }
+
+        if (numChannels != _inputChannels.Length)
+        {
+            throw new InvalidOperationException($"YOLOv8Head inputChannels length mismatch: expected {_inputChannels.Length}, got {numChannels}.");
+        }
+
+        for (int i = 0; i < numChannels; i++)
+        {
+            int ic = reader.ReadInt32();
+            if (ic != _inputChannels[i])
+            {
+                throw new InvalidOperationException($"YOLOv8Head inputChannels[{i}] mismatch: expected {_inputChannels[i]}, got {ic}.");
+            }
+        }
+
+        // Read classification branch parameters
+        int clsCount = reader.ReadInt32();
+        if (clsCount != _clsConvs.Count)
+        {
+            throw new InvalidOperationException($"YOLOv8Head clsConvs count mismatch: expected {_clsConvs.Count}, got {clsCount}.");
+        }
+
+        for (int i = 0; i < _clsConvs.Count; i++)
+        {
+            _clsConvs[i].ReadParameters(reader);
+            _clsHeads[i].ReadParameters(reader);
+        }
+
+        // Read regression branch parameters
+        int regCount = reader.ReadInt32();
+        if (regCount != _regConvs.Count)
+        {
+            throw new InvalidOperationException($"YOLOv8Head regConvs count mismatch: expected {_regConvs.Count}, got {regCount}.");
+        }
+
+        for (int i = 0; i < _regConvs.Count; i++)
+        {
+            _regConvs[i].ReadParameters(reader);
+            _regHeads[i].ReadParameters(reader);
+        }
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> x)

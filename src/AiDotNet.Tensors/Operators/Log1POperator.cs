@@ -19,7 +19,7 @@ namespace AiDotNet.Tensors.Operators;
 /// </para>
 /// <para>
 /// <b>Algorithm:</b>
-/// For .NET 5.0+, uses Math.Log1P which provides better numerical stability
+/// For .NET 8.0+, uses double.LogP1/float.LogP1 which provides better numerical stability
 /// for values near zero compared to Math.Log(1 + x).
 /// For older frameworks, falls back to Math.Log(1 + x).
 /// </para>
@@ -44,8 +44,8 @@ public readonly struct Log1POperatorDouble : IUnaryOperator<double, double>
     /// </summary>
     /// <param name="x">Input value</param>
     /// <returns>log(1 + x) computed with numerical stability for small x</returns>
-#if NET9_0_OR_GREATER
-    public double Invoke(double x) => Math.Log1P(x);
+#if NET8_0_OR_GREATER
+    public double Invoke(double x) => double.LogP1(x);
 #else
     public double Invoke(double x) => Math.Log(1.0 + x);
 #endif
@@ -64,8 +64,8 @@ public readonly struct Log1POperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = Math.Log1P(values[i]);
+#if NET8_0_OR_GREATER
+            values[i] = double.LogP1(values[i]);
 #else
             values[i] = Math.Log(1.0 + values[i]);
 #endif
@@ -84,8 +84,8 @@ public readonly struct Log1POperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = Math.Log1P(values[i]);
+#if NET8_0_OR_GREATER
+            values[i] = double.LogP1(values[i]);
 #else
             values[i] = Math.Log(1.0 + values[i]);
 #endif
@@ -104,8 +104,8 @@ public readonly struct Log1POperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = Math.Log1P(values[i]);
+#if NET8_0_OR_GREATER
+            values[i] = double.LogP1(values[i]);
 #else
             values[i] = Math.Log(1.0 + values[i]);
 #endif
@@ -126,8 +126,8 @@ public readonly struct Log1POperatorFloat : IUnaryOperator<float, float>
     /// </summary>
     /// <param name="x">Input value</param>
     /// <returns>log(1 + x) computed with numerical stability for small x</returns>
-#if NET9_0_OR_GREATER
-    public float Invoke(float x) => MathF.Log1P(x);
+#if NET8_0_OR_GREATER
+    public float Invoke(float x) => float.LogP1(x);
 #else
     public float Invoke(float x) => MathF.Log(1.0f + x);
 #endif
@@ -143,8 +143,8 @@ public readonly struct Log1POperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = MathF.Log1P(values[i]);
+#if NET8_0_OR_GREATER
+            values[i] = float.LogP1(values[i]);
 #else
             values[i] = MathF.Log(1.0f + values[i]);
 #endif
@@ -163,8 +163,8 @@ public readonly struct Log1POperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = MathF.Log1P(values[i]);
+#if NET8_0_OR_GREATER
+            values[i] = float.LogP1(values[i]);
 #else
             values[i] = MathF.Log(1.0f + values[i]);
 #endif
@@ -183,8 +183,8 @@ public readonly struct Log1POperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = MathF.Log1P(values[i]);
+#if NET8_0_OR_GREATER
+            values[i] = float.LogP1(values[i]);
 #else
             values[i] = MathF.Log(1.0f + values[i]);
 #endif

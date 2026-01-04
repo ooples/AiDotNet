@@ -19,7 +19,7 @@ namespace AiDotNet.Tensors.Operators;
 /// </para>
 /// <para>
 /// <b>Algorithm:</b>
-/// For .NET 5.0+, uses Math.ExpM1 which provides better numerical stability
+/// For .NET 7.0+, uses double.ExpM1/float.ExpM1 which provides better numerical stability
 /// for values near zero compared to Math.Exp(x) - 1.
 /// For older frameworks, falls back to Math.Exp(x) - 1.
 /// </para>
@@ -43,8 +43,8 @@ public readonly struct ExpM1OperatorDouble : IUnaryOperator<double, double>
     /// </summary>
     /// <param name="x">Input value</param>
     /// <returns>exp(x) - 1 computed with numerical stability for small x</returns>
-#if NET9_0_OR_GREATER
-    public double Invoke(double x) => Math.ExpM1(x);
+#if NET7_0_OR_GREATER
+    public double Invoke(double x) => double.ExpM1(x);
 #else
     public double Invoke(double x) => Math.Exp(x) - 1.0;
 #endif
@@ -63,8 +63,8 @@ public readonly struct ExpM1OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = Math.ExpM1(values[i]);
+#if NET7_0_OR_GREATER
+            values[i] = double.ExpM1(values[i]);
 #else
             values[i] = Math.Exp(values[i]) - 1.0;
 #endif
@@ -83,8 +83,8 @@ public readonly struct ExpM1OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = Math.ExpM1(values[i]);
+#if NET7_0_OR_GREATER
+            values[i] = double.ExpM1(values[i]);
 #else
             values[i] = Math.Exp(values[i]) - 1.0;
 #endif
@@ -103,8 +103,8 @@ public readonly struct ExpM1OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = Math.ExpM1(values[i]);
+#if NET7_0_OR_GREATER
+            values[i] = double.ExpM1(values[i]);
 #else
             values[i] = Math.Exp(values[i]) - 1.0;
 #endif
@@ -125,8 +125,8 @@ public readonly struct ExpM1OperatorFloat : IUnaryOperator<float, float>
     /// </summary>
     /// <param name="x">Input value</param>
     /// <returns>exp(x) - 1 computed with numerical stability for small x</returns>
-#if NET9_0_OR_GREATER
-    public float Invoke(float x) => MathF.ExpM1(x);
+#if NET7_0_OR_GREATER
+    public float Invoke(float x) => float.ExpM1(x);
 #else
     public float Invoke(float x) => MathF.Exp(x) - 1.0f;
 #endif
@@ -142,8 +142,8 @@ public readonly struct ExpM1OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = MathF.ExpM1(values[i]);
+#if NET7_0_OR_GREATER
+            values[i] = float.ExpM1(values[i]);
 #else
             values[i] = MathF.Exp(values[i]) - 1.0f;
 #endif
@@ -162,8 +162,8 @@ public readonly struct ExpM1OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = MathF.ExpM1(values[i]);
+#if NET7_0_OR_GREATER
+            values[i] = float.ExpM1(values[i]);
 #else
             values[i] = MathF.Exp(values[i]) - 1.0f;
 #endif
@@ -182,8 +182,8 @@ public readonly struct ExpM1OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
-#if NET9_0_OR_GREATER
-            values[i] = MathF.ExpM1(values[i]);
+#if NET7_0_OR_GREATER
+            values[i] = float.ExpM1(values[i]);
 #else
             values[i] = MathF.Exp(values[i]) - 1.0f;
 #endif

@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
@@ -200,6 +201,68 @@ internal class DETRDecoder<T>
         return count;
     }
 
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+        writer.Write(_numLayers);
+        writer.Write(_numQueries);
+
+        // Write query embeddings
+        for (int i = 0; i < _queryEmbed.Length; i++)
+        {
+            writer.Write(_numOps.ToDouble(_queryEmbed[i]));
+        }
+
+        // Write decoder layers
+        foreach (var layer in _layers)
+        {
+            layer.WriteParameters(writer);
+        }
+
+        // Write prediction heads
+        _classHead.WriteParameters(writer);
+        _boxHead.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+        int numLayers = reader.ReadInt32();
+        int numQueries = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads ||
+            numLayers != _numLayers || numQueries != _numQueries)
+        {
+            throw new InvalidOperationException(
+                $"DETRDecoder configuration mismatch: expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
+                $"numLayers={_numLayers}, numQueries={_numQueries}.");
+        }
+
+        // Read query embeddings
+        for (int i = 0; i < _queryEmbed.Length; i++)
+        {
+            _queryEmbed[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Read decoder layers
+        foreach (var layer in _layers)
+        {
+            layer.ReadParameters(reader);
+        }
+
+        // Read prediction heads
+        _classHead.ReadParameters(reader);
+        _boxHead.ReadParameters(reader);
+    }
+
     private Tensor<T> InitializeQueryEmbeddings(int numQueries, int hiddenDim)
     {
         var embeddings = new Tensor<T>(new[] { numQueries, hiddenDim });
@@ -374,6 +437,46 @@ internal class DecoderLayer<T>
         return count;
     }
 
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+
+        _selfAttn.WriteParameters(writer);
+        _crossAttn.WriteParameters(writer);
+        _ffn1.WriteParameters(writer);
+        _ffn2.WriteParameters(writer);
+        _norm1.WriteParameters(writer);
+        _norm2.WriteParameters(writer);
+        _norm3.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads)
+        {
+            throw new InvalidOperationException(
+                $"DecoderLayer configuration mismatch: expected hiddenDim={_hiddenDim}, numHeads={_numHeads}.");
+        }
+
+        _selfAttn.ReadParameters(reader);
+        _crossAttn.ReadParameters(reader);
+        _ffn1.ReadParameters(reader);
+        _ffn2.ReadParameters(reader);
+        _norm1.ReadParameters(reader);
+        _norm2.ReadParameters(reader);
+        _norm3.ReadParameters(reader);
+    }
+
     private Tensor<T> ApplyFFN(Tensor<T> x)
     {
         int batch = x.Shape[0];
@@ -499,6 +602,40 @@ internal class MultiHeadCrossAttention<T>
                _keyProj.GetParameterCount() +
                _valueProj.GetParameterCount() +
                _outputProj.GetParameterCount();
+    }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+
+        _queryProj.WriteParameters(writer);
+        _keyProj.WriteParameters(writer);
+        _valueProj.WriteParameters(writer);
+        _outputProj.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads)
+        {
+            throw new InvalidOperationException(
+                $"MultiHeadCrossAttention configuration mismatch: expected hiddenDim={_hiddenDim}, numHeads={_numHeads}.");
+        }
+
+        _queryProj.ReadParameters(reader);
+        _keyProj.ReadParameters(reader);
+        _valueProj.ReadParameters(reader);
+        _outputProj.ReadParameters(reader);
     }
 
     private Tensor<T> ProjectSequence(Tensor<T> x, Dense<T> proj)

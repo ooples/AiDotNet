@@ -1,4 +1,8 @@
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Extensions;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Enums;
@@ -192,17 +196,83 @@ public class DETR<T> : ObjectDetectorBase<T>
     }
 
     /// <inheritdoc/>
-    public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
+    public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException(
-            "Weight loading not yet implemented for DETR. " +
-            "The model will run with randomly initialized weights.");
+        byte[] data;
+        if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var client = new System.Net.Http.HttpClient();
+            data = await client.GetByteArrayWithCancellationAsync(pathOrUrl, cancellationToken);
+        }
+        else
+        {
+            data = await Task.Run(() => File.ReadAllBytes(pathOrUrl), cancellationToken);
+        }
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify magic number and version
+        int magic = reader.ReadInt32();
+        if (magic != 0x44455452) // "DETR" in ASCII
+        {
+            throw new InvalidDataException("Invalid weight file format: incorrect magic number.");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+        }
+
+        // Read model configuration
+        string modelName = reader.ReadString();
+        if (!modelName.StartsWith("DETR"))
+        {
+            throw new InvalidDataException($"Weight file is for {modelName}, not DETR.");
+        }
+
+        // Read backbone parameters
+        if (Backbone is not null)
+        {
+            Backbone.ReadParameters(reader);
+        }
+
+        // Read input projection
+        _inputProj.ReadParameters(reader);
+
+        // Read encoder parameters
+        _encoder.ReadParameters(reader);
+
+        // Read decoder parameters
+        _decoder.ReadParameters(reader);
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write magic number and version
+        writer.Write(0x44455452); // "DETR" in ASCII
+        writer.Write(1); // Version 1
+
+        // Write model configuration
+        writer.Write(Name);
+
+        // Write backbone parameters
+        Backbone!.WriteParameters(writer);
+
+        // Write input projection
+        _inputProj.WriteParameters(writer);
+
+        // Write encoder parameters
+        _encoder.WriteParameters(writer);
+
+        // Write decoder parameters
+        _decoder.WriteParameters(writer);
     }
 
     private Tensor<T> FlattenForTransformer(Tensor<T> x)
@@ -320,6 +390,42 @@ internal class DETREncoder<T>
         }
         return count;
     }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+        writer.Write(_numLayers);
+
+        foreach (var layer in _layers)
+        {
+            layer.WriteParameters(writer);
+        }
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+        int numLayers = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim || numHeads != _numHeads || numLayers != _numLayers)
+        {
+            throw new InvalidOperationException(
+                $"DETREncoder configuration mismatch: expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, numLayers={_numLayers}.");
+        }
+
+        foreach (var layer in _layers)
+        {
+            layer.ReadParameters(reader);
+        }
+    }
 }
 
 /// <summary>
@@ -376,6 +482,40 @@ internal class EncoderLayer<T>
                _ffn2.GetParameterCount() +
                _norm1.GetParameterCount() +
                _norm2.GetParameterCount();
+    }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+
+        _selfAttn.WriteParameters(writer);
+        _ffn1.WriteParameters(writer);
+        _ffn2.WriteParameters(writer);
+        _norm1.WriteParameters(writer);
+        _norm2.WriteParameters(writer);
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+
+        if (hiddenDim != _hiddenDim)
+        {
+            throw new InvalidOperationException(
+                $"EncoderLayer configuration mismatch: expected hiddenDim={_hiddenDim}, got {hiddenDim}.");
+        }
+
+        _selfAttn.ReadParameters(reader);
+        _ffn1.ReadParameters(reader);
+        _ffn2.ReadParameters(reader);
+        _norm1.ReadParameters(reader);
+        _norm2.ReadParameters(reader);
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
@@ -520,6 +660,58 @@ internal class LayerNorm<T>
     public long GetParameterCount()
     {
         return 2 * _hiddenDim; // gamma + beta
+    }
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    public void WriteParameters(BinaryWriter writer)
+    {
+        writer.Write(_hiddenDim);
+        writer.Write(_eps);
+
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_gamma[i]));
+        }
+
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_beta[i]));
+        }
+    }
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    public void ReadParameters(BinaryReader reader)
+    {
+        int hiddenDim = reader.ReadInt32();
+        double eps = reader.ReadDouble();
+
+        if (hiddenDim != _hiddenDim)
+        {
+            throw new InvalidOperationException(
+                $"LayerNorm configuration mismatch: expected hiddenDim={_hiddenDim}, got {hiddenDim}.");
+        }
+
+        // Validate eps matches within a small tolerance for floating point comparison
+        const double tolerance = 1e-12;
+        if (Math.Abs(eps - _eps) > tolerance)
+        {
+            throw new InvalidOperationException(
+                $"LayerNorm configuration mismatch: expected eps={_eps}, got {eps}.");
+        }
+
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _gamma[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _beta[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
     }
 }
 

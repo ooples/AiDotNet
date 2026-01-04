@@ -141,6 +141,42 @@ public class CSPDarknet<T> : BackboneBase<T>
         return count;
     }
 
+    /// <inheritdoc/>
+    public override void WriteParameters(System.IO.BinaryWriter writer)
+    {
+        // Write stem parameters
+        _stem.WriteParameters(writer);
+
+        // Write number of stages
+        writer.Write(_stages.Count);
+
+        // Write each stage's parameters
+        foreach (var stage in _stages)
+        {
+            stage.WriteParameters(writer);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ReadParameters(System.IO.BinaryReader reader)
+    {
+        // Read stem parameters
+        _stem.ReadParameters(reader);
+
+        // Read number of stages
+        int stageCount = reader.ReadInt32();
+        if (stageCount != _stages.Count)
+        {
+            throw new InvalidOperationException($"Expected {_stages.Count} stages but found {stageCount}.");
+        }
+
+        // Read each stage's parameters
+        foreach (var stage in _stages)
+        {
+            stage.ReadParameters(reader);
+        }
+    }
+
     /// <summary>
     /// Applies SiLU (Swish) activation.
     /// </summary>
@@ -268,6 +304,36 @@ internal class CSPBlock<T>
         return count;
     }
 
+    public void WriteParameters(System.IO.BinaryWriter writer)
+    {
+        _downsample.WriteParameters(writer);
+        _cv1.WriteParameters(writer);
+        _cv2.WriteParameters(writer);
+        _cv3.WriteParameters(writer);
+        writer.Write(_bottlenecks.Count);
+        foreach (var b in _bottlenecks)
+        {
+            b.WriteParameters(writer);
+        }
+    }
+
+    public void ReadParameters(System.IO.BinaryReader reader)
+    {
+        _downsample.ReadParameters(reader);
+        _cv1.ReadParameters(reader);
+        _cv2.ReadParameters(reader);
+        _cv3.ReadParameters(reader);
+        int bottleneckCount = reader.ReadInt32();
+        if (bottleneckCount != _bottlenecks.Count)
+        {
+            throw new InvalidOperationException($"Expected {_bottlenecks.Count} bottlenecks but found {bottleneckCount}.");
+        }
+        foreach (var b in _bottlenecks)
+        {
+            b.ReadParameters(reader);
+        }
+    }
+
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
         var result = new Tensor<T>(x.Shape);
@@ -376,6 +442,18 @@ internal class BottleneckBlock<T>
     public long GetParameterCount()
     {
         return _cv1.GetParameterCount() + _cv2.GetParameterCount();
+    }
+
+    public void WriteParameters(System.IO.BinaryWriter writer)
+    {
+        _cv1.WriteParameters(writer);
+        _cv2.WriteParameters(writer);
+    }
+
+    public void ReadParameters(System.IO.BinaryReader reader)
+    {
+        _cv1.ReadParameters(reader);
+        _cv2.ReadParameters(reader);
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> x)

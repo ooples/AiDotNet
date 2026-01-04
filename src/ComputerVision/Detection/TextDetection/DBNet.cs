@@ -1,6 +1,8 @@
+using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.TextDetection;
@@ -262,15 +264,92 @@ public class DBNet<T> : TextDetectorBase<T>
     }
 
     /// <inheritdoc/>
-    public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
+    public override async Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        byte[] data;
+        if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            using var client = new System.Net.Http.HttpClient();
+            data = await client.GetByteArrayWithCancellationAsync(pathOrUrl, cancellationToken);
+        }
+        else
+        {
+            // Use Task.Run for net471 compatibility (ReadAllBytesAsync not available)
+            data = await Task.Run(() => File.ReadAllBytes(pathOrUrl), cancellationToken);
+        }
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+
+        // Read and verify header
+        int magic = reader.ReadInt32();
+        if (magic != 0x44424E54) // "DBNT" in ASCII
+        {
+            throw new InvalidDataException($"Invalid DBNet model file. Expected magic 0x44424E54, got 0x{magic:X8}");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidDataException($"Unsupported DBNet model version: {version}");
+        }
+
+        string name = reader.ReadString();
+        int hiddenDim = reader.ReadInt32();
+        double k = reader.ReadDouble();
+
+        if (name != Name)
+        {
+            throw new InvalidOperationException(
+                $"DBNet configuration mismatch. Expected name={Name}, got name={name}");
+        }
+
+        if (hiddenDim != _hiddenDim)
+        {
+            throw new InvalidOperationException(
+                $"DBNet configuration mismatch. Expected hiddenDim={_hiddenDim}, got hiddenDim={hiddenDim}");
+        }
+
+        // Validate k parameter within tolerance for floating point comparison
+        const double tolerance = 1e-12;
+        if (Math.Abs(k - _k) > tolerance)
+        {
+            throw new InvalidOperationException(
+                $"DBNet configuration mismatch. Expected k={_k}, got k={k}");
+        }
+
+        // Read component weights
+        Backbone!.ReadParameters(reader);
+        _inConv.ReadParameters(reader);
+        _upConv1.ReadParameters(reader);
+        _upConv2.ReadParameters(reader);
+        _upConv3.ReadParameters(reader);
+        _probHead.ReadParameters(reader);
+        _threshHead.ReadParameters(reader);
     }
 
     /// <inheritdoc/>
     public override void SaveWeights(string path)
     {
-        throw new NotImplementedException("Weight saving not yet implemented");
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+
+        // Write header
+        writer.Write(0x44424E54); // "DBNT" in ASCII
+        writer.Write(1); // Version 1
+        writer.Write(Name);
+        writer.Write(_hiddenDim);
+        writer.Write(_k);
+
+        // Write component weights
+        Backbone!.WriteParameters(writer);
+        _inConv.WriteParameters(writer);
+        _upConv1.WriteParameters(writer);
+        _upConv2.WriteParameters(writer);
+        _upConv3.WriteParameters(writer);
+        _probHead.WriteParameters(writer);
+        _threshHead.WriteParameters(writer);
     }
 
     private Tensor<T> ApplyReLU(Tensor<T> x)

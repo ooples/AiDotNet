@@ -147,6 +147,23 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Calculates the backward pass gradient for Sigmoid using GPU-accelerated fused operation.
+    /// </summary>
+    /// <param name="input">The input tensor that was used in the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
+    /// which is faster than computing derivative and gradient multiplication separately.
+    /// </remarks>
+    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
+    {
+        // Sigmoid backward uses forward output: grad = gradOutput * output * (1 - output)
+        var sigmoidOutput = Activate(input);
+        return Engine.SigmoidBackward(outputGradient, sigmoidOutput);
+    }
+
+    /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
     /// <value>True because Sigmoid gradient computation is fully implemented and tested.</value>

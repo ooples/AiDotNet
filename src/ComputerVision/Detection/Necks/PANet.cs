@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -222,6 +223,121 @@ public class PANet<T> : NeckBase<T>
         }
 
         return count;
+    }
+
+    /// <inheritdoc/>
+    public override void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write(_numLevels);
+        writer.Write(_outputChannels);
+        foreach (int ic in _inputChannels)
+        {
+            writer.Write(ic);
+        }
+
+        // Write top-down pathway weights
+        for (int i = 0; i < _numLevels; i++)
+        {
+            WriteTensor(writer, _lateralWeights[i]);
+            WriteTensor(writer, _lateralBiases[i]);
+            WriteTensor(writer, _topDownWeights[i]);
+            WriteTensor(writer, _topDownBiases[i]);
+            WriteTensor(writer, _bottomUpWeights[i]);
+            WriteTensor(writer, _bottomUpBiases[i]);
+        }
+
+        // Write downsample convolution weights
+        for (int i = 0; i < _numLevels - 1; i++)
+        {
+            WriteTensor(writer, _downsampleWeights[i]);
+            WriteTensor(writer, _downsampleBiases[i]);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        int numLevels = reader.ReadInt32();
+        int outputChannels = reader.ReadInt32();
+        var inputChannels = new int[numLevels];
+        for (int i = 0; i < numLevels; i++)
+        {
+            inputChannels[i] = reader.ReadInt32();
+        }
+
+        if (numLevels != _numLevels || outputChannels != _outputChannels)
+        {
+            throw new InvalidOperationException($"PANet configuration mismatch: expected {_numLevels} levels with {_outputChannels} channels, got {numLevels} levels with {outputChannels} channels.");
+        }
+
+        for (int i = 0; i < numLevels; i++)
+        {
+            if (inputChannels[i] != _inputChannels[i])
+            {
+                throw new InvalidOperationException($"PANet input channel mismatch at level {i}: expected {_inputChannels[i]}, got {inputChannels[i]}.");
+            }
+        }
+
+        // Read top-down pathway weights
+        for (int i = 0; i < _numLevels; i++)
+        {
+            ReadTensor(reader, _lateralWeights[i]);
+            ReadTensor(reader, _lateralBiases[i]);
+            ReadTensor(reader, _topDownWeights[i]);
+            ReadTensor(reader, _topDownBiases[i]);
+            ReadTensor(reader, _bottomUpWeights[i]);
+            ReadTensor(reader, _bottomUpBiases[i]);
+        }
+
+        // Read downsample convolution weights
+        for (int i = 0; i < _numLevels - 1; i++)
+        {
+            ReadTensor(reader, _downsampleWeights[i]);
+            ReadTensor(reader, _downsampleBiases[i]);
+        }
+    }
+
+    private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
+    {
+        // Write shape
+        writer.Write(tensor.Rank);
+        foreach (int dim in tensor.Shape)
+        {
+            writer.Write(dim);
+        }
+
+        // Write data
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(tensor[i]));
+        }
+    }
+
+    private void ReadTensor(BinaryReader reader, Tensor<T> tensor)
+    {
+        // Read and verify shape
+        int rank = reader.ReadInt32();
+        if (rank != tensor.Rank)
+        {
+            throw new InvalidOperationException($"Tensor rank mismatch: expected {tensor.Rank}, got {rank}.");
+        }
+
+        for (int i = 0; i < rank; i++)
+        {
+            int dim = reader.ReadInt32();
+            if (dim != tensor.Shape[i])
+            {
+                throw new InvalidOperationException($"Tensor shape mismatch at dimension {i}: expected {tensor.Shape[i]}, got {dim}.");
+            }
+        }
+
+        // Read data
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)

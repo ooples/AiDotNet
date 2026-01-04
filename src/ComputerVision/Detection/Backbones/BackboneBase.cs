@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
@@ -117,6 +118,18 @@ public abstract class BackboneBase<T>
     /// </summary>
     /// <returns>Number of trainable parameters.</returns>
     public abstract long GetParameterCount();
+
+    /// <summary>
+    /// Writes all parameters to a binary writer for serialization.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    public abstract void WriteParameters(BinaryWriter writer);
+
+    /// <summary>
+    /// Reads parameters from a binary reader for deserialization.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    public abstract void ReadParameters(BinaryReader reader);
 
     /// <summary>
     /// Gets the expected input size for this backbone.
