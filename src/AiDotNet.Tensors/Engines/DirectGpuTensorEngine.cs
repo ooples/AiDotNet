@@ -3610,6 +3610,94 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
     }
 
+    /// <summary>
+    /// GPU-resident batch normalization. Input and output remain on GPU, avoiding CPU round-trips.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor with shape [batch, features] or [batch, channels, H, W].</param>
+    /// <param name="gamma">Scale parameters (from CPU, cached on GPU).</param>
+    /// <param name="beta">Shift parameters (from CPU, cached on GPU).</param>
+    /// <param name="runningMean">Running mean for inference (from CPU, will be updated during training).</param>
+    /// <param name="runningVar">Running variance for inference (from CPU, will be updated during training).</param>
+    /// <param name="epsilon">Numerical stability constant.</param>
+    /// <param name="momentum">Momentum for running statistics update.</param>
+    /// <param name="training">Whether in training mode.</param>
+    /// <returns>GPU-resident output tensor with same shape as input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU backend is not available.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs batch normalization entirely on GPU, returning a GPU-resident tensor.
+    /// The running statistics are updated on GPU during training mode and then downloaded back
+    /// to update the CPU-side tensors.
+    /// </para>
+    /// <para>
+    /// For 4D input [batch, channels, H, W], spatialSize = H * W. For 2D input [batch, features], spatialSize = 1.
+    /// </para>
+    /// </remarks>
+    public (IGpuTensor<T> Output, Tensor<T>? SaveMean, Tensor<T>? SaveVar) FusedBatchNormGpu<T>(
+        IGpuTensor<T> input,
+        Tensor<T> gamma,
+        Tensor<T> beta,
+        ref Tensor<T> runningMean,
+        ref Tensor<T> runningVar,
+        double epsilon,
+        double momentum,
+        bool training)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for FusedBatchNormGpu");
+
+        int[] shape = input.Shape;
+        int batch = shape[0];
+        int channels = shape.Length > 1 ? shape[1] : shape[0];
+        int spatialSize = 1;
+        for (int i = 2; i < shape.Length; i++)
+        {
+            spatialSize *= shape[i];
+        }
+
+        // Upload parameters to GPU (these are typically cached)
+        using var gammaBuffer = GetOrAllocateBuffer(backend, gamma.Data);
+        using var betaBuffer = GetOrAllocateBuffer(backend, beta.Data);
+        using var runningMeanBuffer = GetOrAllocateBuffer(backend, runningMean.Data);
+        using var runningVarBuffer = GetOrAllocateBuffer(backend, runningVar.Data);
+
+        // Allocate output and save buffers
+        int outputSize = input.ElementCount;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+        using var saveMeanBuffer = AllocateOutputBuffer(backend, channels);
+        using var saveVarBuffer = AllocateOutputBuffer(backend, channels);
+
+        // Execute batch norm on GPU
+        backend.BatchNorm(
+            input.Buffer, outputBuffer, gammaBuffer.Buffer, betaBuffer.Buffer,
+            runningMeanBuffer.Buffer, runningVarBuffer.Buffer,
+            saveMeanBuffer.Buffer, saveVarBuffer.Buffer,
+            batch, channels, spatialSize,
+            (float)epsilon, (float)momentum, training);
+
+        // If training, download updated running statistics back to CPU
+        Tensor<T>? saveMean = null;
+        Tensor<T>? saveVar = null;
+        if (training)
+        {
+            float[] updatedRunningMean = backend.DownloadBuffer(runningMeanBuffer.Buffer);
+            float[] updatedRunningVar = backend.DownloadBuffer(runningVarBuffer.Buffer);
+            runningMean = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(updatedRunningMean), new[] { channels });
+            runningVar = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(updatedRunningVar), new[] { channels });
+
+            // Also return saveMean/saveVar for backward pass
+            float[] saveMeanFloat = backend.DownloadBuffer(saveMeanBuffer.Buffer);
+            float[] saveVarFloat = backend.DownloadBuffer(saveVarBuffer.Buffer);
+            saveMean = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(saveMeanFloat), new[] { channels });
+            saveVar = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(saveVarFloat), new[] { channels });
+        }
+
+        // Return GPU-resident output tensor
+        var outputTensor = new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return (outputTensor, saveMean, saveVar);
+    }
+
     #endregion
 
     #region Dropout Operations (GPU Accelerated)

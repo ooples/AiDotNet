@@ -420,6 +420,62 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Gets whether this layer has a GPU implementation.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs GPU-resident batch normalization forward pass.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor with shape [batch, features] or [batch, channels, H, W].</param>
+    /// <returns>GPU-resident output tensor with same shape as input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU engine is not available.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs batch normalization entirely on GPU, avoiding CPU round-trips.
+    /// The input and output tensors remain GPU-resident for chained GPU operations.
+    /// </para>
+    /// <para>
+    /// During training mode, running statistics (mean and variance) are updated on GPU
+    /// and then downloaded back to CPU for persistence.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        // Store input shape for backward pass
+        _lastInput = null; // GPU path doesn't store CPU tensor
+
+        double epsilonDouble = NumOps.ToDouble(_epsilon);
+        double momentumDouble = NumOps.ToDouble(_momentum);
+
+        // Call GPU-resident batch norm
+        var (output, saveMean, saveVar) = gpuEngine.FusedBatchNormGpu(
+            input,
+            _gamma,
+            _beta,
+            ref _runningMean,
+            ref _runningVariance,
+            epsilonDouble,
+            momentumDouble,
+            IsTrainingMode);
+
+        // Store saved values for backward pass (if training)
+        if (IsTrainingMode && saveMean is not null && saveVar is not null)
+        {
+            _lastMean = saveMean;
+            _lastVariance = saveVar;
+        }
+
+        return output;
+    }
+
+    /// <summary>
     /// Performs the backward pass of batch normalization.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>

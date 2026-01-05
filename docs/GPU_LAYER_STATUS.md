@@ -21,7 +21,7 @@ These layers are used in most neural networks and have high GPU acceleration pot
 |-------|--------|-------|
 | DenseLayer | Done | Uses FusedGemmBiasRelu, any-rank tensor support |
 | ConvolutionalLayer | Done | Uses FusedConv2DGpu with MapActivationToFused |
-| BatchNormalizationLayer | Pending | Needs BatchNorm GPU kernel |
+| BatchNormalizationLayer | Done | Uses FusedBatchNormGpu, supports training/inference modes |
 | MaxPoolingLayer | Done | Basic GPU support |
 | AveragePoolingLayer | Done | Basic GPU support |
 | DropoutLayer | Done | Training mode check, pass-through inference |
@@ -217,7 +217,7 @@ These layers are used in most neural networks and have high GPU acceleration pot
 
 | Category | Done | Pending | Blocked | N/A | Total |
 |----------|------|---------|---------|-----|-------|
-| Core Layers | 8 | 1 | 0 | 0 | 9 |
+| Core Layers | 9 | 0 | 0 | 0 | 9 |
 | Attention/Transformer | 0 | 8 | 0 | 0 | 8 |
 | Normalization | 0 | 4 | 0 | 0 | 4 |
 | Conv Variants | 0 | 7 | 1 | 0 | 8 |
@@ -230,7 +230,7 @@ These layers are used in most neural networks and have high GPU acceleration pot
 | Sequence | 0 | 4 | 0 | 1 | 5 |
 | Simple Ops | 0 | 0 | 0 | 8 | 8 |
 | Experimental | 0 | 8 | 13 | 0 | 21 |
-| **Total** | **9** | **51** | **37** | **11** | **108** |
+| **Total** | **10** | **50** | **37** | **11** | **108** |
 
 ---
 
