@@ -199,7 +199,9 @@ public sealed class GpuTensorRegistry : IDisposable
         lock (_evictionLock)
         {
             // Try to get back under the threshold
-            long targetBytes = (long)(_maxMemoryBytes * _options.MaxMemoryUsage);
+            // Note: _maxMemoryBytes is already calculated as backend.GlobalMemoryBytes * _options.MaxMemoryUsage
+            // in the constructor, so we use it directly without multiplying again
+            long targetBytes = _maxMemoryBytes;
             long bytesToFree = _totalAllocatedBytes - targetBytes;
 
             if (bytesToFree > 0)

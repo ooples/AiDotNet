@@ -46,6 +46,18 @@ public sealed class GraphCompiler
     /// <returns>An optimized execution graph.</returns>
     public ExecutionGraph Compile(List<ExecutionNode> nodes, IAsyncGpuBackend backend)
     {
+        var (graph, _) = CompileWithStatistics(nodes, backend);
+        return graph;
+    }
+
+    /// <summary>
+    /// Compiles and optimizes a list of execution nodes, returning both the graph and optimization statistics.
+    /// </summary>
+    /// <param name="nodes">The nodes to compile.</param>
+    /// <param name="backend">The async GPU backend.</param>
+    /// <returns>A tuple containing the optimized execution graph and optimization statistics.</returns>
+    public (ExecutionGraph Graph, OptimizationStatistics Statistics) CompileWithStatistics(List<ExecutionNode> nodes, IAsyncGpuBackend backend)
+    {
         if (nodes == null)
         {
             throw new ArgumentNullException(nameof(nodes));
@@ -61,58 +73,68 @@ public sealed class GraphCompiler
 
         var sw = Stopwatch.StartNew();
 
-        // Create stream pool if needed
-        if (_options.EnableComputeTransferOverlap)
+        GpuStreamPool? streamPool = null;
+        try
         {
-            context.StreamPool = new GpuStreamPool(backend, _options);
-        }
-
-        // Initialize pass statistics
-        foreach (var pass in _passes)
-        {
-            context.Statistics.PassStats[pass.Name] = new PassStatistics { PassName = pass.Name };
-        }
-
-        // Run optimization passes
-        var optimizedNodes = nodes;
-        foreach (var pass in _passes)
-        {
-            if (!pass.IsEnabled)
+            // Create stream pool if needed
+            if (_options.EnableComputeTransferOverlap)
             {
-                continue;
+                streamPool = new GpuStreamPool(backend, _options);
+                context.StreamPool = streamPool;
             }
 
-            var passSw = Stopwatch.StartNew();
-            int beforeCount = optimizedNodes.Count;
-
-            optimizedNodes = pass.Apply(optimizedNodes, context);
-
-            passSw.Stop();
-
-            if (context.Statistics.PassStats.TryGetValue(pass.Name, out var stats))
+            // Initialize pass statistics
+            foreach (var pass in _passes)
             {
-                stats.Duration = passSw.Elapsed;
-                if (stats.NodeCountDelta == 0)
+                context.Statistics.PassStats[pass.Name] = new PassStatistics { PassName = pass.Name };
+            }
+
+            // Run optimization passes
+            var optimizedNodes = nodes;
+            foreach (var pass in _passes)
+            {
+                if (!pass.IsEnabled)
                 {
-                    stats.NodeCountDelta = optimizedNodes.Count - beforeCount;
+                    continue;
+                }
+
+                var passSw = Stopwatch.StartNew();
+                int beforeCount = optimizedNodes.Count;
+
+                optimizedNodes = pass.Apply(optimizedNodes, context);
+
+                passSw.Stop();
+
+                if (context.Statistics.PassStats.TryGetValue(pass.Name, out var stats))
+                {
+                    stats.Duration = passSw.Elapsed;
+                    if (stats.NodeCountDelta == 0)
+                    {
+                        stats.NodeCountDelta = optimizedNodes.Count - beforeCount;
+                    }
                 }
             }
+
+            sw.Stop();
+
+            // Compute final statistics
+            context.Statistics.OptimizedNodeCount = optimizedNodes.Count;
+            context.Statistics.OptimizationTime = sw.Elapsed;
+
+            int originalCost = nodes.Sum(n => n.EstimatedCost);
+            int optimizedCost = optimizedNodes.Sum(n => n.EstimatedCost);
+            context.Statistics.EstimatedCostReduction = originalCost > 0
+                ? (double)(originalCost - optimizedCost) / originalCost
+                : 0;
+
+            // Create the optimized graph
+            return (new ExecutionGraph(optimizedNodes), context.Statistics);
         }
-
-        sw.Stop();
-
-        // Compute final statistics
-        context.Statistics.OptimizedNodeCount = optimizedNodes.Count;
-        context.Statistics.OptimizationTime = sw.Elapsed;
-
-        int originalCost = nodes.Sum(n => n.EstimatedCost);
-        int optimizedCost = optimizedNodes.Sum(n => n.EstimatedCost);
-        context.Statistics.EstimatedCostReduction = originalCost > 0
-            ? (double)(originalCost - optimizedCost) / originalCost
-            : 0;
-
-        // Create the optimized graph
-        return new ExecutionGraph(optimizedNodes);
+        finally
+        {
+            // Dispose the stream pool after compilation
+            streamPool?.Dispose();
+        }
     }
 
     /// <summary>

@@ -494,10 +494,12 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         // Get the fused activation type for optimal GPU/CPU performance
         var fusedActivation = GetFusedActivationType();
 
+        Tensor<T> result;
+
         if (fusedActivation != FusedActivationType.None)
         {
             // Use FusedConvTranspose2D for optimal GPU kernel fusion (conv transpose + bias + activation)
-            _lastOutput = Engine.FusedConvTranspose2D(
+            result = Engine.FusedConvTranspose2D(
                 input, _kernels, _biases,
                 Stride, Stride,
                 Padding, Padding,
@@ -517,18 +519,16 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
             var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
             var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
 
-            var result = ApplyActivation(biasedOutput);
-
-            // Only store for backward pass during training - skip during inference
-            if (IsTrainingMode)
-            {
-                _lastOutput = result;
-            }
-
-            return result;
+            result = ApplyActivation(biasedOutput);
         }
 
-        return _lastOutput;
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
+
+        return result;
     }
 
     /// <summary>

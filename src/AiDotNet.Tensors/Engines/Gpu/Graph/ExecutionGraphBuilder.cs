@@ -221,16 +221,30 @@ public sealed class ExecutionGraphBuilder : IDisposable
     /// <returns>The optimized execution graph.</returns>
     public ExecutionGraph BuildOptimized(GpuExecutionOptions options, IAsyncGpuBackend backend)
     {
+        var (graph, _) = BuildOptimizedWithStatistics(options, backend);
+        return graph;
+    }
+
+    /// <summary>
+    /// Builds and optimizes the execution graph, returning both the graph and optimization statistics.
+    /// </summary>
+    /// <param name="options">Optimization options.</param>
+    /// <param name="backend">Backend for optimization passes.</param>
+    /// <returns>A tuple containing the optimized execution graph and optimization statistics.</returns>
+    public (ExecutionGraph Graph, Optimization.OptimizationStatistics Statistics) BuildOptimizedWithStatistics(
+        GpuExecutionOptions options, IAsyncGpuBackend backend)
+    {
         ThrowIfBuilt();
+        ThrowIfDisposed();
 
         // Validate first
         ValidateGraph();
 
         var compiler = new GraphCompiler(options);
-        var optimizedGraph = compiler.Compile(_nodes.ToList(), backend);
+        var (optimizedGraph, statistics) = compiler.CompileWithStatistics(_nodes.ToList(), backend);
 
         _isBuilt = true;
-        return optimizedGraph;
+        return (optimizedGraph, statistics);
     }
 
     /// <summary>
@@ -315,6 +329,9 @@ public sealed class ExecutionGraphBuilder : IDisposable
 
     private void ThrowIfBuilt()
     {
+        // Also check disposed state since all public methods should verify both
+        ThrowIfDisposed();
+
         if (_isBuilt)
         {
             throw new InvalidOperationException(

@@ -190,7 +190,7 @@ public sealed class BarrierNode : ExecutionNode
             {
                 if (srcStream != stream)
                 {
-                    var evt = srcStream.RecordEvent();
+                    using var evt = srcStream.RecordEvent();
                     stream.WaitEvent(evt);
                 }
             }

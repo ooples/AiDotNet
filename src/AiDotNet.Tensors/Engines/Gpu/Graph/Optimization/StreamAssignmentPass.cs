@@ -332,20 +332,16 @@ public sealed class OperationReorderingPass : IGraphOptimizationPass
 
     private static List<ExecutionNode> OptimizeTransferOrder(List<ExecutionNode> nodes)
     {
-        // Move H2D transfers as early as possible
-        // Move D2H transfers as late as possible (just before their dependents need them)
-        var h2dNodes = nodes.Where(n => n.NodeType == ExecutionNodeType.TransferH2D).ToList();
-        var d2hNodes = nodes.Where(n => n.NodeType == ExecutionNodeType.TransferD2H).ToList();
-        var otherNodes = nodes.Where(n =>
-            n.NodeType != ExecutionNodeType.TransferH2D &&
-            n.NodeType != ExecutionNodeType.TransferD2H).ToList();
-
-        // H2D at the start, then compute, then D2H
-        var result = new List<ExecutionNode>();
-        result.AddRange(h2dNodes);
-        result.AddRange(otherNodes);
-        result.AddRange(d2hNodes);
-
-        return result;
+        // Note: Naive reordering (moving all H2D to start and D2H to end) was removed
+        // because it ignores the dependency graph and can violate topological order.
+        // For example, if a D2H transfer result is needed by a subsequent compute node,
+        // or if an H2D transfer depends on a prior computation.
+        //
+        // The correct approach is to preserve the topological ordering from ReorderForCriticalPath
+        // and let the stream assignment handle parallelism. A more sophisticated implementation
+        // would need to compute valid insertion points based on dependency constraints.
+        //
+        // For now, preserve the topologically-sorted order.
+        return nodes;
     }
 }

@@ -14,6 +14,7 @@ public sealed class DeferredScope : IDeferredScope
     private readonly GpuStreamPool? _streamPool;
     private readonly Stopwatch _totalTimer;
     private ExecutionGraph? _compiledGraph;
+    private OptimizationStatistics? _compiledStatistics;
     private DeferredScopeStatistics? _statistics;
     private bool _disposed;
 
@@ -132,20 +133,23 @@ public sealed class DeferredScope : IDeferredScope
             return _compiledGraph;
         }
 
-        _compiledGraph = GraphBuilder.BuildOptimized(Options, _backend);
+        var (graph, statistics) = GraphBuilder.BuildOptimizedWithStatistics(Options, _backend);
+        _compiledGraph = graph;
+        _compiledStatistics = statistics;
         return _compiledGraph;
     }
 
     private void RecordStatistics(ExecutionGraph graph, TimeSpan compilationTime, TimeSpan executionTime)
     {
-        var context = new OptimizationContext(Options, _backend);
+        // Use the actual optimization statistics from compilation instead of creating a new empty context
+        var stats = _compiledStatistics ?? new OptimizationStatistics();
 
         _statistics = new DeferredScopeStatistics
         {
             OperationsRecorded = GraphBuilder.NodeCount,
             NodesAfterCompilation = graph.TopologicalOrder.Count,
-            FusedOperations = context.Statistics.NodesFused,
-            EliminatedOperations = context.Statistics.NodesEliminated,
+            FusedOperations = stats.NodesFused,
+            EliminatedOperations = stats.NodesEliminated,
             CompilationTime = compilationTime,
             ExecutionTime = executionTime,
             TotalTime = _totalTimer.Elapsed

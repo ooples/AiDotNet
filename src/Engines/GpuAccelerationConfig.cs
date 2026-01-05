@@ -384,6 +384,24 @@ public class GpuAccelerationConfig
     public bool EnableProfiling { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets the number of transfer streams (default: 2).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Transfer streams are used for data movement between
+    /// CPU and GPU. Having dedicated transfer streams allows data transfers to overlap
+    /// with computation.
+    ///
+    /// Values:
+    /// - 1: Single transfer stream (no transfer parallelism)
+    /// - 2: Separate H2D and D2H streams (recommended)
+    /// - 3+: Additional transfer parallelism (for high-bandwidth systems)
+    ///
+    /// This can also be configured via AIDOTNET_GPU_TRANSFER_STREAMS environment variable.
+    /// </para>
+    /// </remarks>
+    public int TransferStreams { get; set; } = 2;
+
+    /// <summary>
     /// Creates a configuration with default GPU settings.
     /// </summary>
     public GpuAccelerationConfig()
@@ -413,6 +431,7 @@ public class GpuAccelerationConfig
         {
             MinGpuElements = MinGpuElements,
             MaxComputeStreams = MaxComputeStreams,
+            TransferStreams = TransferStreams,
             EnableGraphCompilation = EnableGraphCompilation,
             EnableAutoFusion = EnableAutoFusion,
             MaxMemoryUsage = MaxGpuMemoryUsage,

@@ -874,11 +874,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 _lastOutput = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
             }
-            else
-            {
-                // During inference, _lastOutput is not used for backprop, so skip computation
-                _lastOutput = result;
-            }
+            // Note: During inference, _lastOutput is NOT set because:
+            // 1. It's not needed for backprop (no Backward() call expected during inference)
+            // 2. Setting it to activated values would produce incorrect gradients if Backward() were called
+            // 3. Keeping it null/stale makes the intent clear and aligns with other layer patterns
         }
         else
         {
