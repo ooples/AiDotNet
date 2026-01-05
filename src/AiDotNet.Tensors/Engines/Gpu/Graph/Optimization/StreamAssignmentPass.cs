@@ -128,19 +128,14 @@ public sealed class StreamAssignmentPass : IGraphOptimizationPass
         }
 
         // For nodes at the same level, distribute across streams
-        if (!nodeLevels.TryGetValue(node.NodeId, out var level))
-        {
-            return pool.DefaultComputeStream;
-        }
-
-        // Simple round-robin for nodes at same level
-        // More sophisticated: consider dependencies and data locality
-        int streamIdx = level % maxStreams;
-
-        // Use default for first stream, acquire for others
-        return streamIdx == 0
-            ? pool.DefaultComputeStream
-            : pool.AcquireStream(GpuStreamType.Compute);
+        // Note: We use the default compute stream here rather than acquiring streams
+        // from the pool because acquired streams would need to be tracked and released,
+        // and the optimization pass is just marking preferred stream assignments.
+        // The actual stream management happens during execution in ExecutionGraph.Execute().
+        //
+        // For true multi-stream execution, streams should be acquired and released
+        // during graph execution, not during optimization.
+        return pool.DefaultComputeStream;
     }
 
     private List<ExecutionNode> InsertSynchronizationNodes(

@@ -99,15 +99,29 @@ public sealed class KernelNode : ExecutionNode
         AssignedStream = stream;
         _kernelAction(backend, stream);
 
-        // Mark outputs as modified
+        // Mark outputs as modified - handle common tensor types
         foreach (var output in _outputs)
         {
-            if (output is IGpuTensor<float> typedTensor)
+            // Record sync point for modified tensors
+            using var evt = stream.RecordEvent();
+            var syncPoint = new KernelSyncPoint(evt, stream);
+
+            // Handle common tensor types that support MarkModified
+            switch (output)
             {
-                // Record sync point for modified tensors
-                var evt = stream.RecordEvent();
-                var syncPoint = new KernelSyncPoint(evt, stream);
-                typedTensor.MarkModified(syncPoint);
+                case IGpuTensor<float> floatTensor:
+                    floatTensor.MarkModified(syncPoint);
+                    break;
+                case IGpuTensor<double> doubleTensor:
+                    doubleTensor.MarkModified(syncPoint);
+                    break;
+                case IGpuTensor<int> intTensor:
+                    intTensor.MarkModified(syncPoint);
+                    break;
+                case IGpuTensor<long> longTensor:
+                    longTensor.MarkModified(syncPoint);
+                    break;
+                // Note: Half/bfloat16 types can be added when supported
             }
         }
 

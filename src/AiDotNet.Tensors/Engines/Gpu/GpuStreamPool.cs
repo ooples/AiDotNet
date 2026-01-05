@@ -153,29 +153,36 @@ public sealed class GpuStreamPool : IDisposable
 
     /// <summary>
     /// Gets a stream appropriate for the given operation.
-    /// For compute operations, returns a compute stream.
-    /// For transfers, returns the appropriate transfer stream.
+    /// For compute operations, returns the default compute stream.
+    /// For transfers, returns the appropriate default transfer stream.
     /// </summary>
     /// <param name="isH2DTransfer">True for host-to-device transfer.</param>
     /// <param name="isD2HTransfer">True for device-to-host transfer.</param>
-    /// <returns>An appropriate stream for the operation.</returns>
+    /// <returns>An appropriate stream for the operation. Callers do NOT need to release these streams.</returns>
+    /// <remarks>
+    /// This method returns default streams which don't need to be released.
+    /// For explicit stream acquisition with release semantics, use AcquireStream/ReleaseStream.
+    /// </remarks>
     public IGpuStream GetStreamForOperation(bool isH2DTransfer = false, bool isD2HTransfer = false)
     {
         if (isH2DTransfer)
         {
+            // Return default transfer stream - no release needed
             return _options.EnableComputeTransferOverlap
-                ? AcquireStream(GpuStreamType.HostToDevice)
+                ? DefaultH2DStream
                 : DefaultComputeStream;
         }
 
         if (isD2HTransfer)
         {
+            // Return default transfer stream - no release needed
             return _options.EnableComputeTransferOverlap
-                ? AcquireStream(GpuStreamType.DeviceToHost)
+                ? DefaultD2HStream
                 : DefaultComputeStream;
         }
 
-        return AcquireStream(GpuStreamType.Compute);
+        // Return default compute stream - no release needed
+        return DefaultComputeStream;
     }
 
     /// <summary>

@@ -305,11 +305,12 @@ public sealed class ExecutionGraph : IDisposable
         // Determine stream type based on node type
         var streamType = DetermineOptimalStreamType(node);
 
+        // Use default streams which don't require release, avoiding potential stream leaks
         return streamType switch
         {
             GpuStreamType.HostToDevice => pool.DefaultH2DStream,
             GpuStreamType.DeviceToHost => pool.DefaultD2HStream,
-            _ => pool.AcquireStream(GpuStreamType.Compute)
+            _ => pool.DefaultComputeStream
         };
     }
 
