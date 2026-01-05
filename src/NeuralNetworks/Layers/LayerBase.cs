@@ -858,7 +858,23 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// to run on GPUs for much better performance.
     /// </para>
     /// </remarks>
-    public virtual bool CanExecuteOnGpu => false;
+    public virtual bool CanExecuteOnGpu => SupportsGpuExecution && Engine is DirectGpuTensorEngine;
+
+    /// <summary>
+    /// Gets whether this layer has a GPU implementation.
+    /// Override this to return true when the layer implements <see cref="ForwardGpu"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the derived class has implemented GPU execution.
+    /// The actual <see cref="CanExecuteOnGpu"/> property combines this with engine availability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simple flag that derived classes set to true
+    /// when they have implemented the ForwardGpu method. You don't need to check if the GPU
+    /// is available - that's handled automatically by CanExecuteOnGpu.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsGpuExecution => false;
 
     /// <summary>
     /// Performs a GPU-resident forward pass.
@@ -871,7 +887,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <remarks>
     /// <para>
     /// By default, this method throws <see cref="NotSupportedException"/>. Derived classes that support
-    /// GPU execution should override both this method and <see cref="CanExecuteOnGpu"/>.
+    /// GPU execution should override both this method and <see cref="SupportsGpuExecution"/>.
     /// </para>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// If a layer hasn't been GPU-optimized yet, calling this will throw an error.

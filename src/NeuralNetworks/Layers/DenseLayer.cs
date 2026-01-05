@@ -912,7 +912,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <inheritdoc/>
-    public override bool CanExecuteOnGpu => Engine is DirectGpuTensorEngine;
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Performs a GPU-resident forward pass, keeping tensors on GPU.
