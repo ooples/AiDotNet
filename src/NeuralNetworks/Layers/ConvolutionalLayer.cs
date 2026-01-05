@@ -949,6 +949,136 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Gets whether this layer has a GPU implementation.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass using fused Conv2D + Bias + Activation.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        EnsureInitialized();
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        if (input.Shape.Length < 3)
+        {
+            throw new ArgumentException(
+                $"Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
+        }
+
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Reshape input to 4D [B, C, H, W] for convolution
+        IGpuTensor<T> input4D;
+        if (rank == 3)
+        {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
+            _addedBatchDimension = true;
+            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        }
+        else if (rank == 4)
+        {
+            // 4D [B, C, H, W] - no reshaping needed
+            _addedBatchDimension = false;
+            input4D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            _addedBatchDimension = false;
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+            {
+                flatBatch *= input.Shape[d];
+            }
+            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+
+        // Validate input channels
+        int actualInputChannels = input4D.Shape[1];
+        if (actualInputChannels != InputDepth)
+        {
+            throw new ArgumentException(
+                $"Expected input depth {InputDepth}, but got {actualInputChannels}.");
+        }
+
+        // Map activation function to FusedActivationType
+        var fusedActivation = MapActivationToFused();
+
+        // Execute GPU-fused Conv2D + Bias + Activation
+        var result = gpuEngine.FusedConv2DGpu(
+            input4D,
+            _kernels,
+            _biases,
+            Stride, Stride,      // strideH, strideW
+            Padding, Padding,    // padH, padW
+            1, 1,                // dilationH, dilationW
+            fusedActivation);
+
+        // Restore original shape if needed
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            // Restore original batch dimensions for higher-rank input
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+            {
+                outputShape[d] = _originalInputShape[d];
+            }
+            outputShape[_originalInputShape.Length - 3] = OutputDepth;
+            outputShape[_originalInputShape.Length - 2] = result.Shape[2];
+            outputShape[_originalInputShape.Length - 1] = result.Shape[3];
+            return result.CreateView(0, outputShape);
+        }
+
+        if (_addedBatchDimension)
+        {
+            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
+            return result.CreateView(0, [OutputDepth, result.Shape[2], result.Shape[3]]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Maps the layer's activation function to FusedActivationType for GPU execution.
+    /// </summary>
+    private FusedActivationType MapActivationToFused()
+    {
+        // Check both scalar and vector activation functions
+        object? activation = ScalarActivation ?? (object?)VectorActivation;
+        if (activation is null)
+        {
+            return FusedActivationType.None;
+        }
+
+        var typeName = activation.GetType().Name;
+        return typeName switch
+        {
+            var n when n.StartsWith("Relu") || n.StartsWith("ReLU") => FusedActivationType.ReLU,
+            var n when n.StartsWith("Gelu") || n.StartsWith("GELU") => FusedActivationType.GELU,
+            var n when n.StartsWith("Sigmoid") => FusedActivationType.Sigmoid,
+            var n when n.StartsWith("Tanh") => FusedActivationType.Tanh,
+            var n when n.StartsWith("Swish") || n.StartsWith("SiLU") => FusedActivationType.Swish,
+            var n when n.StartsWith("LeakyRelu") || n.StartsWith("LeakyReLU") => FusedActivationType.LeakyReLU,
+            _ => FusedActivationType.None // Unsupported activations will be applied separately
+        };
+    }
+
+    /// <summary>
     /// Calculates gradients for the input, kernels, and biases during backpropagation.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
