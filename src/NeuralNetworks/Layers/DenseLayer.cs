@@ -868,9 +868,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Engine handles: GPU kernel fusion, persistent tensor caching, CPU SIMD fallback
             result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
 
-            // For fused operations, pre-activation is not directly available
-            // We compute it separately for gradient computation if needed
-            _lastOutput = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
+            // For fused operations, pre-activation is only needed for gradient computation during training.
+            // Skip this expensive GPU operation during inference to avoid 50% overhead.
+            if (IsTrainingMode)
+            {
+                _lastOutput = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
+            }
+            // Note: During inference, _lastOutput is NOT set because:
+            // 1. It's not needed for backprop (no Backward() call expected during inference)
+            // 2. Setting it to activated values would produce incorrect gradients if Backward() were called
+            // 3. Keeping it null/stale makes the intent clear and aligns with other layer patterns
         }
         else
         {

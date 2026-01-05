@@ -291,21 +291,27 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var bias2Broadcast = BroadcastBias(_mlpBias2, batchSize, numNodes);
         var mlpOutput = Engine.TensorAdd(hidden2, bias2Broadcast);
 
-        _lastOutput = ApplyActivation(mlpOutput);
+        var result = ApplyActivation(mlpOutput);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
 
         // Reshape output to match original input shape (except for feature dimension)
         if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
             // Original was 2D [N, F] -> return [N, outputFeatures]
-            return _lastOutput.Reshape([numNodes, _outputFeatures]);
+            return result.Reshape([numNodes, _outputFeatures]);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 1)
         {
             // Original was 1D [F] -> return [outputFeatures]
-            return _lastOutput.Reshape([_outputFeatures]);
+            return result.Reshape([_outputFeatures]);
         }
 
-        return _lastOutput;
+        return result;
     }
 
     /// <summary>

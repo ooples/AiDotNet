@@ -6006,6 +6006,85 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         {
             Console.WriteLine("[AiDotNet] Warning: GPU DeviceIndex selection is not implemented for DirectGpu backends.");
         }
+
+        // Apply advanced GPU execution options (Phase 2-3)
+        ApplyAdvancedGpuExecutionOptions();
+    }
+
+    /// <summary>
+    /// Applies advanced GPU execution options from the configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Phase 2-3: GPU Execution Optimization</b></para>
+    /// <para>
+    /// Configures advanced execution features:
+    /// - Execution mode (eager, deferred, scoped-deferred)
+    /// - Graph compilation and kernel fusion
+    /// - Multi-stream compute/transfer overlap
+    /// - Memory management and prefetching
+    /// </para>
+    /// </remarks>
+    private void ApplyAdvancedGpuExecutionOptions()
+    {
+        if (_gpuAccelerationConfig == null)
+        {
+            return;
+        }
+
+        // Convert to internal execution options
+        var executionOptions = _gpuAccelerationConfig.ToExecutionOptions();
+
+        // Validate the options
+        try
+        {
+            executionOptions.Validate();
+        }
+        catch (ArgumentException ex)
+        {
+            Console.WriteLine($"[AiDotNet] Warning: Invalid GPU execution option: {ex.Message}");
+            return;
+        }
+
+        // Log advanced options if verbose logging is enabled
+        if (_gpuAccelerationConfig.VerboseLogging)
+        {
+            Console.WriteLine($"[AiDotNet] Advanced GPU Execution Options:");
+            Console.WriteLine($"  Execution Mode: {_gpuAccelerationConfig.ExecutionMode}");
+            Console.WriteLine($"  Graph Compilation: {(_gpuAccelerationConfig.EnableGraphCompilation ? "Enabled" : "Disabled")}");
+            Console.WriteLine($"  Auto Fusion: {(_gpuAccelerationConfig.EnableAutoFusion ? "Enabled" : "Disabled")}");
+            Console.WriteLine($"  Compute/Transfer Overlap: {(_gpuAccelerationConfig.EnableComputeTransferOverlap ? "Enabled" : "Disabled")}");
+            Console.WriteLine($"  Max Compute Streams: {_gpuAccelerationConfig.MaxComputeStreams}");
+            Console.WriteLine($"  Min GPU Elements: {_gpuAccelerationConfig.MinGpuElements}");
+            Console.WriteLine($"  Max GPU Memory: {_gpuAccelerationConfig.MaxGpuMemoryUsage:P0}");
+            Console.WriteLine($"  Prefetch: {(_gpuAccelerationConfig.EnablePrefetch ? "Enabled" : "Disabled")}");
+            Console.WriteLine($"  Graph Caching: {(_gpuAccelerationConfig.CacheCompiledGraphs ? "Enabled" : "Disabled")}");
+            Console.WriteLine($"  Profiling: {(_gpuAccelerationConfig.EnableProfiling ? "Enabled" : "Disabled")}");
+        }
+
+        // Set environment variables for GPU execution options
+        // These are read by GpuExecutionOptions.FromEnvironment() when creating execution contexts
+        SetGpuExecutionEnvironmentVariables(executionOptions);
+    }
+
+    /// <summary>
+    /// Sets environment variables for GPU execution options.
+    /// </summary>
+    /// <param name="options">The execution options to set.</param>
+    private static void SetGpuExecutionEnvironmentVariables(AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions options)
+    {
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_MIN_ELEMENTS", options.MinGpuElements.ToString());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_STREAMS", options.MaxComputeStreams.ToString());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_FORCE_GPU", options.ForceGpu.ToString().ToLowerInvariant());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_FORCE_CPU", options.ForceCpu.ToString().ToLowerInvariant());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_ENABLE_GRAPH", options.EnableGraphCompilation.ToString().ToLowerInvariant());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_ENABLE_FUSION", options.EnableAutoFusion.ToString().ToLowerInvariant());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_MAX_MEMORY", options.MaxMemoryUsage.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_ENABLE_PREFETCH", options.EnablePrefetch.ToString().ToLowerInvariant());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_ENABLE_OVERLAP", options.EnableComputeTransferOverlap.ToString().ToLowerInvariant());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_EXECUTION_MODE", options.ExecutionMode.ToString());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_RESIDENT", options.EnableGpuResidency.ToString().ToLowerInvariant());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_PROFILING", options.EnableProfiling.ToString().ToLowerInvariant());
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_CACHE_GRAPHS", options.CacheCompiledGraphs.ToString().ToLowerInvariant());
     }
 
     /// <summary>

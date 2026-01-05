@@ -479,7 +479,13 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Final residual and layer norm
         var output = Engine.TensorAdd(normed1, ffnOutput);
 
-        _lastOutput = ApplyActivation(output);
+        var result = ApplyActivation(output);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
 
         // Restore original shape for any-rank tensor support
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -487,12 +493,12 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             if (_originalInputShape.Length == 2)
             {
                 // Was 2D, return [nodes, outputFeatures]
-                return _lastOutput.Reshape([numNodes, _outputFeatures]);
+                return result.Reshape([numNodes, _outputFeatures]);
             }
             else if (_originalInputShape.Length == 1)
             {
                 // Was 1D, return [outputFeatures]
-                return _lastOutput.Reshape([_outputFeatures]);
+                return result.Reshape([_outputFeatures]);
             }
             else
             {
@@ -501,11 +507,11 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 for (int d = 0; d < _originalInputShape.Length - 1; d++)
                     newShape[d] = _originalInputShape[d];
                 newShape[_originalInputShape.Length - 1] = _outputFeatures;
-                return _lastOutput.Reshape(newShape);
+                return result.Reshape(newShape);
             }
         }
 
-        return _lastOutput;
+        return result;
     }
 
     private Tensor<T> MultiHeadAttention(Tensor<T> input, int batchSize, int numNodes)

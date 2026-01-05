@@ -321,7 +321,11 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         // Add bias
         output = AddBias(output, _outputBias);
 
-        _lastOutput = output;
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = output;
+        }
 
         // Restore original shape for any-rank support
         if (_originalQueryShape != null)

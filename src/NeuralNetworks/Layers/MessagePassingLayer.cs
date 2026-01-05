@@ -653,8 +653,15 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             }
         }
 
-        _lastOutput = ApplyActivation(output);
-        return _lastOutput;
+        var result = ApplyActivation(output);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
+
+        return result;
     }
 
     /// <summary>
