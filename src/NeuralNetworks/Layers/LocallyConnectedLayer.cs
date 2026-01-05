@@ -546,17 +546,23 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // Transpose output back from NCHW [batch, channels, height, width] to NHWC [batch, height, width, channels]
         var preActivation = outputNCHW.Transpose([0, 2, 3, 1]);
 
-        // Cache pre-activation and apply activation function
-        _lastPreActivation = preActivation;
-        _lastOutput = ApplyActivation(preActivation);
+        // Apply activation function
+        var result = ApplyActivation(preActivation);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastPreActivation = preActivation;
+            _lastOutput = result;
+        }
 
         // Restore output shape to match original input rank
         if (_originalInputShape != null && _originalInputShape.Length != 4)
         {
             // Get output spatial dimensions from the 4D output
-            int outHeight = _lastOutput.Shape[1];
-            int outWidth = _lastOutput.Shape[2];
-            int outChannels = _lastOutput.Shape[3];
+            int outHeight = result.Shape[1];
+            int outWidth = result.Shape[2];
+            int outChannels = result.Shape[3];
 
             if (_originalInputShape.Length < 4)
             {
@@ -567,7 +573,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
                 if (_originalInputShape.Length >= 3) outShape[_originalInputShape.Length - 3] = outHeight;
                 if (_originalInputShape.Length >= 2) outShape[_originalInputShape.Length - 2] = outWidth;
                 outShape[_originalInputShape.Length - 1] = outChannels;
-                return _lastOutput.Reshape(outShape);
+                return result.Reshape(outShape);
             }
             else
             {
@@ -578,11 +584,11 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
                 outShape[_originalInputShape.Length - 3] = outHeight;
                 outShape[_originalInputShape.Length - 2] = outWidth;
                 outShape[_originalInputShape.Length - 1] = outChannels;
-                return _lastOutput.Reshape(outShape);
+                return result.Reshape(outShape);
             }
         }
 
-        return _lastOutput;
+        return result;
     }
 
     /// <summary>

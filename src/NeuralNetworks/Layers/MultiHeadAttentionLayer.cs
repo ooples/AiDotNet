@@ -694,15 +694,21 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var output_reshaped = output_flat.Reshape(batchSize, seqLengthQ, embeddingDimension);
 
         var biasBroadcast = _outputBias.Reshape(1, 1, embeddingDimension);
-        var output = Engine.TensorBroadcastAdd(output_reshaped, biasBroadcast);
-        _lastOutput = ApplyActivation(output);
+        var outputWithBias = Engine.TensorBroadcastAdd(output_reshaped, biasBroadcast);
+        var result = ApplyActivation(outputWithBias);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
 
         // Reshape output back to original batch dimensions
         // Output is currently [flatBatch, seq, dim], need to reshape to [origBatch..., seq, dim]
         if (_originalQueryShape.Length == 1)
         {
             // 1D input -> 1D output [dim]
-            return _lastOutput.Reshape([embeddingDimension]);
+            return result.Reshape([embeddingDimension]);
         }
 
         int[] outputShape = new int[_originalQueryShape.Length];
@@ -713,7 +719,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         outputShape[^2] = seqLengthQ;
         outputShape[^1] = embeddingDimension;
 
-        return _lastOutput.Reshape(outputShape);
+        return result.Reshape(outputShape);
     }
 
     /// <summary>

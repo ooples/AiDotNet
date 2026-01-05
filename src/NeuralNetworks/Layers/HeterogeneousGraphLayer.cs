@@ -441,7 +441,13 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             output = AddNodeOutput(output, selfOutput, biasBroadcast, batchSize, i, _outputFeatures);
         }
 
-        _lastOutput = ApplyActivation(output);
+        var result = ApplyActivation(output);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
 
         // Restore output shape to match input rank
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -449,12 +455,12 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             if (_originalInputShape.Length == 2)
             {
                 // 2D input [numNodes, features] -> 2D output [numNodes, outputFeatures]
-                return _lastOutput.Reshape([processNumNodes, _outputFeatures]);
+                return result.Reshape([processNumNodes, _outputFeatures]);
             }
             else if (_originalInputShape.Length == 1)
             {
                 // 1D input -> 1D output
-                return _lastOutput.Reshape([_outputFeatures]);
+                return result.Reshape([_outputFeatures]);
             }
             else
             {
@@ -464,11 +470,11 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
                     outShape[d] = _originalInputShape[d];
                 outShape[_originalInputShape.Length - 2] = processNumNodes;
                 outShape[_originalInputShape.Length - 1] = _outputFeatures;
-                return _lastOutput.Reshape(outShape);
+                return result.Reshape(outShape);
             }
         }
 
-        return _lastOutput;
+        return result;
     }
 
     /// <summary>

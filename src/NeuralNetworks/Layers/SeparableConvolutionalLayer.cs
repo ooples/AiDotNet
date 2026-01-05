@@ -565,8 +565,15 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         // Convert output from NCHW back to NHWC
         var output = pointwiseOutputNCHW.Transpose([0, 2, 3, 1]);
 
-        _lastOutput = ApplyActivation(output);
-        return _lastOutput;
+        var result = ApplyActivation(output);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
+
+        return result;
     }
 
     /// <summary>

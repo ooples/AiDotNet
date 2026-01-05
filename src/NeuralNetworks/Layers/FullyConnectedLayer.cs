@@ -394,8 +394,15 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         var biasBroadcast = _biases.Reshape(1, _biases.Shape[0]);
         var biasedOutput = Engine.TensorBroadcastAdd(linearOutput, biasBroadcast);
 
-        _lastOutput = ApplyActivation(biasedOutput);
-        return _lastOutput;
+        var result = ApplyActivation(biasedOutput);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
+
+        return result;
 
     }
 

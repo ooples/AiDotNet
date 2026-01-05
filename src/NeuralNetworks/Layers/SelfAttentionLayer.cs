@@ -552,8 +552,13 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             output = output.Reshape([sequenceLength, embeddingDimension]);
         }
 
-        _lastOutput = output;
-        return _lastOutput;
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = output;
+        }
+
+        return output;
     }
 
     /// <summary>
