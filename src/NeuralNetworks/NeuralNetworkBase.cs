@@ -619,7 +619,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 var layer = Layers[i];
 
-                if (layer is ISupportsGpuForward<T> gpuLayer && gpuLayer.CanExecuteOnGpu)
+                if (layer.CanExecuteOnGpu)
                 {
                     // Layer supports GPU-resident execution
                     if (current is null)
@@ -629,7 +629,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         ownsCurrentTensor = true;
                     }
 
-                    var next = gpuLayer.ForwardGpu(current);
+                    var next = layer.ForwardGpu(current);
 
                     // Dispose intermediate if we own it (but not the input)
                     if (ownsCurrentTensor && current is not null)
@@ -666,8 +666,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                     // Check if next layer supports GPU
                     bool nextLayerSupportsGpu = i + 1 < Layers.Count &&
-                        Layers[i + 1] is ISupportsGpuForward<T> nextGpuLayer &&
-                        nextGpuLayer.CanExecuteOnGpu;
+                        Layers[i + 1].CanExecuteOnGpu;
 
                     if (nextLayerSupportsGpu || i == Layers.Count - 1)
                     {
@@ -736,9 +735,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 var layer = Layers[i];
 
-                if (layer is ISupportsGpuForward<T> gpuLayer && gpuLayer.CanExecuteOnGpu)
+                if (layer.CanExecuteOnGpu)
                 {
-                    var next = gpuLayer.ForwardGpu(current);
+                    var next = layer.ForwardGpu(current);
 
                     // Dispose intermediate if we own it (but not the original input)
                     if (ownsCurrentTensor)

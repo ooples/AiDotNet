@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -843,6 +844,47 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public abstract Tensor<T> Forward(Tensor<T> input);
+
+    /// <summary>
+    /// Gets whether this layer can execute on GPU.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// By default, layers do not support GPU execution. Derived classes should override this property
+    /// and return true when they have implemented <see cref="ForwardGpu"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if this layer can run on a graphics card (GPU)
+    /// for faster processing. By default, layers run on the CPU, but some layers have been optimized
+    /// to run on GPUs for much better performance.
+    /// </para>
+    /// </remarks>
+    public virtual bool CanExecuteOnGpu => false;
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown by default. Override this method to provide GPU implementation.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// By default, this method throws <see cref="NotSupportedException"/>. Derived classes that support
+    /// GPU execution should override both this method and <see cref="CanExecuteOnGpu"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// If a layer hasn't been GPU-optimized yet, calling this will throw an error.
+    /// Always check <see cref="CanExecuteOnGpu"/> before calling this method, or use the
+    /// network's ForwardGpu which handles fallback automatically.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        throw new NotSupportedException(
+            $"Layer {GetType().Name} does not support GPU execution. " +
+            $"Check CanExecuteOnGpu before calling ForwardGpu, or use the CPU Forward method.");
+    }
 
     /// <summary>
     /// Performs the backward pass of the layer.

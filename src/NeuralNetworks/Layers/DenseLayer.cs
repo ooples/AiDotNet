@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISupportsGpuForward<T>
+public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Specifies the type of regularization to apply to the layer's weights.
@@ -912,7 +912,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISupportsGpuF
     }
 
     /// <inheritdoc/>
-    public bool CanExecuteOnGpu => Engine is DirectGpuTensorEngine;
+    public override bool CanExecuteOnGpu => Engine is DirectGpuTensorEngine;
 
     /// <summary>
     /// Performs a GPU-resident forward pass, keeping tensors on GPU.
@@ -921,7 +921,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISupportsGpuF
     /// <param name="input">GPU-resident input tensor.</param>
     /// <returns>GPU-resident output tensor.</returns>
     /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
-    public IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
     {
         EnsureInitialized();
 
