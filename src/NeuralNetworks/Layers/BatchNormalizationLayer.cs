@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 

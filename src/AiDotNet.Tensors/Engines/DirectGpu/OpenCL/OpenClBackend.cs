@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.Extensions.Logging;
 
@@ -26,13 +27,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
     /// <item>Bank-conflict-free shared memory</item>
     /// </list>
     /// </remarks>
-    public sealed class OpenClBackend : IDirectGpuBackend
+    public sealed class OpenClBackend : IAsyncGpuBackend
     {
         private DirectOpenClContext? _context;
         private readonly Dictionary<string, DirectOpenClKernel> _kernelCache;
         private readonly List<DirectOpenClProgram> _programs;
         private DynamicGemmKernel? _dynamicGemm;
         private bool _disposed;
+        private OpenClCommandQueue? _defaultStream;
         private const string OfflineTuningEnvVar = "AIDOTNET_GPU_TUNE";
         private const string OfflineTuningTrialsEnvVar = "AIDOTNET_GPU_TUNE_TRIALS";
         private const string OfflineTuningDiagEnvVar = "AIDOTNET_GPU_TUNE_DIAG";
@@ -65,6 +67,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         public int ComputeUnits { get; }
         public long GlobalMemoryBytes { get; }
         public long LocalMemoryBytes { get; }
+
+        // IAsyncGpuBackend properties
+        public bool SupportsMultiStream => true;
+        public bool SupportsEvents => true;
+        public bool SupportsAsyncTransfer => true;
+        public bool SupportsGraphCapture => false;
+        public int MaxConcurrentStreams => 8;
+        public IGpuStream DefaultStream => _defaultStream ?? throw new InvalidOperationException("Backend not initialized");
 
         // Dynamic GPU capabilities - initialized from device queries
         private readonly ulong _maxWorkGroupSize;
@@ -139,6 +149,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 Console.WriteLine($"[OpenClBackend]   Local Memory: {LocalMemoryBytes / 1024} KB");
                 Console.WriteLine($"[OpenClBackend]   Supports FP16: {_supportsFp16}");
                 Console.WriteLine($"[OpenClBackend]   Supports Subgroups: {_supportsSubgroups}");
+
+                // Initialize default stream wrapper
+                _defaultStream = new OpenClCommandQueue(this, _context.CommandQueue, _context.Context, _context.Device,
+                    GpuStreamType.Default, _context.IsProfilingEnabled, ownsHandle: false);
+                Console.WriteLine("[OpenClBackend] Default command queue wrapper initialized.");
 
                 Console.WriteLine("[OpenClBackend] Compiling kernels...");
                 CompileKernels();
@@ -252,6 +267,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     _kernelCache[name] = new DirectOpenClKernel(_context, convProgram, name);
                 }
                 Console.WriteLine($"[OpenClBackend] Convolution kernels: {string.Join(", ", ConvolutionKernels.GetKernelNames())}");
+
+                // Compile fused convolution kernels
+                Console.WriteLine("[OpenClBackend] Compiling fused convolution kernels...");
+                var fusedConvProgram = new DirectOpenClProgram(_context, FusedConvolutionKernels.GetSource());
+                fusedConvProgram.Build(optimizationFlags);
+                _programs.Add(fusedConvProgram);
+                foreach (var name in FusedConvolutionKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, fusedConvProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] Fused convolution kernels: {string.Join(", ", FusedConvolutionKernels.GetKernelNames())}");
 
                 // Compile pooling kernels
                 Console.WriteLine("[OpenClBackend] Compiling pooling kernels...");
@@ -2435,6 +2461,303 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         {
             _context?.Finish();
         }
+
+        #region IAsyncGpuBackend Implementation
+
+        /// <inheritdoc/>
+        public IGpuStream CreateStream(GpuStreamType streamType)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            return new OpenClCommandQueue(this, _context.Context, _context.Device, streamType, enableProfiling: false);
+        }
+
+        /// <inheritdoc/>
+        public IGpuStream CreateStream(GpuStreamType streamType, int priority)
+        {
+            // OpenCL doesn't support queue priorities, so we ignore the priority parameter
+            return CreateStream(streamType);
+        }
+
+        /// <inheritdoc/>
+        public IGpuEvent CreateEvent()
+        {
+            // Create an unrecorded event (will be recorded later)
+            return new OpenClEvent(this, IntPtr.Zero, null, profilingEnabled: false);
+        }
+
+        /// <inheritdoc/>
+        public IGpuEvent CreateEvent(bool enableTiming)
+        {
+            return new OpenClEvent(this, IntPtr.Zero, null, profilingEnabled: enableTiming);
+        }
+
+        /// <inheritdoc/>
+        public void RecordEvent(IGpuEvent gpuEvent, IGpuStream stream)
+        {
+            if (gpuEvent is not OpenClEvent openClEvent)
+                throw new ArgumentException("Event must be an OpenClEvent", nameof(gpuEvent));
+
+            openClEvent.Record(stream);
+        }
+
+        /// <inheritdoc/>
+        public void StreamWaitEvent(IGpuStream stream, IGpuEvent gpuEvent)
+        {
+            if (stream is not OpenClCommandQueue openClQueue)
+                throw new ArgumentException("Stream must be an OpenClCommandQueue", nameof(stream));
+
+            openClQueue.WaitEvent(gpuEvent);
+        }
+
+        /// <inheritdoc/>
+        public GpuSyncPoint CreateSyncPoint(IGpuStream stream)
+        {
+            if (stream is not OpenClCommandQueue openClQueue)
+                throw new ArgumentException("Stream must be an OpenClCommandQueue", nameof(stream));
+
+            return new OpenClSyncPoint(this, openClQueue);
+        }
+
+        /// <inheritdoc/>
+        public GpuSyncPoint CreateSyncPoint()
+        {
+            if (_defaultStream == null)
+                throw new InvalidOperationException("Backend not initialized");
+
+            return new OpenClSyncPoint(this, _defaultStream);
+        }
+
+        /// <inheritdoc/>
+        public unsafe void UploadBufferAsync(float[] data, IGpuBuffer buffer, IGpuStream stream)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+            var openClBuffer = (DirectOpenClGpuBuffer)buffer;
+            fixed (float* dataPtr = data)
+            {
+                int err = OpenClNativeBindings.EnqueueWriteBuffer(
+                    stream.Handle,
+                    openClBuffer.Buffer.Handle,
+                    0, // non-blocking
+                    UIntPtr.Zero,
+                    (UIntPtr)(data.Length * sizeof(float)),
+                    (IntPtr)dataPtr,
+                    0,
+                    IntPtr.Zero,
+                    IntPtr.Zero);
+
+                if (err != OpenClNativeBindings.CL_SUCCESS)
+                    throw new InvalidOperationException($"clEnqueueWriteBuffer failed: {err}");
+            }
+        }
+
+        /// <inheritdoc/>
+        public unsafe void UploadBufferAsync(ReadOnlySpan<float> data, IGpuBuffer buffer, IGpuStream stream)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+            var openClBuffer = (DirectOpenClGpuBuffer)buffer;
+            fixed (float* dataPtr = data)
+            {
+                int err = OpenClNativeBindings.EnqueueWriteBuffer(
+                    stream.Handle,
+                    openClBuffer.Buffer.Handle,
+                    0, // non-blocking
+                    UIntPtr.Zero,
+                    (UIntPtr)(data.Length * sizeof(float)),
+                    (IntPtr)dataPtr,
+                    0,
+                    IntPtr.Zero,
+                    IntPtr.Zero);
+
+                if (err != OpenClNativeBindings.CL_SUCCESS)
+                    throw new InvalidOperationException($"clEnqueueWriteBuffer failed: {err}");
+            }
+        }
+
+        /// <inheritdoc/>
+        public unsafe void DownloadBufferAsync(IGpuBuffer buffer, float[] destination, IGpuStream stream)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+            var openClBuffer = (DirectOpenClGpuBuffer)buffer;
+            fixed (float* destPtr = destination)
+            {
+                int err = OpenClNativeBindings.EnqueueReadBuffer(
+                    stream.Handle,
+                    openClBuffer.Buffer.Handle,
+                    0, // non-blocking
+                    UIntPtr.Zero,
+                    (UIntPtr)(destination.Length * sizeof(float)),
+                    (IntPtr)destPtr,
+                    0,
+                    IntPtr.Zero,
+                    IntPtr.Zero);
+
+                if (err != OpenClNativeBindings.CL_SUCCESS)
+                    throw new InvalidOperationException($"clEnqueueReadBuffer failed: {err}");
+            }
+        }
+
+        /// <inheritdoc/>
+        public IGpuBuffer AllocateBufferAsync(float[] data, IGpuStream stream)
+        {
+            var buffer = AllocateBuffer(data.Length);
+            UploadBufferAsync(data, buffer, stream);
+            return buffer;
+        }
+
+        /// <inheritdoc/>
+        public void CopyBufferAsync(IGpuBuffer source, IGpuBuffer destination, int size, IGpuStream stream)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+            var srcBuffer = (DirectOpenClGpuBuffer)source;
+            var dstBuffer = (DirectOpenClGpuBuffer)destination;
+
+            int err = OpenClNativeBindings.EnqueueCopyBuffer(
+                stream.Handle,
+                srcBuffer.Buffer.Handle,
+                dstBuffer.Buffer.Handle,
+                UIntPtr.Zero,
+                UIntPtr.Zero,
+                (UIntPtr)(size * sizeof(float)),
+                0,
+                IntPtr.Zero,
+                IntPtr.Zero);
+
+            if (err != OpenClNativeBindings.CL_SUCCESS)
+                throw new InvalidOperationException($"clEnqueueCopyBuffer failed: {err}");
+        }
+
+        /// <inheritdoc/>
+        public void GemmAsync(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K,
+            float alpha, float beta, IGpuStream stream)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
+            var bufferC = ((DirectOpenClGpuBuffer)C).Buffer;
+
+            // Use the simple tiled kernel for async operations on specific streams
+            var kernel = _kernelCache["gemm_tiled_simple"];
+
+            kernel.SetArg(0, bufferA.Handle);
+            kernel.SetArg(1, bufferB.Handle);
+            kernel.SetArg(2, bufferC.Handle);
+            kernel.SetArg(3, M);
+            kernel.SetArg(4, N);
+            kernel.SetArg(5, K);
+            kernel.SetArg(6, alpha);
+            kernel.SetArg(7, beta);
+
+            const int tileSize = 16;
+            const int wgSize = 16;
+            int numTilesM = (M + tileSize - 1) / tileSize;
+            int numTilesN = (N + tileSize - 1) / tileSize;
+            int globalSizeX = numTilesM * wgSize;
+            int globalSizeY = numTilesN * wgSize;
+
+            // Execute on the specified stream
+            kernel.Execute2DOnQueue(stream.Handle, globalSizeX, globalSizeY, wgSize, wgSize);
+        }
+
+        /// <inheritdoc/>
+        public void FusedGemmBiasActivationAsync(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output,
+            int M, int N, int K, FusedActivationType activation, IGpuStream stream)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            // Map activation to fused kernel name
+            string kernelName = activation switch
+            {
+                FusedActivationType.ReLU => "gemm_bias_relu",
+                FusedActivationType.Sigmoid => "gemm_bias_sigmoid",
+                FusedActivationType.Tanh => "gemm_bias_tanh",
+                FusedActivationType.None => "gemm_bias",
+                _ => throw new NotSupportedException($"Activation type {activation} not supported for fused GEMM")
+            };
+
+            if (!_kernelCache.TryGetValue(kernelName, out var kernel))
+                throw new InvalidOperationException($"Fused kernel not found: {kernelName}");
+
+            var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
+            var bufferBias = ((DirectOpenClGpuBuffer)bias).Buffer;
+            var bufferC = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            kernel.SetArg(0, bufferA.Handle);
+            kernel.SetArg(1, bufferB.Handle);
+            kernel.SetArg(2, bufferBias.Handle);
+            kernel.SetArg(3, bufferC.Handle);
+            kernel.SetArg(4, M);
+            kernel.SetArg(5, N);
+            kernel.SetArg(6, K);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(M, N);
+            kernel.Execute2DOnQueue(stream.Handle, M, N, localSizeX, localSizeY);
+        }
+
+        /// <inheritdoc/>
+        public void SynchronizeStream(IGpuStream stream)
+        {
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+            int err = OpenClNativeBindings.Finish(stream.Handle);
+            if (err != OpenClNativeBindings.CL_SUCCESS)
+                throw new InvalidOperationException($"clFinish failed: {err}");
+        }
+
+        /// <inheritdoc/>
+        public bool QueryStreamComplete(IGpuStream stream)
+        {
+            if (stream is not OpenClCommandQueue openClQueue)
+                throw new ArgumentException("Stream must be an OpenClCommandQueue", nameof(stream));
+
+            return openClQueue.Query();
+        }
+
+        /// <inheritdoc/>
+        public bool QueryEventComplete(IGpuEvent gpuEvent)
+        {
+            if (gpuEvent is not OpenClEvent openClEvent)
+                throw new ArgumentException("Event must be an OpenClEvent", nameof(gpuEvent));
+
+            return openClEvent.Query();
+        }
+
+        /// <inheritdoc/>
+        public float GetEventElapsedTime(IGpuEvent start, IGpuEvent end)
+        {
+            if (start is not OpenClEvent openClStart)
+                throw new ArgumentException("Start event must be an OpenClEvent", nameof(start));
+            if (end is not OpenClEvent openClEnd)
+                throw new ArgumentException("End event must be an OpenClEvent", nameof(end));
+
+            return openClEnd.GetElapsedTime(openClStart);
+        }
+
+        #endregion
 
         #region Profiling and Diagnostics
 
@@ -5126,6 +5449,43 @@ KERNEL VARIANTS (A/B testing):
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        public void Selu(IGpuBuffer A, IGpuBuffer B, float alpha, float scale, int size)
+        {
+            var k = _kernelCache["selu_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, alpha);
+            k.SetArg(arg++, scale);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        public void Hardsigmoid(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            var k = _kernelCache["hardsigmoid_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        public void Hardtanh(IGpuBuffer A, IGpuBuffer B, float minVal, float maxVal, int size)
+        {
+            var k = _kernelCache["hardtanh_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, minVal);
+            k.SetArg(arg++, maxVal);
             k.SetArg(arg++, size);
 
             k.Execute1D(size, Math.Min(256, size));

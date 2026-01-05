@@ -740,6 +740,9 @@ public interface IDirectGpuBackend : IDisposable
     void Mish(IGpuBuffer A, IGpuBuffer B, int size);
     void Softplus(IGpuBuffer A, IGpuBuffer B, int size);
     void Hardswish(IGpuBuffer A, IGpuBuffer B, int size);
+    void Selu(IGpuBuffer A, IGpuBuffer B, float alpha, float scale, int size);
+    void Hardsigmoid(IGpuBuffer A, IGpuBuffer B, int size);
+    void Hardtanh(IGpuBuffer A, IGpuBuffer B, float minVal, float maxVal, int size);
 
     #endregion
 

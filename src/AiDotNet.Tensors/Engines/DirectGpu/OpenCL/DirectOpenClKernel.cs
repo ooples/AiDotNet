@@ -174,6 +174,107 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         #endregion
 
+        #region Stream-Specific Execution
+
+        /// <summary>
+        /// Executes kernel with 1D work distribution on a specific command queue.
+        /// </summary>
+        /// <param name="commandQueue">The command queue handle to execute on.</param>
+        /// <param name="globalSize">The global work size.</param>
+        /// <param name="localSize">The local work size.</param>
+        public void Execute1DOnQueue(IntPtr commandQueue, int globalSize, int localSize)
+        {
+            // Round up global size to multiple of local size
+            int alignedGlobal = ((globalSize + localSize - 1) / localSize) * localSize;
+
+            var globalSizes = new UIntPtr[] { (UIntPtr)alignedGlobal };
+            var localSizes = new UIntPtr[] { (UIntPtr)localSize };
+
+            int err = OpenClNativeBindings.EnqueueNDRangeKernel(
+                commandQueue,
+                _kernel,
+                1, // work_dim
+                null, // global_work_offset
+                globalSizes,
+                localSizes,
+                0,
+                IntPtr.Zero,
+                IntPtr.Zero);
+
+            if (err != OpenClNativeBindings.CL_SUCCESS)
+                throw new InvalidOperationException($"Failed to enqueue kernel on queue: {err}");
+        }
+
+        /// <summary>
+        /// Executes kernel with 2D work distribution on a specific command queue.
+        /// </summary>
+        /// <param name="commandQueue">The command queue handle to execute on.</param>
+        /// <param name="globalSizeX">The global work size in X dimension.</param>
+        /// <param name="globalSizeY">The global work size in Y dimension.</param>
+        /// <param name="localSizeX">The local work size in X dimension.</param>
+        /// <param name="localSizeY">The local work size in Y dimension.</param>
+        public void Execute2DOnQueue(IntPtr commandQueue, int globalSizeX, int globalSizeY, int localSizeX, int localSizeY)
+        {
+            // Round up global sizes to multiples of local sizes
+            int alignedGlobalX = ((globalSizeX + localSizeX - 1) / localSizeX) * localSizeX;
+            int alignedGlobalY = ((globalSizeY + localSizeY - 1) / localSizeY) * localSizeY;
+
+            var globalSizes = new UIntPtr[] { (UIntPtr)alignedGlobalX, (UIntPtr)alignedGlobalY };
+            var localSizes = new UIntPtr[] { (UIntPtr)localSizeX, (UIntPtr)localSizeY };
+
+            int err = OpenClNativeBindings.EnqueueNDRangeKernel(
+                commandQueue,
+                _kernel,
+                2, // work_dim
+                null, // global_work_offset
+                globalSizes,
+                localSizes,
+                0,
+                IntPtr.Zero,
+                IntPtr.Zero);
+
+            if (err != OpenClNativeBindings.CL_SUCCESS)
+                throw new InvalidOperationException($"Failed to enqueue kernel on queue: {err}");
+        }
+
+        /// <summary>
+        /// Executes kernel with 3D work distribution on a specific command queue.
+        /// </summary>
+        /// <param name="commandQueue">The command queue handle to execute on.</param>
+        /// <param name="globalSizeX">The global work size in X dimension.</param>
+        /// <param name="globalSizeY">The global work size in Y dimension.</param>
+        /// <param name="globalSizeZ">The global work size in Z dimension.</param>
+        /// <param name="localSizeX">The local work size in X dimension.</param>
+        /// <param name="localSizeY">The local work size in Y dimension.</param>
+        /// <param name="localSizeZ">The local work size in Z dimension.</param>
+        public void Execute3DOnQueue(IntPtr commandQueue, int globalSizeX, int globalSizeY, int globalSizeZ,
+            int localSizeX, int localSizeY, int localSizeZ)
+        {
+            // Round up global sizes to multiples of local sizes
+            int alignedGlobalX = ((globalSizeX + localSizeX - 1) / localSizeX) * localSizeX;
+            int alignedGlobalY = ((globalSizeY + localSizeY - 1) / localSizeY) * localSizeY;
+            int alignedGlobalZ = ((globalSizeZ + localSizeZ - 1) / localSizeZ) * localSizeZ;
+
+            var globalSizes = new UIntPtr[] { (UIntPtr)alignedGlobalX, (UIntPtr)alignedGlobalY, (UIntPtr)alignedGlobalZ };
+            var localSizes = new UIntPtr[] { (UIntPtr)localSizeX, (UIntPtr)localSizeY, (UIntPtr)localSizeZ };
+
+            int err = OpenClNativeBindings.EnqueueNDRangeKernel(
+                commandQueue,
+                _kernel,
+                3, // work_dim
+                null, // global_work_offset
+                globalSizes,
+                localSizes,
+                0,
+                IntPtr.Zero,
+                IntPtr.Zero);
+
+            if (err != OpenClNativeBindings.CL_SUCCESS)
+                throw new InvalidOperationException($"Failed to enqueue kernel on queue: {err}");
+        }
+
+        #endregion
+
         #region Profiled Execution
 
         /// <summary>

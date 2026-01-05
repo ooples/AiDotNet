@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu.Graph;
 using AiDotNet.Tensors.Engines.Gpu.Graph.Optimization;
 
@@ -11,6 +12,7 @@ namespace AiDotNet.Tensors.Engines.Gpu;
 public sealed class DeferredScope : IDeferredScope
 {
     private readonly IAsyncGpuBackend _backend;
+    private readonly RecordingGpuBackend _recordingBackend;
     private readonly GpuStreamPool? _streamPool;
     private readonly Stopwatch _totalTimer;
     private ExecutionGraph? _compiledGraph;
@@ -20,6 +22,12 @@ public sealed class DeferredScope : IDeferredScope
 
     /// <inheritdoc/>
     public ExecutionGraphBuilder GraphBuilder { get; }
+
+    /// <inheritdoc/>
+    public IDirectGpuBackend RecordingBackend => _recordingBackend;
+
+    /// <inheritdoc/>
+    public bool IsRecording => _recordingBackend.IsRecording;
 
     /// <inheritdoc/>
     public GpuExecutionOptions Options { get; }
@@ -43,6 +51,10 @@ public sealed class DeferredScope : IDeferredScope
         _streamPool = streamPool;
         GraphBuilder = new ExecutionGraphBuilder();
         _totalTimer = Stopwatch.StartNew();
+
+        // Create the recording backend wrapper and start recording
+        _recordingBackend = new RecordingGpuBackend(backend);
+        _recordingBackend.BeginRecording(GraphBuilder);
     }
 
     /// <inheritdoc/>
@@ -50,6 +62,9 @@ public sealed class DeferredScope : IDeferredScope
     {
         ThrowIfDisposed();
         ThrowIfExecuted();
+
+        // Stop recording before compiling and executing
+        _recordingBackend.EndRecording();
 
         var compilationTimer = Stopwatch.StartNew();
         var graph = CompileInternal();
@@ -82,6 +97,9 @@ public sealed class DeferredScope : IDeferredScope
     {
         ThrowIfDisposed();
         ThrowIfExecuted();
+
+        // Stop recording before compiling and executing
+        _recordingBackend.EndRecording();
 
         var compilationTimer = Stopwatch.StartNew();
         var graph = CompileInternal();

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu.Graph;
 
 namespace AiDotNet.Tensors.Engines.Gpu;
@@ -17,10 +18,9 @@ namespace AiDotNet.Tensors.Engines.Gpu;
 /// <code>
 /// using (var scope = backend.BeginDeferredScope())
 /// {
-///     // Operations are RECORDED, not executed
-///     var c1 = backend.GemmBiasRelu(a1, b1, bias1, M, N, K);
-///     var c2 = backend.GemmBiasRelu(a2, b2, bias2, M, N, K);
-///     var result = backend.Add(c1, c2, output, size);
+///     // Use the recording backend to record operations
+///     scope.RecordingBackend.Gemm(a, b, c, M, N, K);
+///     scope.RecordingBackend.Relu(c, c, size);
 ///
 ///     // Graph is compiled, optimized, and executed here
 ///     await scope.ExecuteAsync();
@@ -33,6 +33,17 @@ public interface IDeferredScope : IDisposable
     /// Gets the execution graph builder for recording operations.
     /// </summary>
     ExecutionGraphBuilder GraphBuilder { get; }
+
+    /// <summary>
+    /// Gets the recording backend that intercepts operations and records them to the graph.
+    /// Use this backend instead of the original to have operations recorded.
+    /// </summary>
+    IDirectGpuBackend RecordingBackend { get; }
+
+    /// <summary>
+    /// Gets whether operations are currently being recorded.
+    /// </summary>
+    bool IsRecording { get; }
 
     /// <summary>
     /// Gets the execution options for this scope.

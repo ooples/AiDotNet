@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -378,6 +380,44 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// Always <c>true</c> because reshape is a simple reshape operation that can be JIT compiled.
     /// </value>
     public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because reshape is a zero-copy operation that can be done via GPU tensor view.
+    /// </value>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs the forward pass on GPU using a zero-copy view reshape.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU tensor view with the reshaped dimensions.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements GPU-resident reshape by creating a view into the input tensor
+    /// with the target shape. No data is copied - only the shape interpretation changes.
+    /// </para>
+    /// <para><b>For Beginners:</b> The GPU version of reshape is very efficient because:
+    /// - It doesn't move any data
+    /// - It just tells the GPU "interpret this same data with a different shape"
+    /// - This is called a "view" operation
+    ///
+    /// For example, if input has shape [32, 28, 28, 1] and target is [784],
+    /// the view will have shape [32, 784] but still points to the same GPU memory.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        // Calculate full target shape including batch dimension
+        int batchSize = input.Shape[0];
+        int[] targetShape = new int[_outputShape.Length + 1];
+        targetShape[0] = batchSize;
+        Array.Copy(_outputShape, 0, targetShape, 1, _outputShape.Length);
+
+        return input.CreateView(0, targetShape);
+    }
 
     /// <summary>
     /// Exports the reshape layer's forward pass as a JIT-compilable computation graph.

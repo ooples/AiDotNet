@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -78,6 +82,16 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     private int[,,,,]? _maxIndices;
 
     /// <summary>
+    /// Stores GPU-resident pooling indices for backward pass.
+    /// </summary>
+    private IGpuBuffer? _gpuIndices;
+
+    /// <summary>
+    /// Stores the input shape from the GPU forward pass for backward pass.
+    /// </summary>
+    private int[]? _gpuInputShape;
+
+    /// <summary>
     /// Stores the last input tensor from the forward pass for use in autodiff backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
@@ -107,6 +121,97 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         PoolSize = poolSize;
         Stride = stride;
+    }
+
+    /// <summary>
+    /// Indicates that this layer supports GPU-accelerated execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs GPU-resident forward pass of max pooling, keeping all data on GPU.
+    /// </summary>
+    /// <param name="input">The input tensor on GPU.</param>
+    /// <returns>The pooled output as a GPU-resident tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        // Ensure input is 4D [batch, channels, height, width]
+        IGpuTensor<T> input4D;
+        bool addedBatch = false;
+
+        if (input.Shape.Length == 3)
+        {
+            // Add batch dimension: [C, H, W] -> [1, C, H, W]
+            addedBatch = true;
+            input4D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        }
+        else if (input.Shape.Length == 4)
+        {
+            input4D = input;
+        }
+        else
+        {
+            throw new ArgumentException("Input must be 3D [C, H, W] or 4D [batch, C, H, W]");
+        }
+
+        _gpuInputShape = input4D.Shape;
+        _addedBatchDimension = addedBatch;
+
+        var poolSizeArr = new[] { PoolSize, PoolSize };
+        var strideArr = new[] { Stride, Stride };
+
+        // Dispose previous GPU indices if any
+        _gpuIndices?.Dispose();
+
+        var output = gpuEngine.MaxPool2DGpu<T>(input4D, poolSizeArr, strideArr, out var indices);
+        _gpuIndices = indices;
+
+        // Return with matching dimensions
+        if (addedBatch)
+        {
+            return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass of max pooling.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the output on GPU.</param>
+    /// <returns>The gradient with respect to input as a GPU-resident tensor.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        if (_gpuIndices == null || _gpuInputShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        // Ensure gradient is 4D
+        IGpuTensor<T> gradient4D;
+        if (outputGradient.Shape.Length == 3)
+        {
+            gradient4D = outputGradient.CreateView(0, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
+        }
+        else
+        {
+            gradient4D = outputGradient;
+        }
+
+        var poolSizeArr = new[] { PoolSize, PoolSize };
+        var strideArr = new[] { Stride, Stride };
+
+        var inputGrad = gpuEngine.MaxPool2DBackwardGpu<T>(gradient4D, _gpuIndices, _gpuInputShape, poolSizeArr, strideArr);
+
+        // Return with matching dimensions
+        if (_addedBatchDimension)
+        {
+            return inputGrad.CreateView(0, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3] });
+        }
+        return inputGrad;
     }
 
     /// <summary>
@@ -477,6 +582,11 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         _lastInput = null;
         _maxIndices = null;
         _addedBatchDimension = false;
+
+        // Dispose GPU resources
+        _gpuIndices?.Dispose();
+        _gpuIndices = null;
+        _gpuInputShape = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

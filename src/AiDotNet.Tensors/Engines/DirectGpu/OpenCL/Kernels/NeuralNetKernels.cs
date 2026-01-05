@@ -250,6 +250,49 @@ __kernel void hardswish_forward(
     output[idx] = x * fmin(fmax(x + 3.0f, 0.0f), 6.0f) / 6.0f;
 }
 
+// SELU: scale * (x if x > 0, else alpha * (exp(x) - 1))
+// Standard parameters: alpha ≈ 1.6733, scale ≈ 1.0507
+__kernel void selu_forward(
+    __global const float* input,
+    __global float* output,
+    const float alpha,
+    const float scale,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float x = input[idx];
+    output[idx] = scale * (x > 0.0f ? x : alpha * (exp(x) - 1.0f));
+}
+
+// Hardsigmoid: clip((x + 3) / 6, 0, 1)
+__kernel void hardsigmoid_forward(
+    __global const float* input,
+    __global float* output,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float x = input[idx];
+    output[idx] = fmin(fmax((x + 3.0f) / 6.0f, 0.0f), 1.0f);
+}
+
+// Hardtanh: clip(x, minVal, maxVal)
+__kernel void hardtanh_forward(
+    __global const float* input,
+    __global float* output,
+    const float minVal,
+    const float maxVal,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    output[idx] = fmin(fmax(input[idx], minVal), maxVal);
+}
+
 // ===========================================================================
 // LOSS FUNCTION KERNELS
 // ===========================================================================
@@ -891,6 +934,7 @@ __kernel void scatter_add_kernel(
                 "elu_forward", "elu_backward",
                 "swish_forward", "swish_backward",
                 "silu_forward", "mish_forward", "softplus_forward", "hardswish_forward",
+                "selu_forward", "hardsigmoid_forward", "hardtanh_forward",
                 // Loss functions
                 "cross_entropy_loss", "cross_entropy_backward",
                 "bce_loss", "bce_backward",

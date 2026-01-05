@@ -39,7 +39,21 @@ namespace AiDotNet.Tensors.Engines.DirectGpu
         /// <summary>Dropout.</summary>
         Dropout = 12,
         /// <summary>Residual connection (skip connection).</summary>
-        Residual = 13
+        Residual = 13,
+        /// <summary>2D convolution.</summary>
+        Conv2D = 14,
+        /// <summary>Depthwise 2D convolution.</summary>
+        DepthwiseConv2D = 15,
+        /// <summary>Scaled dot-product attention (Q @ K^T / sqrt(d)).</summary>
+        ScaledDotProduct = 16,
+        /// <summary>FlashAttention (memory-efficient fused attention).</summary>
+        FlashAttention = 17,
+        /// <summary>Grouped Query Attention (multiple Q heads share K/V heads).</summary>
+        GroupedQueryAttention = 18,
+        /// <summary>Swish/SiLU activation.</summary>
+        Swish = 19,
+        /// <summary>LeakyReLU activation.</summary>
+        LeakyReLU = 20
     }
 
     /// <summary>
@@ -366,6 +380,247 @@ namespace AiDotNet.Tensors.Engines.DirectGpu
                 "sparse_gemm_bias_relu",
                 "Fused sparse GEMM (2:4) + Bias + ReLU",
                 "2x (from sparsity) + 20-50% (from fusion)"
+            ));
+
+            // Conv2D + Bias + Activation patterns
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Conv2D),
+                    new FusableOperation(GpuOperationType.BiasAdd),
+                    new FusableOperation(GpuOperationType.ReLU)
+                },
+                "conv2d_bias_relu",
+                "Fused Conv2D + Bias + ReLU for CNN layers",
+                "30-60%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Conv2D),
+                    new FusableOperation(GpuOperationType.BiasAdd),
+                    new FusableOperation(GpuOperationType.GELU)
+                },
+                "conv2d_bias_gelu",
+                "Fused Conv2D + Bias + GELU for CNN layers",
+                "30-60%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Conv2D),
+                    new FusableOperation(GpuOperationType.BiasAdd),
+                    new FusableOperation(GpuOperationType.Sigmoid)
+                },
+                "conv2d_bias_sigmoid",
+                "Fused Conv2D + Bias + Sigmoid for CNN layers",
+                "30-60%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Conv2D),
+                    new FusableOperation(GpuOperationType.BiasAdd)
+                },
+                "conv2d_bias",
+                "Fused Conv2D + Bias (no activation)",
+                "20-40%"
+            ));
+
+            // Conv2D + BatchNorm + Activation patterns (inference mode with folded weights)
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Conv2D),
+                    new FusableOperation(GpuOperationType.BatchNorm),
+                    new FusableOperation(GpuOperationType.ReLU)
+                },
+                "conv2d_batchnorm_relu",
+                "Fused Conv2D + BatchNorm + ReLU (folded for inference)",
+                "40-70%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Conv2D),
+                    new FusableOperation(GpuOperationType.BatchNorm),
+                    new FusableOperation(GpuOperationType.GELU)
+                },
+                "conv2d_batchnorm_gelu",
+                "Fused Conv2D + BatchNorm + GELU (folded for inference)",
+                "40-70%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Conv2D),
+                    new FusableOperation(GpuOperationType.BatchNorm)
+                },
+                "conv2d_batchnorm",
+                "Fused Conv2D + BatchNorm (folded for inference)",
+                "30-50%"
+            ));
+
+            // Depthwise Conv2D fusion patterns
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.DepthwiseConv2D),
+                    new FusableOperation(GpuOperationType.BiasAdd),
+                    new FusableOperation(GpuOperationType.ReLU)
+                },
+                "depthwise_conv2d_bias_relu",
+                "Fused Depthwise Conv2D + Bias + ReLU for MobileNet",
+                "40-70%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.DepthwiseConv2D),
+                    new FusableOperation(GpuOperationType.BatchNorm),
+                    new FusableOperation(GpuOperationType.ReLU)
+                },
+                "depthwise_conv2d_batchnorm_relu",
+                "Fused Depthwise Conv2D + BatchNorm + ReLU for MobileNet",
+                "50-80%"
+            ));
+
+            // BatchNorm + Activation patterns (standalone, for inference)
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.BatchNorm),
+                    new FusableOperation(GpuOperationType.ReLU)
+                },
+                "batchnorm_relu",
+                "Fused BatchNorm + ReLU for CNN inference",
+                "20-40%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.BatchNorm),
+                    new FusableOperation(GpuOperationType.GELU)
+                },
+                "batchnorm_gelu",
+                "Fused BatchNorm + GELU for CNN inference",
+                "20-40%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.BatchNorm),
+                    new FusableOperation(GpuOperationType.Sigmoid)
+                },
+                "batchnorm_sigmoid",
+                "Fused BatchNorm + Sigmoid for CNN inference",
+                "20-40%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.BatchNorm),
+                    new FusableOperation(GpuOperationType.Tanh)
+                },
+                "batchnorm_tanh",
+                "Fused BatchNorm + Tanh for CNN inference",
+                "20-40%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Residual),
+                    new FusableOperation(GpuOperationType.BatchNorm),
+                    new FusableOperation(GpuOperationType.ReLU)
+                },
+                "residual_batchnorm_relu",
+                "Fused Residual + BatchNorm + ReLU for ResNet blocks",
+                "30-50%"
+            ));
+
+            // LayerNorm + Activation patterns (Transformer blocks)
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.LayerNorm),
+                    new FusableOperation(GpuOperationType.ReLU)
+                },
+                "layernorm_relu",
+                "Fused LayerNorm + ReLU for Transformer blocks",
+                "20-40%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.LayerNorm),
+                    new FusableOperation(GpuOperationType.GELU)
+                },
+                "layernorm_gelu",
+                "Fused LayerNorm + GELU for Transformer FFN",
+                "20-40%"
+            ));
+
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Residual),
+                    new FusableOperation(GpuOperationType.LayerNorm)
+                },
+                "residual_layernorm",
+                "Fused Residual + LayerNorm for Transformer blocks",
+                "20-40%"
+            ));
+
+            // Attention patterns - FlashAttention is already fused internally but we track it
+            // for graph optimization and scheduling purposes
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.ScaledDotProduct),
+                    new FusableOperation(GpuOperationType.Softmax)
+                },
+                "flash_attention_v2",
+                "FlashAttention v2 (memory-efficient tiled attention)",
+                "2-10x (memory reduction)"
+            ));
+
+            // Swish/SiLU activation patterns
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Gemm),
+                    new FusableOperation(GpuOperationType.BiasAdd),
+                    new FusableOperation(GpuOperationType.Swish)
+                },
+                "gemm_bias_swish",
+                "Fused GEMM + Bias + Swish for modern architectures",
+                "20-50%"
+            ));
+
+            // LeakyReLU patterns
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Gemm),
+                    new FusableOperation(GpuOperationType.BiasAdd),
+                    new FusableOperation(GpuOperationType.LeakyReLU)
+                },
+                "gemm_bias_leaky_relu",
+                "Fused GEMM + Bias + LeakyReLU for GANs",
+                "20-50%"
+            ));
+
+            // Scale + Softmax pattern (for attention scaling)
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.Scale),
+                    new FusableOperation(GpuOperationType.Softmax)
+                },
+                "scaled_softmax",
+                "Fused Scale + Softmax for attention scores",
+                "15-30%"
+            ));
+
+            // Bias + Dropout pattern (for training)
+            RegisterPattern(new FusionPattern(
+                new[] {
+                    new FusableOperation(GpuOperationType.BiasAdd),
+                    new FusableOperation(GpuOperationType.Dropout)
+                },
+                "bias_dropout",
+                "Fused Bias + Dropout for training efficiency",
+                "15-30%"
             ));
         }
 

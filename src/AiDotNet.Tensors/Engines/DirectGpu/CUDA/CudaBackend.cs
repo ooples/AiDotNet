@@ -6,19 +6,22 @@ using System.Runtime.InteropServices;
 using System.Text;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu.CUDA.Kernels;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.CUDA;
 
-public sealed class CudaBackend : IDirectGpuBackend
+public sealed class CudaBackend : IAsyncGpuBackend
 {
     private const int DefaultBlockSize = 256;
     private readonly Dictionary<string, IntPtr> _kernelCache;
     private IntPtr _cudaContext;
     private IntPtr _stream;
     private IntPtr _cublasHandle;
+    private CudaStream? _defaultStream;
     private IntPtr _activationModule;
     private IntPtr _convolutionModule;
+    private IntPtr _fusedConvolutionModule;
     private IntPtr _poolingModule;
     private IntPtr _normalizationModule;
     private IntPtr _neuralNetModule;
@@ -34,6 +37,14 @@ public sealed class CudaBackend : IDirectGpuBackend
     public int ComputeUnits { get; }
     public long GlobalMemoryBytes { get; }
     public long LocalMemoryBytes { get; }
+
+    // IAsyncGpuBackend properties
+    public bool SupportsMultiStream => true;
+    public bool SupportsEvents => true;
+    public bool SupportsAsyncTransfer => true;
+    public bool SupportsGraphCapture => false; // CUDA graphs not yet implemented
+    public int MaxConcurrentStreams => 16;
+    public IGpuStream DefaultStream => _defaultStream ?? throw new InvalidOperationException("Backend not initialized");
 
     public static bool IsCudaAvailable => CudaNativeBindings.IsAvailable && NvrtcNativeBindings.IsAvailable;
 
@@ -78,6 +89,7 @@ public sealed class CudaBackend : IDirectGpuBackend
 
             CuBlasNative.CheckCudaResult(CuBlasNative.cuCtxCreate(out _cudaContext, 0, device), "cuCtxCreate");
             CuBlasNative.CheckCudaResult(CudaNativeBindings.cuStreamCreate(out _stream, 0), "cuStreamCreate");
+            _defaultStream = new CudaStream(this, _stream, GpuStreamType.Default, ownsHandle: false);
 
             CuBlasNative.CheckCublasStatus(CuBlasNative.cublasCreate(out _cublasHandle), "cublasCreate");
             CuBlasNative.CheckCublasStatus(CuBlasNative.cublasSetStream(_cublasHandle, _stream), "cublasSetStream");
@@ -255,6 +267,7 @@ public sealed class CudaBackend : IDirectGpuBackend
 
         _activationModule = CompileKernelModule(device, CudaActivationKernels.GetSource(), "activation_kernels", CudaActivationKernels.GetKernelNames());
         _convolutionModule = CompileKernelModule(device, CudaConvolutionKernels.GetSource(), "convolution_kernels", CudaConvolutionKernels.GetKernelNames());
+        _fusedConvolutionModule = CompileKernelModule(device, CudaFusedConvolutionKernels.GetSource(), "fused_convolution_kernels", CudaFusedConvolutionKernels.GetKernelNames());
         _poolingModule = CompileKernelModule(device, CudaPoolingKernels.GetSource(), "pooling_kernels", CudaPoolingKernels.GetKernelNames());
         _normalizationModule = CompileKernelModule(device, CudaNormalizationKernels.GetSource(), "normalization_kernels", CudaNormalizationKernels.GetKernelNames());
         _neuralNetModule = CompileKernelModule(device, CudaNeuralNetKernels.GetSource(), "neuralnet_kernels", CudaNeuralNetKernels.GetKernelNames());
@@ -824,6 +837,315 @@ public sealed class CudaBackend : IDirectGpuBackend
         using var _ = PushContext();
         CuBlasNative.CheckCudaResult(CudaNativeBindings.cuStreamSynchronize(_stream), "cuStreamSynchronize");
     }
+
+    #region IAsyncGpuBackend Implementation
+
+    /// <inheritdoc/>
+    public IGpuStream CreateStream(GpuStreamType streamType)
+    {
+        return new CudaStream(this, streamType, 0);
+    }
+
+    /// <inheritdoc/>
+    public IGpuStream CreateStream(GpuStreamType streamType, int priority)
+    {
+        return new CudaStream(this, streamType, priority);
+    }
+
+    /// <inheritdoc/>
+    public IGpuEvent CreateEvent()
+    {
+        return new CudaEvent(this, null, enableTiming: false);
+    }
+
+    /// <inheritdoc/>
+    public IGpuEvent CreateEvent(bool enableTiming)
+    {
+        return new CudaEvent(this, null, enableTiming);
+    }
+
+    /// <inheritdoc/>
+    public void RecordEvent(IGpuEvent gpuEvent, IGpuStream stream)
+    {
+        if (gpuEvent is not CudaEvent cudaEvent)
+            throw new ArgumentException("Event must be a CudaEvent", nameof(gpuEvent));
+
+        cudaEvent.Record(stream);
+    }
+
+    /// <inheritdoc/>
+    public void StreamWaitEvent(IGpuStream stream, IGpuEvent gpuEvent)
+    {
+        if (stream is not CudaStream cudaStream)
+            throw new ArgumentException("Stream must be a CudaStream", nameof(stream));
+
+        cudaStream.WaitEvent(gpuEvent);
+    }
+
+    /// <inheritdoc/>
+    public GpuSyncPoint CreateSyncPoint(IGpuStream stream)
+    {
+        if (stream is not CudaStream cudaStream)
+            throw new ArgumentException("Stream must be a CudaStream", nameof(stream));
+
+        return new CudaSyncPoint(this, cudaStream);
+    }
+
+    /// <inheritdoc/>
+    public GpuSyncPoint CreateSyncPoint()
+    {
+        if (_defaultStream == null)
+            throw new InvalidOperationException("Backend not initialized");
+
+        return new CudaSyncPoint(this, _defaultStream);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void UploadBufferAsync(float[] data, IGpuBuffer buffer, IGpuStream stream)
+    {
+        if (data == null) throw new ArgumentNullException(nameof(data));
+        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        using var _ = PushContext();
+        fixed (float* dataPtr = data)
+        {
+            var result = CudaNativeBindings.cuMemcpyHtoDAsync(
+                buffer.Handle,
+                (IntPtr)dataPtr,
+                (ulong)(data.Length * sizeof(float)),
+                stream.Handle);
+            CuBlasNative.CheckCudaResult(result, "cuMemcpyHtoDAsync");
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void UploadBufferAsync(ReadOnlySpan<float> data, IGpuBuffer buffer, IGpuStream stream)
+    {
+        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        using var _ = PushContext();
+        fixed (float* dataPtr = data)
+        {
+            var result = CudaNativeBindings.cuMemcpyHtoDAsync(
+                buffer.Handle,
+                (IntPtr)dataPtr,
+                (ulong)(data.Length * sizeof(float)),
+                stream.Handle);
+            CuBlasNative.CheckCudaResult(result, "cuMemcpyHtoDAsync");
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void DownloadBufferAsync(IGpuBuffer buffer, float[] destination, IGpuStream stream)
+    {
+        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        using var _ = PushContext();
+        fixed (float* destPtr = destination)
+        {
+            var result = CudaNativeBindings.cuMemcpyDtoHAsync(
+                (IntPtr)destPtr,
+                buffer.Handle,
+                (ulong)(destination.Length * sizeof(float)),
+                stream.Handle);
+            CuBlasNative.CheckCudaResult(result, "cuMemcpyDtoHAsync");
+        }
+    }
+
+    /// <inheritdoc/>
+    public IGpuBuffer AllocateBufferAsync(float[] data, IGpuStream stream)
+    {
+        var buffer = AllocateBuffer(data.Length);
+        UploadBufferAsync(data, buffer, stream);
+        return buffer;
+    }
+
+    /// <inheritdoc/>
+    public void CopyBufferAsync(IGpuBuffer source, IGpuBuffer destination, int size, IGpuStream stream)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        using var _ = PushContext();
+        ulong byteSize = (ulong)size * sizeof(float);
+        var result = CudaNativeBindings.cuMemcpyDtoDAsync(
+            destination.Handle,
+            source.Handle,
+            byteSize,
+            stream.Handle);
+        CuBlasNative.CheckCudaResult(result, "cuMemcpyDtoDAsync");
+    }
+
+    /// <inheritdoc/>
+    public void GemmAsync(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K,
+        float alpha, float beta, IGpuStream stream)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        ValidateGemmArgs(A, B, C, M, N, K);
+
+        using var _ = PushContext();
+        float alphaVal = alpha;
+        float betaVal = beta;
+
+        // Set cuBLAS to use the specified stream
+        CuBlasNative.CheckCublasStatus(CuBlasNative.cublasSetStream(_cublasHandle, stream.Handle), "cublasSetStream");
+
+        try
+        {
+            // Row-major C = A * B. Use cuBLAS column-major trick: C^T = B^T * A^T.
+            CuBlasNative.CheckCublasStatus(
+                CuBlasNative.cublasSgemm(
+                    _cublasHandle,
+                    CublasOperation.None,
+                    CublasOperation.None,
+                    N, M, K,
+                    ref alphaVal,
+                    B.Handle, N,
+                    A.Handle, K,
+                    ref betaVal,
+                    C.Handle, N),
+                "cublasSgemm");
+        }
+        finally
+        {
+            // Restore the default stream
+            CuBlasNative.cublasSetStream(_cublasHandle, _stream);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void FusedGemmBiasActivationAsync(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output,
+        int M, int N, int K, FusedActivationType activation, IGpuStream stream)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        // Map activation to fused kernel name
+        string kernelName = activation switch
+        {
+            FusedActivationType.ReLU => "fused_gemm_bias_relu",
+            FusedActivationType.Sigmoid => "fused_gemm_bias_sigmoid",
+            FusedActivationType.Tanh => "fused_gemm_bias_tanh",
+            FusedActivationType.None => "fused_gemm_bias",
+            _ => throw new NotSupportedException($"Activation type {activation} not supported for fused GEMM")
+        };
+
+        ExecuteFusedGemmOnStream(kernelName, A, B, bias, output, M, N, K, stream);
+    }
+
+    /// <inheritdoc/>
+    public void SynchronizeStream(IGpuStream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        using var _ = PushContext();
+        var result = CudaNativeBindings.cuStreamSynchronize(stream.Handle);
+        CuBlasNative.CheckCudaResult(result, "cuStreamSynchronize");
+    }
+
+    /// <inheritdoc/>
+    public bool QueryStreamComplete(IGpuStream stream)
+    {
+        if (stream is not CudaStream cudaStream)
+            throw new ArgumentException("Stream must be a CudaStream", nameof(stream));
+
+        return cudaStream.Query();
+    }
+
+    /// <inheritdoc/>
+    public bool QueryEventComplete(IGpuEvent gpuEvent)
+    {
+        if (gpuEvent is not CudaEvent cudaEvent)
+            throw new ArgumentException("Event must be a CudaEvent", nameof(gpuEvent));
+
+        return cudaEvent.Query();
+    }
+
+    /// <inheritdoc/>
+    public float GetEventElapsedTime(IGpuEvent start, IGpuEvent end)
+    {
+        if (start is not CudaEvent cudaStart)
+            throw new ArgumentException("Start event must be a CudaEvent", nameof(start));
+        if (end is not CudaEvent cudaEnd)
+            throw new ArgumentException("End event must be a CudaEvent", nameof(end));
+
+        return cudaEnd.GetElapsedTime(cudaStart);
+    }
+
+    /// <summary>
+    /// Launches a kernel on a specific stream.
+    /// </summary>
+    private unsafe void LaunchKernelOnStream(IntPtr kernel, uint gridX, uint blockX, void** args, IntPtr stream, uint sharedMem = 0)
+    {
+        CuBlasNative.CheckCudaResult(
+            CudaNativeBindings.cuLaunchKernel(
+                kernel,
+                gridX, 1, 1,
+                blockX, 1, 1,
+                sharedMem,
+                stream,
+                (IntPtr)args,
+                IntPtr.Zero),
+            "cuLaunchKernel");
+    }
+
+    /// <summary>
+    /// Launches a 2D kernel on a specific stream.
+    /// </summary>
+    private unsafe void LaunchKernel2DOnStream(IntPtr kernel, uint gridX, uint gridY, uint gridZ, uint blockX, uint blockY, void** args, IntPtr stream, uint sharedMem = 0)
+    {
+        CuBlasNative.CheckCudaResult(
+            CudaNativeBindings.cuLaunchKernel(
+                kernel,
+                gridX, gridY, gridZ,
+                blockX, blockY, 1,
+                sharedMem,
+                stream,
+                (IntPtr)args,
+                IntPtr.Zero),
+            "cuLaunchKernel2D");
+    }
+
+    /// <summary>
+    /// Executes a fused GEMM kernel on a specific stream.
+    /// </summary>
+    private unsafe void ExecuteFusedGemmOnStream(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output, int M, int N, int K, IGpuStream stream)
+    {
+        if (!_kernelCache.TryGetValue(kernelName, out var kernel))
+            throw new InvalidOperationException($"CUDA fused kernel not found: {kernelName}");
+
+        using var _ = PushContext();
+
+        const int TILE_SIZE = 16;
+        uint gridX = (uint)((N + TILE_SIZE - 1) / TILE_SIZE);
+        uint gridY = (uint)((M + TILE_SIZE - 1) / TILE_SIZE);
+
+        IntPtr aPtr = A.Handle;
+        IntPtr bPtr = B.Handle;
+        IntPtr biasPtr = bias.Handle;
+        IntPtr outPtr = output.Handle;
+        int m = M, n = N, k = K;
+
+        void** args = stackalloc void*[7];
+        args[0] = &aPtr;
+        args[1] = &bPtr;
+        args[2] = &biasPtr;
+        args[3] = &outPtr;
+        args[4] = &m;
+        args[5] = &n;
+        args[6] = &k;
+
+        LaunchKernel2DOnStream(kernel, gridX, gridY, 1, TILE_SIZE, TILE_SIZE, args, stream.Handle);
+    }
+
+    #endregion
 
     private unsafe void LaunchUnaryKernel(string kernelName, IGpuBuffer input, IGpuBuffer output, int size)
     {
@@ -2523,6 +2845,47 @@ public sealed class CudaBackend : IDirectGpuBackend
     public void Hardswish(IGpuBuffer A, IGpuBuffer B, int size)
     {
         LaunchUnaryKernel("hardswish", A, B, size);
+    }
+
+    public unsafe void Selu(IGpuBuffer A, IGpuBuffer B, float alpha, float scale, int size)
+    {
+        if (!_kernelCache.TryGetValue("selu", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: selu");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr aPtr = A.Handle;
+        IntPtr bPtr = B.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &aPtr;
+        args[1] = &bPtr;
+        args[2] = &alpha;
+        args[3] = &scale;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public void Hardsigmoid(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("hardsigmoid", A, B, size);
+    }
+
+    public unsafe void Hardtanh(IGpuBuffer A, IGpuBuffer B, float minVal, float maxVal, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardtanh", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hardtanh");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr aPtr = A.Handle;
+        IntPtr bPtr = B.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &aPtr;
+        args[1] = &bPtr;
+        args[2] = &minVal;
+        args[3] = &maxVal;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
     #endregion

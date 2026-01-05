@@ -76,6 +76,219 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         return IsGpuAvailable && backend != null;
     }
 
+    /// <summary>
+    /// Gets the GPU backend if available.
+    /// </summary>
+    /// <returns>The GPU backend, or null if not available.</returns>
+    public IDirectGpuBackend? GetBackend()
+    {
+        if (TryGetBackend(out var backend))
+        {
+            return backend;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the async GPU backend if available (supports deferred execution).
+    /// </summary>
+    /// <returns>The async GPU backend, or null if not available or not supported.</returns>
+    public IAsyncGpuBackend? GetAsyncBackend()
+    {
+        if (TryGetBackend(out var backend))
+        {
+            return backend as IAsyncGpuBackend;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Begins a GPU execution context for GPU-resident operations.
+    /// Operations within the context stay GPU-resident until explicitly downloaded.
+    /// </summary>
+    /// <param name="options">Optional execution options.</param>
+    /// <returns>A GPU execution context, or null if GPU is not available.</returns>
+    public GpuExecutionContext? BeginGpuContext(GpuExecutionOptions? options = null)
+    {
+        if (!TryGetBackend(out var backend))
+        {
+            return null;
+        }
+
+        return GpuExecutionContext.Begin(backend, options);
+    }
+
+    /// <summary>
+    /// Begins a deferred execution scope that records operations to an execution graph
+    /// for optimized batch execution.
+    /// </summary>
+    /// <param name="options">Optional execution options.</param>
+    /// <returns>A deferred scope for recording operations, or null if not supported.</returns>
+    /// <remarks>
+    /// <para><b>Example:</b></para>
+    /// <code>
+    /// using var scope = engine.BeginDeferredScope();
+    /// if (scope != null)
+    /// {
+    ///     // Operations recorded to scope.GraphBuilder
+    ///     scope.Execute(); // Compile and execute all at once
+    /// }
+    /// </code>
+    /// </remarks>
+    public IDeferredScope? BeginDeferredScope(GpuExecutionOptions? options = null)
+    {
+        var asyncBackend = GetAsyncBackend();
+        if (asyncBackend == null)
+        {
+            return null;
+        }
+
+        var effectiveOptions = options ?? GpuExecutionOptions.FromEnvironment();
+        var streamPool = asyncBackend.SupportsMultiStream
+            ? new GpuStreamPool(asyncBackend, effectiveOptions)
+            : null;
+
+        return new DeferredScope(asyncBackend, effectiveOptions, streamPool);
+    }
+
+    /// <summary>
+    /// Gets whether deferred execution is supported on this engine.
+    /// </summary>
+    public bool SupportsDeferredExecution => GetAsyncBackend() != null;
+
+    /// <summary>
+    /// Gets the current GPU execution context for this thread, if any.
+    /// This allows operations to check if GPU-resident mode is active.
+    /// </summary>
+    public static GpuExecutionContext? CurrentContext => GpuExecutionContext.Current;
+
+    /// <summary>
+    /// Gets whether a GPU execution context is currently active on this thread.
+    /// When active, GPU tensors can stay resident on the GPU without downloading.
+    /// </summary>
+    public static bool IsGpuContextActive => GpuExecutionContext.Current != null;
+
+    /// <summary>
+    /// Determines whether GPU should be used for an operation of the given element count.
+    /// Uses the current execution context options if available, otherwise uses defaults.
+    /// </summary>
+    /// <param name="elementCount">The number of elements in the operation.</param>
+    /// <returns>True if GPU should be used.</returns>
+    public bool ShouldUseGpu(int elementCount)
+    {
+        if (!IsGpuAvailable)
+        {
+            return false;
+        }
+
+        // Use context options if available
+        var context = GpuExecutionContext.Current;
+        if (context != null)
+        {
+            return context.ShouldUseGpu(elementCount);
+        }
+
+        // Default threshold
+        return elementCount >= 4096;
+    }
+
+    /// <summary>
+    /// Uploads a tensor to GPU within the current execution context.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="tensor">The CPU tensor to upload.</param>
+    /// <param name="role">The role of this tensor.</param>
+    /// <returns>A GPU-resident tensor, or null if no context is active.</returns>
+    public GpuTensor<T>? UploadToContext<T>(Tensor<T> tensor, GpuTensorRole role = GpuTensorRole.General)
+    {
+        var context = GpuExecutionContext.Current;
+        return context?.Upload(tensor, role);
+    }
+
+    /// <summary>
+    /// Uploads data to GPU within the current execution context.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="data">The CPU data to upload.</param>
+    /// <param name="shape">The shape of the tensor.</param>
+    /// <param name="role">The role of this tensor.</param>
+    /// <returns>A GPU-resident tensor, or null if no context is active.</returns>
+    public GpuTensor<T>? UploadToContext<T>(T[] data, int[] shape, GpuTensorRole role = GpuTensorRole.General)
+    {
+        var context = GpuExecutionContext.Current;
+        return context?.Upload(data, shape, role);
+    }
+
+    /// <summary>
+    /// Creates an empty GPU tensor within the current execution context.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="shape">The shape of the tensor.</param>
+    /// <param name="role">The role of this tensor.</param>
+    /// <returns>A GPU-resident tensor with uninitialized data, or null if no context is active.</returns>
+    public GpuTensor<T>? EmptyInContext<T>(int[] shape, GpuTensorRole role = GpuTensorRole.Intermediate)
+    {
+        var context = GpuExecutionContext.Current;
+        return context?.Empty<T>(shape, role);
+    }
+
+    /// <summary>
+    /// Creates a GPU tensor filled with zeros within the current execution context.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="shape">The shape of the tensor.</param>
+    /// <param name="role">The role of this tensor.</param>
+    /// <returns>A GPU-resident tensor filled with zeros, or null if no context is active.</returns>
+    public GpuTensor<T>? ZerosInContext<T>(int[] shape, GpuTensorRole role = GpuTensorRole.Intermediate)
+    {
+        var context = GpuExecutionContext.Current;
+        return context?.Zeros<T>(shape, role);
+    }
+
+    /// <summary>
+    /// Executes an action within a GPU execution context.
+    /// </summary>
+    /// <param name="action">The action to execute.</param>
+    /// <param name="options">Optional execution options.</param>
+    /// <returns>True if executed on GPU, false if GPU not available.</returns>
+    public bool WithGpuContext(Action<GpuExecutionContext> action, GpuExecutionOptions? options = null)
+    {
+        var context = BeginGpuContext(options);
+        if (context == null)
+        {
+            return false;
+        }
+
+        using (context)
+        {
+            action(context);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Executes a function within a GPU execution context.
+    /// </summary>
+    /// <typeparam name="TResult">The result type.</typeparam>
+    /// <param name="func">The function to execute.</param>
+    /// <param name="fallback">Fallback function if GPU is not available.</param>
+    /// <param name="options">Optional execution options.</param>
+    /// <returns>The function result.</returns>
+    public TResult WithGpuContext<TResult>(Func<GpuExecutionContext, TResult> func, Func<TResult> fallback, GpuExecutionOptions? options = null)
+    {
+        var context = BeginGpuContext(options);
+        if (context == null)
+        {
+            return fallback();
+        }
+
+        using (context)
+        {
+            return func(context);
+        }
+    }
+
     private static float ToFloatScalar<T>(T value)
     {
         if (typeof(T) == typeof(float))
@@ -855,6 +1068,29 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             case FusedActivationType.Swish:
                 backend.Swish(buffer, buffer, size);
                 break;
+            case FusedActivationType.ELU:
+                backend.Elu(buffer, buffer, 1.0f, size); // alpha = 1.0 is standard
+                break;
+            case FusedActivationType.SELU:
+                // SELU: scale * (x if x > 0, else alpha * (exp(x) - 1))
+                // Standard parameters: scale ≈ 1.0507, alpha ≈ 1.6733
+                backend.Selu(buffer, buffer, 1.6732632423543772f, 1.0507009873554805f, size);
+                break;
+            case FusedActivationType.Softplus:
+                backend.Softplus(buffer, buffer, size);
+                break;
+            case FusedActivationType.Mish:
+                backend.Mish(buffer, buffer, size);
+                break;
+            case FusedActivationType.HardSwish:
+                backend.Hardswish(buffer, buffer, size);
+                break;
+            case FusedActivationType.HardSigmoid:
+                backend.Hardsigmoid(buffer, buffer, size);
+                break;
+            case FusedActivationType.HardTanh:
+                backend.Hardtanh(buffer, buffer, -1.0f, 1.0f, size);
+                break;
             case FusedActivationType.None:
                 break;
         }
@@ -889,6 +1125,270 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         // Return GPU tensor that owns the buffer
         return new GpuTensor<T>(backend, buffer, tensor.Shape.ToArray(), role, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Applies an activation function to a GPU-resident tensor, returning a new GPU tensor.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <param name="activation">The activation type to apply.</param>
+    /// <returns>A new GPU tensor with the activation applied.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method applies the specified activation function entirely on the GPU,
+    /// without downloading data to CPU. Supported activations: ReLU, LeakyReLU, Sigmoid, Tanh, GELU, Swish.
+    /// </para>
+    /// </remarks>
+    public IGpuTensor<T> ActivationGpu<T>(IGpuTensor<T> input, FusedActivationType activation)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for ActivationGpu");
+
+        // Allocate output buffer
+        int size = input.ElementCount;
+        var outputBuffer = backend.AllocateBuffer(size);
+
+        // Copy input to output first (activations work in-place)
+        backend.Copy(input.Buffer, outputBuffer, size);
+
+        // Apply activation in-place on output buffer
+        ApplyGpuActivation(backend, outputBuffer, size, activation);
+
+        // Return new GPU tensor
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Performs GPU-resident dropout forward pass with random mask generation.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <param name="dropoutRate">Probability of dropping each element (0-1).</param>
+    /// <param name="isTraining">If true, applies dropout; if false, passes through unchanged.</param>
+    /// <param name="seed">Random seed for mask generation (use different seed per batch for variety).</param>
+    /// <returns>A tuple of (output tensor, mask tensor) for use in backward pass.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    public (IGpuTensor<T> Output, IGpuTensor<T> Mask) DropoutGpu<T>(
+        IGpuTensor<T> input,
+        float dropoutRate,
+        bool isTraining,
+        ulong seed)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for DropoutGpu");
+
+        int size = input.ElementCount;
+
+        // Allocate output and mask buffers
+        var outputBuffer = backend.AllocateBuffer(size);
+        var maskBuffer = backend.AllocateBuffer(size);
+
+        // Run dropout kernel (handles both training and inference modes)
+        backend.Dropout(input.Buffer, outputBuffer, maskBuffer, size, dropoutRate, seed, isTraining);
+
+        // Return GPU tensors
+        var output = new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+        var mask = new GpuTensor<T>(backend, maskBuffer, input.Shape, GpuTensorRole.Intermediate, ownsBuffer: true);
+
+        return (output, mask);
+    }
+
+    /// <summary>
+    /// Performs GPU-resident dropout backward pass.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">The GPU-resident gradient from the next layer.</param>
+    /// <param name="mask">The dropout mask from the forward pass.</param>
+    /// <param name="dropoutRate">The dropout rate used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    public IGpuTensor<T> DropoutBackwardGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuTensor<T> mask,
+        float dropoutRate)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for DropoutBackwardGpu");
+
+        int size = gradOutput.ElementCount;
+        var gradInputBuffer = backend.AllocateBuffer(size);
+
+        backend.DropoutBackward(gradOutput.Buffer, mask.Buffer, gradInputBuffer, size, dropoutRate);
+
+        return new GpuTensor<T>(backend, gradInputBuffer, gradOutput.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident 2D max pooling that keeps output and indices on GPU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="input">The input tensor on GPU.</param>
+    /// <param name="poolSize">Pool size [height, width].</param>
+    /// <param name="stride">Stride [height, width].</param>
+    /// <param name="gpuIndices">Output GPU buffer containing pooling indices.</param>
+    /// <returns>The pooled output as GPU-resident tensor.</returns>
+    public IGpuTensor<T> MaxPool2DGpu<T>(
+        IGpuTensor<T> input,
+        int[] poolSize,
+        int[] stride,
+        out IGpuBuffer gpuIndices)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for MaxPool2DGpu");
+
+        if (input.Shape.Length != 4 || poolSize.Length != 2 || stride.Length != 2)
+            throw new ArgumentException("Input must be 4D [batch, channels, height, width] with 2D poolSize and stride");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        int outHeight = (inHeight - poolSize[0]) / stride[0] + 1;
+        int outWidth = (inWidth - poolSize[1]) / stride[1] + 1;
+
+        if (outHeight <= 0 || outWidth <= 0)
+            throw new ArgumentException($"Invalid pooling parameters: output dimensions ({outHeight}, {outWidth}) are non-positive");
+
+        int outputSize = batch * channels * outHeight * outWidth;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+        var indicesBuffer = backend.AllocateBuffer(outputSize);
+
+        backend.MaxPool2D(input.Buffer, outputBuffer, indicesBuffer,
+            batch, channels, inHeight, inWidth,
+            outHeight, outWidth,
+            poolSize[0], poolSize[1],
+            stride[0], stride[1], 0, 0);
+
+        var outputShape = new[] { batch, channels, outHeight, outWidth };
+        gpuIndices = indicesBuffer;
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident backward pass for 2D max pooling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="gradOutput">The gradient of the output on GPU.</param>
+    /// <param name="gpuIndices">The GPU buffer containing pooling indices from forward pass.</param>
+    /// <param name="inputShape">The shape of the original input.</param>
+    /// <param name="poolSize">Pool size [height, width].</param>
+    /// <param name="stride">Stride [height, width].</param>
+    /// <returns>The gradient with respect to input as GPU-resident tensor.</returns>
+    public IGpuTensor<T> MaxPool2DBackwardGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuBuffer gpuIndices,
+        int[] inputShape,
+        int[] poolSize,
+        int[] stride)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for MaxPool2DBackwardGpu");
+
+        if (gradOutput.Shape.Length != 4 || inputShape.Length != 4)
+            throw new ArgumentException("GradOutput and inputShape must be 4D");
+
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int inHeight = inputShape[2];
+        int inWidth = inputShape[3];
+
+        int gradInputSize = batch * channels * inHeight * inWidth;
+        var gradInputBuffer = backend.AllocateBuffer(gradInputSize);
+
+        backend.MaxPool2DBackward(gradOutput.Buffer, gpuIndices, gradInputBuffer,
+            batch, channels, inHeight, inWidth,
+            gradOutput.Shape[2], gradOutput.Shape[3],
+            poolSize[0], poolSize[1],
+            stride[0], stride[1], 0, 0);
+
+        return new GpuTensor<T>(backend, gradInputBuffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident 2D average pooling that keeps output on GPU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="input">The input tensor on GPU.</param>
+    /// <param name="poolSize">Pool size [height, width].</param>
+    /// <param name="stride">Stride [height, width].</param>
+    /// <returns>The pooled output as GPU-resident tensor.</returns>
+    public IGpuTensor<T> AvgPool2DGpu<T>(
+        IGpuTensor<T> input,
+        int[] poolSize,
+        int[] stride)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for AvgPool2DGpu");
+
+        if (input.Shape.Length != 4 || poolSize.Length != 2 || stride.Length != 2)
+            throw new ArgumentException("Input must be 4D [batch, channels, height, width] with 2D poolSize and stride");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        int outHeight = (inHeight - poolSize[0]) / stride[0] + 1;
+        int outWidth = (inWidth - poolSize[1]) / stride[1] + 1;
+
+        if (outHeight <= 0 || outWidth <= 0)
+            throw new ArgumentException($"Invalid pooling parameters: output dimensions ({outHeight}, {outWidth}) are non-positive");
+
+        int outputSize = batch * channels * outHeight * outWidth;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        backend.AvgPool2D(input.Buffer, outputBuffer,
+            batch, channels, inHeight, inWidth,
+            outHeight, outWidth,
+            poolSize[0], poolSize[1],
+            stride[0], stride[1], 0, 0,
+            countIncludePad: true);
+
+        var outputShape = new[] { batch, channels, outHeight, outWidth };
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident backward pass for 2D average pooling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="gradOutput">The gradient of the output on GPU.</param>
+    /// <param name="inputShape">The shape of the original input.</param>
+    /// <param name="poolSize">Pool size [height, width].</param>
+    /// <param name="stride">Stride [height, width].</param>
+    /// <returns>The gradient with respect to input as GPU-resident tensor.</returns>
+    public IGpuTensor<T> AvgPool2DBackwardGpu<T>(
+        IGpuTensor<T> gradOutput,
+        int[] inputShape,
+        int[] poolSize,
+        int[] stride)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for AvgPool2DBackwardGpu");
+
+        if (gradOutput.Shape.Length != 4 || inputShape.Length != 4)
+            throw new ArgumentException("GradOutput and inputShape must be 4D");
+
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int inHeight = inputShape[2];
+        int inWidth = inputShape[3];
+
+        int gradInputSize = batch * channels * inHeight * inWidth;
+        var gradInputBuffer = backend.AllocateBuffer(gradInputSize);
+
+        backend.AvgPool2DBackward(gradOutput.Buffer, gradInputBuffer,
+            batch, channels, inHeight, inWidth,
+            gradOutput.Shape[2], gradOutput.Shape[3],
+            poolSize[0], poolSize[1],
+            stride[0], stride[1], 0, 0,
+            countIncludePad: true);
+
+        return new GpuTensor<T>(backend, gradInputBuffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>

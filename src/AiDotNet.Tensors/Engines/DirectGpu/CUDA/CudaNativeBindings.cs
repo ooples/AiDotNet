@@ -99,4 +99,52 @@ internal static class CudaNativeBindings
 
     [DllImport(CudaLibrary, EntryPoint = "cuStreamSynchronize")]
     public static extern CudaResult cuStreamSynchronize(IntPtr stream);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuStreamQuery")]
+    public static extern CudaResult cuStreamQuery(IntPtr stream);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuStreamCreateWithPriority")]
+    public static extern CudaResult cuStreamCreateWithPriority(out IntPtr stream, uint flags, int priority);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuStreamWaitEvent")]
+    public static extern CudaResult cuStreamWaitEvent(IntPtr stream, IntPtr hEvent, uint flags);
+
+    // Event APIs
+    [DllImport(CudaLibrary, EntryPoint = "cuEventCreate")]
+    public static extern CudaResult cuEventCreate(out IntPtr phEvent, uint flags);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuEventDestroy_v2")]
+    public static extern CudaResult cuEventDestroy(IntPtr hEvent);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuEventRecord")]
+    public static extern CudaResult cuEventRecord(IntPtr hEvent, IntPtr stream);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuEventSynchronize")]
+    public static extern CudaResult cuEventSynchronize(IntPtr hEvent);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuEventQuery")]
+    public static extern CudaResult cuEventQuery(IntPtr hEvent);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuEventElapsedTime")]
+    public static extern CudaResult cuEventElapsedTime(out float pMilliseconds, IntPtr hStart, IntPtr hEnd);
+
+    // Async memory transfer APIs
+    [DllImport(CudaLibrary, EntryPoint = "cuMemcpyHtoDAsync_v2")]
+    public static extern CudaResult cuMemcpyHtoDAsync(IntPtr dstDevice, IntPtr srcHost, ulong byteCount, IntPtr stream);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuMemcpyDtoHAsync_v2")]
+    public static extern CudaResult cuMemcpyDtoHAsync(IntPtr dstHost, IntPtr srcDevice, ulong byteCount, IntPtr stream);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuMemcpyDtoDAsync_v2")]
+    public static extern CudaResult cuMemcpyDtoDAsync(IntPtr dstDevice, IntPtr srcDevice, ulong byteCount, IntPtr stream);
+
+    // Event flag constants
+    public const uint CU_EVENT_DEFAULT = 0;
+    public const uint CU_EVENT_BLOCKING_SYNC = 1;
+    public const uint CU_EVENT_DISABLE_TIMING = 2;
+    public const uint CU_EVENT_INTERPROCESS = 4;
+
+    // Stream flag constants
+    public const uint CU_STREAM_DEFAULT = 0;
+    public const uint CU_STREAM_NON_BLOCKING = 1;
 }

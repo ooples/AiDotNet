@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -418,6 +420,48 @@ public class FlattenLayer<T> : LayerBase<T>
     /// Always <c>true</c> because flatten is a simple reshape operation that can be JIT compiled.
     /// </value>
     public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because flatten is a zero-copy reshape that can be done via GPU tensor view.
+    /// </value>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs the forward pass on GPU using a zero-copy view reshape.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU tensor view with the flattened shape.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements GPU-resident flatten by creating a view into the input tensor
+    /// with the flattened shape. No data is copied - only the shape interpretation changes.
+    /// </para>
+    /// <para><b>For Beginners:</b> The GPU version of flatten is very efficient because:
+    /// - It doesn't move any data
+    /// - It just tells the GPU "interpret this same data with a different shape"
+    /// - This is called a "view" operation
+    ///
+    /// For example, if input has shape [32, 7, 7, 64], the view will have shape [32, 3136]
+    /// but still points to the exact same memory on the GPU.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        // Handle unbatched input (3D: [C, H, W] or 2D: [H, W] or 1D)
+        if (input.Shape.Length <= 3)
+        {
+            // Unbatched input: flatten to 1D vector
+            return input.CreateView(0, [input.ElementCount]);
+        }
+
+        // Batched input: flatten spatial dimensions keeping batch dimension
+        int batchSize = input.Shape[0];
+        int flattenedSize = input.ElementCount / batchSize;
+        return input.CreateView(0, [batchSize, flattenedSize]);
+    }
 
     /// <summary>
     /// Exports the flatten layer's forward pass as a JIT-compilable computation graph.

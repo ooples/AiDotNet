@@ -68,5 +68,47 @@ public enum FusedActivationType
     /// Softmax: exp(x_i) / sum(exp(x_j))
     /// Normalizes outputs to probability distribution, used for classification.
     /// </summary>
-    Softmax = 7
+    Softmax = 7,
+
+    /// <summary>
+    /// Exponential Linear Unit: f(x) = x if x > 0, else alpha * (exp(x) - 1)
+    /// Smoother version of ReLU that avoids dead neurons.
+    /// </summary>
+    ELU = 8,
+
+    /// <summary>
+    /// Scaled Exponential Linear Unit: f(x) = scale * (x if x > 0, else alpha * (exp(x) - 1))
+    /// Self-normalizing activation for deep networks.
+    /// </summary>
+    SELU = 9,
+
+    /// <summary>
+    /// Softplus: f(x) = log(1 + exp(x))
+    /// Smooth approximation of ReLU.
+    /// </summary>
+    Softplus = 10,
+
+    /// <summary>
+    /// Mish: f(x) = x * tanh(softplus(x)) = x * tanh(log(1 + exp(x)))
+    /// Self-regularized activation that often outperforms Swish.
+    /// </summary>
+    Mish = 11,
+
+    /// <summary>
+    /// HardSwish: f(x) = x * clip((x + 3) / 6, 0, 1)
+    /// Efficient approximation of Swish for mobile/edge deployment.
+    /// </summary>
+    HardSwish = 12,
+
+    /// <summary>
+    /// HardSigmoid: f(x) = clip((x + 3) / 6, 0, 1)
+    /// Efficient approximation of Sigmoid for mobile/edge deployment.
+    /// </summary>
+    HardSigmoid = 13,
+
+    /// <summary>
+    /// HardTanh: f(x) = clip(x, -1, 1)
+    /// Efficient approximation of Tanh with bounded outputs.
+    /// </summary>
+    HardTanh = 14
 }

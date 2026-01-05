@@ -55,6 +55,7 @@ public enum CudaResult
     NotMappedAsArray = 212,
     NotMappedAsPointer = 213,
     LaunchFailed = 719,
+    NotReady = 600,
     Unknown = 999
 }
 
