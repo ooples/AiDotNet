@@ -127,15 +127,18 @@ public sealed class StreamAssignmentPass : IGraphOptimizationPass
             return null;
         }
 
-        // For nodes at the same level, distribute across streams
-        // Note: We use the default compute stream here rather than acquiring streams
-        // from the pool because acquired streams would need to be tracked and released,
-        // and the optimization pass is just marking preferred stream assignments.
-        // The actual stream management happens during execution in ExecutionGraph.Execute().
+        // During optimization, we don't assign actual streams - we leave AssignedStream as null
+        // so that ExecutionGraph.GetStreamForNode() will acquire streams at runtime.
+        // This allows proper multi-stream execution where streams are acquired and released
+        // during graph execution, not during compilation.
         //
-        // For true multi-stream execution, streams should be acquired and released
-        // during graph execution, not during optimization.
-        return pool.DefaultComputeStream;
+        // The ExecutionGraph will:
+        // 1. Acquire streams from the pool for compute operations
+        // 2. Track acquired streams
+        // 3. Release them after execution completes
+        //
+        // Returning null here tells the execution layer to dynamically acquire a stream.
+        return null;
     }
 
     private List<ExecutionNode> InsertSynchronizationNodes(

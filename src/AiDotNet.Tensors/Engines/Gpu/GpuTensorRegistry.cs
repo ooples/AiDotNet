@@ -103,8 +103,9 @@ public sealed class GpuTensorRegistry : IDisposable
     {
         if (_tensors.TryGetValue(registrationId, out var entry))
         {
-            entry.LastAccessTime = DateTime.UtcNow;
-            entry.AccessCount++;
+            // Thread-safe updates to prevent race conditions
+            entry.UpdateAccessTime();
+            entry.IncrementAccessCount();
         }
     }
 
@@ -294,13 +295,24 @@ public sealed class GpuTensorRegistry : IDisposable
     /// </summary>
     private sealed class TensorEntry
     {
+        private long _lastAccessTimeTicks;
+        private int _accessCount;
+
         public int Id { get; }
         public IGpuBuffer Buffer { get; }
         public GpuTensorRole Role { get; }
         public long SizeInBytes { get; }
         public DateTime CreationTime { get; }
-        public DateTime LastAccessTime { get; set; }
-        public int AccessCount { get; set; }
+
+        /// <summary>
+        /// Gets the last access time. Thread-safe read.
+        /// </summary>
+        public DateTime LastAccessTime => new DateTime(Interlocked.Read(ref _lastAccessTimeTicks));
+
+        /// <summary>
+        /// Gets the access count. Thread-safe read.
+        /// </summary>
+        public int AccessCount => Interlocked.CompareExchange(ref _accessCount, 0, 0);
 
         public TensorEntry(int id, IGpuBuffer buffer, GpuTensorRole role, long sizeInBytes)
         {
@@ -309,8 +321,24 @@ public sealed class GpuTensorRegistry : IDisposable
             Role = role;
             SizeInBytes = sizeInBytes;
             CreationTime = DateTime.UtcNow;
-            LastAccessTime = DateTime.UtcNow;
-            AccessCount = 0;
+            _lastAccessTimeTicks = DateTime.UtcNow.Ticks;
+            _accessCount = 0;
+        }
+
+        /// <summary>
+        /// Updates the access time in a thread-safe manner.
+        /// </summary>
+        public void UpdateAccessTime()
+        {
+            Interlocked.Exchange(ref _lastAccessTimeTicks, DateTime.UtcNow.Ticks);
+        }
+
+        /// <summary>
+        /// Increments the access count in a thread-safe manner.
+        /// </summary>
+        public void IncrementAccessCount()
+        {
+            Interlocked.Increment(ref _accessCount);
         }
     }
 }

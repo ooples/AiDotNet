@@ -11,6 +11,8 @@ public sealed class ExecutionGraph : IDisposable
     private readonly List<ExecutionNode> _nodes;
     private readonly List<ExecutionNode> _topologicalOrder;
     private readonly Dictionary<int, List<ExecutionNode>> _levelNodes;
+    private readonly List<IGpuStream> _acquiredStreams = new();
+    private readonly object _streamLock = new();
     private bool _disposed;
 
     /// <summary>
@@ -100,21 +102,29 @@ public sealed class ExecutionGraph : IDisposable
             throw new ArgumentNullException(nameof(streamPool));
         }
 
-        // Execute level by level
-        foreach (var level in _levelNodes.Keys.OrderBy(k => k))
+        try
         {
-            var levelNodesList = _levelNodes[level];
-
-            // Execute nodes at this level - can be parallel across streams
-            foreach (var node in levelNodesList)
+            // Execute level by level
+            foreach (var level in _levelNodes.Keys.OrderBy(k => k))
             {
-                var stream = GetStreamForNode(node, streamPool);
-                node.ExecuteAsync(backend, stream);
-            }
-        }
+                var levelNodesList = _levelNodes[level];
 
-        // Final synchronization
-        streamPool.SynchronizeAll();
+                // Execute nodes at this level - can be parallel across streams
+                foreach (var node in levelNodesList)
+                {
+                    var stream = GetStreamForNode(node, streamPool);
+                    node.ExecuteAsync(backend, stream);
+                }
+            }
+
+            // Final synchronization
+            streamPool.SynchronizeAll();
+        }
+        finally
+        {
+            // Release all acquired streams back to the pool
+            ReleaseAcquiredStreams(streamPool);
+        }
     }
 
     /// <summary>
@@ -140,26 +150,34 @@ public sealed class ExecutionGraph : IDisposable
             throw new ArgumentNullException(nameof(streamPool));
         }
 
-        // Execute level by level with async yielding for cancellation checks
-        foreach (var level in _levelNodes.Keys.OrderBy(k => k))
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var levelNodesList = _levelNodes[level];
-
-            // Launch all nodes at this level
-            foreach (var node in levelNodesList)
+            // Execute level by level with async yielding for cancellation checks
+            foreach (var level in _levelNodes.Keys.OrderBy(k => k))
             {
-                var stream = GetStreamForNode(node, streamPool);
-                node.ExecuteAsync(backend, stream);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var levelNodesList = _levelNodes[level];
+
+                // Launch all nodes at this level
+                foreach (var node in levelNodesList)
+                {
+                    var stream = GetStreamForNode(node, streamPool);
+                    node.ExecuteAsync(backend, stream);
+                }
+
+                // Yield to allow other work
+                await Task.Yield();
             }
 
-            // Yield to allow other work
-            await Task.Yield();
+            // Final synchronization
+            streamPool.SynchronizeAll();
         }
-
-        // Final synchronization
-        streamPool.SynchronizeAll();
+        finally
+        {
+            // Release all acquired streams back to the pool
+            ReleaseAcquiredStreams(streamPool);
+        }
     }
 
     /// <summary>
@@ -305,13 +323,48 @@ public sealed class ExecutionGraph : IDisposable
         // Determine stream type based on node type
         var streamType = DetermineOptimalStreamType(node);
 
-        // Use default streams which don't require release, avoiding potential stream leaks
-        return streamType switch
+        // For transfer operations, use the default transfer streams (no acquire needed)
+        if (streamType == GpuStreamType.HostToDevice)
         {
-            GpuStreamType.HostToDevice => pool.DefaultH2DStream,
-            GpuStreamType.DeviceToHost => pool.DefaultD2HStream,
-            _ => pool.DefaultComputeStream
-        };
+            return pool.DefaultH2DStream;
+        }
+
+        if (streamType == GpuStreamType.DeviceToHost)
+        {
+            return pool.DefaultD2HStream;
+        }
+
+        // For compute operations, acquire a stream from the pool for multi-stream execution
+        // Track the acquired stream so it can be released after execution
+        try
+        {
+            var stream = pool.AcquireStream(GpuStreamType.Compute);
+            lock (_streamLock)
+            {
+                _acquiredStreams.Add(stream);
+            }
+            return stream;
+        }
+        catch (InvalidOperationException)
+        {
+            // Pool exhausted, fall back to default stream
+            return pool.DefaultComputeStream;
+        }
+    }
+
+    /// <summary>
+    /// Releases all acquired streams back to the pool.
+    /// </summary>
+    private void ReleaseAcquiredStreams(GpuStreamPool pool)
+    {
+        lock (_streamLock)
+        {
+            foreach (var stream in _acquiredStreams)
+            {
+                pool.ReleaseStream(stream);
+            }
+            _acquiredStreams.Clear();
+        }
     }
 
     private static GpuStreamType DetermineOptimalStreamType(ExecutionNode node)
