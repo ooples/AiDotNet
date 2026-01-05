@@ -897,9 +897,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Performs a GPU-resident forward pass, keeping tensors on GPU.
     /// Use this for chained layer execution to avoid CPU round-trips.
+    /// Supports any-rank tensor input (1D, 2D, or ND), matching CPU Forward behavior.
     /// </summary>
-    /// <param name="input">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident output tensor.</returns>
+    /// <param name="input">GPU-resident input tensor of any rank. Last dimension is features.</param>
+    /// <returns>GPU-resident output tensor with same batch dimensions, outputSize as last dim.</returns>
     /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
     public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
     {
@@ -911,10 +912,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
         }
 
-        // Store for potential backward pass (though typically not used during inference)
+        // Store for potential backward pass
         _originalInputShape = input.Shape;
 
-        int actualInputSize = input.Shape[^1]; // Last dimension
+        int actualInputSize = input.Shape[^1]; // Last dimension is always features
         int expectedInputSize = _weights.Shape[0];
 
         // Dynamic input size adaptation
@@ -923,39 +924,74 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             EnsureWeightShapeForInput(actualInputSize);
         }
 
-        int inputSize = actualInputSize;
-        int batchDim;
+        int outputSize = OutputShape[0];
 
-        // Determine batch dimension from input shape
+        // Determine if reshape is needed and compute the effective batch dimension
+        int batchDim;
+        bool needsReshape = false;
+        int[] originalBatchDims = Array.Empty<int>();
+
         if (input.Shape.Length == 1)
         {
+            // 1D input [features] -> treat as single sample
             batchDim = 1;
+            needsReshape = true;
         }
         else if (input.Shape.Length == 2)
         {
+            // 2D input [batch, features] -> standard case, no reshape needed
             batchDim = input.Shape[0];
+            needsReshape = false;
         }
         else
         {
-            // ND input: flatten batch dimensions
+            // ND input [dim0, dim1, ..., features] -> flatten batch dims, then reshape back
+            needsReshape = true;
+            originalBatchDims = new int[input.Shape.Length - 1];
             batchDim = 1;
             for (int i = 0; i < input.Shape.Length - 1; i++)
             {
+                originalBatchDims[i] = input.Shape[i];
                 batchDim *= input.Shape[i];
             }
+        }
+
+        // Reshape ND input to 2D [totalBatch, features] for matrix multiply
+        IGpuTensor<T> input2D = input;
+        if (needsReshape && input.Shape.Length > 2)
+        {
+            input2D = input.CreateView(0, [batchDim, actualInputSize]);
+        }
+        else if (needsReshape && input.Shape.Length == 1)
+        {
+            input2D = input.CreateView(0, [1, actualInputSize]);
         }
 
         // Get the fused activation type
         var fusedActivation = GetFusedActivationType();
 
         // Use GPU-resident FusedLinear - NO CPU round-trip
-        // Note: For inference mode, we don't compute _lastOutput (pre-activation)
-        // because it's only needed for backprop during training
-        var result = gpuEngine.FusedLinearGpu(input, _weights, _biases, fusedActivation);
+        // Result is [batchDim, outputSize]
+        var result = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, fusedActivation);
 
-        // Note: Shape reshaping for ND tensors would require a GPU reshape operation
-        // For now, we assume 2D input [batch, features] for GPU path
-        // The caller is responsible for ensuring input is properly shaped
+        // Reshape output back to original batch dimensions if needed
+        if (input.Shape.Length == 1)
+        {
+            // 1D input -> 1D output [outputSize]
+            result = result.CreateView(0, [outputSize]);
+        }
+        else if (input.Shape.Length > 2)
+        {
+            // ND input -> ND output [dim0, dim1, ..., outputSize]
+            int[] outputShape = new int[originalBatchDims.Length + 1];
+            for (int i = 0; i < originalBatchDims.Length; i++)
+            {
+                outputShape[i] = originalBatchDims[i];
+            }
+            outputShape[^1] = outputSize;
+            result = result.CreateView(0, outputShape);
+        }
+        // 2D input: result is already [batch, outputSize]
 
         return result;
     }
