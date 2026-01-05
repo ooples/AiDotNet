@@ -849,6 +849,38 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    /// <summary>
+    /// Adds bias to Conv2D output in NCHW format.
+    /// Operation: output[b, c, h, w] += bias[c]
+    /// </summary>
+    public unsafe void Conv2DBiasAdd(IGpuBuffer output, IGpuBuffer bias, int batch, int channels, int spatialSize)
+    {
+        if (!_kernelCache.TryGetValue("conv2d_bias_add", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: conv2d_bias_add");
+
+        int totalSize = batch * channels * spatialSize;
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(bias.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(spatialSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
     #endregion
 
     #region Element-wise Operations

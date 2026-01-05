@@ -1943,6 +1943,29 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             kernel.Execute2D(globalSizeX, globalSizeY, localSizeX, localSizeY);
         }
 
+        public void Conv2DBiasAdd(IGpuBuffer output, IGpuBuffer bias, int batch, int channels, int spatialSize)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+            var bufferBias = ((DirectOpenClGpuBuffer)bias).Buffer;
+
+            var kernel = _kernelCache["conv2d_bias_add"];
+
+            kernel.SetArg(0, bufferOutput.Handle);
+            kernel.SetArg(1, bufferBias.Handle);
+            kernel.SetArg(2, batch);
+            kernel.SetArg(3, channels);
+            kernel.SetArg(4, spatialSize);
+
+            int totalSize = batch * channels * spatialSize;
+            const int localSize = 256;
+            int globalSize = ((totalSize + localSize - 1) / localSize) * localSize;
+
+            kernel.Execute1D(globalSize, localSize);
+        }
+
         #endregion
 
         #region Element-wise Operations

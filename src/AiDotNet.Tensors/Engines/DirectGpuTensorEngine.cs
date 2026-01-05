@@ -1517,6 +1517,98 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-resident fused 2D convolution with activation.
+    /// Keeps input and output on GPU for chained layer execution.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor [batch, inChannels, height, width].</param>
+    /// <param name="kernel">Kernel tensor (cached if registered).</param>
+    /// <param name="bias">Optional bias tensor (cached if registered).</param>
+    /// <param name="strideH">Vertical stride.</param>
+    /// <param name="strideW">Horizontal stride.</param>
+    /// <param name="padH">Vertical padding.</param>
+    /// <param name="padW">Horizontal padding.</param>
+    /// <param name="dilationH">Vertical dilation.</param>
+    /// <param name="dilationW">Horizontal dilation.</param>
+    /// <param name="activation">Activation function to fuse.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    public IGpuTensor<T> FusedConv2DGpu<T>(
+        IGpuTensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int dilationH, int dilationW,
+        FusedActivationType activation)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for FusedConv2DGpu");
+
+        // Expected input shape: [batch, inChannels, height, width]
+        // Expected kernel shape: [outChannels, inChannels, kernelH, kernelW]
+        if (input.Shape.Length != 4 || kernel.Rank != 4)
+            throw new ArgumentException("FusedConv2DGpu requires 4D input and kernel tensors");
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelH = kernel.Shape[2];
+        int kernelW = kernel.Shape[3];
+
+        // Calculate output dimensions with dilation
+        int effectiveKernelH = kernelH + (kernelH - 1) * (dilationH - 1);
+        int effectiveKernelW = kernelW + (kernelW - 1) * (dilationW - 1);
+        int outHeight = (inHeight + 2 * padH - effectiveKernelH) / strideH + 1;
+        int outWidth = (inWidth + 2 * padW - effectiveKernelW) / strideW + 1;
+
+        if (outHeight <= 0 || outWidth <= 0)
+            throw new ArgumentException($"Invalid convolution parameters result in non-positive output dimensions: {outHeight}x{outWidth}");
+
+        int outputSize = batch * outChannels * outHeight * outWidth;
+
+        // Input is already on GPU - use its buffer directly
+        using var kernelBuffer = GetOrAllocateBuffer(backend, kernel.Data);
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        try
+        {
+            // Execute GPU convolution
+            backend.Conv2D(input.Buffer, kernelBuffer.Buffer, outputBuffer,
+                batch, inChannels, inHeight, inWidth,
+                outChannels, outHeight, outWidth,
+                kernelH, kernelW,
+                strideH, strideW, padH, padW,
+                dilationH, dilationW);
+
+            // Add bias if present using GPU kernel for NCHW format
+            if (bias != null)
+            {
+                int spatialSize = outHeight * outWidth;
+                using var biasBuffer = GetOrAllocateBuffer(backend, bias.Data);
+                backend.Conv2DBiasAdd(outputBuffer, biasBuffer.Buffer, batch, outChannels, spatialSize);
+            }
+
+            // Apply activation on GPU
+            if (activation != FusedActivationType.None)
+            {
+                ApplyGpuActivation(backend, outputBuffer, outputSize, activation);
+            }
+
+            // Return GPU-resident tensor - NO DOWNLOAD
+            return new GpuTensor<T>(backend, outputBuffer, new[] { batch, outChannels, outHeight, outWidth },
+                GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        catch
+        {
+            outputBuffer.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// GPU-accelerated fused 3D convolution with activation.
     /// Uses cached GPU buffers for registered persistent tensors (kernel/bias) to avoid
     /// redundant CPU→GPU transfers on every forward pass.

@@ -519,6 +519,17 @@ extern ""C"" __global__ void hardtanh_vector(const float* A, float* B, float min
     if (idx >= size) return;
     B[idx] = fminf(fmaxf(A[idx], minVal), maxVal);
 }
+
+// Conv2D bias add in NCHW format: output[b,c,h,w] += bias[c]
+// Memory layout: output is [batch, channels, height, width] in row-major order
+extern ""C"" __global__ void conv2d_bias_add(float* output, const float* bias, int batch, int channels, int spatialSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+    int channel = (idx / spatialSize) % channels;
+    output[idx] += bias[channel];
+}
 ";
     }
 
@@ -538,7 +549,8 @@ extern ""C"" __global__ void hardtanh_vector(const float* A, float* B, float min
             "floor_vector", "ceil_vector", "round_vector", "trunc_vector",
             "mish_vector", "softplus_vector", "hardswish_vector", "selu_vector",
             "hardsigmoid_vector", "hardtanh_vector",
-            "reduce_sum", "reduce_max", "sum_axis", "bias_add"
+            "reduce_sum", "reduce_max", "sum_axis", "bias_add",
+            "conv2d_bias_add"
         };
     }
 }

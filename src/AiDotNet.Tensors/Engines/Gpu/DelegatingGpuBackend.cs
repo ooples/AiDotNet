@@ -113,6 +113,9 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N)
         => Inner.BiasAdd(A, bias, C, M, N);
 
+    public virtual void Conv2DBiasAdd(IGpuBuffer output, IGpuBuffer bias, int batch, int channels, int spatialSize)
+        => Inner.Conv2DBiasAdd(output, bias, batch, channels, spatialSize);
+
     #endregion
 
     #region Element-wise Operations

@@ -189,6 +189,17 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="N">Number of columns (features).</param>
     void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N);
 
+    /// <summary>
+    /// Adds bias to Conv2D output in NCHW format.
+    /// Operation: output[b, c, h, w] += bias[c]
+    /// </summary>
+    /// <param name="output">Output buffer to modify in-place [batch, channels, height, width].</param>
+    /// <param name="bias">Bias vector [channels].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="spatialSize">Height * Width (spatial dimensions).</param>
+    void Conv2DBiasAdd(IGpuBuffer output, IGpuBuffer bias, int batch, int channels, int spatialSize);
+
     #endregion
 
     #region Element-wise Operations

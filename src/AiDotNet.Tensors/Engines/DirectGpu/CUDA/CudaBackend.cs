@@ -506,6 +506,25 @@ public sealed class CudaBackend : IAsyncGpuBackend
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
+    public unsafe void Conv2DBiasAdd(IGpuBuffer output, IGpuBuffer bias, int batch, int channels, int spatialSize)
+    {
+        if (!_kernelCache.TryGetValue("conv2d_bias_add", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: conv2d_bias_add");
+
+        using var _ = PushContext();
+        int totalSize = batch * channels * spatialSize;
+        uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr outPtr = output.Handle;
+        IntPtr biasPtr = bias.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &outPtr;
+        args[1] = &biasPtr;
+        args[2] = &batch;
+        args[3] = &channels;
+        args[4] = &spatialSize;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
     public void Add(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
         LaunchElementwiseKernel("add_vectors", A, B, C, size);
