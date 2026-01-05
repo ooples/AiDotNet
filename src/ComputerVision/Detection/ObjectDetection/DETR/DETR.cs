@@ -2,10 +2,10 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Augmentation.Image;
-using AiDotNet.Extensions;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 
