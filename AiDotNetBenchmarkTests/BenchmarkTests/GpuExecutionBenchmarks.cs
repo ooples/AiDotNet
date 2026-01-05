@@ -88,9 +88,10 @@ public class GpuExecutionBenchmarks
     /// Benchmark: Creating an execution graph builder.
     /// </summary>
     [Benchmark]
-    public ExecutionGraphBuilder GraphBuilder_Create()
+    public int GraphBuilder_Create()
     {
-        return new ExecutionGraphBuilder();
+        using var builder = new ExecutionGraphBuilder();
+        return builder.GetHashCode(); // Prevent dead-code elimination
     }
 
     /// <summary>
