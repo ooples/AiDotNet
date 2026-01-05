@@ -1026,6 +1026,195 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }, cancellationToken);
     }
 
+    #region GPU Execution Context Integration
+
+    /// <summary>
+    /// Begins a GPU execution context for managing GPU-resident tensor lifecycle.
+    /// </summary>
+    /// <param name="options">Optional GPU execution options.</param>
+    /// <returns>A GPU execution context that should be disposed when done.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a scope for GPU operations where tensors stay
+    /// on the GPU and are only downloaded when explicitly needed. This avoids redundant
+    /// CPU-GPU transfers during batch inference or training.</para>
+    /// <code>
+    /// // Example: Batch inference with GPU context
+    /// using (var ctx = network.BeginGpuExecution())
+    /// {
+    ///     foreach (var batch in batches)
+    ///     {
+    ///         var result = network.ForwardWithGpuContext(batch);
+    ///         // Results are GPU-resident until ToTensor() is called
+    ///         predictions.Add(result.ToTensor());
+    ///     }
+    /// } // All GPU tensors are cleaned up here
+    /// </code>
+    /// </remarks>
+    public virtual GpuExecutionContext BeginGpuExecution(GpuExecutionOptions? options = null)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "BeginGpuExecution requires DirectGpuTensorEngine. Current engine: " +
+                Engine.GetType().Name);
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null || !backend.IsAvailable)
+        {
+            throw new InvalidOperationException("No GPU backend available.");
+        }
+
+        return GpuExecutionContext.Begin(backend, options);
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass within a GPU execution context.
+    /// Uses the current thread's GpuExecutionContext for tensor management.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>GPU-resident output tensor managed by the current context.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU context is active.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method is like ForwardGpu but uses the GPU execution context
+    /// to track all tensor allocations. The context handles memory management automatically,
+    /// preventing memory leaks and enabling memory pressure monitoring.</para>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardWithGpuContext(Tensor<T> input)
+    {
+        var ctx = GpuExecutionContext.Current;
+        if (ctx is null)
+        {
+            throw new InvalidOperationException(
+                "ForwardWithGpuContext requires an active GpuExecutionContext. " +
+                "Call BeginGpuExecution() first.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardWithGpuContext requires DirectGpuTensorEngine. Current engine: " +
+                Engine.GetType().Name);
+        }
+
+        // Use context's size threshold for GPU decision
+        int inputElements = input.Data.Length;
+
+        if (!ctx.ShouldUseGpu(inputElements))
+        {
+            // Context says stay on CPU - wrap result in GPU tensor for API consistency
+            var cpuResult = Predict(input);
+            return ctx.Upload(cpuResult, GpuTensorRole.Activation);
+        }
+
+        // Upload input to GPU using context (tracked in registry)
+        IGpuTensor<T> current = ctx.Upload(input, GpuTensorRole.Activation);
+
+        try
+        {
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                var layer = Layers[i];
+
+                if (layer.CanExecuteOnGpu)
+                {
+                    var next = layer.ForwardGpu(current);
+
+                    // Register output with context (if not already registered by layer)
+                    if (next is GpuTensor<T> gpuNext)
+                    {
+                        ctx.Registry.TryRegister(gpuNext);
+                    }
+
+                    current = next;
+                }
+                else
+                {
+                    // Layer doesn't support GPU - fall back to CPU
+                    var cpuInput = current.ToTensor();
+                    var cpuOutput = layer.Forward(cpuInput);
+
+                    // Upload result back using context
+                    current = ctx.Upload(cpuOutput, GpuTensorRole.Activation);
+                }
+            }
+
+            return current;
+        }
+        catch
+        {
+            // On error, tensors are cleaned up when context is disposed
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass within a GPU execution context with GPU-resident input.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor managed by the current context.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU context is active.</exception>
+    public virtual IGpuTensor<T> ForwardWithGpuContext(IGpuTensor<T> input)
+    {
+        var ctx = GpuExecutionContext.Current;
+        if (ctx is null)
+        {
+            throw new InvalidOperationException(
+                "ForwardWithGpuContext requires an active GpuExecutionContext. " +
+                "Call BeginGpuExecution() first.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardWithGpuContext requires DirectGpuTensorEngine. Current engine: " +
+                Engine.GetType().Name);
+        }
+
+        IGpuTensor<T> current = input;
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+
+            if (layer.CanExecuteOnGpu)
+            {
+                var next = layer.ForwardGpu(current);
+
+                // Register output with context (if not already registered by layer)
+                if (next is GpuTensor<T> gpuNext)
+                {
+                    ctx.Registry.TryRegister(gpuNext);
+                }
+
+                current = next;
+            }
+            else
+            {
+                // Layer doesn't support GPU - fall back to CPU
+                var cpuInput = current.ToTensor();
+                var cpuOutput = layer.Forward(cpuInput);
+
+                // Upload result back using context
+                current = ctx.Upload(cpuOutput, GpuTensorRole.Activation);
+            }
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Gets GPU memory statistics if running within a GPU execution context.
+    /// </summary>
+    /// <returns>Memory statistics, or null if no context is active.</returns>
+    public virtual GpuMemoryStats? GetGpuMemoryStats()
+    {
+        return GpuExecutionContext.Current?.GetMemoryStats();
+    }
+
+    #endregion
+
     /// <summary>
     /// Performs a forward pass and returns intermediate layer activations for feature extraction.
     /// </summary>
