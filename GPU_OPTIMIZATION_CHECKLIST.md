@@ -418,5 +418,63 @@ All backend implementations (HIP, CUDA, OpenCL) now support:
 
 **Remaining Work for Full Optimization:**
 - Modify neural network layers to use GpuExecutionContext for GPU-resident operations
-- Add execution graph compilation infrastructure (Phase 3.1)
-- Implement graph optimization passes (Phase 3.2)
+
+### Phase 3.1 - Execution Graph Infrastructure (COMPLETE)
+Audit Date: 2026-01-05
+
+All execution graph infrastructure is fully implemented:
+
+**ExecutionNodeType Enum** (`src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionNodeType.cs`)
+- 14 node types: Allocate, TransferH2D, TransferD2H, Kernel, FusedKernel, Barrier, RecordEvent, WaitEvent, Deallocate, Copy, Reduction, Normalization, Attention, Convolution
+
+**ExecutionNode Base Class** (`src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionNode.cs`)
+- Abstract base with dependency tracking
+- Async execution support (ExecuteAsync with IGpuStream)
+- Circular dependency detection
+- Cost estimation for scheduling
+- Input/output tensor tracking
+
+**Concrete Node Implementations:**
+- `KernelNode.cs` - Kernel execution with factory methods (CreateGemm, CreateActivation, CreateElementWise)
+- `FusedKernelNode.cs` - Fused operations with TryFuse for pattern detection (GEMM+Bias+Activation)
+- `TransferNode.cs` - Memory transfers (H2D, D2H, D2D) with timing support
+- `AllocationNode.cs` - Buffer allocation/deallocation with role tracking
+- `BarrierNode.cs` - Stream synchronization (single stream or full device sync)
+- `EventNode.cs` - Event recording and waiting
+
+**Graph Components:**
+- `ExecutionGraph.cs` - Compiled graph with topological ordering, level computation, multi-stream execution
+- `ExecutionGraphBuilder.cs` - Operation recording with automatic dependency tracking, fluent API
+- `GraphCompiler.cs` - Orchestrates optimization passes, runs 6 default passes
+- `CompiledGraphCache.cs` - LRU cache for compiled graphs
+
+### Phase 3.2 - Graph Optimization Passes (COMPLETE)
+Audit Date: 2026-01-05
+
+All 6 optimization passes are fully implemented:
+
+| Pass | Priority | Description |
+|------|----------|-------------|
+| DeadCodeEliminationPass | 50 | Removes unused computations, marks needed nodes via dependency traversal |
+| KernelFusionPass | 100 | Fuses GEMM+Bias+Activation, Conv+BatchNorm+Activation, LayerNorm+Activation patterns |
+| OperationReorderingPass | 200 | Critical path analysis, prioritizes compute-bound ops, moves transfers for overlap |
+| StreamAssignmentPass | 300 | Level-based stream assignment, inserts barriers for cross-stream dependencies |
+| MemoryPlanningPass | 400 | Buffer liveness analysis, computes reuse opportunities to minimize allocation |
+| PrefetchPass | 500 | Moves H2D transfers earlier to hide latency |
+
+**Interface & Statistics:**
+- `IGraphOptimizationPass.cs` - Interface with Name, Priority, IsEnabled, Apply method
+- `OptimizationContext` - Holds options, buffer reuse map, statistics
+- `OptimizationStatistics` - Tracks nodes eliminated, kernels fused, per-pass stats
+
+### Updated Progress Table
+
+| Phase | Issue | Status | Speedup Achieved |
+|-------|-------|--------|------------------|
+| 1.1 | Double computation | COMPLETE (all layers) | TBD - needs benchmark |
+| 1.2 | Redundant Synchronize | COMPLETE (47+ calls removed) | TBD - needs benchmark |
+| 2.1 | GPU-resident results | COMPLETE (infrastructure built) | TBD - needs benchmark |
+| 2.2 | Input caching | COMPLETE (infrastructure built) | TBD - needs benchmark |
+| 3.1 | Float conversion | COMPLETE (scalar + span optimizations) | TBD - needs benchmark |
+| 3.1 | Execution Graph Infrastructure | COMPLETE (all node types, graph compiler) | TBD - needs benchmark |
+| 3.2 | Graph Optimization Passes | COMPLETE (all 6 passes implemented) | TBD - needs benchmark |
