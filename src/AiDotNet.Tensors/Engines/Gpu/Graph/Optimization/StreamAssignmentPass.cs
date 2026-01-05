@@ -148,18 +148,22 @@ public sealed class StreamAssignmentPass : IGraphOptimizationPass
             return null;
         }
 
-        // During optimization, we don't assign actual streams - we leave AssignedStream as null
-        // so that ExecutionGraph.GetStreamForNode() will acquire streams at runtime.
-        // This allows proper multi-stream execution where streams are acquired and released
-        // during graph execution, not during compilation.
+        // Assign the default compute stream for all compute operations.
+        // This ensures InsertSynchronizationNodes can properly insert barriers
+        // for cross-stream dependencies between compute and transfer operations.
         //
-        // The ExecutionGraph will:
-        // 1. Acquire streams from the pool for compute operations
-        // 2. Track acquired streams
-        // 3. Release them after execution completes
+        // Note: We assign streams during optimization (not runtime) because:
+        // 1. It enables proper barrier insertion for cross-stream synchronization
+        // 2. Transfer streams (H2D, D2H) run on separate default streams, enabling
+        //    compute/transfer overlap which is the primary performance benefit
+        // 3. Fine-grained multi-stream compute parallelism can be added later if needed
         //
-        // Returning null here tells the execution layer to dynamically acquire a stream.
-        return null;
+        // The primary optimization goal is compute/transfer overlap, which is achieved
+        // by having compute on DefaultComputeStream and transfers on DefaultH2DStream
+        // and DefaultD2HStream. This configuration allows uploads, compute, and downloads
+        // to overlap in the GPU pipeline.
+
+        return pool.DefaultComputeStream;
     }
 
     private List<ExecutionNode> InsertSynchronizationNodes(

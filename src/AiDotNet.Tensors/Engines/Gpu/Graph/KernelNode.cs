@@ -316,6 +316,8 @@ public static class KernelTypeExtensions
         return kernelType switch
         {
             KernelType.Gemm => true,       // Can fuse with bias and activation
+            KernelType.Conv2D => true,     // Can fuse with batch norm and activation
+            KernelType.LayerNorm => true,  // Can fuse with activation
             KernelType.Activation => true, // Can be fused into preceding op
             KernelType.ElementWise => true, // Can be fused
             _ => false
