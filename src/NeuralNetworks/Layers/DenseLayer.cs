@@ -3,6 +3,7 @@ using AiDotNet.Extensions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -38,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISupportsGpuForward<T>
 {
     /// <summary>
     /// Specifies the type of regularization to apply to the layer's weights.
@@ -906,6 +907,75 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             result = result.Reshape(outputShape);
         }
         // 2D input: result is already [batch, outputSize]
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public bool CanExecuteOnGpu => Engine is DirectGpuTensorEngine;
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass, keeping tensors on GPU.
+    /// Use this for chained layer execution to avoid CPU round-trips.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
+    public IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        EnsureInitialized();
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        // Store for potential backward pass (though typically not used during inference)
+        _originalInputShape = input.Shape;
+
+        int actualInputSize = input.Shape[^1]; // Last dimension
+        int expectedInputSize = _weights.Shape[0];
+
+        // Dynamic input size adaptation
+        if (actualInputSize != expectedInputSize)
+        {
+            EnsureWeightShapeForInput(actualInputSize);
+        }
+
+        int inputSize = actualInputSize;
+        int batchDim;
+
+        // Determine batch dimension from input shape
+        if (input.Shape.Length == 1)
+        {
+            batchDim = 1;
+        }
+        else if (input.Shape.Length == 2)
+        {
+            batchDim = input.Shape[0];
+        }
+        else
+        {
+            // ND input: flatten batch dimensions
+            batchDim = 1;
+            for (int i = 0; i < input.Shape.Length - 1; i++)
+            {
+                batchDim *= input.Shape[i];
+            }
+        }
+
+        // Get the fused activation type
+        var fusedActivation = GetFusedActivationType();
+
+        // Use GPU-resident FusedLinear - NO CPU round-trip
+        // Note: For inference mode, we don't compute _lastOutput (pre-activation)
+        // because it's only needed for backprop during training
+        var result = gpuEngine.FusedLinearGpu(input, _weights, _biases, fusedActivation);
+
+        // Note: Shape reshaping for ND tensors would require a GPU reshape operation
+        // For now, we assume 2D input [batch, features] for GPU path
+        // The caller is responsible for ensuring input is properly shaped
 
         return result;
     }

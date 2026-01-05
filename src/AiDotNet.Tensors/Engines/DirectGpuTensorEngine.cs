@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -680,6 +681,141 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
     }
 
+    /// <summary>
+    /// GPU-resident fused linear transformation that keeps result on GPU.
+    /// Returns an IGpuTensor that can be passed to subsequent GPU operations
+    /// without CPU round-trips. Only download the final result using ToTensor().
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">Input tensor (will be uploaded to GPU).</param>
+    /// <param name="weights">Weight tensor (cached if registered).</param>
+    /// <param name="bias">Optional bias tensor (cached if registered).</param>
+    /// <param name="activation">Activation function to fuse.</param>
+    /// <returns>GPU-resident tensor with the result.</returns>
+    public IGpuTensor<T> FusedLinearGpu<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, FusedActivationType activation)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for FusedLinearGpu");
+
+        if (input.Rank < 1 || weights.Rank != 2)
+            throw new ArgumentException("Invalid tensor dimensions for FusedLinearGpu");
+
+        int batchSize = input.Shape[0];
+        int inputFeatures = weights.Shape[0];
+        int outputFeatures = weights.Shape[1];
+
+        // Upload input to GPU
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var weightsBuffer = GetOrAllocateBuffer(backend, weights.Data);
+        using var biasBuffer = bias != null ? GetOrAllocateBuffer(backend, bias.Data) : default;
+
+        // Execute the fused kernel and get result buffer
+        var resultBuffer = ExecuteFusedLinearKernel(backend, inputBuffer.Buffer, weightsBuffer.Buffer,
+            biasBuffer.Buffer, batchSize, outputFeatures, inputFeatures, activation);
+
+        // Return GPU-resident tensor - NO DOWNLOAD
+        return new GpuTensor<T>(backend, resultBuffer, new[] { batchSize, outputFeatures },
+            GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident fused linear transformation with GPU-resident input.
+    /// Avoids re-uploading input that's already on GPU from a previous layer.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="weights">Weight tensor (cached if registered).</param>
+    /// <param name="bias">Optional bias tensor (cached if registered).</param>
+    /// <param name="activation">Activation function to fuse.</param>
+    /// <returns>GPU-resident tensor with the result.</returns>
+    public IGpuTensor<T> FusedLinearGpu<T>(IGpuTensor<T> input, Tensor<T> weights, Tensor<T>? bias, FusedActivationType activation)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for FusedLinearGpu");
+
+        if (input.Shape.Length < 1 || weights.Rank != 2)
+            throw new ArgumentException("Invalid tensor dimensions for FusedLinearGpu");
+
+        int batchSize = input.Shape[0];
+        int inputFeatures = weights.Shape[0];
+        int outputFeatures = weights.Shape[1];
+
+        // Input is already on GPU - use its buffer directly
+        using var weightsBuffer = GetOrAllocateBuffer(backend, weights.Data);
+        using var biasBuffer = bias != null ? GetOrAllocateBuffer(backend, bias.Data) : default;
+
+        // Execute the fused kernel and get result buffer
+        var resultBuffer = ExecuteFusedLinearKernel(backend, input.Buffer, weightsBuffer.Buffer,
+            biasBuffer.Buffer, batchSize, outputFeatures, inputFeatures, activation);
+
+        // Return GPU-resident tensor - NO DOWNLOAD
+        return new GpuTensor<T>(backend, resultBuffer, new[] { batchSize, outputFeatures },
+            GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Executes the fused linear kernel and returns the result buffer.
+    /// Shared implementation for both CPU and GPU input variants.
+    /// </summary>
+    private static IGpuBuffer ExecuteFusedLinearKernel(
+        IDirectGpuBackend backend,
+        IGpuBuffer inputBuffer,
+        IGpuBuffer weightsBuffer,
+        IGpuBuffer? biasBuffer,
+        int batchSize,
+        int outputFeatures,
+        int inputFeatures,
+        FusedActivationType activation)
+    {
+        IGpuBuffer resultBuffer;
+
+        // Use fused GPU kernels when available
+        if (biasBuffer != null && activation != FusedActivationType.None)
+        {
+            // Use fused kernels for common activations (most efficient)
+            switch (activation)
+            {
+                case FusedActivationType.ReLU:
+                    resultBuffer = backend.GemmBiasRelu(inputBuffer, weightsBuffer, biasBuffer, batchSize, outputFeatures, inputFeatures);
+                    break;
+                case FusedActivationType.GELU:
+                    resultBuffer = backend.GemmBiasGelu(inputBuffer, weightsBuffer, biasBuffer, batchSize, outputFeatures, inputFeatures);
+                    break;
+                case FusedActivationType.Sigmoid:
+                    resultBuffer = backend.GemmBiasSigmoid(inputBuffer, weightsBuffer, biasBuffer, batchSize, outputFeatures, inputFeatures);
+                    break;
+                case FusedActivationType.Tanh:
+                    resultBuffer = backend.GemmBiasTanh(inputBuffer, weightsBuffer, biasBuffer, batchSize, outputFeatures, inputFeatures);
+                    break;
+                default:
+                    // For other activations, use GemmBias + separate activation kernel
+                    resultBuffer = backend.GemmBias(inputBuffer, weightsBuffer, biasBuffer, batchSize, outputFeatures, inputFeatures);
+                    int size = batchSize * outputFeatures;
+                    ApplyGpuActivation(backend, resultBuffer, size, activation);
+                    break;
+            }
+        }
+        else if (biasBuffer != null && activation == FusedActivationType.None)
+        {
+            // GEMM + Bias only (no activation)
+            resultBuffer = backend.GemmBias(inputBuffer, weightsBuffer, biasBuffer, batchSize, outputFeatures, inputFeatures);
+        }
+        else if (biasBuffer == null && activation == FusedActivationType.None)
+        {
+            // Simple MatMul only
+            resultBuffer = backend.MatMul(inputBuffer, weightsBuffer, batchSize, outputFeatures, inputFeatures);
+        }
+        else
+        {
+            // MatMul + activation (no bias)
+            resultBuffer = backend.MatMul(inputBuffer, weightsBuffer, batchSize, outputFeatures, inputFeatures);
+            int size = batchSize * outputFeatures;
+            ApplyGpuActivation(backend, resultBuffer, size, activation);
+        }
+
+        return resultBuffer;
+    }
+
     private static IGpuBuffer GemmBiasNoActivation(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer bias, int M, int N, int K)
     {
         // Use GemmBiasRelu with a subsequent inverse to get just GEMM + Bias
@@ -722,6 +858,37 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             case FusedActivationType.None:
                 break;
         }
+    }
+
+    /// <summary>
+    /// Uploads a tensor to GPU memory, returning a GPU-resident tensor handle.
+    /// </summary>
+    /// <typeparam name="T">The element type of the tensor.</typeparam>
+    /// <param name="tensor">The CPU tensor to upload.</param>
+    /// <param name="role">The role of this tensor for memory management.</param>
+    /// <returns>A GPU-resident tensor that can be used in subsequent GPU operations.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    /// <remarks>
+    /// <para>
+    /// Use this method to explicitly upload data to GPU for use in GPU-resident operations.
+    /// The returned tensor can be passed to methods like <see cref="FusedLinearGpu{T}(IGpuTensor{T}, Tensor{T}, Tensor{T}?, FusedActivationType)"/>
+    /// to avoid redundant uploads.
+    /// </para>
+    /// <para>
+    /// The caller is responsible for disposing the returned GPU tensor when done.
+    /// </para>
+    /// </remarks>
+    public IGpuTensor<T> UploadToGpu<T>(Tensor<T> tensor, GpuTensorRole role)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for UploadToGpu");
+
+        // Convert tensor data to float and allocate GPU buffer
+        float[] floatData = DirectGpuEngine.ToFloatArray(tensor.Data);
+        var buffer = backend.AllocateBuffer(floatData);
+
+        // Return GPU tensor that owns the buffer
+        return new GpuTensor<T>(backend, buffer, tensor.Shape.ToArray(), role, ownsBuffer: true);
     }
 
     /// <summary>
