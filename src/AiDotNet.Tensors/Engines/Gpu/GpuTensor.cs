@@ -191,8 +191,9 @@ public sealed class GpuTensor<T> : IGpuTensor<T>, IGpuTensor
                 $"View with offset {offset} and {viewElements} elements exceeds tensor bounds.");
         }
 
-        // For now, views share the same buffer (read-only semantics assumed)
-        // A full implementation would create a sub-buffer view
+        // Views share the same GPU buffer with an offset - this is the standard GPU approach
+        // since most GPU APIs (CUDA, OpenCL) don't support true sub-buffer allocation.
+        // The view tracks its offset and provides read-only access to a portion of the buffer.
         return new GpuTensorView<T>(this, offset, shape);
     }
 

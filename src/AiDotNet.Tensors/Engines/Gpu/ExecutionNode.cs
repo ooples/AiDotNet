@@ -150,26 +150,36 @@ public abstract class ExecutionNode
     /// <returns>True if valid, false otherwise.</returns>
     public virtual bool Validate()
     {
-        // Check for circular dependencies (simplified check)
+        var visiting = new HashSet<int>();
         var visited = new HashSet<int>();
-        return !HasCircularDependency(this, visited);
+        return !HasCircularDependency(this, visiting, visited);
     }
 
-    private static bool HasCircularDependency(ExecutionNode node, HashSet<int> visited)
+    private static bool HasCircularDependency(
+        ExecutionNode node,
+        HashSet<int> visiting,
+        HashSet<int> visited)
     {
-        if (!visited.Add(node.NodeId))
+        if (visited.Contains(node.NodeId))
         {
-            return true; // Already visited, circular dependency
+            return false;
+        }
+
+        if (!visiting.Add(node.NodeId))
+        {
+            return true;
         }
 
         foreach (var dep in node._dependencies)
         {
-            if (HasCircularDependency(dep, new HashSet<int>(visited)))
+            if (HasCircularDependency(dep, visiting, visited))
             {
                 return true;
             }
         }
 
+        visiting.Remove(node.NodeId);
+        visited.Add(node.NodeId);
         return false;
     }
 

@@ -11,8 +11,16 @@ public sealed class ExecutionGraphBuilder : IDisposable
     private readonly List<ExecutionNode> _nodes = new();
     private readonly Dictionary<IGpuBuffer, ExecutionNode> _lastWriteNode = new();
     private readonly Dictionary<IGpuBuffer, List<ExecutionNode>> _bufferDependents = new();
+    private readonly List<string> _validationWarnings = new();
     private bool _isBuilt;
     private bool _disposed;
+
+    /// <summary>
+    /// Gets any validation warnings generated during the last Build() call.
+    /// These indicate potential issues that don't prevent execution but may
+    /// indicate unintended graph structure (e.g., orphaned nodes with no dependencies).
+    /// </summary>
+    public IReadOnlyList<string> ValidationWarnings => _validationWarnings;
 
     /// <summary>
     /// Gets the current number of nodes in the graph.
@@ -303,6 +311,8 @@ public sealed class ExecutionGraphBuilder : IDisposable
 
     private void ValidateGraph()
     {
+        _validationWarnings.Clear();
+
         // Check for circular dependencies
         foreach (var node in _nodes)
         {
@@ -313,17 +323,34 @@ public sealed class ExecutionGraphBuilder : IDisposable
             }
         }
 
-        // Check that all nodes have valid configurations
+        // Identify orphaned nodes (no dependencies, not first, not special types)
+        // These may indicate unintended graph structure but are not errors
         var orphanedNodes = _nodes.Where(n =>
             n.Dependencies.Count == 0 &&
             _nodes.IndexOf(n) > 0 &&
             !(n is AllocationNode) &&
             !(n is BarrierNode)).ToList();
 
-        if (orphanedNodes.Count > 0)
+        foreach (var orphan in orphanedNodes)
         {
-            // These nodes have no dependencies but aren't first - might be intentional
-            // Just log for now, don't throw
+            _validationWarnings.Add(
+                $"Node '{orphan.Name}' (type: {orphan.NodeType}) has no dependencies " +
+                $"but is not at graph start. This may indicate missing dependency links.");
+        }
+
+        // Check for nodes with no dependents that aren't terminal operations
+        var deadEndNodes = _nodes.Where(n =>
+            n.Dependents.Count == 0 &&
+            n.NodeType != ExecutionNodeType.TransferD2H &&
+            n.NodeType != ExecutionNodeType.Deallocate &&
+            n.NodeType != ExecutionNodeType.Barrier &&
+            _nodes.IndexOf(n) < _nodes.Count - 1).ToList();
+
+        foreach (var deadEnd in deadEndNodes)
+        {
+            _validationWarnings.Add(
+                $"Node '{deadEnd.Name}' (type: {deadEnd.NodeType}) has no dependents. " +
+                $"Its output may be unused (dead code).");
         }
     }
 
@@ -445,9 +472,15 @@ public static class ExecutionGraphBuilderExtensions
 
     private static void ApplyActivation(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size, FusedActivationType activation)
     {
-        // Delegate to appropriate activation based on type
         switch (activation)
         {
+            case FusedActivationType.None:
+                // Identity - copy input to output if they're different buffers
+                if (input != output)
+                {
+                    backend.Copy(input, output, size);
+                }
+                break;
             case FusedActivationType.ReLU:
                 backend.Relu(input, output, size);
                 break;
@@ -460,8 +493,17 @@ public static class ExecutionGraphBuilderExtensions
             case FusedActivationType.GELU:
                 backend.Gelu(input, output, size);
                 break;
-            // Other activations would be implemented here
-            default:
+            case FusedActivationType.LeakyReLU:
+                // Default alpha for LeakyReLU is 0.01
+                backend.LeakyRelu(input, output, 0.01f, size);
+                break;
+            case FusedActivationType.Swish:
+                backend.Swish(input, output, size);
+                break;
+            case FusedActivationType.Softmax:
+                // Softmax requires batch and feature dimensions.
+                // When only total size is available, treat as single batch.
+                backend.Softmax(input, output, 1, size);
                 break;
         }
     }

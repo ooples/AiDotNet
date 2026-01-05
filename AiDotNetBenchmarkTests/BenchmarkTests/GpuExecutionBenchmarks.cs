@@ -351,11 +351,55 @@ public class GpuExecutionBenchmarks
     }
 
     #endregion
-}
 
-// Note: GpuConfigConversionBenchmarks removed - ToExecutionOptions() is internal
-// and cannot be accessed from the benchmark project. Conversion benchmarks would
-// need to be done via internal tests or by making the method public.
+    #region Configuration Conversion Benchmarks
+
+    /// <summary>
+    /// Benchmark: Converting GpuAccelerationConfig to GpuExecutionOptions.
+    /// </summary>
+    [Benchmark]
+    public GpuExecutionOptions Config_ToExecutionOptions()
+    {
+        var config = new GpuAccelerationConfig
+        {
+            ExecutionMode = GpuExecutionModeConfig.Deferred,
+            EnableGraphCompilation = true,
+            EnableAutoFusion = true,
+            MaxComputeStreams = 4,
+            TransferStreams = 2
+        };
+
+        return config.ToExecutionOptions();
+    }
+
+    /// <summary>
+    /// Benchmark: Converting complex GpuAccelerationConfig to GpuExecutionOptions.
+    /// </summary>
+    [Benchmark]
+    public GpuExecutionOptions Config_ToExecutionOptions_Complex()
+    {
+        var config = new GpuAccelerationConfig
+        {
+            DeviceType = GpuDeviceType.Auto,
+            UsageLevel = GpuUsageLevel.Aggressive,
+            ExecutionMode = GpuExecutionModeConfig.Deferred,
+            EnableGraphCompilation = true,
+            EnableAutoFusion = true,
+            EnableComputeTransferOverlap = true,
+            MaxComputeStreams = 8,
+            TransferStreams = 4,
+            MinGpuElements = 2048,
+            MaxGpuMemoryUsage = 0.9,
+            EnablePrefetch = true,
+            CacheCompiledGraphs = true,
+            EnableProfiling = false
+        };
+
+        return config.ToExecutionOptions();
+    }
+
+    #endregion
+}
 
 /// <summary>
 /// Benchmarks for GpuExecutionOptions validation and cloning.

@@ -56,6 +56,13 @@ public sealed class OptimizationContext
     public GpuStreamPool? StreamPool { get; set; }
 
     /// <summary>
+    /// Gets the buffer reuse map computed by MemoryPlanningPass.
+    /// Maps buffers that can be reused to the buffer they should reuse.
+    /// This allows the execution layer to substitute buffers at runtime.
+    /// </summary>
+    public Dictionary<DirectGpu.IGpuBuffer, DirectGpu.IGpuBuffer> BufferReuseMap { get; } = new();
+
+    /// <summary>
     /// Creates a new optimization context.
     /// </summary>
     public OptimizationContext(GpuExecutionOptions options, IAsyncGpuBackend backend)
