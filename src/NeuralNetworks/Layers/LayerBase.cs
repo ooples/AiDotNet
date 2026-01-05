@@ -903,6 +903,69 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Maps the layer's activation function to a <see cref="FusedActivationType"/> for GPU-fused operations.
+    /// </summary>
+    /// <returns>
+    /// The corresponding <see cref="FusedActivationType"/> for the layer's activation function,
+    /// or <see cref="FusedActivationType.None"/> if no activation is configured or the activation
+    /// type is not supported for GPU fusion.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method is used by GPU-optimized layers to determine which fused activation kernel to use.
+    /// Fused operations combine matrix multiplication, bias addition, and activation into a single
+    /// GPU kernel, reducing memory bandwidth and improving performance.
+    /// </para>
+    /// <para><b>For Beginners:</b> When running on a GPU, combining multiple operations (like
+    /// matrix multiply and activation) into one step is faster than doing them separately.
+    /// This method tells the GPU which activation function to include in the combined operation.
+    /// </para>
+    /// </remarks>
+    protected FusedActivationType MapActivationToFused()
+    {
+        // Check scalar activation first, then vector activation
+        if (ScalarActivation is not null)
+        {
+            return MapActivationInstanceToFused(ScalarActivation);
+        }
+
+        if (VectorActivation is not null)
+        {
+            return MapActivationInstanceToFused(VectorActivation);
+        }
+
+        return FusedActivationType.None;
+    }
+
+    /// <summary>
+    /// Maps an activation function instance to its corresponding <see cref="FusedActivationType"/>.
+    /// </summary>
+    /// <param name="activation">The activation function instance to map.</param>
+    /// <returns>The corresponding fused activation type.</returns>
+    private static FusedActivationType MapActivationInstanceToFused(object activation)
+    {
+        return activation switch
+        {
+            ReLUActivation<T> => FusedActivationType.ReLU,
+            GELUActivation<T> => FusedActivationType.GELU,
+            SigmoidActivation<T> => FusedActivationType.Sigmoid,
+            TanhActivation<T> => FusedActivationType.Tanh,
+            LeakyReLUActivation<T> => FusedActivationType.LeakyReLU,
+            SwishActivation<T> => FusedActivationType.Swish,
+            ELUActivation<T> => FusedActivationType.ELU,
+            SELUActivation<T> => FusedActivationType.SELU,
+            SoftPlusActivation<T> => FusedActivationType.Softplus,
+            SoftmaxActivation<T> => FusedActivationType.Softmax,
+            MishActivation<T> => FusedActivationType.Mish,
+            HardSwishActivation<T> => FusedActivationType.HardSwish,
+            HardSigmoidActivation<T> => FusedActivationType.HardSigmoid,
+            HardTanhActivation<T> => FusedActivationType.HardTanh,
+            IdentityActivation<T> => FusedActivationType.None,
+            _ => FusedActivationType.None
+        };
+    }
+
+    /// <summary>
     /// Performs the backward pass of the layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>

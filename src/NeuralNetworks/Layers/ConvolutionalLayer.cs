@@ -1054,31 +1054,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Maps the layer's activation function to FusedActivationType for GPU execution.
-    /// </summary>
-    private FusedActivationType MapActivationToFused()
-    {
-        // Check both scalar and vector activation functions
-        object? activation = ScalarActivation ?? (object?)VectorActivation;
-        if (activation is null)
-        {
-            return FusedActivationType.None;
-        }
-
-        var typeName = activation.GetType().Name;
-        return typeName switch
-        {
-            var n when n.StartsWith("Relu") || n.StartsWith("ReLU") => FusedActivationType.ReLU,
-            var n when n.StartsWith("Gelu") || n.StartsWith("GELU") => FusedActivationType.GELU,
-            var n when n.StartsWith("Sigmoid") => FusedActivationType.Sigmoid,
-            var n when n.StartsWith("Tanh") => FusedActivationType.Tanh,
-            var n when n.StartsWith("Swish") || n.StartsWith("SiLU") => FusedActivationType.Swish,
-            var n when n.StartsWith("LeakyRelu") || n.StartsWith("LeakyReLU") => FusedActivationType.LeakyReLU,
-            _ => FusedActivationType.None // Unsupported activations will be applied separately
-        };
-    }
-
-    /// <summary>
     /// Calculates gradients for the input, kernels, and biases during backpropagation.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
