@@ -62,33 +62,54 @@ public sealed class StreamAssignmentPass : IGraphOptimizationPass
     {
         var levels = new Dictionary<int, int>();
 
-        // Compute topological order
+        // Compute topological order with cycle detection using three-color DFS
+        // - Not visited: node not in visiting or visited
+        // - Visiting (gray): node is in visiting set (currently on recursion stack)
+        // - Visited (black): node is in visited set (fully processed)
+        var visiting = new HashSet<int>();
         var visited = new HashSet<int>();
         var order = new List<ExecutionNode>();
 
-        void Visit(ExecutionNode node)
+        bool Visit(ExecutionNode node)
         {
             if (visited.Contains(node.NodeId))
             {
-                return;
+                return true; // Already processed, no cycle here
             }
 
-            visited.Add(node.NodeId);
+            if (visiting.Contains(node.NodeId))
+            {
+                // Node is on the current recursion stack - cycle detected!
+                throw new InvalidOperationException(
+                    $"Circular dependency detected involving node {node.Name} (NodeId: {node.NodeId}). " +
+                    "Cannot compute topological order for stream assignment.");
+            }
+
+            visiting.Add(node.NodeId);
 
             foreach (var dep in node.Dependencies)
             {
-                Visit(dep);
+                if (!Visit(dep))
+                {
+                    return false;
+                }
             }
 
+            visiting.Remove(node.NodeId);
+            visited.Add(node.NodeId);
             order.Add(node);
+            return true;
         }
 
         foreach (var node in nodes)
         {
-            Visit(node);
+            if (!visited.Contains(node.NodeId))
+            {
+                Visit(node);
+            }
         }
 
-        // Compute levels
+        // Compute levels based on topological order
         foreach (var node in order)
         {
             int level = 0;
@@ -146,11 +167,17 @@ public sealed class StreamAssignmentPass : IGraphOptimizationPass
         Dictionary<int, int> nodeLevels)
     {
         var result = new List<ExecutionNode>();
-        var streamGroups = nodes.GroupBy(n => n.AssignedStream).ToList();
 
-        if (streamGroups.Count <= 1)
+        // Get unique streams (excluding null)
+        var uniqueStreams = nodes
+            .Select(n => n.AssignedStream)
+            .Where(s => s != null)
+            .Distinct()
+            .ToList();
+
+        if (uniqueStreams.Count <= 1)
         {
-            // Single stream, no sync needed
+            // Single stream (or all null), no explicit sync needed
             return nodes;
         }
 
@@ -160,24 +187,92 @@ public sealed class StreamAssignmentPass : IGraphOptimizationPass
             .OrderBy(g => g.Key)
             .ToList();
 
+        // Track which streams have been used at each level for sync point insertion
+        var lastLevelWithActivity = new Dictionary<IGpuStream, int>();
+
         foreach (var levelGroup in levelGroups)
         {
+            int currentLevel = levelGroup.Key;
             var levelNodes = levelGroup.ToList();
 
-            // Check if this level has cross-stream dependencies from previous level
-            var prevLevelNodes = result.Where(n =>
-                nodeLevels.TryGetValue(n.NodeId, out var l) && l == levelGroup.Key - 1).ToList();
+            // Collect all cross-stream dependencies for this level
+            var crossStreamSyncNeeded = new Dictionary<IGpuStream, HashSet<IGpuStream>>();
 
-            // For each node in this level, check if it needs to wait for nodes on other streams
             foreach (var node in levelNodes)
             {
+                if (node.AssignedStream == null)
+                {
+                    continue;
+                }
+
+                // Find dependencies on other streams
                 var crossStreamDeps = node.Dependencies
-                    .Where(d => d.AssignedStream != node.AssignedStream)
+                    .Where(d => d.AssignedStream != null &&
+                                d.AssignedStream != node.AssignedStream)
                     .ToList();
 
-                // Dependencies are handled by the ExecutionNode.ExecuteAsync method
-                // which uses events for cross-stream sync
+                if (crossStreamDeps.Count > 0)
+                {
+                    if (!crossStreamSyncNeeded.TryGetValue(node.AssignedStream, out var waitForStreams))
+                    {
+                        waitForStreams = new HashSet<IGpuStream>();
+                        crossStreamSyncNeeded[node.AssignedStream] = waitForStreams;
+                    }
+
+                    foreach (var dep in crossStreamDeps)
+                    {
+                        if (dep.AssignedStream != null)
+                        {
+                            waitForStreams.Add(dep.AssignedStream);
+                        }
+                    }
+                }
+            }
+
+            // Insert barrier nodes for cross-stream synchronization before the level's nodes
+            foreach (var kvp in crossStreamSyncNeeded)
+            {
+                IGpuStream targetStream = kvp.Key;
+                var streamsToWaitFor = kvp.Value.ToList();
+
+                if (streamsToWaitFor.Count > 0)
+                {
+                    // Create a barrier node that synchronizes the required streams
+                    var barrier = new BarrierNode(streamsToWaitFor);
+                    barrier.AssignedStream = targetStream;
+
+                    // Add dependencies on the last nodes from the source streams
+                    foreach (var srcStream in streamsToWaitFor)
+                    {
+                        var lastNodeOnStream = result
+                            .LastOrDefault(n => n.AssignedStream == srcStream);
+
+                        if (lastNodeOnStream != null)
+                        {
+                            barrier.AddDependency(lastNodeOnStream);
+                        }
+                    }
+
+                    result.Add(barrier);
+
+                    // Make nodes on this stream at this level depend on the barrier
+                    foreach (var node in levelNodes.Where(n => n.AssignedStream == targetStream))
+                    {
+                        node.AddDependency(barrier);
+                    }
+                }
+            }
+
+            // Add all nodes for this level
+            foreach (var node in levelNodes)
+            {
                 result.Add(node);
+
+                // Track stream activity
+                if (node.AssignedStream != null)
+                {
+                    lastLevelWithActivity[node.AssignedStream] = currentLevel;
+                }
             }
         }
 

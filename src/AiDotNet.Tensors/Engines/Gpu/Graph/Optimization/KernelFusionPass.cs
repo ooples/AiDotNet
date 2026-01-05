@@ -157,9 +157,18 @@ public sealed class KernelFusionPass : IGraphOptimizationPass
         {
             if (backend is IAsyncGpuBackend asyncBackend && stream != null)
             {
+                // Async path: use fused kernel for best performance
                 asyncBackend.FusedGemmBiasActivationAsync(
                     gemmInputs[0].Buffer, gemmInputs[1].Buffer, biasInput.Buffer, finalOutput.Buffer,
                     m, n, k, activation, stream);
+            }
+            else
+            {
+                // Fallback path: execute the original nodes sequentially
+                // This ensures correctness when async execution is not available
+                gemmNode.Execute(backend);
+                biasNode.Execute(backend);
+                activationNode?.Execute(backend);
             }
         };
 
@@ -171,10 +180,20 @@ public sealed class KernelFusionPass : IGraphOptimizationPass
                 gemmInputs[0], gemmInputs[1], biasInput, finalOutput,
                 m, n, k, fusedAction, fusedNodes);
 
-        // Transfer dependencies
-        foreach (var dep in gemmNode.Dependencies)
+        // Transfer dependencies from ALL fused nodes, not just the first one
+        // This ensures the fused node respects all data dependencies
+        var fusedNodeIds = new HashSet<int>(fusedNodes.Select(n => n.NodeId));
+
+        foreach (var fusedOriginal in fusedNodes)
         {
-            fusedNode.AddDependency(dep);
+            foreach (var dep in fusedOriginal.Dependencies)
+            {
+                // Don't add other fused nodes as dependencies (they're being fused into this node)
+                if (!fusedNodeIds.Contains(dep.NodeId))
+                {
+                    fusedNode.AddDependency(dep);
+                }
+            }
         }
 
         return new FusionResult(fusedNode, fusedNodes);
@@ -253,10 +272,18 @@ public sealed class KernelFusionPass : IGraphOptimizationPass
             fusedNodes,
             activation);
 
-        // Transfer dependencies
-        foreach (var dep in convNode.Dependencies)
+        // Transfer dependencies from ALL fused nodes, not just the first one
+        var fusedNodeIds = new HashSet<int>(fusedNodes.Select(n => n.NodeId));
+
+        foreach (var fusedOriginal in fusedNodes)
         {
-            fusedNode.AddDependency(dep);
+            foreach (var dep in fusedOriginal.Dependencies)
+            {
+                if (!fusedNodeIds.Contains(dep.NodeId))
+                {
+                    fusedNode.AddDependency(dep);
+                }
+            }
         }
 
         return new FusionResult(fusedNode, fusedNodes);
@@ -308,10 +335,18 @@ public sealed class KernelFusionPass : IGraphOptimizationPass
             fusedNodes,
             activation);
 
-        // Transfer dependencies
-        foreach (var dep in layerNormNode.Dependencies)
+        // Transfer dependencies from ALL fused nodes, not just the first one
+        var fusedNodeIds = new HashSet<int>(fusedNodes.Select(n => n.NodeId));
+
+        foreach (var fusedOriginal in fusedNodes)
         {
-            fusedNode.AddDependency(dep);
+            foreach (var dep in fusedOriginal.Dependencies)
+            {
+                if (!fusedNodeIds.Contains(dep.NodeId))
+                {
+                    fusedNode.AddDependency(dep);
+                }
+            }
         }
 
         return new FusionResult(fusedNode, fusedNodes);

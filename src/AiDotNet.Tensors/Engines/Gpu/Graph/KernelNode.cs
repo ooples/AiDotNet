@@ -103,7 +103,10 @@ public sealed class KernelNode : ExecutionNode
         foreach (var output in _outputs)
         {
             // Record sync point for modified tensors
-            using var evt = stream.RecordEvent();
+            // Note: Do NOT use 'using' here - KernelSyncPoint takes ownership of the event
+            // and is responsible for disposing it when the sync point is no longer needed.
+            // The tensor holds the sync point and disposes it when appropriate.
+            var evt = stream.RecordEvent();
             var syncPoint = new KernelSyncPoint(evt, stream);
 
             // Handle common tensor types that support MarkModified
