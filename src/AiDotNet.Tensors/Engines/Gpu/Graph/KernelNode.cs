@@ -110,21 +110,33 @@ public sealed class KernelNode : ExecutionNode
             var syncPoint = new KernelSyncPoint(evt, stream);
 
             // Handle common tensor types that support MarkModified
+            bool syncPointUsed = false;
             switch (output)
             {
                 case IGpuTensor<float> floatTensor:
                     floatTensor.MarkModified(syncPoint);
+                    syncPointUsed = true;
                     break;
                 case IGpuTensor<double> doubleTensor:
                     doubleTensor.MarkModified(syncPoint);
+                    syncPointUsed = true;
                     break;
                 case IGpuTensor<int> intTensor:
                     intTensor.MarkModified(syncPoint);
+                    syncPointUsed = true;
                     break;
                 case IGpuTensor<long> longTensor:
                     longTensor.MarkModified(syncPoint);
+                    syncPointUsed = true;
                     break;
                 // Note: Half/bfloat16 types can be added when supported
+            }
+
+            // Dispose the sync point if it wasn't used (unrecognized tensor type)
+            // to prevent GPU event resource leaks
+            if (!syncPointUsed)
+            {
+                syncPoint.Dispose();
             }
         }
 
