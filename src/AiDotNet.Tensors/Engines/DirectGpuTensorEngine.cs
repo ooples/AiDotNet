@@ -2588,6 +2588,197 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
     }
 
+    /// <summary>
+    /// GPU-resident Scaled Dot-Product Attention.
+    /// Takes GPU-resident Q, K, V tensors in 4D shape [batch, heads, seq, head_dim]
+    /// and returns GPU-resident attention output.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="query">GPU-resident query tensor [batch, heads, seqQ, headDim].</param>
+    /// <param name="key">GPU-resident key tensor [batch, heads, seqK, headDim].</param>
+    /// <param name="value">GPU-resident value tensor [batch, heads, seqK, headDim].</param>
+    /// <param name="scale">Scaling factor (typically 1/sqrt(headDim)).</param>
+    /// <param name="isCausal">If true, applies causal masking.</param>
+    /// <returns>GPU-resident output tensor [batch, heads, seqQ, headDim].</returns>
+    public IGpuTensor<T> ScaledDotProductAttentionGpu<T>(
+        IGpuTensor<T> query,
+        IGpuTensor<T> key,
+        IGpuTensor<T> value,
+        double scale,
+        bool isCausal = false)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for ScaledDotProductAttentionGpu");
+
+        // Validate 4D tensor shapes
+        if (query.Shape.Length != 4 || key.Shape.Length != 4 || value.Shape.Length != 4)
+            throw new ArgumentException("Query, Key, Value must be 4D tensors [batch, heads, seq, headDim]");
+
+        int batch = query.Shape[0];
+        int heads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int seqK = key.Shape[2];
+
+        // Allocate output and attention weights buffers
+        var outputBuffer = backend.AllocateBuffer(batch * heads * seqQ * headDim);
+        var attnWeightsBuffer = backend.AllocateBuffer(batch * heads * seqQ * seqK);
+
+        // Execute GPU ScaledDotProductAttention
+        backend.ScaledDotProductAttention(
+            query.Buffer, key.Buffer, value.Buffer,
+            outputBuffer, attnWeightsBuffer, null,
+            batch, heads, seqQ, headDim, (float)scale, isCausal);
+
+        // Return GPU-resident output (attention weights buffer will be freed, but output is kept)
+        return new GpuTensor<T>(backend, outputBuffer, new[] { batch, heads, seqQ, headDim },
+            GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident tensor permutation (transpose with arbitrary dimension reordering).
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="permutation">Permutation of dimensions (e.g., [0, 2, 1, 3] for [B,H,S,D] -> [B,S,H,D]).</param>
+    /// <returns>GPU-resident permuted tensor.</returns>
+    public IGpuTensor<T> PermuteGpu<T>(IGpuTensor<T> input, int[] permutation)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for PermuteGpu");
+
+        if (permutation.Length != input.Shape.Length)
+            throw new ArgumentException("Permutation length must match input rank");
+
+        // Compute output shape
+        int[] outputShape = new int[input.Shape.Length];
+        for (int i = 0; i < permutation.Length; i++)
+            outputShape[i] = input.Shape[permutation[i]];
+
+        int totalElements = 1;
+        foreach (int dim in input.Shape)
+            totalElements *= dim;
+
+        var outputBuffer = backend.AllocateBuffer(totalElements);
+        backend.Permute(input.Buffer, outputBuffer, input.Shape, permutation);
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape,
+            GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident batched matrix multiplication.
+    /// Supports 3D inputs [batch, M, K] @ [K, N] -> [batch, M, N] for projections.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor [batch, seq, inputDim] or 2D [batch*seq, inputDim].</param>
+    /// <param name="weights">Weight tensor [inputDim, outputDim].</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    public IGpuTensor<T> BatchedMatMulGpu<T>(IGpuTensor<T> input, Tensor<T> weights)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for BatchedMatMulGpu");
+
+        if (weights.Rank != 2)
+            throw new ArgumentException("Weights must be 2D tensor [inputDim, outputDim]");
+
+        int inputDim = weights.Shape[0];
+        int outputDim = weights.Shape[1];
+
+        // Flatten input to 2D for MatMul: [batch*seq, inputDim]
+        int flatBatch = 1;
+        for (int i = 0; i < input.Shape.Length - 1; i++)
+            flatBatch *= input.Shape[i];
+        int lastDim = input.Shape[^1];
+
+        if (lastDim != inputDim)
+            throw new ArgumentException($"Input last dimension {lastDim} doesn't match weight input dimension {inputDim}");
+
+        // Upload weights
+        using var weightsBuffer = GetOrAllocateBuffer(backend, weights.Data);
+
+        // Execute MatMul
+        var resultBuffer = backend.MatMul(input.Buffer, weightsBuffer.Buffer, flatBatch, outputDim, inputDim);
+
+        // Compute output shape (same leading dimensions, last dim = outputDim)
+        int[] outputShape = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length - 1; i++)
+            outputShape[i] = input.Shape[i];
+        outputShape[^1] = outputDim;
+
+        return new GpuTensor<T>(backend, resultBuffer, outputShape,
+            GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident tensor reshape (zero-copy view when possible).
+    /// Creates a new GPU tensor with the same buffer but different shape interpretation.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="newShape">New shape (total elements must match).</param>
+    /// <returns>GPU-resident reshaped tensor (shares buffer with input).</returns>
+    public IGpuTensor<T> ReshapeGpu<T>(IGpuTensor<T> input, int[] newShape)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for ReshapeGpu");
+
+        int inputElements = 1;
+        foreach (int dim in input.Shape)
+            inputElements *= dim;
+
+        int outputElements = 1;
+        foreach (int dim in newShape)
+            outputElements *= dim;
+
+        if (inputElements != outputElements)
+            throw new ArgumentException($"Reshape element count mismatch: {inputElements} vs {outputElements}");
+
+        // Zero-copy reshape - create new GpuTensor with same buffer but different shape
+        // Note: ownsBuffer is false because the original tensor owns the buffer
+        return new GpuTensor<T>(backend, input.Buffer, newShape,
+            GpuTensorRole.Activation, ownsBuffer: false);
+    }
+
+    /// <summary>
+    /// GPU-resident tensor bias addition with broadcasting.
+    /// Adds bias to the last dimension of the input tensor.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="bias">Bias tensor (1D, length must match input's last dimension).</param>
+    /// <returns>GPU-resident output tensor with bias added.</returns>
+    public IGpuTensor<T> AddBiasGpu<T>(IGpuTensor<T> input, Tensor<T> bias)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for AddBiasGpu");
+
+        if (bias.Rank != 1)
+            throw new ArgumentException("Bias must be 1D tensor");
+
+        int lastDim = input.Shape[^1];
+        if (bias.Length != lastDim)
+            throw new ArgumentException($"Bias length {bias.Length} doesn't match input last dimension {lastDim}");
+
+        int totalElements = 1;
+        foreach (int dim in input.Shape)
+            totalElements *= dim;
+
+        // Upload bias
+        using var biasBuffer = GetOrAllocateBuffer(backend, bias.Data);
+
+        // Allocate output
+        var outputBuffer = backend.AllocateBuffer(totalElements);
+
+        // Execute bias addition (broadcast along last dimension)
+        // BiasAdd signature: BiasAdd(A, bias, C, M, N) where A is [M, N], bias is [N], C is output [M, N]
+        int numVectors = totalElements / lastDim;
+        backend.BiasAdd(input.Buffer, biasBuffer.Buffer, outputBuffer, numVectors, lastDim);
+
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(),
+            GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
     #endregion
 
     #region Persistent Tensor Management

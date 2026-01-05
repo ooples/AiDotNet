@@ -35,7 +35,7 @@ These layers are used in most neural networks and have high GPU acceleration pot
 
 | Layer | Status | Notes |
 |-------|--------|-------|
-| MultiHeadAttentionLayer | Pending | Needs attention kernel (Q*K^T, softmax, V matmul) |
+| MultiHeadAttentionLayer | Done | Uses ScaledDotProductAttentionGpu, BatchedMatMulGpu, PermuteGpu |
 | SelfAttentionLayer | Pending | Similar to MultiHeadAttention |
 | CrossAttentionLayer | Pending | Similar to MultiHeadAttention |
 | TransformerEncoderLayer | Pending | Composition of attention + FFN |
@@ -218,7 +218,7 @@ These layers are used in most neural networks and have high GPU acceleration pot
 | Category | Done | Pending | Blocked | N/A | Total |
 |----------|------|---------|---------|-----|-------|
 | Core Layers | 9 | 0 | 0 | 0 | 9 |
-| Attention/Transformer | 0 | 8 | 0 | 0 | 8 |
+| Attention/Transformer | 1 | 7 | 0 | 0 | 8 |
 | Normalization | 0 | 4 | 0 | 0 | 4 |
 | Conv Variants | 0 | 7 | 1 | 0 | 8 |
 | Recurrent | 0 | 4 | 1 | 0 | 5 |
@@ -230,16 +230,16 @@ These layers are used in most neural networks and have high GPU acceleration pot
 | Sequence | 0 | 4 | 0 | 1 | 5 |
 | Simple Ops | 0 | 0 | 0 | 8 | 8 |
 | Experimental | 0 | 8 | 13 | 0 | 21 |
-| **Total** | **10** | **50** | **37** | **11** | **108** |
+| **Total** | **11** | **49** | **37** | **11** | **108** |
 
 ---
 
 ## Next Steps
 
-1. **BatchNormalizationLayer** - Create BatchNorm GPU kernel (mean, variance, normalize, scale/shift)
-2. **MultiHeadAttentionLayer** - Create attention GPU kernel (QKV matmul, softmax, output projection)
-3. **LayerNormalizationLayer** - Create LayerNorm GPU kernel
-4. **ActivationLayer** - Wire up existing activation kernels
+1. **LayerNormalizationLayer** - Create LayerNorm GPU kernel
+2. **ActivationLayer** - Wire up existing activation kernels
+3. **SelfAttentionLayer** - Similar pattern to MultiHeadAttention (can reuse ScaledDotProductAttentionGpu)
+4. **TransformerEncoderLayer** - Composition of attention + FFN (uses existing GPU layers)
 
 ---
 
@@ -256,4 +256,5 @@ These layers are used in most neural networks and have high GPU acceleration pot
 
 ## Last Updated
 
+2026-01-05 - Added ForwardGpu to MultiHeadAttentionLayer with ScaledDotProductAttentionGpu
 2025-01-05 - Initial comprehensive layer list created

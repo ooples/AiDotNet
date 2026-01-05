@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -196,6 +197,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU-resident execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the number of attention heads in this layer.
@@ -720,6 +726,92 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         outputShape[^1] = embeddingDimension;
 
         return result.Reshape(outputShape);
+    }
+
+    /// <summary>
+    /// GPU-resident forward pass for multi-head attention.
+    /// Performs all projections and attention computation on GPU without downloading intermediate results.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        // Handle input shape - flatten to 3D [batch, seq, embedding]
+        int[] inputShape = input.Shape;
+        int seqLength, embeddingDimension, batchSize;
+
+        if (inputShape.Length == 2)
+        {
+            // 2D input: [seq, embedding] -> treat as batch=1
+            batchSize = 1;
+            seqLength = inputShape[0];
+            embeddingDimension = inputShape[1];
+        }
+        else if (inputShape.Length >= 3)
+        {
+            // 3D+ input: flatten batch dimensions
+            batchSize = 1;
+            for (int i = 0; i < inputShape.Length - 2; i++)
+                batchSize *= inputShape[i];
+            seqLength = inputShape[^2];
+            embeddingDimension = inputShape[^1];
+        }
+        else
+        {
+            throw new ArgumentException("Input must be at least 2D [seq, embedding]");
+        }
+
+        // 1. Reshape input to 3D for processing
+        var input3D = gpuEngine.ReshapeGpu(input, new[] { batchSize, seqLength, embeddingDimension });
+
+        // 2. Project to Q, K, V using batched matrix multiplication
+        // Input: [batch, seq, embedding], Weights: [embedding, embedding]
+        // Output: [batch, seq, embedding]
+        var queries = gpuEngine.BatchedMatMulGpu(input3D, _queryWeights);
+        var keys = gpuEngine.BatchedMatMulGpu(input3D, _keyWeights);
+        var values = gpuEngine.BatchedMatMulGpu(input3D, _valueWeights);
+
+        // 3. Reshape to [batch, seq, heads, headDim]
+        var qReshaped = gpuEngine.ReshapeGpu(queries, new[] { batchSize, seqLength, _headCount, _headDimension });
+        var kReshaped = gpuEngine.ReshapeGpu(keys, new[] { batchSize, seqLength, _headCount, _headDimension });
+        var vReshaped = gpuEngine.ReshapeGpu(values, new[] { batchSize, seqLength, _headCount, _headDimension });
+
+        // 4. Transpose to [batch, heads, seq, headDim] for attention
+        var qPermuted = gpuEngine.PermuteGpu(qReshaped, new[] { 0, 2, 1, 3 });
+        var kPermuted = gpuEngine.PermuteGpu(kReshaped, new[] { 0, 2, 1, 3 });
+        var vPermuted = gpuEngine.PermuteGpu(vReshaped, new[] { 0, 2, 1, 3 });
+
+        // 5. Compute scaled dot-product attention
+        double scale = 1.0 / Math.Sqrt(_headDimension);
+        var attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(qPermuted, kPermuted, vPermuted, scale);
+
+        // 6. Transpose back to [batch, seq, heads, headDim]
+        var contextPermuted = gpuEngine.PermuteGpu(attentionOutput, new[] { 0, 2, 1, 3 });
+
+        // 7. Reshape to [batch, seq, embedding]
+        var contextFlat = gpuEngine.ReshapeGpu(contextPermuted, new[] { batchSize, seqLength, embeddingDimension });
+
+        // 8. Apply output projection
+        var outputProjected = gpuEngine.BatchedMatMulGpu(contextFlat, _outputWeights);
+
+        // 9. Add output bias
+        var outputWithBias = gpuEngine.AddBiasGpu(outputProjected, _outputBias);
+
+        // 10. Reshape back to original batch dimensions if needed
+        if (inputShape.Length != 3 || inputShape[0] != batchSize)
+        {
+            int[] outputShape = new int[inputShape.Length];
+            for (int i = 0; i < inputShape.Length - 2; i++)
+                outputShape[i] = inputShape[i];
+            outputShape[^2] = seqLength;
+            outputShape[^1] = embeddingDimension;
+            return gpuEngine.ReshapeGpu(outputWithBias, outputShape);
+        }
+
+        return outputWithBias;
     }
 
     /// <summary>
