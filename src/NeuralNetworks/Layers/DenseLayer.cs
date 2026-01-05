@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -41,27 +42,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
-    /// <summary>
-    /// Specifies the type of regularization to apply to the layer's weights.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This determines how the network prevents overfitting in this layer.
-    ///
-    /// Regularization types:
-    /// - None: No regularization (default)
-    /// - L1: Encourages weights to become exactly zero (creates sparse networks)
-    /// - L2: Encourages weights to be small but not necessarily zero (smooths the network)
-    /// - L1L2: Combines both L1 and L2 regularization
-    /// </para>
-    /// </remarks>
-    public enum RegularizationType
-    {
-        None,
-        L1,
-        L2,
-        L1L2
-    }
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
     /// </summary>
@@ -603,7 +583,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T regularizationLoss = NumOps.Zero;
 
         // === Vectorized L1 Regularization: Σ|w| (Phase B: US-GPU-015) ===
-        if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.L1L2)
+        if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.ElasticNet)
         {
             // Use vectorized abs and sum operations
             var absWeights = Engine.TensorAbs(_weights);
@@ -613,7 +593,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // === Vectorized L2 Regularization: Σ(w²) (Phase B: US-GPU-015) ===
-        if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.L1L2)
+        if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.ElasticNet)
         {
             // Use vectorized element-wise multiply and sum operations
             var weightsSquared = Engine.TensorMultiply(_weights, _weights);
