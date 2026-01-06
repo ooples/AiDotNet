@@ -994,12 +994,10 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Process each batch
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract batch input slice
+            // Extract batch input slice using GPU-native view
             int batchOffset = b * numNodes * inputFeatures;
-            float[] batchData = new float[numNodes * inputFeatures];
-            float[] fullInputData = backend.DownloadBuffer(input.Buffer);
-            Array.Copy(fullInputData, batchOffset, batchData, 0, numNodes * inputFeatures);
-            var batchInputBuffer = backend.AllocateBuffer(batchData);
+            var batchView = input.CreateView(batchOffset, [numNodes, inputFeatures]);
+            var batchInputBuffer = batchView.Buffer;
 
             // Step 1: Transform self features
             // selfTransformed = input @ selfWeights
@@ -1057,19 +1055,18 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 L2NormalizeRowsCpu(backend, selfTransformedBuffer, numNodes, _outputFeatures);
             }
 
-            // Copy to output buffer at correct batch offset
+            // Copy to output buffer at correct batch offset using GPU-native strided copy
             int outputOffset = b * numNodes * _outputFeatures;
-            CopyToOffsetCpu(backend, selfTransformedBuffer, outputBuffer, outputOffset, numNodes * _outputFeatures);
-
-            // Dispose batch input buffer for this iteration
-            batchInputBuffer.Dispose();
+            int copySize = numNodes * _outputFeatures;
+            backend.Copy2DStrided(selfTransformedBuffer, outputBuffer, 1, copySize, outputSize, outputOffset);
+            // Note: batchInputBuffer is a view and doesn't need disposal
         }
 
-        // Apply activation
+        // Apply activation using GPU-native base class method
         var activationType = GetFusedActivationType();
         if (activationType != FusedActivationType.None)
         {
-            ApplyActivationCpu(backend, outputBuffer, outputSize, activationType);
+            ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, activationType);
         }
 
         // Clean up
@@ -1097,20 +1094,20 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </summary>
     private static void DivideByRowDegreeCpu(IDirectGpuBackend backend, IGpuBuffer dataBuffer, IGpuBuffer degreeBuffer, int numNodes, int features)
     {
-        float[] data = backend.DownloadBuffer(dataBuffer);
-        float[] degrees = backend.DownloadBuffer(degreeBuffer);
+        // GPU-native implementation using broadcast multiply with reciprocal degrees
+        // Step 1: Clamp degrees to minimum 1.0 using Max operation
+        using var onesBuffer = backend.AllocateBuffer(numNodes);
+        backend.Fill(onesBuffer, 1.0f, numNodes);
+        using var clampedDegreesBuffer = backend.AllocateBuffer(numNodes);
+        backend.Max(degreeBuffer, onesBuffer, clampedDegreesBuffer, numNodes);
 
-        for (int i = 0; i < numNodes; i++)
-        {
-            float deg = MathF.Max(degrees[i], 1.0f);
-            for (int f = 0; f < features; f++)
-            {
-                data[i * features + f] /= deg;
-            }
-        }
+        // Step 2: Compute reciprocal: 1/degrees
+        using var reciprocalBuffer = backend.AllocateBuffer(numNodes);
+        backend.Reciprocal(clampedDegreesBuffer, reciprocalBuffer, numNodes);
 
-        using var tempBuffer = backend.AllocateBuffer(data);
-        backend.Copy(tempBuffer, dataBuffer, data.Length);
+        // Step 3: Broadcast multiply each row by its reciprocal degree
+        // data[i, f] *= reciprocal[i] for all f
+        backend.BroadcastMultiplyFirstAxis(dataBuffer, reciprocalBuffer, dataBuffer, numNodes, features);
     }
 
     /// <summary>

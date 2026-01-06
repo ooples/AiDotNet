@@ -417,7 +417,8 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         if (Engine is not DirectGpuTensorEngine tensorEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
 
-        if (!tensorEngine.TryGetBackend(out var backend))
+        var backend = tensorEngine.GetBackend();
+        if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable");
 
         if (_adjacencyMatrix == null)
@@ -434,19 +435,12 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         int numNodes = inputShape.Length >= 3 ? inputShape[1] : inputShape[0];
         int inputFeatures = inputShape.Length >= 3 ? inputShape[2] : inputShape[1];
 
-        // Normalize adjacency and edge features
+        // Normalize adjacency and edge features on CPU (one-time preprocessing)
         var normalizedAdj = NormalizeAdjacency(_adjacencyMatrix, batchSize, numNodes);
         var normalizedEdge = NormalizeEdgeFeatures(_edgeFeatures, batchSize);
         int numEdges = normalizedEdge.Shape[1];
 
-        // Upload input to GPU
-        float[] inputData;
-        using (var inputBuffer = input.GetBuffer())
-        {
-            inputData = backend.DownloadBuffer(inputBuffer);
-        }
-
-        // Upload edge network weights
+        // Upload edge network weights and biases
         using var w1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkWeights1.Data));
         using var w2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkWeights2.Data));
         using var b1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkBias1.Data));
@@ -458,29 +452,27 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         using var edgeBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(normalizedEdge.Data));
 
         // ===== Edge Network Layer 1: [batch*numEdges, edgeFeatures] @ [edgeFeatures, hiddenDim] =====
+        // Uses fused GemmBiasRelu for optimal GPU performance
         int M1 = batchSize * numEdges;
         int K1 = _edgeFeaturesCount;
         int N1 = _edgeNetworkHiddenDim;
-
-        using var hidden1Buffer = backend.AllocateBuffer(new float[M1 * N1]);
-        backend.GemmBiasRelu(edgeBuffer, w1Buffer, b1Buffer, hidden1Buffer, M1, N1, K1);
+        using var hidden1Buffer = backend.GemmBiasRelu(edgeBuffer, w1Buffer, b1Buffer, M1, N1, K1);
 
         // ===== Edge Network Layer 2: [batch*numEdges, hiddenDim] @ [hiddenDim, inF*outF] =====
         int M2 = batchSize * numEdges;
         int K2 = _edgeNetworkHiddenDim;
         int N2 = _inputFeatures * _outputFeatures;
+        using var flatWeightsBuffer = backend.AllocateBuffer(M2 * N2);
 
-        using var flatWeightsBuffer = backend.AllocateBuffer(new float[M2 * N2]);
-
-        // GEMM + bias (no activation)
+        // GEMM + bias broadcast (no activation) - use BiasAdd for efficient broadcast
         backend.Gemm(hidden1Buffer, w2Buffer, flatWeightsBuffer, M2, N2, K2);
-        backend.Add(flatWeightsBuffer, b2Buffer, flatWeightsBuffer, M2 * N2);
-
-        // Download flat edge weights for edge-conditioned aggregation
-        var flatWeightsData = backend.DownloadBuffer(flatWeightsBuffer);
+        backend.BiasAdd(flatWeightsBuffer, b2Buffer, flatWeightsBuffer, M2, N2);
 
         // ===== Edge-Conditioned Aggregation: h_i' = Σ_{j∈N(i)} θ(e_ij) · h_j =====
-        // This is computed on CPU due to edge-specific index mapping complexity
+        // Download edge weights and input for sparse aggregation (requires CPU due to irregular indexing)
+        var flatWeightsData = backend.DownloadBuffer(flatWeightsBuffer);
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
         var aggregatedOutput = ComputeEdgeConditionedAggregationCpu(
             inputData, flatWeightsData, normalizedAdj,
             batchSize, numNodes, numEdges, _inputFeatures, _outputFeatures);
@@ -488,29 +480,24 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         using var aggBuffer = backend.AllocateBuffer(aggregatedOutput);
 
         // ===== Self-Loop Transformation: input @ selfWeights =====
-        // Reshape input for batched GEMM: [batch*numNodes, inputFeatures] @ [inputFeatures, outputFeatures]
+        // Use input buffer directly (already on GPU) for GEMM
         int MSelf = batchSize * numNodes;
-        using var inputGpuBuffer = backend.AllocateBuffer(inputData);
-        using var selfOutputBuffer = backend.AllocateBuffer(new float[MSelf * _outputFeatures]);
-        backend.Gemm(inputGpuBuffer, selfBuffer, selfOutputBuffer, MSelf, _outputFeatures, _inputFeatures);
+        using var selfOutputBuffer = backend.AllocateBuffer(MSelf * _outputFeatures);
+        backend.Gemm(input.Buffer, selfBuffer, selfOutputBuffer, MSelf, _outputFeatures, _inputFeatures);
 
-        // ===== Combine: aggregated + selfLoop + bias =====
-        using var combinedBuffer = backend.AllocateBuffer(new float[batchSize * numNodes * _outputFeatures]);
-        backend.Add(aggBuffer, selfOutputBuffer, combinedBuffer, batchSize * numNodes * _outputFeatures);
+        // ===== Combine: aggregated + selfLoop =====
+        int totalOutput = batchSize * numNodes * _outputFeatures;
+        using var combinedBuffer = backend.AllocateBuffer(totalOutput);
+        backend.Add(aggBuffer, selfOutputBuffer, combinedBuffer, totalOutput);
 
-        // Broadcast and add bias
-        using var biasBroadcastBuffer = backend.AllocateBuffer(new float[batchSize * numNodes * _outputFeatures]);
-        BroadcastBiasGpu(backend, biasBuffer, biasBroadcastBuffer, batchSize, numNodes, _outputFeatures);
-        backend.Add(combinedBuffer, biasBroadcastBuffer, combinedBuffer, batchSize * numNodes * _outputFeatures);
+        // Add bias using BiasAdd (efficient GPU broadcast) - treats output as [batch*numNodes, outputFeatures]
+        backend.BiasAdd(combinedBuffer, biasBuffer, combinedBuffer, MSelf, _outputFeatures);
 
         // ===== Apply Activation =====
-        int totalOutput = batchSize * numNodes * _outputFeatures;
-        using var outputBuffer = backend.AllocateBuffer(new float[totalOutput]);
+        var finalBuffer = backend.AllocateBuffer(totalOutput);
+        ApplyGpuActivation(backend, combinedBuffer, finalBuffer, totalOutput, GetFusedActivationType());
 
-        ApplyFusedActivation(backend, combinedBuffer, outputBuffer, totalOutput);
-
-        var outputData = backend.DownloadBuffer(outputBuffer);
-        return new GpuTensor<T>(backend, outputData, [batchSize, numNodes, _outputFeatures]);
+        return new GpuTensor<T>(backend, finalBuffer, [batchSize, numNodes, _outputFeatures], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -556,59 +543,6 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Broadcasts bias across batch and node dimensions on GPU.
-    /// </summary>
-    private void BroadcastBiasGpu(IDirectGpuBackend backend, IGpuBuffer biasBuffer, IGpuBuffer outputBuffer,
-        int batchSize, int numNodes, int outputFeatures)
-    {
-        var biasData = backend.DownloadBuffer(biasBuffer);
-        var broadcast = new float[batchSize * numNodes * outputFeatures];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                int offset = (b * numNodes + n) * outputFeatures;
-                Array.Copy(biasData, 0, broadcast, offset, outputFeatures);
-            }
-        }
-
-        backend.UploadBuffer(outputBuffer, broadcast);
-    }
-
-    /// <summary>
-    /// Applies activation function on GPU.
-    /// </summary>
-    private void ApplyFusedActivation(IDirectGpuBackend backend, IGpuBuffer inputBuffer, IGpuBuffer outputBuffer, int size)
-    {
-        string activationName = ActivationFunction.GetType().Name.ToLowerInvariant();
-
-        if (activationName.Contains("relu"))
-        {
-            backend.ReLU(inputBuffer, outputBuffer, size);
-        }
-        else if (activationName.Contains("sigmoid"))
-        {
-            backend.Sigmoid(inputBuffer, outputBuffer, size);
-        }
-        else if (activationName.Contains("tanh"))
-        {
-            backend.Tanh(inputBuffer, outputBuffer, size);
-        }
-        else if (activationName.Contains("leakyrelu"))
-        {
-            // Default leaky ReLU alpha
-            backend.LeakyReLU(inputBuffer, outputBuffer, size, 0.01f);
-        }
-        else
-        {
-            // Identity or unknown - just copy
-            var data = backend.DownloadBuffer(inputBuffer);
-            backend.UploadBuffer(outputBuffer, data);
-        }
     }
 
     /// <summary>

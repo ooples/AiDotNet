@@ -225,10 +225,33 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
-        // RRDB chains 3 ResidualDenseBlocks with global residual - use CPU fallback for complex chained operations
-        var cpuInput = inputs[0].ToTensor();
-        var cpuOutput = Forward(cpuInput);
-        return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+
+        // Store input buffer for global residual
+        var inputBuffer = input.Buffer;
+
+        // Pass through 3 Residual Dense Blocks sequentially on GPU
+        var x = _rdbBlocks[0].ForwardGpu(input);
+        x = _rdbBlocks[1].ForwardGpu(x);
+        x = _rdbBlocks[2].ForwardGpu(x);
+
+        // Global residual: output = RDB3_output * residualScale + input
+        int outputSize = shape.Aggregate(1, (a, b) => a * b);
+
+        var scaledBuffer = backend.AllocateBuffer(outputSize);
+        backend.Scale(x.Buffer, scaledBuffer, (float)_residualScale, outputSize);
+
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+        backend.Add(scaledBuffer, inputBuffer, outputBuffer, outputSize);
+
+        scaledBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion

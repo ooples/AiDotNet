@@ -1905,6 +1905,147 @@ public sealed class HipBackend : IAsyncGpuBackend
             numNodes, numEdges, features, hasEdgeValues);
     }
 
+    /// <inheritdoc/>
+    public void CsrSegmentedMax(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_max", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: csr_segmented_max");
+
+        int gridX = M;
+        int gridY = (N + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var colIndicesHandle = ((HipGpuBuffer)csrColIndices).Handle;
+        var rowPointersHandle = ((HipGpuBuffer)csrRowPointers).Handle;
+        var inputHandle = ((HipGpuBuffer)input).Handle;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+
+        LaunchCsrSegmentedKernel(kernel, gridX, gridY, DefaultBlockSize, 1,
+            colIndicesHandle, rowPointersHandle, inputHandle, outputHandle, M, K, N);
+    }
+
+    /// <inheritdoc/>
+    public void CsrSegmentedMin(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_min", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: csr_segmented_min");
+
+        int gridX = M;
+        int gridY = (N + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var colIndicesHandle = ((HipGpuBuffer)csrColIndices).Handle;
+        var rowPointersHandle = ((HipGpuBuffer)csrRowPointers).Handle;
+        var inputHandle = ((HipGpuBuffer)input).Handle;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+
+        LaunchCsrSegmentedKernel(kernel, gridX, gridY, DefaultBlockSize, 1,
+            colIndicesHandle, rowPointersHandle, inputHandle, outputHandle, M, K, N);
+    }
+
+    /// <inheritdoc/>
+    public void CsrSegmentedStdDev(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N,
+        float epsilon = 1e-8f)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_stddev", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: csr_segmented_stddev");
+
+        int gridX = M;
+        int gridY = (N + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var colIndicesHandle = ((HipGpuBuffer)csrColIndices).Handle;
+        var rowPointersHandle = ((HipGpuBuffer)csrRowPointers).Handle;
+        var inputHandle = ((HipGpuBuffer)input).Handle;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+
+        LaunchCsrSegmentedStdDevKernel(kernel, gridX, gridY, DefaultBlockSize, 1,
+            colIndicesHandle, rowPointersHandle, inputHandle, outputHandle, M, K, N, epsilon);
+    }
+
+    private unsafe void LaunchCsrSegmentedKernel(IntPtr kernel, int gridX, int gridY, int blockX, int blockY,
+        IntPtr colIndices, IntPtr rowPointers, IntPtr input, IntPtr output, int M, int K, int N)
+    {
+        void*[] args = new void*[7];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [colIndices, rowPointers, input, output];
+            int[] ints = [M, K, N];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &h[2];
+                argsPtr[3] = &h[3];
+                argsPtr[4] = &i[0];
+                argsPtr[5] = &i[1];
+                argsPtr[6] = &i[2];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)blockX, (uint)blockY, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (csr_segmented)");
+            }
+        }
+    }
+
+    private unsafe void LaunchCsrSegmentedStdDevKernel(IntPtr kernel, int gridX, int gridY, int blockX, int blockY,
+        IntPtr colIndices, IntPtr rowPointers, IntPtr input, IntPtr output, int M, int K, int N, float epsilon)
+    {
+        void*[] args = new void*[8];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [colIndices, rowPointers, input, output];
+            int[] ints = [M, K, N];
+            float epsCopy = epsilon;
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &h[2];
+                argsPtr[3] = &h[3];
+                argsPtr[4] = &i[0];
+                argsPtr[5] = &i[1];
+                argsPtr[6] = &i[2];
+                argsPtr[7] = &epsCopy;
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)blockX, (uint)blockY, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (csr_segmented_stddev)");
+            }
+        }
+    }
+
     private unsafe void LaunchKernel2D(IntPtr kernel, int gridX, int gridY, int blockX, int blockY,
         IntPtr values, IntPtr colIndices, IntPtr rowPointers, IntPtr denseB, IntPtr output,
         int M, int K, int N, int nnz)
@@ -3729,6 +3870,129 @@ public sealed class HipBackend : IAsyncGpuBackend
         UploadToBuffer(buffer, data);
     }
 
+    /// <inheritdoc/>
+    public unsafe void Copy2DStrided(IGpuBuffer source, IGpuBuffer destination, int numRows, int srcCols, int destTotalCols, int destColOffset)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("copy_2d_strided", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: copy_2d_strided");
+
+        int gridX = (srcCols + DefaultBlockSize - 1) / DefaultBlockSize;
+        int gridY = numRows;
+
+        var srcHandle = ((HipGpuBuffer)source).Handle;
+        var dstHandle = ((HipGpuBuffer)destination).Handle;
+
+        void*[] args = new void*[6];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [srcHandle, dstHandle];
+            int[] ints = [numRows, srcCols, destTotalCols, destColOffset];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &i[0];
+                argsPtr[3] = &i[1];
+                argsPtr[4] = &i[2];
+                argsPtr[5] = &i[3];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)DefaultBlockSize, 1, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (copy_2d_strided)");
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        // Check for the kernel, if not available fall back to CPU implementation
+        if (!_kernelCache.TryGetValue("nearest_neighbor_upsample", out var kernel))
+        {
+            NearestNeighborUpsampleFallback(input, output, batchChannels, height, width, scaleFactor);
+            return;
+        }
+
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        int grid = (outputSize + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var srcHandle = ((HipGpuBuffer)input).Handle;
+        var dstHandle = ((HipGpuBuffer)output).Handle;
+
+        void*[] args = new void*[7];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [srcHandle, dstHandle];
+            int[] ints = [batchChannels, height, width, scaleFactor, outputSize];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &i[0];
+                argsPtr[3] = &i[1];
+                argsPtr[4] = &i[2];
+                argsPtr[5] = &i[3];
+                argsPtr[6] = &i[4];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)grid, 1, 1,
+                    (uint)DefaultBlockSize, 1, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (nearest_neighbor_upsample)");
+            }
+        }
+    }
+
+    /// <summary>
+    /// CPU fallback for nearest-neighbor upsampling when kernel is not available.
+    /// </summary>
+    private void NearestNeighborUpsampleFallback(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+    {
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        // Download input using existing method
+        var inputData = DownloadBuffer(input);
+
+        // Perform CPU upsampling
+        var outputData = new float[outputSize];
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int ih = oh / scaleFactor;
+                    int iw = ow / scaleFactor;
+                    int inputIdx = bc * height * width + ih * width + iw;
+                    int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                    outputData[outputIdx] = inputData[inputIdx];
+                }
+            }
+        }
+
+        // Upload output using existing method
+        UploadToBuffer(output, outputData);
+    }
+
     #endregion
 
     #region Activation Gradient Operations
@@ -4205,6 +4469,32 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             var args = new IntPtr[5];
             for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void NotEqualScalar(IGpuBuffer A, IGpuBuffer C, float scalar, int size)
+    {
+        if (!_kernelCache.TryGetValue("not_equal_scalar", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: not_equal_scalar");
+
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(C.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(scalar, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);

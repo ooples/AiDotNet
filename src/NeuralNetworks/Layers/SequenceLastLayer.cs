@@ -113,6 +113,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
 
     /// <summary>
     /// GPU-accelerated forward pass that extracts the last timestep from a sequence.
+    /// Uses zero-copy CreateView to extract the last slice directly on GPU.
     /// </summary>
     /// <param name="inputs">GPU-resident input tensors.</param>
     /// <returns>GPU-resident output tensor containing the last timestep.</returns>
@@ -121,21 +122,51 @@ public class SequenceLastLayer<T> : LayerBase<T>
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        if (Engine is not DirectGpuTensorEngine)
         {
             throw new InvalidOperationException(
                 "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
         }
 
         var input = inputs[0];
+        var shape = input.Shape;
+        int rank = shape.Length;
 
-        // Download to CPU, extract last timestep, upload result
-        // This is a simple extraction operation that doesn't benefit from GPU compute
-        var cpuInput = input.ToTensor();
-        var cpuOutput = Forward(cpuInput);
+        _originalShape = shape;
 
-        // Upload result to GPU using proper API
-        return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+        if (rank == 1)
+        {
+            // Already a 1D vector, just pass through
+            _lastSequenceLength = 1;
+            return input;
+        }
+        else if (rank == 2)
+        {
+            // Shape: [seqLen, features] -> [features]
+            int seqLen = shape[0];
+            int features = shape[1];
+            _lastSequenceLength = seqLen;
+
+            // Zero-copy view of the last row
+            int offset = (seqLen - 1) * features;
+            return input.CreateView(offset, [features]);
+        }
+        else if (rank == 3)
+        {
+            // Shape: [seqLen, batch, features] -> [batch, features]
+            int seqLen = shape[0];
+            int batch = shape[1];
+            int features = shape[2];
+            _lastSequenceLength = seqLen;
+
+            // Zero-copy view of the last slice
+            int offset = (seqLen - 1) * batch * features;
+            return input.CreateView(offset, [batch, features]);
+        }
+        else
+        {
+            throw new ArgumentException($"SequenceLastLayer expects 1D, 2D, or 3D input, got {rank}D.");
+        }
     }
 
     /// <summary>

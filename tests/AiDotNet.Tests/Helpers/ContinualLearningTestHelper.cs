@@ -449,7 +449,7 @@ public class MockLayer<T> : ILayer<T>
     // IGpuExecutable<T>
     public bool CanExecuteOnGpu => false;
 
-    public IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
         throw new NotSupportedException("Mock layer does not support GPU execution");
     }

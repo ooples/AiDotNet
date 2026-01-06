@@ -324,6 +324,14 @@ extern ""C"" __global__ void equals(
     C[idx] = fabsf(A[idx] - B[idx]) < 1e-6f ? 1.0f : 0.0f;
 }
 
+extern ""C"" __global__ void not_equal_scalar(
+    const float* A, float* C, float scalar, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    C[idx] = fabsf(A[idx] - scalar) >= 1e-6f ? 1.0f : 0.0f;
+}
+
 extern ""C"" __global__ void where_cond(
     const float* condition, const float* A, const float* B, float* C, int size)
 {

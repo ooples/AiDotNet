@@ -598,6 +598,62 @@ public interface IDirectGpuBackend : IDisposable
         IGpuBuffer output,
         int numNodes, int numEdges, int features);
 
+    /// <summary>
+    /// CSR-based max aggregation: output[i, f] = max over neighbors j of input[j, f]
+    /// Used for graph neural network max pooling over neighbors.
+    /// </summary>
+    /// <param name="csrColIndices">Column indices (neighbor indices) [nnz] (int32).</param>
+    /// <param name="csrRowPointers">Row pointers [M+1] (int32).</param>
+    /// <param name="input">Input features [K x N] where K is number of source nodes.</param>
+    /// <param name="output">Output features [M x N].</param>
+    /// <param name="M">Number of target nodes (rows).</param>
+    /// <param name="K">Number of source nodes.</param>
+    /// <param name="N">Number of features.</param>
+    void CsrSegmentedMax(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N);
+
+    /// <summary>
+    /// CSR-based min aggregation: output[i, f] = min over neighbors j of input[j, f]
+    /// Used for graph neural network min pooling over neighbors.
+    /// </summary>
+    /// <param name="csrColIndices">Column indices (neighbor indices) [nnz] (int32).</param>
+    /// <param name="csrRowPointers">Row pointers [M+1] (int32).</param>
+    /// <param name="input">Input features [K x N] where K is number of source nodes.</param>
+    /// <param name="output">Output features [M x N].</param>
+    /// <param name="M">Number of target nodes (rows).</param>
+    /// <param name="K">Number of source nodes.</param>
+    /// <param name="N">Number of features.</param>
+    void CsrSegmentedMin(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N);
+
+    /// <summary>
+    /// CSR-based standard deviation aggregation: output[i, f] = stddev over neighbors j of input[j, f]
+    /// Computes sqrt(variance) per segment for graph neural networks.
+    /// </summary>
+    /// <param name="csrColIndices">Column indices (neighbor indices) [nnz] (int32).</param>
+    /// <param name="csrRowPointers">Row pointers [M+1] (int32).</param>
+    /// <param name="input">Input features [K x N] where K is number of source nodes.</param>
+    /// <param name="output">Output features [M x N].</param>
+    /// <param name="M">Number of target nodes (rows).</param>
+    /// <param name="K">Number of source nodes.</param>
+    /// <param name="N">Number of features.</param>
+    /// <param name="epsilon">Small value for numerical stability (default 1e-8).</param>
+    void CsrSegmentedStdDev(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N,
+        float epsilon = 1e-8f);
+
     #endregion
 
     #region Reduction Operations
@@ -845,6 +901,30 @@ public interface IDirectGpuBackend : IDisposable
     void Copy(IGpuBuffer source, IGpuBuffer destination, int size);
     void Fill(IGpuBuffer buffer, float value, int size);
 
+    /// <summary>
+    /// Copies a 2D region from source to destination with different strides.
+    /// Useful for concatenating features: dest[row, destColOffset:destColOffset+srcCols] = src[row, :]
+    /// </summary>
+    /// <param name="source">Source buffer [numRows x srcCols].</param>
+    /// <param name="destination">Destination buffer [numRows x destTotalCols].</param>
+    /// <param name="numRows">Number of rows to copy.</param>
+    /// <param name="srcCols">Number of columns in source.</param>
+    /// <param name="destTotalCols">Total columns in destination.</param>
+    /// <param name="destColOffset">Column offset in destination where source data is copied.</param>
+    void Copy2DStrided(IGpuBuffer source, IGpuBuffer destination, int numRows, int srcCols, int destTotalCols, int destColOffset);
+
+    /// <summary>
+    /// Performs nearest-neighbor upsampling on 2D spatial data.
+    /// Each input pixel is replicated scaleFactor x scaleFactor times in the output.
+    /// </summary>
+    /// <param name="input">Input buffer [batchChannels x height x width].</param>
+    /// <param name="output">Output buffer [batchChannels x (height*scaleFactor) x (width*scaleFactor)].</param>
+    /// <param name="batchChannels">Combined batch and channel dimensions.</param>
+    /// <param name="height">Input height.</param>
+    /// <param name="width">Input width.</param>
+    /// <param name="scaleFactor">Upsampling scale factor (applied to both height and width).</param>
+    void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor);
+
     #endregion
 
     #region Activation Gradients
@@ -915,6 +995,15 @@ public interface IDirectGpuBackend : IDisposable
     void LessThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
     void Equal(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
     void Where(IGpuBuffer condition, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+
+    /// <summary>
+    /// Element-wise not-equal comparison against a scalar: C[i] = (A[i] != scalar) ? 1.0f : 0.0f
+    /// </summary>
+    /// <param name="A">Input buffer.</param>
+    /// <param name="C">Output buffer with 1.0f where not equal, 0.0f where equal.</param>
+    /// <param name="scalar">Scalar value to compare against.</param>
+    /// <param name="size">Number of elements.</param>
+    void NotEqualScalar(IGpuBuffer A, IGpuBuffer C, float scalar, int size);
 
     #endregion
 

@@ -296,7 +296,8 @@ public class ReadoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the forward pass on GPU using CPU fallback.
+    /// Performs the forward pass on GPU using FusedLinearGpu.
+    /// Supports both scalar and vector (softmax) activations.
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
@@ -308,11 +309,89 @@ public class ReadoutLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
-        // CPU fallback: download, process, upload
-        var cpuInput = inputs[0].ToTensor();
-        var cpuOutput = Forward(cpuInput);
+        var input = inputs[0];
+        _originalInputShape = input.Shape;
 
-        return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+        int inputSize = input.Shape[^1];
+        if (inputSize != InputShape[0])
+        {
+            throw new ArgumentException(
+                $"Input size {inputSize} does not match expected {InputShape[0]}.");
+        }
+
+        // Compute batch dimension
+        int batchDim = 1;
+        for (int d = 0; d < input.Shape.Length - 1; d++)
+            batchDim *= input.Shape[d];
+
+        // Reshape input to 2D [batch, inputSize] for matrix multiply
+        IGpuTensor<T> input2D = input;
+        if (input.Shape.Length == 1)
+        {
+            input2D = input.CreateView(0, [1, inputSize]);
+            batchDim = 1;
+        }
+        else if (input.Shape.Length > 2)
+        {
+            input2D = input.CreateView(0, [batchDim, inputSize]);
+        }
+
+        // Transpose weights for FusedLinearGpu
+        // ReadoutLayer _weights: [outputSize, inputSize] -> [inputSize, outputSize]
+        var weightsT = Engine.TensorTranspose(_weights);
+        int outputSize = OutputShape[0];
+
+        IGpuTensor<T> result;
+
+        if (UsingVectorActivation)
+        {
+            // For vector activations (like softmax), apply linear then activation separately
+            var preActivation = gpuEngine.FusedLinearGpu(input2D, weightsT, _bias, FusedActivationType.None);
+
+            // Check if it's softmax and apply on GPU
+            if (VectorActivation is SoftmaxActivation<T>)
+            {
+                result = gpuEngine.ActivationGpu(preActivation, FusedActivationType.Softmax);
+            }
+            else
+            {
+                // For other vector activations, fall back to CPU
+                var cpuPreActivation = preActivation.ToTensor();
+                var cpuActivated = VectorActivation!.Activate(cpuPreActivation);
+                result = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
+            }
+        }
+        else
+        {
+            // For scalar activations, use fused linear with activation
+            var fusedActivation = GetFusedActivationType();
+            result = gpuEngine.FusedLinearGpu(input2D, weightsT, _bias, fusedActivation);
+        }
+
+        // Cache state for backward pass only during training
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            var preActResult = gpuEngine.FusedLinearGpu(input2D, weightsT, _bias, FusedActivationType.None);
+            _lastPreActivation = preActResult.ToTensor();
+            _lastOutput = result.ToTensor();
+        }
+
+        // Reshape output to match expected shape
+        if (input.Shape.Length == 1)
+        {
+            return result.CreateView(0, [outputSize]);
+        }
+        else if (input.Shape.Length > 2)
+        {
+            var outputShape = new int[input.Shape.Length];
+            for (int d = 0; d < input.Shape.Length - 1; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[^1] = outputSize;
+            return result.CreateView(0, outputShape);
+        }
+
+        return result;
     }
 
     /// <summary>

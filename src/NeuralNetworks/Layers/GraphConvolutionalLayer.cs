@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -805,7 +806,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
 
-        if (!gpuEngine.TryGetBackend(out var backend))
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable");
 
         // Check that graph structure is set
@@ -850,10 +852,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var inputFlat = processInput.CreateView(0, [batchSize * numNodes, inputFeatures]);
 
         // Upload weights
-        var weightsGpu = gpuEngine.UploadTensorGpu(_weights);
+        var weightsGpu = gpuEngine.UploadToGpu(_weights, GpuTensorRole.Weight);
 
         // MatMul: [batch*nodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [batch*nodes, outputFeatures]
-        var xwBuffer = backend.MatMul(inputFlat.Buffer, weightsGpu.Buffer, batchSize * numNodes, outputFeatures, inputFeatures);
+        var xwBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
+        backend.Gemm(inputFlat.Buffer, weightsGpu.Buffer, xwBuffer, batchSize * numNodes, outputFeatures, inputFeatures);
         var xwFlat = new GpuTensor<T>(backend, xwBuffer, [batchSize * numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
 
         IGpuTensor<T> output;
@@ -912,7 +915,12 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             }
 
             var aggregated = new GpuTensor<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
-            output = gpuEngine.AddBiasGpu(aggregated, _bias);
+            // Add bias: broadcast bias across batch and nodes
+            var biasData = DirectGpuEngine.ToFloatArray<T>(_bias.Data);
+            using var biasBuffer = backend.AllocateBuffer(biasData);
+            // BiasAdd expects [M, N] input and [N] bias, but we have [batch*nodes, outputFeatures]
+            backend.BiasAdd(aggregated.Buffer, biasBuffer, aggregated.Buffer, batchSize * numNodes, outputFeatures);
+            output = aggregated;
         }
         else
         {
@@ -942,40 +950,30 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             _adjForBatch = adjForBatch;
 
             // Upload adjacency to GPU
-            var adjGpu = gpuEngine.UploadTensorGpu(adjForBatch);
+            var adjGpu = gpuEngine.UploadToGpu(adjForBatch, GpuTensorRole.Weight);
 
-            // Batched matmul: for each batch, A[nodes,nodes] @ XW[nodes,outputFeatures]
+            // Reshape xwFlat from [batchSize*numNodes, outputFeatures] to [batchSize, numNodes, outputFeatures]
+            var xwBatched = xwFlat.CreateView(0, [batchSize, numNodes, outputFeatures]);
+
+            // GPU batched matmul: A[batch,nodes,nodes] @ XW[batch,nodes,outputFeatures] -> [batch,nodes,outputFeatures]
+            // BatchedGemm expects: A[batchCount,M,K], B[batchCount,K,N] -> C[batchCount,M,N]
+            // M = numNodes, N = outputFeatures, K = numNodes
             var outputBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Get views for this batch
-                int adjOffset = b * numNodes * numNodes;
-                int xwOffset = b * numNodes * outputFeatures;
-                int outOffset = b * numNodes * outputFeatures;
-
-                // Create slice buffers for this batch matmul
-                // A[b]: [numNodes, numNodes], XW[b]: [numNodes, outputFeatures]
-                // Result[b]: [numNodes, outputFeatures]
-                var adjSlice = adjGpu.CreateView(adjOffset, [numNodes, numNodes]);
-                var xwSlice = xwFlat.CreateView(b * numNodes * outputFeatures, [numNodes, outputFeatures]);
-
-                var batchResult = backend.MatMul(adjSlice.Buffer, xwSlice.Buffer, numNodes, outputFeatures, numNodes);
-
-                // Copy result to output buffer at correct offset
-                backend.Copy(batchResult, outputBuffer, numNodes * outputFeatures, 0, outOffset);
-                batchResult.Dispose();
-            }
+            backend.BatchedGemm(adjGpu.Buffer, xwBatched.Buffer, outputBuffer, numNodes, outputFeatures, numNodes, batchSize);
 
             var matmulResult = new GpuTensor<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
-            output = gpuEngine.AddBiasGpu(matmulResult, _bias);
+            // Add bias: broadcast bias across batch and nodes
+            var biasData2 = DirectGpuEngine.ToFloatArray<T>(_bias.Data);
+            using var biasBuffer2 = backend.AllocateBuffer(biasData2);
+            backend.BiasAdd(matmulResult.Buffer, biasBuffer2, matmulResult.Buffer, batchSize * numNodes, outputFeatures);
+            output = matmulResult;
         }
 
         // Apply activation using base class method
         var fusedActivation = GetFusedActivationType();
         if (fusedActivation != FusedActivationType.None)
         {
-            output = gpuEngine.ApplyActivationGpu(output, fusedActivation);
+            ApplyGpuActivation(backend, output.Buffer, output.Buffer, output.ElementCount, fusedActivation);
         }
 
         // Cache for backward pass during training

@@ -532,7 +532,8 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (Engine is not DirectGpuTensorEngine tensorEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
 
-        if (!tensorEngine.TryGetBackend(out var backend))
+        var backend = tensorEngine.GetBackend();
+        if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable");
 
         if (_adjacencyMatrix == null)
@@ -576,11 +577,43 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         using var ffnBias1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias1.Data));
         using var ffnBias2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias2.Data));
 
-        // Upload structural bias if enabled
-        IGpuBuffer? structuralBiasBuffer = null;
+        // Upload structural bias if enabled - precompute per-head slices for efficient GPU access
+        IGpuBuffer[]? structuralBiasPerHead = null;
         if (_useStructuralEncoding && _structuralBias != null)
         {
-            structuralBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_structuralBias.Data));
+            // Precompute and upload each head's bias slice separately to avoid CPU fallbacks
+            structuralBiasPerHead = new IGpuBuffer[_numHeads];
+            for (int h = 0; h < _numHeads; h++)
+            {
+                int biasOffset = h * numNodes * numNodes;
+                float[] headBiasSlice = new float[numNodes * numNodes];
+                for (int i = 0; i < numNodes * numNodes; i++)
+                {
+                    int srcIdx = biasOffset + i;
+                    if (srcIdx < _structuralBias.Length)
+                    {
+                        headBiasSlice[i] = (float)NumOps.ToDouble(_structuralBias.Data[srcIdx]);
+                    }
+                }
+                structuralBiasPerHead[h] = backend.AllocateBuffer(headBiasSlice);
+            }
+        }
+
+        // Precompute graph mask for 2D adjacency matrices (shared across all heads/batches)
+        IGpuBuffer? graphMaskBuffer = null;
+        if (_useStructuralEncoding && _adjacencyMatrix.Shape.Length == 2)
+        {
+            // Create negative infinity mask: negInfMask[i,j] = -1e9 if adj[i,j] == 0, else 0
+            float[] negInfMask = new float[numNodes * numNodes];
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    float adjValue = (float)NumOps.ToDouble(_adjacencyMatrix[i, j]);
+                    negInfMask[i * numNodes + j] = MathF.Abs(adjValue) < 1e-6f ? -1e9f : 0f;
+                }
+            }
+            graphMaskBuffer = backend.AllocateBuffer(negInfMask);
         }
 
         // Allocate output buffer
@@ -589,11 +622,13 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         float sqrtDk = MathF.Sqrt(_headDim);
 
+        // Process batches using GPU-native views
         for (int b = 0; b < batchSize; b++)
         {
+            // Use GPU-native view for batch slicing (no CPU download)
             int batchInputOffset = b * numNodes * inputFeatures;
-            using var batchInputBuffer = tensorEngine.GetOrAllocateBufferSlice(
-                input.Buffer, batchInputOffset, numNodes * inputFeatures);
+            var batchView = input.CreateView(batchInputOffset, [numNodes, inputFeatures]);
+            var batchInputBuffer = batchView.Buffer;
 
             // ========================================
             // MULTI-HEAD SELF-ATTENTION
@@ -617,61 +652,67 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 using var queriesBuffer = backend.AllocateBuffer(numNodes * _headDim);
                 backend.Gemm(
                     batchInputBuffer, qWeightsBuffer, queriesBuffer,
-                    numNodes, _headDim, inputFeatures,
-                    transposeA: false, transposeB: false,
-                    alpha: 1.0f, beta: 0.0f);
+                    numNodes, _headDim, inputFeatures);
 
                 // Compute K = X @ W_k: [numNodes, headDim]
                 using var keysBuffer = backend.AllocateBuffer(numNodes * _headDim);
                 backend.Gemm(
                     batchInputBuffer, kWeightsBuffer, keysBuffer,
-                    numNodes, _headDim, inputFeatures,
-                    transposeA: false, transposeB: false,
-                    alpha: 1.0f, beta: 0.0f);
+                    numNodes, _headDim, inputFeatures);
 
                 // Compute V = X @ W_v: [numNodes, headDim]
                 using var valuesBuffer = backend.AllocateBuffer(numNodes * _headDim);
                 backend.Gemm(
                     batchInputBuffer, vWeightsBuffer, valuesBuffer,
-                    numNodes, _headDim, inputFeatures,
-                    transposeA: false, transposeB: false,
-                    alpha: 1.0f, beta: 0.0f);
+                    numNodes, _headDim, inputFeatures);
 
                 // Compute attention scores: Q @ K^T / sqrt(d_k)
+                // Use GPU-native transpose operation
+                using var keysTransposedBuffer = backend.AllocateBuffer(_headDim * numNodes);
+                backend.Transpose(keysBuffer, keysTransposedBuffer, numNodes, _headDim);
+
                 // [numNodes, headDim] @ [headDim, numNodes] -> [numNodes, numNodes]
                 using var scoresBuffer = backend.AllocateBuffer(numNodes * numNodes);
                 backend.Gemm(
-                    queriesBuffer, keysBuffer, scoresBuffer,
-                    numNodes, numNodes, _headDim,
-                    transposeA: false, transposeB: true,
-                    alpha: 1.0f / sqrtDk, beta: 0.0f);
+                    queriesBuffer, keysTransposedBuffer, scoresBuffer,
+                    numNodes, numNodes, _headDim);
 
-                // Add structural bias if enabled
-                if (_useStructuralEncoding && structuralBiasBuffer != null)
+                // Scale by 1/sqrt(d_k)
+                backend.Scale(scoresBuffer, scoresBuffer, 1.0f / sqrtDk, numNodes * numNodes);
+
+                // Add structural bias if enabled - use precomputed per-head bias buffer
+                if (_useStructuralEncoding && structuralBiasPerHead != null)
                 {
-                    // Add bias[h, i, j] to scores[i, j]
-                    int biasOffset = h * numNodes * numNodes;
-                    AddStructuralBiasGpu(backend, scoresBuffer, structuralBiasBuffer, biasOffset, numNodes);
+                    // Direct GPU Add using precomputed bias slice for this head
+                    backend.Add(scoresBuffer, structuralBiasPerHead[h], scoresBuffer, numNodes * numNodes);
                 }
 
-                // Apply graph mask: set scores to -inf for non-adjacent nodes
+                // Apply graph mask: use precomputed mask buffer for 2D adjacency, fallback for 3D
                 if (_useStructuralEncoding)
                 {
-                    ApplyGraphMaskGpu(backend, scoresBuffer, _adjacencyMatrix, numNodes);
+                    if (graphMaskBuffer != null)
+                    {
+                        // GPU-native masking: add negative infinity mask to scores
+                        // scores = scores + negInfMask (where negInfMask[i,j] = -1e9 for non-adjacent)
+                        backend.Add(scoresBuffer, graphMaskBuffer, scoresBuffer, numNodes * numNodes);
+                    }
+                    else if (_adjacencyMatrix.Shape.Length == 3)
+                    {
+                        // 3D adjacency matrix: per-batch masking requires CPU fallback
+                        ApplyGraphMaskGpu(backend, scoresBuffer, _adjacencyMatrix, numNodes, b);
+                    }
                 }
 
                 // Apply softmax row-wise to get attention weights
                 using var attentionWeightsBuffer = backend.AllocateBuffer(numNodes * numNodes);
-                backend.SoftmaxRows(scoresBuffer, attentionWeightsBuffer, numNodes, numNodes);
+                backend.Softmax(scoresBuffer, attentionWeightsBuffer, numNodes, numNodes);
 
                 // Apply attention to values: attn @ V
                 // [numNodes, numNodes] @ [numNodes, headDim] -> [numNodes, headDim]
                 using var headOutputBuffer = backend.AllocateBuffer(numNodes * _headDim);
                 backend.Gemm(
                     attentionWeightsBuffer, valuesBuffer, headOutputBuffer,
-                    numNodes, _headDim, numNodes,
-                    transposeA: false, transposeB: false,
-                    alpha: 1.0f, beta: 0.0f);
+                    numNodes, _headDim, numNodes);
 
                 // Copy head output to concatenated buffer at correct offset
                 int headOffset = h * _headDim;
@@ -687,11 +728,9 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             using var attnOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
             backend.Gemm(
                 concatenatedHeadsBuffer, outputWeightsBuffer, attnOutputBuffer,
-                numNodes, _outputFeatures, _numHeads * _headDim,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+                numNodes, _outputFeatures, _numHeads * _headDim);
 
-            backend.AddBias(attnOutputBuffer, outputBiasBuffer, attnOutputBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(attnOutputBuffer, outputBiasBuffer, attnOutputBuffer, numNodes, _outputFeatures);
 
             // ========================================
             // RESIDUAL CONNECTION 1
@@ -717,61 +756,57 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             using var ffnHiddenBuffer = backend.AllocateBuffer(numNodes * _ffnHiddenDim);
             backend.Gemm(
                 residual1Buffer, ffnWeights1Buffer, ffnHiddenBuffer,
-                numNodes, _ffnHiddenDim, _outputFeatures,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+                numNodes, _ffnHiddenDim, _outputFeatures);
 
-            backend.AddBias(ffnHiddenBuffer, ffnBias1Buffer, ffnHiddenBuffer, numNodes, _ffnHiddenDim);
+            backend.BiasAdd(ffnHiddenBuffer, ffnBias1Buffer, ffnHiddenBuffer, numNodes, _ffnHiddenDim);
 
             // Apply GELU activation
-            backend.GELU(ffnHiddenBuffer, ffnHiddenBuffer, numNodes * _ffnHiddenDim);
+            backend.Gelu(ffnHiddenBuffer, ffnHiddenBuffer, numNodes * _ffnHiddenDim);
 
             // FFN layer 2: ffnOutput = hidden @ W2 + b2
             using var ffnOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
             backend.Gemm(
                 ffnHiddenBuffer, ffnWeights2Buffer, ffnOutputBuffer,
-                numNodes, _outputFeatures, _ffnHiddenDim,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+                numNodes, _outputFeatures, _ffnHiddenDim);
 
-            backend.AddBias(ffnOutputBuffer, ffnBias2Buffer, ffnOutputBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(ffnOutputBuffer, ffnBias2Buffer, ffnOutputBuffer, numNodes, _outputFeatures);
 
             // ========================================
             // RESIDUAL CONNECTION 2 + ACTIVATION
             // ========================================
 
-            int batchOutputOffset = b * numNodes * _outputFeatures;
-            using var batchOutputBuffer = tensorEngine.GetOrAllocateBufferSlice(
-                outputBuffer, batchOutputOffset, numNodes * _outputFeatures);
-
-            // Add residual: output = residual1 + ffnOutput
+            // Add residual: batchOutput = residual1 + ffnOutput
+            using var batchOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
             backend.Add(residual1Buffer, ffnOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
 
             // Apply activation if specified
-            var fusedActivation = GetFusedActivationType();
-            if (fusedActivation == FusedActivationType.ReLU)
-            {
-                backend.ReLU(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-            }
-            else if (fusedActivation == FusedActivationType.Sigmoid)
-            {
-                backend.Sigmoid(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-            }
-            else if (fusedActivation == FusedActivationType.Tanh)
-            {
-                backend.Tanh(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-            }
+            ApplyGpuActivation(backend, batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures, GetFusedActivationType());
+
+            // Copy batch output to the correct offset using GPU-native strided copy
+            int batchOutputOffset = b * numNodes * _outputFeatures;
+            int batchCopySize = numNodes * _outputFeatures;
+            backend.Copy2DStrided(batchOutputBuffer, outputBuffer, 1, batchCopySize, outputSize, batchOutputOffset);
         }
 
-        // Clean up structural bias buffer if allocated
-        structuralBiasBuffer?.Dispose();
+        // Clean up precomputed buffers
+        if (structuralBiasPerHead != null)
+        {
+            foreach (var buffer in structuralBiasPerHead)
+            {
+                buffer?.Dispose();
+            }
+        }
+        graphMaskBuffer?.Dispose();
 
         // Return GPU tensor with appropriate shape
         int[] outputShape = batchSize == 1
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(outputBuffer, outputShape, backend);
+        // Create a new buffer (non-using) and copy using GPU-native operation
+        var finalBuffer = backend.AllocateBuffer(outputSize);
+        backend.Copy(outputBuffer, finalBuffer, outputSize);
+        return new GpuTensor<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -791,49 +826,30 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <summary>
-    /// Adds structural bias to attention scores on GPU.
+    /// Applies graph mask to attention scores for 3D adjacency matrices with per-batch masking.
+    /// For 2D adjacency matrices, use the precomputed graphMaskBuffer with GPU Add instead.
     /// </summary>
-    private void AddStructuralBiasGpu(
-        IDirectGpuBackend backend,
-        IGpuBuffer scoresBuffer,
-        IGpuBuffer biasBuffer,
-        int biasOffset,
-        int numNodes)
-    {
-        // Download, add bias, re-upload
-        float[] scores = backend.DownloadBuffer(scoresBuffer);
-        float[] bias = backend.DownloadBuffer(biasBuffer);
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = 0; j < numNodes; j++)
-            {
-                scores[i * numNodes + j] += bias[biasOffset + i * numNodes + j];
-            }
-        }
-
-        backend.UploadBuffer(scoresBuffer, scores);
-    }
-
-    /// <summary>
-    /// Applies graph mask to attention scores, setting non-adjacent entries to -infinity.
-    /// </summary>
+    /// <param name="backend">The GPU backend.</param>
+    /// <param name="scoresBuffer">The attention scores buffer to mask.</param>
+    /// <param name="adjacencyMatrix">The 3D adjacency matrix [batch, nodes, nodes].</param>
+    /// <param name="numNodes">Number of nodes in the graph.</param>
+    /// <param name="batchIndex">The batch index for 3D adjacency matrix lookup.</param>
     private void ApplyGraphMaskGpu(
         IDirectGpuBackend backend,
         IGpuBuffer scoresBuffer,
         Tensor<T> adjacencyMatrix,
-        int numNodes)
+        int numNodes,
+        int batchIndex)
     {
+        // This is only called for 3D adjacency matrices where per-batch masking is needed
         float[] scores = backend.DownloadBuffer(scoresBuffer);
-        float negInf = float.NegativeInfinity;
+        const float negInf = -1e9f; // Use large negative value for softmax stability
 
         for (int i = 0; i < numNodes; i++)
         {
             for (int j = 0; j < numNodes; j++)
             {
-                float adjValue = adjacencyMatrix.Shape.Length == 2
-                    ? (float)NumOps.ToDouble(adjacencyMatrix[i, j])
-                    : (float)NumOps.ToDouble(adjacencyMatrix[0, i, j]);
+                float adjValue = (float)NumOps.ToDouble(adjacencyMatrix[batchIndex, i, j]);
 
                 if (MathF.Abs(adjValue) < 1e-6f)
                 {
@@ -842,7 +858,9 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             }
         }
 
-        backend.UploadBuffer(scoresBuffer, scores);
+        // Re-upload by allocating new buffer and copying
+        using var tempBuffer = backend.AllocateBuffer(scores);
+        backend.Copy(tempBuffer, scoresBuffer, scores.Length);
     }
 
     /// <summary>
@@ -857,18 +875,10 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int headOffset,
         int totalConcatDim)
     {
-        float[] head = backend.DownloadBuffer(headBuffer);
-        float[] concat = backend.DownloadBuffer(concatBuffer);
-
-        for (int n = 0; n < numNodes; n++)
-        {
-            for (int d = 0; d < headDim; d++)
-            {
-                concat[n * totalConcatDim + headOffset + d] = head[n * headDim + d];
-            }
-        }
-
-        backend.UploadBuffer(concatBuffer, concat);
+        // Use GPU-native Copy2DStrided for efficient head concatenation
+        // Each row of head [numNodes, headDim] is copied to the corresponding
+        // row of concat [numNodes, totalConcatDim] at offset headOffset
+        backend.Copy2DStrided(headBuffer, concatBuffer, numNodes, headDim, totalConcatDim, headOffset);
     }
 
     private Tensor<T> MultiHeadAttention(Tensor<T> input, int batchSize, int numNodes)

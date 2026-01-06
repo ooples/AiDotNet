@@ -486,7 +486,8 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (Engine is not DirectGpuTensorEngine tensorEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
 
-        if (!tensorEngine.TryGetBackend(out var backend))
+        var backend = tensorEngine.GetBackend();
+        if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable");
 
         if (_adjacencyMatrix == null)
@@ -542,29 +543,31 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Convert adjacency matrix to CSR format for sparse operations
-        // A[i,j] = 1 means edge from j to i (j→i) for incoming aggregation
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix);
         using var adjCsr = new CsrGpuTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
 
         // Create transposed adjacency for outgoing aggregation
-        // A^T[i,j] = A[j,i], so A^T represents edges where i→j (outgoing from i)
         var (adjTValues, adjTColIndices, adjTRowPointers) = ConvertToCSRTranspose(_adjacencyMatrix);
         using var adjTCsr = new CsrGpuTensor<T>(backend, adjTValues, adjTColIndices, adjTRowPointers, numNodes, numNodes);
 
         // Allocate output buffer [batch, nodes, outputFeatures]
         int outputSize = batchSize * numNodes * _outputFeatures;
-        using var outputBuffer = backend.AllocateBuffer(outputSize);
+        var outputBuffer = backend.AllocateBuffer(outputSize);
 
-        // Allocate intermediate buffers for each path
+        // Intermediate buffer sizes
         int transformedSize = numNodes * _outputFeatures;
         int concatenatedSize = numNodes * 3 * _outputFeatures;
 
+        // Reshape input to 3D for batch processing if needed
+        var input3D = inputShape.Length == 2
+            ? input.CreateView(0, new[] { 1, numNodes, inputFeatures })
+            : input;
+
         for (int b = 0; b < batchSize; b++)
         {
-            // Get current batch input slice
-            int batchInputOffset = b * numNodes * inputFeatures;
-            using var batchInputBuffer = tensorEngine.GetOrAllocateBufferSlice(
-                input.Buffer, batchInputOffset, numNodes * inputFeatures);
+            // Get current batch input slice using CreateView
+            var batchInput = input3D.CreateView(b * numNodes * inputFeatures, new[] { numNodes, inputFeatures });
+            var batchInputBuffer = batchInput.Buffer;
 
             // ========================================
             // STEP 1: Incoming aggregation A @ (X @ W_in) + b_in
@@ -572,21 +575,18 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
             // X @ W_in: [nodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [nodes, outputFeatures]
             using var xwInBuffer = backend.AllocateBuffer(transformedSize);
-            backend.Gemm(
-                batchInputBuffer, inWeightsBuffer, xwInBuffer,
-                numNodes, _outputFeatures, inputFeatures,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+            backend.Gemm(batchInputBuffer, inWeightsBuffer, xwInBuffer,
+                numNodes, _outputFeatures, inputFeatures);
 
             // A @ (X @ W_in): SpMM with sparse adjacency
             using var incomingBuffer = backend.AllocateBuffer(transformedSize);
             backend.CsrSpMM(
                 adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
                 xwInBuffer, incomingBuffer,
-                numNodes, _outputFeatures, numNodes, adjCsr.Nnz);
+                numNodes, inputFeatures, _outputFeatures, adjCsr.Nnz);
 
             // Add bias: incoming + b_in
-            backend.AddBias(incomingBuffer, inBiasBuffer, incomingBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(incomingBuffer, inBiasBuffer, incomingBuffer, numNodes, _outputFeatures);
 
             // ========================================
             // STEP 2: Outgoing aggregation A^T @ (X @ W_out) + b_out
@@ -594,58 +594,46 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
             // X @ W_out
             using var xwOutBuffer = backend.AllocateBuffer(transformedSize);
-            backend.Gemm(
-                batchInputBuffer, outWeightsBuffer, xwOutBuffer,
-                numNodes, _outputFeatures, inputFeatures,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+            backend.Gemm(batchInputBuffer, outWeightsBuffer, xwOutBuffer,
+                numNodes, _outputFeatures, inputFeatures);
 
             // A^T @ (X @ W_out): SpMM with transposed sparse adjacency
             using var outgoingBuffer = backend.AllocateBuffer(transformedSize);
             backend.CsrSpMM(
                 adjTCsr.Values, adjTCsr.ColumnIndices, adjTCsr.RowPointers,
                 xwOutBuffer, outgoingBuffer,
-                numNodes, _outputFeatures, numNodes, adjTCsr.Nnz);
+                numNodes, inputFeatures, _outputFeatures, adjTCsr.Nnz);
 
             // Add bias: outgoing + b_out
-            backend.AddBias(outgoingBuffer, outBiasBuffer, outgoingBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(outgoingBuffer, outBiasBuffer, outgoingBuffer, numNodes, _outputFeatures);
 
             // ========================================
             // STEP 3: Self transformation X @ W_self + b_self
             // ========================================
 
             using var selfBuffer = backend.AllocateBuffer(transformedSize);
-            backend.Gemm(
-                batchInputBuffer, selfWeightsBuffer, selfBuffer,
-                numNodes, _outputFeatures, inputFeatures,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+            backend.Gemm(batchInputBuffer, selfWeightsBuffer, selfBuffer,
+                numNodes, _outputFeatures, inputFeatures);
 
             // Add bias: self + b_self
-            backend.AddBias(selfBuffer, selfBiasBuffer, selfBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(selfBuffer, selfBiasBuffer, selfBuffer, numNodes, _outputFeatures);
 
             // ========================================
-            // STEP 4: Concatenate [incoming, outgoing, self]
+            // STEP 4: Concatenate [incoming, outgoing, self] using GPU-native Copy2DStrided
             // ========================================
 
             // Concatenate along feature dimension: [nodes, 3*outputFeatures]
-            using var concatenatedBuffer = backend.AllocateBuffer(concatenatedSize);
-            backend.ConcatFeatures(
-                incomingBuffer, outgoingBuffer,
-                concatenatedBuffer, numNodes, _outputFeatures, _outputFeatures);
+            // Each source buffer: [numNodes, outputFeatures]
+            // Destination: [numNodes, 3*outputFeatures]
+            var fullConcatBuffer = backend.AllocateBuffer(concatenatedSize);
+            backend.Fill(fullConcatBuffer, 0.0f, concatenatedSize);
 
-            // Now concatenate the partially concatenated buffer with self
-            // First, create buffer for [incoming, outgoing]
-            using var inOutBuffer = backend.AllocateBuffer(numNodes * 2 * _outputFeatures);
-            backend.ConcatFeatures(
-                incomingBuffer, outgoingBuffer,
-                inOutBuffer, numNodes, _outputFeatures, _outputFeatures);
-
-            // Full concatenation: [[incoming, outgoing], self] -> [incoming, outgoing, self]
-            using var fullConcatBuffer = backend.AllocateBuffer(concatenatedSize);
-            backend.ConcatFeatures(
-                inOutBuffer, selfBuffer,
-                fullConcatBuffer, numNodes, 2 * _outputFeatures, _outputFeatures);
+            // Copy incoming features to columns [0, outputFeatures)
+            backend.Copy2DStrided(incomingBuffer, fullConcatBuffer, numNodes, _outputFeatures, 3 * _outputFeatures, 0);
+            // Copy outgoing features to columns [outputFeatures, 2*outputFeatures)
+            backend.Copy2DStrided(outgoingBuffer, fullConcatBuffer, numNodes, _outputFeatures, 3 * _outputFeatures, _outputFeatures);
+            // Copy self features to columns [2*outputFeatures, 3*outputFeatures)
+            backend.Copy2DStrided(selfBuffer, fullConcatBuffer, numNodes, _outputFeatures, 3 * _outputFeatures, 2 * _outputFeatures);
 
             IGpuBuffer gatedBuffer = fullConcatBuffer;
 
@@ -657,60 +645,39 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             {
                 // Compute gates: concat @ W_gate + b_gate
                 using var gateLogitsBuffer = backend.AllocateBuffer(numNodes * 3);
-                backend.Gemm(
-                    fullConcatBuffer, gateWeightsBuffer, gateLogitsBuffer,
-                    numNodes, 3, 3 * _outputFeatures,
-                    transposeA: false, transposeB: false,
-                    alpha: 1.0f, beta: 0.0f);
+                backend.Gemm(fullConcatBuffer, gateWeightsBuffer, gateLogitsBuffer,
+                    numNodes, 3, 3 * _outputFeatures);
 
                 // Add gate bias
-                backend.AddBias(gateLogitsBuffer, gateBiasBuffer, gateLogitsBuffer, numNodes, 3);
+                backend.BiasAdd(gateLogitsBuffer, gateBiasBuffer, gateLogitsBuffer, numNodes, 3);
 
                 // Apply sigmoid to get gates
                 using var gatesBuffer = backend.AllocateBuffer(numNodes * 3);
                 backend.Sigmoid(gateLogitsBuffer, gatesBuffer, numNodes * 3);
 
                 // Apply gates to each of the three feature groups
-                // gate[i,0] applies to incoming[i,:], gate[i,1] to outgoing[i,:], gate[i,2] to self[i,:]
                 using var gatedFeaturesBuffer = backend.AllocateBuffer(concatenatedSize);
-                ApplyGatesToFeaturesGpu(
-                    backend, fullConcatBuffer, gatesBuffer, gatedFeaturesBuffer,
-                    numNodes, _outputFeatures);
+                ApplyGatesToFeaturesGpu(backend, fullConcatBuffer, gatesBuffer, gatedFeaturesBuffer, numNodes, _outputFeatures);
 
-                // gatedBuffer now points to the gated features
                 gatedBuffer = gatedFeaturesBuffer;
 
                 // ========================================
                 // STEP 6: Final combination with gated features
                 // ========================================
 
-                int batchOutputOffset = b * numNodes * _outputFeatures;
-                using var batchOutputBuffer = tensorEngine.GetOrAllocateBufferSlice(
-                    outputBuffer, batchOutputOffset, numNodes * _outputFeatures);
-
-                backend.Gemm(
-                    gatedFeaturesBuffer, combWeightsBuffer, batchOutputBuffer,
-                    numNodes, _outputFeatures, 3 * _outputFeatures,
-                    transposeA: false, transposeB: false,
-                    alpha: 1.0f, beta: 0.0f);
+                using var batchOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+                backend.Gemm(gatedFeaturesBuffer, combWeightsBuffer, batchOutputBuffer,
+                    numNodes, _outputFeatures, 3 * _outputFeatures);
 
                 // Add combination bias
-                backend.AddBias(batchOutputBuffer, combBiasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
+                backend.BiasAdd(batchOutputBuffer, combBiasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
 
-                // Apply activation if specified
+                // Apply activation using base class method
                 var fusedActivation = GetFusedActivationType();
-                if (fusedActivation == FusedActivationType.ReLU)
-                {
-                    backend.ReLU(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-                }
-                else if (fusedActivation == FusedActivationType.Sigmoid)
-                {
-                    backend.Sigmoid(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-                }
-                else if (fusedActivation == FusedActivationType.Tanh)
-                {
-                    backend.Tanh(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-                }
+                ApplyGpuActivation(backend, batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures, fusedActivation);
+
+                // Copy batch result to output buffer at correct offset
+                CopyToOutputBuffer(backend, batchOutputBuffer, outputBuffer, numNodes * _outputFeatures, b * numNodes * _outputFeatures);
             }
             else
             {
@@ -718,33 +685,19 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 // STEP 6: Final combination without gating
                 // ========================================
 
-                int batchOutputOffset = b * numNodes * _outputFeatures;
-                using var batchOutputBuffer = tensorEngine.GetOrAllocateBufferSlice(
-                    outputBuffer, batchOutputOffset, numNodes * _outputFeatures);
-
-                backend.Gemm(
-                    fullConcatBuffer, combWeightsBuffer, batchOutputBuffer,
-                    numNodes, _outputFeatures, 3 * _outputFeatures,
-                    transposeA: false, transposeB: false,
-                    alpha: 1.0f, beta: 0.0f);
+                using var batchOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+                backend.Gemm(fullConcatBuffer, combWeightsBuffer, batchOutputBuffer,
+                    numNodes, _outputFeatures, 3 * _outputFeatures);
 
                 // Add combination bias
-                backend.AddBias(batchOutputBuffer, combBiasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
+                backend.BiasAdd(batchOutputBuffer, combBiasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
 
-                // Apply activation if specified
+                // Apply activation using base class method
                 var fusedActivation = GetFusedActivationType();
-                if (fusedActivation == FusedActivationType.ReLU)
-                {
-                    backend.ReLU(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-                }
-                else if (fusedActivation == FusedActivationType.Sigmoid)
-                {
-                    backend.Sigmoid(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-                }
-                else if (fusedActivation == FusedActivationType.Tanh)
-                {
-                    backend.Tanh(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-                }
+                ApplyGpuActivation(backend, batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures, fusedActivation);
+
+                // Copy batch result to output buffer at correct offset
+                CopyToOutputBuffer(backend, batchOutputBuffer, outputBuffer, numNodes * _outputFeatures, b * numNodes * _outputFeatures);
             }
         }
 
@@ -754,10 +707,30 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Return GPU tensor with appropriate shape
         int[] outputShape = batchSize == 1
-            ? [numNodes, _outputFeatures]
-            : [batchSize, numNodes, _outputFeatures];
+            ? new[] { numNodes, _outputFeatures }
+            : new[] { batchSize, numNodes, _outputFeatures };
 
-        return new GpuTensor<T>(outputBuffer, outputShape, backend);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Copies data from source buffer to a specific offset in the destination buffer.
+    /// Uses GPU-native Copy2DStrided for offset copy operations.
+    /// </summary>
+    private static void CopyToOutputBuffer(IDirectGpuBackend backend, IGpuBuffer source, IGpuBuffer destination, int size, int destOffset)
+    {
+        if (destOffset == 0)
+        {
+            // Simple case - direct copy
+            backend.Copy(source, destination, size);
+        }
+        else
+        {
+            // Use GPU-native strided copy for offset operations
+            // Copy2DStrided with numRows=1 acts as a simple offset copy
+            int totalDestSize = size + destOffset; // Assume dest buffer is at least this large
+            backend.Copy2DStrided(source, destination, 1, size, totalDestSize, destOffset);
+        }
     }
 
     /// <summary>
@@ -865,7 +838,9 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             }
         }
 
-        backend.UploadBuffer(output, outputData);
+        // Copy result to output buffer
+        using var tempBuffer = backend.AllocateBuffer(outputData);
+        backend.Copy(tempBuffer, output, outputData.Length);
     }
 
     /// <summary>

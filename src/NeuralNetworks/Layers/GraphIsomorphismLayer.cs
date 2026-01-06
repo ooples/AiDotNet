@@ -864,17 +864,13 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var hiddenBuffer = backend.AllocateBuffer(new float[numNodes * _mlpHiddenDim]);
         var mlpOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
 
-        // Download input data for batch processing
-        float[] inputData = backend.DownloadBuffer(input.Buffer);
-
-        // Process each batch
+        // Process each batch using GPU-native views
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract batch input slice
+            // Extract batch input slice using GPU-native view (no CPU download)
             int batchOffset = b * numNodes * inputFeatures;
-            float[] batchData = new float[numNodes * inputFeatures];
-            Array.Copy(inputData, batchOffset, batchData, 0, numNodes * inputFeatures);
-            var batchInputBuffer = backend.AllocateBuffer(batchData);
+            var batchView = input.CreateView(batchOffset, [numNodes, inputFeatures]);
+            var batchInputBuffer = batchView.Buffer;
 
             // Step 1: Compute neighbor sum = adj @ input
             backend.Gemm(
@@ -910,19 +906,18 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 numNodes, _outputFeatures, _mlpHiddenDim);
             backend.BiasAdd(mlpOutputBuffer, bias2Buffer, mlpOutputBuffer, numNodes, _outputFeatures);
 
-            // Copy to output buffer at correct batch offset
+            // Copy to output buffer at correct batch offset using GPU-native strided copy
             int outputOffset = b * numNodes * _outputFeatures;
-            CopyToOffsetCpu(backend, mlpOutputBuffer, outputBuffer, outputOffset, numNodes * _outputFeatures);
-
-            // Dispose batch buffer
-            batchInputBuffer.Dispose();
+            int copySize = numNodes * _outputFeatures;
+            backend.Copy2DStrided(mlpOutputBuffer, outputBuffer, 1, copySize, outputSize, outputOffset);
+            // Note: batchInputBuffer is a view and doesn't need disposal
         }
 
-        // Apply activation
+        // Apply activation using GPU-native base class method
         var activationType = GetFusedActivationType();
         if (activationType != FusedActivationType.None)
         {
-            ApplyActivationCpu(backend, outputBuffer, outputSize, activationType);
+            ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, activationType);
         }
 
         // Clean up

@@ -309,6 +309,21 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual IGpuBuffer AllocateByteBuffer(int size) => Inner.AllocateByteBuffer(size);
 
+    /// <inheritdoc/>
+    public virtual void CsrSegmentedMax(IGpuBuffer csrColIndices, IGpuBuffer csrRowPointers,
+        IGpuBuffer input, IGpuBuffer output, int M, int K, int N)
+        => Inner.CsrSegmentedMax(csrColIndices, csrRowPointers, input, output, M, K, N);
+
+    /// <inheritdoc/>
+    public virtual void CsrSegmentedMin(IGpuBuffer csrColIndices, IGpuBuffer csrRowPointers,
+        IGpuBuffer input, IGpuBuffer output, int M, int K, int N)
+        => Inner.CsrSegmentedMin(csrColIndices, csrRowPointers, input, output, M, K, N);
+
+    /// <inheritdoc/>
+    public virtual void CsrSegmentedStdDev(IGpuBuffer csrColIndices, IGpuBuffer csrRowPointers,
+        IGpuBuffer input, IGpuBuffer output, int M, int K, int N, float epsilon = 1e-8f)
+        => Inner.CsrSegmentedStdDev(csrColIndices, csrRowPointers, input, output, M, K, N, epsilon);
+
     #endregion
 
     #region Reduction Operations
@@ -600,6 +615,15 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void Copy(IGpuBuffer source, IGpuBuffer destination, int size) => Inner.Copy(source, destination, size);
 
     /// <inheritdoc/>
+    public virtual void Copy2DStrided(IGpuBuffer source, IGpuBuffer destination, int numRows,
+        int srcCols, int destTotalCols, int destColOffset)
+        => Inner.Copy2DStrided(source, destination, numRows, srcCols, destTotalCols, destColOffset);
+
+    /// <inheritdoc/>
+    public virtual void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+        => Inner.NearestNeighborUpsample(input, output, batchChannels, height, width, scaleFactor);
+
+    /// <inheritdoc/>
     public virtual void Fill(IGpuBuffer buffer, float value, int size) => Inner.Fill(buffer, value, size);
 
     #endregion
@@ -755,6 +779,10 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual void Where(IGpuBuffer condition, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
         => Inner.Where(condition, A, B, C, size);
+
+    /// <inheritdoc/>
+    public virtual void NotEqualScalar(IGpuBuffer A, IGpuBuffer C, float scalar, int size)
+        => Inner.NotEqualScalar(A, C, scalar, size);
 
     #endregion
 

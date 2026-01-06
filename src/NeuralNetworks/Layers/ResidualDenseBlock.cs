@@ -1,7 +1,9 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Engines;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -139,6 +141,11 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             return true;
         }
     }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     #endregion
 
@@ -300,6 +307,166 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         // Local residual learning: output = x5 * residualScale + x0
         return AddResidual(x5, x0, _residualScale);
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after residual dense block processing.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+
+        // Handle 3D [C,H,W] or 4D [B,C,H,W] input
+        int batch, channels, height, width;
+        if (shape.Length == 3)
+        {
+            batch = 1;
+            channels = shape[0];
+            height = shape[1];
+            width = shape[2];
+        }
+        else if (shape.Length == 4)
+        {
+            batch = shape[0];
+            channels = shape[1];
+            height = shape[2];
+            width = shape[3];
+        }
+        else
+        {
+            throw new ArgumentException($"ResidualDenseBlock requires 3D or 4D input, got {shape.Length}D.");
+        }
+
+        int spatialSize = height * width;
+
+        // x0 = input
+        var x0Buffer = input.Buffer;
+
+        // Conv1: x1 = LeakyReLU(Conv(x0))
+        var conv1Out = _convLayers[0].ForwardGpu(input);
+        int x1Size = batch * _growthChannels * spatialSize;
+        var x1Activated = backend.AllocateBuffer(x1Size);
+        backend.LeakyRelu(conv1Out.Buffer, x1Activated, 0.2f, x1Size);
+
+        // Concatenate x0 and x1 for conv2 input: [channels + growthChannels]
+        int concat1Channels = _numFeatures + _growthChannels;
+        int concat1Size = batch * concat1Channels * spatialSize;
+        var concat1Buffer = backend.AllocateBuffer(concat1Size);
+        ConcatenateChannelsGpu(backend, x0Buffer, x1Activated, concat1Buffer,
+            batch, _numFeatures, _growthChannels, spatialSize);
+        var concat1Tensor = new GpuTensor<T>(backend, concat1Buffer,
+            shape.Length == 3 ? [concat1Channels, height, width] : [batch, concat1Channels, height, width],
+            GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Conv2: x2 = LeakyReLU(Conv(concat(x0, x1)))
+        var conv2Out = _convLayers[1].ForwardGpu(concat1Tensor);
+        int x2Size = batch * _growthChannels * spatialSize;
+        var x2Activated = backend.AllocateBuffer(x2Size);
+        backend.LeakyRelu(conv2Out.Buffer, x2Activated, 0.2f, x2Size);
+
+        // Concatenate concat1 and x2 for conv3 input: [channels + 2*growthChannels]
+        int concat2Channels = _numFeatures + 2 * _growthChannels;
+        int concat2Size = batch * concat2Channels * spatialSize;
+        var concat2Buffer = backend.AllocateBuffer(concat2Size);
+        ConcatenateChannelsGpu(backend, concat1Buffer, x2Activated, concat2Buffer,
+            batch, concat1Channels, _growthChannels, spatialSize);
+        var concat2Tensor = new GpuTensor<T>(backend, concat2Buffer,
+            shape.Length == 3 ? [concat2Channels, height, width] : [batch, concat2Channels, height, width],
+            GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Conv3: x3 = LeakyReLU(Conv(concat(x0, x1, x2)))
+        var conv3Out = _convLayers[2].ForwardGpu(concat2Tensor);
+        int x3Size = batch * _growthChannels * spatialSize;
+        var x3Activated = backend.AllocateBuffer(x3Size);
+        backend.LeakyRelu(conv3Out.Buffer, x3Activated, 0.2f, x3Size);
+
+        // Concatenate concat2 and x3 for conv4 input: [channels + 3*growthChannels]
+        int concat3Channels = _numFeatures + 3 * _growthChannels;
+        int concat3Size = batch * concat3Channels * spatialSize;
+        var concat3Buffer = backend.AllocateBuffer(concat3Size);
+        ConcatenateChannelsGpu(backend, concat2Buffer, x3Activated, concat3Buffer,
+            batch, concat2Channels, _growthChannels, spatialSize);
+        var concat3Tensor = new GpuTensor<T>(backend, concat3Buffer,
+            shape.Length == 3 ? [concat3Channels, height, width] : [batch, concat3Channels, height, width],
+            GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Conv4: x4 = LeakyReLU(Conv(concat(x0, x1, x2, x3)))
+        var conv4Out = _convLayers[3].ForwardGpu(concat3Tensor);
+        int x4Size = batch * _growthChannels * spatialSize;
+        var x4Activated = backend.AllocateBuffer(x4Size);
+        backend.LeakyRelu(conv4Out.Buffer, x4Activated, 0.2f, x4Size);
+
+        // Concatenate concat3 and x4 for conv5 input: [channels + 4*growthChannels]
+        int concat4Channels = _numFeatures + 4 * _growthChannels;
+        int concat4Size = batch * concat4Channels * spatialSize;
+        var concat4Buffer = backend.AllocateBuffer(concat4Size);
+        ConcatenateChannelsGpu(backend, concat3Buffer, x4Activated, concat4Buffer,
+            batch, concat3Channels, _growthChannels, spatialSize);
+        var concat4Tensor = new GpuTensor<T>(backend, concat4Buffer,
+            shape.Length == 3 ? [concat4Channels, height, width] : [batch, concat4Channels, height, width],
+            GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Conv5: x5 = Conv(concat(x0, x1, x2, x3, x4)) - NO activation
+        var x5 = _convLayers[4].ForwardGpu(concat4Tensor);
+        int x5Size = batch * _numFeatures * spatialSize;
+
+        // Local residual learning: output = x5 * residualScale + x0
+        var scaledBuffer = backend.AllocateBuffer(x5Size);
+        backend.Scale(x5.Buffer, scaledBuffer, (float)_residualScale, x5Size);
+
+        var outputBuffer = backend.AllocateBuffer(x5Size);
+        backend.Add(scaledBuffer, x0Buffer, outputBuffer, x5Size);
+
+        // Dispose intermediate activated buffers (concat buffers disposed by GpuTensor)
+        x1Activated.Dispose();
+        x2Activated.Dispose();
+        x3Activated.Dispose();
+        x4Activated.Dispose();
+        scaledBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Concatenates two tensors along the channel dimension on GPU.
+    /// For NCHW format: output[b, 0:channelsA, :, :] = A[b, :, :, :]
+    ///                  output[b, channelsA:, :, :] = B[b, :, :, :]
+    /// </summary>
+    private static void ConcatenateChannelsGpu(
+        Tensors.Engines.DirectGpu.IDirectGpuBackend backend,
+        Tensors.Engines.DirectGpu.IGpuBuffer a,
+        Tensors.Engines.DirectGpu.IGpuBuffer b,
+        Tensors.Engines.DirectGpu.IGpuBuffer output,
+        int batch, int channelsA, int channelsB, int spatialSize)
+    {
+        int totalChannels = channelsA + channelsB;
+        int aChannelDataPerBatch = channelsA * spatialSize;
+        int bChannelDataPerBatch = channelsB * spatialSize;
+        int outChannelDataPerBatch = totalChannels * spatialSize;
+
+        // Use Copy2DStrided for channel concatenation:
+        // - numRows = batch (each row is one batch's worth of channel data)
+        // - srcCols = channelsX * spatialSize (data per batch in source)
+        // - destTotalCols = totalChannels * spatialSize (data per batch in output)
+        // - destColOffset = offset within each batch's output data
+
+        // Copy A's channels to output[b, 0:channelsA, :, :]
+        backend.Copy2DStrided(a, output, batch, aChannelDataPerBatch, outChannelDataPerBatch, 0);
+
+        // Copy B's channels to output[b, channelsA:, :, :]
+        backend.Copy2DStrided(b, output, batch, bChannelDataPerBatch, outChannelDataPerBatch, aChannelDataPerBatch);
     }
 
     #endregion

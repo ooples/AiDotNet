@@ -1850,6 +1850,96 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-resident fused transposed 2D convolution with activation.
+    /// Keeps input and output on GPU for chained layer execution.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor [batch, inChannels, height, width].</param>
+    /// <param name="kernel">Kernel tensor (cached if registered).</param>
+    /// <param name="bias">Optional bias tensor (cached if registered).</param>
+    /// <param name="strideH">Vertical stride.</param>
+    /// <param name="strideW">Horizontal stride.</param>
+    /// <param name="padH">Vertical padding.</param>
+    /// <param name="padW">Horizontal padding.</param>
+    /// <param name="outputPadH">Vertical output padding.</param>
+    /// <param name="outputPadW">Horizontal output padding.</param>
+    /// <param name="activation">Activation function to fuse.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    public IGpuTensor<T> FusedConvTranspose2DGpu<T>(
+        IGpuTensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int outputPadH, int outputPadW,
+        FusedActivationType activation)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for FusedConvTranspose2DGpu");
+
+        // Expected input shape: [batch, inChannels, height, width]
+        // Expected kernel shape: [inChannels, outChannels, kernelH, kernelW]
+        if (input.Shape.Length != 4 || kernel.Rank != 4)
+            throw new ArgumentException("FusedConvTranspose2DGpu requires 4D input and kernel tensors");
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        int outChannels = kernel.Shape[1];
+        int kernelH = kernel.Shape[2];
+        int kernelW = kernel.Shape[3];
+
+        // Calculate output dimensions for transposed convolution
+        int outHeight = (inHeight - 1) * strideH - 2 * padH + kernelH + outputPadH;
+        int outWidth = (inWidth - 1) * strideW - 2 * padW + kernelW + outputPadW;
+
+        if (outHeight <= 0 || outWidth <= 0)
+            throw new ArgumentException($"Invalid transposed convolution parameters result in non-positive output dimensions: {outHeight}x{outWidth}");
+
+        int outputSize = batch * outChannels * outHeight * outWidth;
+
+        // Input is already on GPU - use its buffer directly
+        using var kernelBuffer = GetOrAllocateBuffer(backend, kernel.Data);
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        try
+        {
+            // Execute GPU transposed convolution
+            backend.ConvTranspose2D(input.Buffer, kernelBuffer.Buffer, outputBuffer,
+                batch, inChannels, inHeight, inWidth,
+                outChannels, outHeight, outWidth,
+                kernelH, kernelW,
+                strideH, strideW, padH, padW,
+                outputPadH, outputPadW);
+
+            // Add bias if present using GPU kernel for NCHW format
+            if (bias != null)
+            {
+                int spatialSize = outHeight * outWidth;
+                using var biasBuffer = GetOrAllocateBuffer(backend, bias.Data);
+                backend.Conv2DBiasAdd(outputBuffer, biasBuffer.Buffer, batch, outChannels, spatialSize);
+            }
+
+            // Apply activation on GPU
+            if (activation != FusedActivationType.None)
+            {
+                ApplyGpuActivation(backend, outputBuffer, outputSize, activation);
+            }
+
+            // Return GPU-resident tensor - NO DOWNLOAD
+            return new GpuTensor<T>(backend, outputBuffer, new[] { batch, outChannels, outHeight, outWidth },
+                GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        catch
+        {
+            outputBuffer.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// GPU-accelerated 2D max pooling operation.
     /// Uses GPU kernels for efficient parallel computation of maximum values within pooling windows.
     /// </summary>
@@ -2240,6 +2330,91 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         catch
         {
             return base.DepthwiseConv2D(input, kernel, stride, padding);
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident depthwise 2D convolution with optional bias and activation.
+    /// Keeps input and output on GPU for chained layer execution.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor [batch, channels, height, width].</param>
+    /// <param name="kernel">Kernel tensor (cached if registered). Shape: [channels, 1, kH, kW].</param>
+    /// <param name="bias">Optional bias tensor (cached if registered).</param>
+    /// <param name="strideH">Vertical stride.</param>
+    /// <param name="strideW">Horizontal stride.</param>
+    /// <param name="padH">Vertical padding.</param>
+    /// <param name="padW">Horizontal padding.</param>
+    /// <param name="activation">Activation function to fuse.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    public IGpuTensor<T> DepthwiseConv2DGpu<T>(
+        IGpuTensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        FusedActivationType activation)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for DepthwiseConv2DGpu");
+
+        // Expected input shape: [batch, channels, height, width]
+        // Expected kernel shape: [channels, 1, kernelH, kernelW] or [channels, kernelH, kernelW]
+        if (input.Shape.Length != 4)
+            throw new ArgumentException("DepthwiseConv2DGpu requires 4D input tensor");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        int kernelH = kernel.Rank == 4 ? kernel.Shape[2] : kernel.Shape[1];
+        int kernelW = kernel.Rank == 4 ? kernel.Shape[3] : kernel.Shape[2];
+
+        int outHeight = (inHeight + 2 * padH - kernelH) / strideH + 1;
+        int outWidth = (inWidth + 2 * padW - kernelW) / strideW + 1;
+
+        if (outHeight <= 0 || outWidth <= 0)
+            throw new ArgumentException($"Invalid depthwise convolution parameters result in non-positive output dimensions: {outHeight}x{outWidth}");
+
+        int outputSize = batch * channels * outHeight * outWidth;
+
+        // Input is already on GPU - use its buffer directly
+        using var kernelBuffer = GetOrAllocateBuffer(backend, kernel.Data);
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        try
+        {
+            // Execute GPU depthwise convolution
+            backend.DepthwiseConv2D(input.Buffer, kernelBuffer.Buffer, outputBuffer,
+                batch, channels, inHeight, inWidth,
+                outHeight, outWidth,
+                kernelH, kernelW,
+                strideH, strideW, padH, padW);
+
+            // Add bias if present using GPU kernel for NCHW format
+            if (bias != null)
+            {
+                int spatialSize = outHeight * outWidth;
+                using var biasBuffer = GetOrAllocateBuffer(backend, bias.Data);
+                // Depthwise output has same channels as input - use Conv2DBiasAdd pattern
+                backend.Conv2DBiasAdd(outputBuffer, biasBuffer.Buffer, batch, channels, spatialSize);
+            }
+
+            // Apply activation on GPU
+            if (activation != FusedActivationType.None)
+            {
+                ApplyGpuActivation(backend, outputBuffer, outputSize, activation);
+            }
+
+            // Return GPU-resident tensor - NO DOWNLOAD
+            return new GpuTensor<T>(backend, outputBuffer, new[] { batch, channels, outHeight, outWidth },
+                GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        catch
+        {
+            outputBuffer.Dispose();
+            throw;
         }
     }
 
@@ -2830,6 +3005,54 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         backend.BiasAdd(input.Buffer, biasBuffer.Buffer, outputBuffer, numVectors, lastDim);
 
         return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(),
+            GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident nearest-neighbor upsampling.
+    /// Increases spatial dimensions (last two) by the specified scale factor.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor with shape [..., height, width].</param>
+    /// <param name="scaleFactor">Scale factor for both height and width.</param>
+    /// <returns>GPU-resident upsampled tensor.</returns>
+    public IGpuTensor<T> UpsampleGpu<T>(IGpuTensor<T> input, int scaleFactor)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for UpsampleGpu");
+
+        if (input.Shape.Length < 2)
+            throw new ArgumentException("Input must have at least 2 dimensions for upsampling");
+
+        // Compute output shape (scale last two dimensions)
+        int[] outputShape = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length - 2; i++)
+            outputShape[i] = input.Shape[i];
+
+        int inHeight = input.Shape[^2];
+        int inWidth = input.Shape[^1];
+        int outHeight = inHeight * scaleFactor;
+        int outWidth = inWidth * scaleFactor;
+        outputShape[^2] = outHeight;
+        outputShape[^1] = outWidth;
+
+        // Compute total elements
+        int batchChannels = 1;
+        for (int i = 0; i < input.Shape.Length - 2; i++)
+            batchChannels *= input.Shape[i];
+
+        int inputSize = batchChannels * inHeight * inWidth;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Use NearestNeighborUpsample if available, otherwise implement manually
+        backend.NearestNeighborUpsample(
+            input.Buffer, outputBuffer,
+            batchChannels, inHeight, inWidth,
+            scaleFactor);
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape,
             GpuTensorRole.Activation, ownsBuffer: true);
     }
 

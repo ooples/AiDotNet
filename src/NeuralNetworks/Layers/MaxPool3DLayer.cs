@@ -66,6 +66,15 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// <value><c>true</c> if the input shape is configured.</value>
     public override bool SupportsJitCompilation => InputShape != null && InputShape.Length > 0;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// MaxPool3D does not have a native GPU kernel implementation.
+    /// CPU execution is used for this layer.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => false;
+
     #endregion
 
     #region Private Fields

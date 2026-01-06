@@ -1,5 +1,6 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -74,9 +75,9 @@ public class PixelShuffleLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Indicates whether this layer supports GPU execution.
-    /// PixelShuffle is a structural rearrangement operation.
+    /// PixelShuffle uses GPU Reshape and Permute operations for efficient rearrangement.
     /// </summary>
-    protected override bool SupportsGpuExecution => false;
+    protected override bool SupportsGpuExecution => true;
 
     #endregion
 
@@ -273,6 +274,85 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         }
 
         throw new ArgumentException($"Pixel shuffle requires at least 3 dimensions, got {shape.Length}.");
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensors.</param>
+    /// <returns>A GPU-resident output tensor after pixel shuffle.</returns>
+    /// <remarks>
+    /// <para>
+    /// Pixel shuffle is implemented as: Reshape -> Permute -> Reshape
+    /// [N, C*r², H, W] -> [N, C, r, r, H, W] -> [N, C, H, r, W, r] -> [N, C, H*r, W*r]
+    /// All operations stay GPU-resident.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        int r = _upscaleFactor;
+        int r2 = r * r;
+
+        // Handle different input ranks
+        int batch, channels, height, width;
+        bool added3DBatch = false;
+
+        if (shape.Length == 4)
+        {
+            batch = shape[0];
+            channels = shape[1];
+            height = shape[2];
+            width = shape[3];
+        }
+        else if (shape.Length == 3)
+        {
+            batch = 1;
+            channels = shape[0];
+            height = shape[1];
+            width = shape[2];
+            added3DBatch = true;
+            input = gpuEngine.ReshapeGpu(input, new[] { 1, channels, height, width });
+        }
+        else
+        {
+            throw new ArgumentException($"PixelShuffle requires 3D or 4D input, got {shape.Length}D.");
+        }
+
+        // Cache for backward pass
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _originalInputShape = shape;
+        }
+
+        int outChannels = channels / r2;
+
+        // Step 1: Reshape [N, C*r², H, W] -> [N, C, r, r, H, W]
+        var reshaped1 = gpuEngine.ReshapeGpu(input, new[] { batch, outChannels, r, r, height, width });
+
+        // Step 2: Permute [N, C, r, r, H, W] -> [N, C, H, r, W, r]
+        var permuted = gpuEngine.PermuteGpu(reshaped1, new[] { 0, 1, 4, 2, 5, 3 });
+
+        // Step 3: Reshape [N, C, H, r, W, r] -> [N, C, H*r, W*r]
+        int outHeight = height * r;
+        int outWidth = width * r;
+        var result = gpuEngine.ReshapeGpu(permuted, new[] { batch, outChannels, outHeight, outWidth });
+
+        // Remove batch dimension if we added it
+        if (added3DBatch)
+        {
+            result = gpuEngine.ReshapeGpu(result, new[] { outChannels, outHeight, outWidth });
+        }
+
+        return result;
     }
 
     #endregion

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -100,7 +101,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
-    protected override bool SupportsGpuExecution => false;
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the DecoderLayer class with scalar activation.
@@ -304,6 +305,58 @@ public class DecoderLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 2] = output.Shape[1];
             outputShape[_originalInputShape.Length - 1] = output.Shape[2];
             output = output.Reshape(outputShape);
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Performs the GPU-resident forward pass of the decoder layer.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors: [decoderInput, encoderOutput].</param>
+    /// <returns>The GPU output tensor after self-attention, cross-attention, and FFN.</returns>
+    /// <remarks>
+    /// All computations stay on GPU. Chains: SelfAttention → Norm1 → CrossAttention → Norm2 → FFN → Norm3.
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length < 2)
+            throw new ArgumentException("DecoderLayer requires two inputs: [decoderInput, encoderOutput]", nameof(inputs));
+
+        var gpuEngine = Engine as DirectGpuTensorEngine;
+        if (gpuEngine == null)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var decoderInput = inputs[0];
+        var encoderOutput = inputs[1];
+
+        // 1. Self-attention: decoder attends to itself
+        var selfAttentionOutput = _selfAttention.ForwardGpu(decoderInput);
+
+        // 2. First residual connection + layer norm
+        var residual1 = gpuEngine.AddGpu(decoderInput, selfAttentionOutput);
+        var normalized1 = _norm1.ForwardGpu(residual1);
+
+        // 3. Cross-attention: decoder attends to encoder output
+        var crossAttentionOutput = _crossAttention.ForwardGpu(normalized1, encoderOutput);
+
+        // 4. Second residual connection + layer norm
+        var residual2 = gpuEngine.AddGpu(normalized1, crossAttentionOutput);
+        var normalized2 = _norm2.ForwardGpu(residual2);
+
+        // 5. Feed-forward network: two linear layers
+        var ffHidden = _feedForward1.ForwardGpu(normalized2);
+        var ffOutput = _feedForward2.ForwardGpu(ffHidden);
+
+        // 6. Third residual connection + layer norm
+        var residual3 = gpuEngine.AddGpu(normalized2, ffOutput);
+        var output = _norm3.ForwardGpu(residual3);
+
+        // Cache state for backward pass only during training
+        if (IsTrainingMode)
+        {
+            _lastInput = decoderInput.ToTensor();
+            _lastEncoderOutput = encoderOutput.ToTensor();
         }
 
         return output;

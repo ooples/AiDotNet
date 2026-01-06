@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -97,8 +98,9 @@ public class SplitLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
+    /// SplitLayer uses GPU Reshape operations.
     /// </summary>
-    protected override bool SupportsGpuExecution => false;
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SplitLayer{T}"/> class.
@@ -238,6 +240,86 @@ public class SplitLayer<T> : LayerBase<T>
                 outShape[_originalInputShape.Length] = splitSize;
                 return output.Reshape(outShape);
             }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensors.</param>
+    /// <returns>A GPU-resident output tensor after splitting.</returns>
+    /// <remarks>
+    /// <para>
+    /// SplitLayer is implemented as a reshape operation that stays entirely GPU-resident.
+    /// No data is downloaded to CPU during inference.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        int rank = shape.Length;
+
+        // Determine batch size and input size
+        int batchSize;
+        int inputSize;
+        IGpuTensor<T> processInput;
+
+        if (rank == 1)
+        {
+            batchSize = 1;
+            inputSize = shape[0];
+            processInput = gpuEngine.ReshapeGpu(input, new[] { 1, inputSize });
+        }
+        else if (rank == 2)
+        {
+            batchSize = shape[0];
+            inputSize = shape[1];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            batchSize = 1;
+            for (int d = 0; d < rank - 1; d++)
+                batchSize *= shape[d];
+            inputSize = shape[rank - 1];
+            processInput = gpuEngine.ReshapeGpu(input, new[] { batchSize, inputSize });
+        }
+
+        // Cache for backward pass during training
+        if (IsTrainingMode)
+        {
+            _lastInput = processInput.ToTensor();
+            _originalInputShape = shape;
+        }
+
+        int splitSize = inputSize / _numSplits;
+
+        // Reshape to [batch, numSplits, splitSize]
+        var output = gpuEngine.ReshapeGpu(processInput, new[] { batchSize, _numSplits, splitSize });
+
+        // Restore output shape to match original input rank
+        if (rank == 1)
+        {
+            return gpuEngine.ReshapeGpu(output, new[] { _numSplits, splitSize });
+        }
+        else if (rank > 2)
+        {
+            var outShape = new int[rank + 1];
+            for (int d = 0; d < rank - 1; d++)
+                outShape[d] = shape[d];
+            outShape[rank - 1] = _numSplits;
+            outShape[rank] = splitSize;
+            return gpuEngine.ReshapeGpu(output, outShape);
         }
 
         return output;

@@ -472,16 +472,27 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                         break;
 
                     case PNAAggregator.Max:
+                        // Use GPU segmented max aggregation
+                        backend.CsrSegmentedMax(
+                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            transformedBuffer, aggregatedBuffer,
+                            numNodes, numNodes, preTransformFeatures);
+                        break;
+
                     case PNAAggregator.Min:
+                        // Use GPU segmented min aggregation
+                        backend.CsrSegmentedMin(
+                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            transformedBuffer, aggregatedBuffer,
+                            numNodes, numNodes, preTransformFeatures);
+                        break;
+
                     case PNAAggregator.StdDev:
-                        // For complex aggregators, compute on CPU and upload
-                        // This is a simplified approach - full GPU would need segment operations
-                        var aggResult = ComputeAggregatorCpu(transformedBuffer, backend, adjCsr,
-                            aggregator, degrees, numNodes, preTransformFeatures);
-                        using (var tempBuffer = backend.AllocateBuffer(aggResult))
-                        {
-                            backend.Copy(tempBuffer, aggregatedBuffer, aggResult.Length);
-                        }
+                        // Use GPU segmented stddev aggregation
+                        backend.CsrSegmentedStdDev(
+                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            transformedBuffer, aggregatedBuffer,
+                            numNodes, numNodes, preTransformFeatures);
                         break;
 
                     default:
@@ -658,124 +669,48 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     }
 
     /// <summary>
-    /// Computes complex aggregators on CPU and returns float array for GPU upload.
-    /// </summary>
-    private float[] ComputeAggregatorCpu(IGpuBuffer transformedBuffer, IDirectGpuBackend backend,
-        CsrGpuTensor<T> adjCsr, PNAAggregator aggregator, float[] degrees, int numNodes, int features)
-    {
-        float[] transformed = backend.DownloadBuffer(transformedBuffer);
-        var (_, colIndices, rowPointers) = adjCsr.ToCsr();
-        float[] result = new float[numNodes * features];
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            int rowStart = rowPointers[i];
-            int rowEnd = rowPointers[i + 1];
-
-            if (rowEnd == rowStart)
-            {
-                // No neighbors - use zeros (or node's own features for some aggregators)
-                continue;
-            }
-
-            for (int f = 0; f < features; f++)
-            {
-                switch (aggregator)
-                {
-                    case PNAAggregator.Max:
-                        float maxVal = float.NegativeInfinity;
-                        for (int k = rowStart; k < rowEnd; k++)
-                        {
-                            int j = colIndices[k];
-                            maxVal = MathF.Max(maxVal, transformed[j * features + f]);
-                        }
-                        result[i * features + f] = float.IsNegativeInfinity(maxVal) ? 0 : maxVal;
-                        break;
-
-                    case PNAAggregator.Min:
-                        float minVal = float.PositiveInfinity;
-                        for (int k = rowStart; k < rowEnd; k++)
-                        {
-                            int j = colIndices[k];
-                            minVal = MathF.Min(minVal, transformed[j * features + f]);
-                        }
-                        result[i * features + f] = float.IsPositiveInfinity(minVal) ? 0 : minVal;
-                        break;
-
-                    case PNAAggregator.StdDev:
-                        // Compute mean
-                        float sum = 0;
-                        for (int k = rowStart; k < rowEnd; k++)
-                        {
-                            int j = colIndices[k];
-                            sum += transformed[j * features + f];
-                        }
-                        float mean = sum / degrees[i];
-
-                        // Compute variance
-                        float variance = 0;
-                        for (int k = rowStart; k < rowEnd; k++)
-                        {
-                            int j = colIndices[k];
-                            float diff = transformed[j * features + f] - mean;
-                            variance += diff * diff;
-                        }
-                        variance /= degrees[i];
-                        result[i * features + f] = MathF.Sqrt(variance + 1e-8f);
-                        break;
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// Applies amplification or attenuation scaler on GPU.
+    /// Amplification: scale[i] = degree[i] / avgDegree
+    /// Attenuation: scale[i] = avgDegree / max(degree[i], 1)
     /// </summary>
     private void ApplyScalerGpu(IDirectGpuBackend backend, IGpuBuffer sourceBuffer, IGpuBuffer destBuffer,
         IGpuBuffer degreesBuffer, int numNodes, int features, float avgDegree, bool isAmplification)
     {
-        float[] data = backend.DownloadBuffer(sourceBuffer);
-        float[] degrees = backend.DownloadBuffer(degreesBuffer);
-        float[] result = new float[numNodes * features];
+        // Create scale factors buffer on GPU
+        using var scaleFactors = backend.AllocateBuffer(numNodes);
+        using var onesBuffer = backend.AllocateBuffer(numNodes);
+        using var tempBuffer = backend.AllocateBuffer(numNodes);
 
-        for (int i = 0; i < numNodes; i++)
+        // Clamp degrees to minimum of 1 to avoid division by zero
+        // safeDegrees = max(degrees, 1)
+        backend.Fill(onesBuffer, 1.0f, numNodes);
+        backend.Max(degreesBuffer, onesBuffer, tempBuffer, numNodes);
+
+        if (isAmplification)
         {
-            float deg = MathF.Max(degrees[i], 1.0f);
-            float factor = isAmplification ? (deg / avgDegree) : (avgDegree / deg);
-
-            for (int f = 0; f < features; f++)
-            {
-                result[i * features + f] = data[i * features + f] * factor;
-            }
+            // scaleFactors[i] = safeDegrees[i] / avgDegree
+            backend.Scale(tempBuffer, scaleFactors, 1.0f / avgDegree, numNodes);
+        }
+        else
+        {
+            // scaleFactors[i] = avgDegree / safeDegrees[i]
+            // Use Divide: scaleFactors = avgDegree * ones / safeDegrees
+            using var avgBuffer = backend.AllocateBuffer(numNodes);
+            backend.Fill(avgBuffer, avgDegree, numNodes);
+            backend.Divide(avgBuffer, tempBuffer, scaleFactors, numNodes);
         }
 
-        // Upload via temp buffer and copy
-        using var tempBuffer = backend.AllocateBuffer(result);
-        backend.Copy(tempBuffer, destBuffer, result.Length);
+        // Apply scale factors to each row: destBuffer[i,f] = sourceBuffer[i,f] * scaleFactors[i]
+        backend.BroadcastMultiplyFirstAxis(sourceBuffer, scaleFactors, destBuffer, numNodes, features);
     }
 
     /// <summary>
-    /// Copies scaled features to the concatenated buffer at the specified offset.
+    /// Copies scaled features to the concatenated buffer at the specified offset using GPU strided copy.
     /// </summary>
     private void CopyToConcat(IDirectGpuBackend backend, IGpuBuffer sourceBuffer, IGpuBuffer concatBuffer,
         int numNodes, int features, int featureOffset)
     {
-        float[] source = backend.DownloadBuffer(sourceBuffer);
-        float[] concat = backend.DownloadBuffer(concatBuffer);
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                concat[i * _combinedFeatures + featureOffset + f] = source[i * features + f];
-            }
-        }
-
-        // Upload via temp buffer and copy
-        using var tempBuffer = backend.AllocateBuffer(concat);
-        backend.Copy(tempBuffer, concatBuffer, concat.Length);
+        backend.Copy2DStrided(sourceBuffer, concatBuffer, numNodes, features, _combinedFeatures, featureOffset);
     }
 
     /// <summary>

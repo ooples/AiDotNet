@@ -690,6 +690,19 @@ __kernel void equal_values(
     C[idx] = A[idx] == B[idx] ? 1.0f : 0.0f;
 }
 
+// Comparison: not equal to scalar
+__kernel void not_equal_scalar(
+    __global const float* A,
+    __global float* C,
+    const float scalar,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    C[idx] = fabs(A[idx] - scalar) >= 1e-6f ? 1.0f : 0.0f;
+}
+
 // Where (conditional select)
 __kernel void where_select(
     __global const float* condition,

@@ -263,37 +263,16 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable");
 
         var input = inputs[0];
-        int inputSize = input.ElementCount;
         int outputSize = ColumnCount * CellsPerColumn;
 
-        // Download input data from GPU
-        var inputData = backend.DownloadBuffer(input.Buffer);
-
-        // Get cell states as float array
+        // Convert cell states to float array and upload to GPU
         var cellStatesData = DirectGpuEngine.ToFloatArray<T>(CellStates.Data);
-
-        // Create mask by repeating each input element CellsPerColumn times
-        var maskData = new float[outputSize];
-        for (int c = 0; c < ColumnCount; c++)
-        {
-            float inputVal = inputData[c];
-            for (int cell = 0; cell < CellsPerColumn; cell++)
-            {
-                maskData[c * CellsPerColumn + cell] = inputVal;
-            }
-        }
-
-        // Upload mask and cell states to GPU
-        var maskBuffer = backend.AllocateBuffer(maskData);
-        var cellStatesBuffer = backend.AllocateBuffer(cellStatesData);
+        using var cellStatesBuffer = backend.AllocateBuffer(cellStatesData);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
-        // Element-wise multiply on GPU: output = mask * cellStates
-        backend.Multiply(maskBuffer, cellStatesBuffer, outputBuffer, outputSize);
-
-        // Clean up intermediate buffers
-        maskBuffer.Dispose();
-        cellStatesBuffer.Dispose();
+        // Use BroadcastMultiplyFirstAxis: output[col, cell] = cellStates[col, cell] * input[col]
+        // This broadcasts input[ColumnCount] across the CellsPerColumn dimension without CPU download
+        backend.BroadcastMultiplyFirstAxis(cellStatesBuffer, input.Buffer, outputBuffer, ColumnCount, CellsPerColumn);
 
         return new GpuTensor<T>(backend, outputBuffer, new[] { outputSize }, GpuTensorRole.Activation, ownsBuffer: true);
     }

@@ -2694,6 +2694,95 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             kernel.Execute2D(features, numEdges, localSizeX, localSizeY);
         }
 
+        /// <inheritdoc/>
+        public void CsrSegmentedMax(
+            IGpuBuffer csrColIndices,
+            IGpuBuffer csrRowPointers,
+            IGpuBuffer input,
+            IGpuBuffer output,
+            int M, int K, int N)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var kernel = _kernelCache["csr_segmented_max"];
+            var bufferColIndices = ((DirectOpenClGpuBuffer)csrColIndices).Buffer;
+            var bufferRowPointers = ((DirectOpenClGpuBuffer)csrRowPointers).Buffer;
+            var bufferInput = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            kernel.SetArg(0, bufferColIndices.Handle);
+            kernel.SetArg(1, bufferRowPointers.Handle);
+            kernel.SetArg(2, bufferInput.Handle);
+            kernel.SetArg(3, bufferOutput.Handle);
+            kernel.SetArg(4, M);
+            kernel.SetArg(5, K);
+            kernel.SetArg(6, N);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(N, M);
+            kernel.Execute2D(N, M, localSizeX, localSizeY);
+        }
+
+        /// <inheritdoc/>
+        public void CsrSegmentedMin(
+            IGpuBuffer csrColIndices,
+            IGpuBuffer csrRowPointers,
+            IGpuBuffer input,
+            IGpuBuffer output,
+            int M, int K, int N)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var kernel = _kernelCache["csr_segmented_min"];
+            var bufferColIndices = ((DirectOpenClGpuBuffer)csrColIndices).Buffer;
+            var bufferRowPointers = ((DirectOpenClGpuBuffer)csrRowPointers).Buffer;
+            var bufferInput = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            kernel.SetArg(0, bufferColIndices.Handle);
+            kernel.SetArg(1, bufferRowPointers.Handle);
+            kernel.SetArg(2, bufferInput.Handle);
+            kernel.SetArg(3, bufferOutput.Handle);
+            kernel.SetArg(4, M);
+            kernel.SetArg(5, K);
+            kernel.SetArg(6, N);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(N, M);
+            kernel.Execute2D(N, M, localSizeX, localSizeY);
+        }
+
+        /// <inheritdoc/>
+        public void CsrSegmentedStdDev(
+            IGpuBuffer csrColIndices,
+            IGpuBuffer csrRowPointers,
+            IGpuBuffer input,
+            IGpuBuffer output,
+            int M, int K, int N,
+            float epsilon = 1e-8f)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var kernel = _kernelCache["csr_segmented_stddev"];
+            var bufferColIndices = ((DirectOpenClGpuBuffer)csrColIndices).Buffer;
+            var bufferRowPointers = ((DirectOpenClGpuBuffer)csrRowPointers).Buffer;
+            var bufferInput = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            kernel.SetArg(0, bufferColIndices.Handle);
+            kernel.SetArg(1, bufferRowPointers.Handle);
+            kernel.SetArg(2, bufferInput.Handle);
+            kernel.SetArg(3, bufferOutput.Handle);
+            kernel.SetArg(4, M);
+            kernel.SetArg(5, K);
+            kernel.SetArg(6, N);
+            kernel.SetArg(7, epsilon);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(N, M);
+            kernel.Execute2D(N, M, localSizeX, localSizeY);
+        }
+
         #endregion
 
         public void Synchronize()
@@ -5510,6 +5599,95 @@ KERNEL VARIANTS (A/B testing):
             clBuffer.CopyFromHost(data);
         }
 
+        /// <inheritdoc/>
+        public void Copy2DStrided(IGpuBuffer source, IGpuBuffer destination, int numRows, int srcCols, int destTotalCols, int destColOffset)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var kernel = _kernelCache["copy_2d_strided"];
+            var bufferSrc = ((DirectOpenClGpuBuffer)source).Buffer;
+            var bufferDst = ((DirectOpenClGpuBuffer)destination).Buffer;
+
+            kernel.SetArg(0, bufferSrc.Handle);
+            kernel.SetArg(1, bufferDst.Handle);
+            kernel.SetArg(2, numRows);
+            kernel.SetArg(3, srcCols);
+            kernel.SetArg(4, destTotalCols);
+            kernel.SetArg(5, destColOffset);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(srcCols, numRows);
+            kernel.Execute2D(srcCols, numRows, localSizeX, localSizeY);
+        }
+
+        /// <inheritdoc/>
+        public void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            // Try to use kernel if available, otherwise fallback to CPU
+            if (!_kernelCache.TryGetValue("nearest_neighbor_upsample", out var kernel))
+            {
+                NearestNeighborUpsampleFallback(input, output, batchChannels, height, width, scaleFactor);
+                return;
+            }
+
+            var bufferIn = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferOut = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            int outHeight = height * scaleFactor;
+            int outWidth = width * scaleFactor;
+            int outputSize = batchChannels * outHeight * outWidth;
+
+            kernel.SetArg(0, bufferIn.Handle);
+            kernel.SetArg(1, bufferOut.Handle);
+            kernel.SetArg(2, batchChannels);
+            kernel.SetArg(3, height);
+            kernel.SetArg(4, width);
+            kernel.SetArg(5, scaleFactor);
+            kernel.SetArg(6, outputSize);
+
+            kernel.Execute1D(outputSize, Math.Min(256, outputSize));
+        }
+
+        /// <summary>
+        /// CPU fallback for nearest-neighbor upsampling when kernel is not available.
+        /// </summary>
+        private void NearestNeighborUpsampleFallback(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+        {
+            int inputSize = batchChannels * height * width;
+            int outHeight = height * scaleFactor;
+            int outWidth = width * scaleFactor;
+            int outputSize = batchChannels * outHeight * outWidth;
+
+            // Download input
+            var inputData = new float[inputSize];
+            var bufferIn = ((DirectOpenClGpuBuffer)input).Buffer;
+            bufferIn.CopyToHost(inputData);
+
+            // Perform CPU upsampling
+            var outputData = new float[outputSize];
+            for (int bc = 0; bc < batchChannels; bc++)
+            {
+                for (int oh = 0; oh < outHeight; oh++)
+                {
+                    for (int ow = 0; ow < outWidth; ow++)
+                    {
+                        int ih = oh / scaleFactor;
+                        int iw = ow / scaleFactor;
+                        int inputIdx = bc * height * width + ih * width + iw;
+                        int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                        outputData[outputIdx] = inputData[inputIdx];
+                    }
+                }
+            }
+
+            // Upload output
+            var bufferOut = ((DirectOpenClGpuBuffer)output).Buffer;
+            bufferOut.CopyFromHost(outputData);
+        }
+
         #endregion
 
         #region Activation Gradient Operations
@@ -6029,6 +6207,18 @@ KERNEL VARIANTS (A/B testing):
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        public void NotEqualScalar(IGpuBuffer A, IGpuBuffer C, float scalar, int size)
+        {
+            var k = _kernelCache["not_equal_scalar"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, scalar);
             k.SetArg(arg++, size);
 
             k.Execute1D(size, Math.Min(256, size));

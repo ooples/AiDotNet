@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -328,6 +330,11 @@ public class GRULayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GRULayer{T}"/> class with the specified dimensions, return behavior, and element-wise activation functions.
@@ -675,6 +682,180 @@ public class GRULayer<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after GRU processing.</returns>
+    /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        int rank = shape.Length;
+
+        // Determine batch size, sequence length from shape
+        int batchSize;
+        int timeSteps;
+        if (rank == 2)
+        {
+            batchSize = 1;
+            timeSteps = shape[0];
+        }
+        else if (rank == 3)
+        {
+            batchSize = shape[0];
+            timeSteps = shape[1];
+        }
+        else
+        {
+            // Higher rank: collapse leading dims
+            timeSteps = shape[rank - 2];
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= shape[d];
+            batchSize = flatBatch;
+        }
+
+        int hiddenBufferSize = batchSize * _hiddenSize;
+        int inputSliceSize = batchSize * _inputSize;
+
+        // Determine output shape and size
+        int[] outputShape;
+        int outputSize;
+        if (_returnSequences)
+        {
+            outputShape = [batchSize, timeSteps, _hiddenSize];
+            outputSize = batchSize * timeSteps * _hiddenSize;
+        }
+        else
+        {
+            outputShape = [batchSize, _hiddenSize];
+            outputSize = hiddenBufferSize;
+        }
+
+        // Allocate output buffer
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Upload transposed weights to GPU (Wz, Wr, Wh, Uz, Ur, Uh are [hiddenSize, inputSize/hiddenSize])
+        // We need transposed versions for x @ W^T pattern
+        using var WzBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Wz).ToArray()));
+        using var WrBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Wr).ToArray()));
+        using var WhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Wh).ToArray()));
+        using var UzBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Uz).ToArray()));
+        using var UrBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Ur).ToArray()));
+        using var UhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Uh).ToArray()));
+
+        // Upload biases to GPU
+        using var biasZBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bz.ToArray()));
+        using var biasRBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_br.ToArray()));
+        using var biasHBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bh.ToArray()));
+
+        // Allocate hidden state buffers (current and new)
+        var currentHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        backend.Fill(currentHBuffer, 0.0f, hiddenBufferSize); // Initialize to zeros
+
+        // Allocate temporary buffers for gate computations
+        using var tempBuffer1 = backend.AllocateBuffer(hiddenBufferSize);
+        using var tempBuffer2 = backend.AllocateBuffer(hiddenBufferSize);
+        using var zGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var rGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var hCandidateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var rGatedHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var onesBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var oneMinusZBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var newHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+
+        // Fill ones buffer
+        backend.Fill(onesBuffer, 1.0f, hiddenBufferSize);
+
+        try
+        {
+            // Process each time step
+            for (int t = 0; t < timeSteps; t++)
+            {
+                // Get input slice for this timestep
+                int inputSliceOffset = t * inputSliceSize;
+                var inputSlice = input.CreateView(inputSliceOffset, [batchSize, _inputSize]);
+
+                // Update Gate: z = sigmoid(x @ Wz^T + h @ Uz^T + bz)
+                backend.Gemm(inputSlice.Buffer, WzBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(currentHBuffer, UzBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, zGateBuffer, hiddenBufferSize);
+                backend.BiasAdd(zGateBuffer, biasZBuffer, zGateBuffer, batchSize, _hiddenSize);
+                backend.Sigmoid(zGateBuffer, zGateBuffer, hiddenBufferSize);
+
+                // Reset Gate: r = sigmoid(x @ Wr^T + h @ Ur^T + br)
+                backend.Gemm(inputSlice.Buffer, WrBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(currentHBuffer, UrBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, rGateBuffer, hiddenBufferSize);
+                backend.BiasAdd(rGateBuffer, biasRBuffer, rGateBuffer, batchSize, _hiddenSize);
+                backend.Sigmoid(rGateBuffer, rGateBuffer, hiddenBufferSize);
+
+                // Candidate Hidden State: h_candidate = tanh(x @ Wh^T + (r * h) @ Uh^T + bh)
+                backend.Multiply(rGateBuffer, currentHBuffer, rGatedHBuffer, hiddenBufferSize);
+                backend.Gemm(inputSlice.Buffer, WhBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(rGatedHBuffer, UhBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, hCandidateBuffer, hiddenBufferSize);
+                backend.BiasAdd(hCandidateBuffer, biasHBuffer, hCandidateBuffer, batchSize, _hiddenSize);
+                backend.Tanh(hCandidateBuffer, hCandidateBuffer, hiddenBufferSize);
+
+                // Final Hidden State: h = z * h_prev + (1 - z) * h_candidate
+                // Compute (1 - z)
+                backend.Subtract(onesBuffer, zGateBuffer, oneMinusZBuffer, hiddenBufferSize);
+                // z * h_prev
+                backend.Multiply(zGateBuffer, currentHBuffer, tempBuffer1, hiddenBufferSize);
+                // (1 - z) * h_candidate
+                backend.Multiply(oneMinusZBuffer, hCandidateBuffer, tempBuffer2, hiddenBufferSize);
+                // h = z * h_prev + (1 - z) * h_candidate
+                backend.Add(tempBuffer1, tempBuffer2, newHBuffer, hiddenBufferSize);
+
+                // Store hidden state in output if returning sequences
+                if (_returnSequences)
+                {
+                    int outputOffset = t * hiddenBufferSize;
+                    backend.Copy2DStrided(newHBuffer, outputBuffer, 1, hiddenBufferSize, outputSize, outputOffset);
+                }
+
+                // Swap hidden state buffers
+                var tempH = currentHBuffer;
+                currentHBuffer = newHBuffer;
+                newHBuffer = tempH;
+            }
+
+            // If not returning sequences, copy final hidden state to output
+            if (!_returnSequences)
+            {
+                backend.Copy(currentHBuffer, outputBuffer, hiddenBufferSize);
+            }
+
+            // Dispose the buffer we're not returning
+            newHBuffer.Dispose();
+            // currentHBuffer is the last hidden state, keep it if needed for internal state tracking
+            currentHBuffer.Dispose();
+
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        catch
+        {
+            // Clean up on error
+            outputBuffer.Dispose();
+            currentHBuffer.Dispose();
+            newHBuffer.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

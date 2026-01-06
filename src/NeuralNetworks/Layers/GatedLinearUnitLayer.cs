@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -298,6 +299,11 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Gets the total number of trainable parameters in this layer.
     /// </summary>
     /// <value>
@@ -512,6 +518,54 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         var output = Engine.TensorMultiply(_lastLinearOutput, _lastGateOutput);
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU using FusedLinearGpu for efficient computation.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // GLU weights are stored as [outputDim, inputDim], but FusedLinearGpu expects [inputDim, outputDim]
+        // Transpose the weights
+        var linearWeightsT = Engine.TensorTranspose(_linearWeights);
+        var gateWeightsT = Engine.TensorTranspose(_gateWeights);
+
+        // Linear path: linear = input @ linearWeights^T + linearBias (no activation)
+        var linearOutput = gpuEngine.FusedLinearGpu(input, linearWeightsT, _linearBias, FusedActivationType.None);
+
+        // Gate path: gate = sigmoid(input @ gateWeights^T + gateBias)
+        var gateOutput = gpuEngine.FusedLinearGpu(input, gateWeightsT, _gateBias, FusedActivationType.Sigmoid);
+
+        // GLU output: output = linear * gate
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        int size = linearOutput.ElementCount;
+        var outputBuffer = backend.AllocateBuffer(size);
+
+        // Element-wise multiply on GPU
+        backend.Multiply(linearOutput.Buffer, gateOutput.Buffer, outputBuffer, size);
+
+        // Cache state for backward pass only during training
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastLinearOutput = linearOutput.ToTensor();
+            _lastGateOutput = gateOutput.ToTensor();
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, linearOutput.Shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

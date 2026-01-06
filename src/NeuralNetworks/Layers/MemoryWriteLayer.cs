@@ -544,67 +544,93 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
-        // MemoryWriteLayer has complex attention-based operations - use CPU fallback
-        var cpuInput = inputs[0].ToTensor();
-        var cpuMemory = inputs[1].ToTensor();
-        var cpuOutput = Forward(cpuInput, cpuMemory);
-        return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
-    }
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
 
-    /// <summary>
-    /// Applies softmax over memory slots dimension for write layer.
-    /// </summary>
-    private void ApplySoftmaxWriteMemory(float[] data, int batchSize, int memorySlots)
-    {
-        for (int b = 0; b < batchSize; b++)
+        var input = inputs[0];
+        var memory = inputs[1];
+        int[] inputShape = input.Shape;
+        int[] memoryShape = memory.Shape;
+
+        int batchSize = inputShape.Length >= 2 ? inputShape[0] : 1;
+        int inputDim = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
+        int memorySlots = memoryShape[0];
+        int memoryDim = memoryShape[1];
+
+        // Upload weights to GPU
+        float[] queryWeightData = DirectGpuEngine.ToFloatArray<T>(_queryWeights.Data);
+        float[] keyWeightData = DirectGpuEngine.ToFloatArray<T>(_keyWeights.Data);
+        float[] valueWeightData = DirectGpuEngine.ToFloatArray<T>(_valueWeights.Data);
+        float[] outputWeightData = DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data);
+        float[] outputBiasData = DirectGpuEngine.ToFloatArray<T>(_outputBias.Data);
+
+        using var queryWeightsBuffer = backend.AllocateBuffer(queryWeightData);
+        using var keyWeightsBuffer = backend.AllocateBuffer(keyWeightData);
+        using var valueWeightsBuffer = backend.AllocateBuffer(valueWeightData);
+        using var outputWeightsBuffer = backend.AllocateBuffer(outputWeightData);
+        using var outputBiasBuffer = backend.AllocateBuffer(outputBiasData);
+
+        // Step 1: Compute queries = input @ queryWeights [batch, memoryDim]
+        int querySize = batchSize * memoryDim;
+        using var queriesBuffer = backend.AllocateBuffer(querySize);
+        backend.Gemm(input.Buffer, queryWeightsBuffer, queriesBuffer, batchSize, memoryDim, inputDim);
+
+        // Step 2: Compute keys = input @ keyWeights [batch, memoryDim]
+        int keysSize = batchSize * memoryDim;
+        using var keysBuffer = backend.AllocateBuffer(keysSize);
+        backend.Gemm(input.Buffer, keyWeightsBuffer, keysBuffer, batchSize, memoryDim, inputDim);
+
+        // Step 3: Compute values = input @ valueWeights [batch, memoryDim]
+        int valuesSize = batchSize * memoryDim;
+        using var valuesBuffer = backend.AllocateBuffer(valuesSize);
+        backend.Gemm(input.Buffer, valueWeightsBuffer, valuesBuffer, batchSize, memoryDim, inputDim);
+
+        // Step 4: Compute attention scores = queries @ memory^T [batch, memorySlots]
+        // Memory is [memorySlots, memoryDim], need [memoryDim, memorySlots]
+        int memoryBufferSize = memorySlots * memoryDim;
+        using var memoryTransposedBuffer = backend.AllocateBuffer(memoryBufferSize);
+        backend.BatchedTranspose(memory.Buffer, memoryTransposedBuffer, 1, memorySlots, memoryDim);
+
+        int scoresSize = batchSize * memorySlots;
+        using var scoresBuffer = backend.AllocateBuffer(scoresSize);
+        backend.Gemm(queriesBuffer, memoryTransposedBuffer, scoresBuffer, batchSize, memorySlots, memoryDim);
+
+        // Step 5: Scale attention scores by 1/sqrt(memoryDim)
+        float scaleFactor = 1.0f / MathF.Sqrt(memoryDim);
+        using var scaledScoresBuffer = backend.AllocateBuffer(scoresSize);
+        backend.Scale(scoresBuffer, scaledScoresBuffer, scaleFactor, scoresSize);
+
+        // Step 6: Apply softmax to get attention weights
+        using var attentionBuffer = backend.AllocateBuffer(scoresSize);
+        backend.Softmax(scaledScoresBuffer, attentionBuffer, batchSize, memorySlots);
+
+        // Step 7: Compute output projection = values @ outputWeights [batch, memoryDim]
+        int projectedSize = batchSize * memoryDim;
+        using var projectedBuffer = backend.AllocateBuffer(projectedSize);
+        backend.Gemm(valuesBuffer, outputWeightsBuffer, projectedBuffer, batchSize, memoryDim, memoryDim);
+
+        // Step 8: Add bias
+        var outputBuffer = backend.AllocateBuffer(projectedSize);
+        backend.Copy(projectedBuffer, outputBuffer, projectedSize);
+        backend.BiasAdd(outputBuffer, outputBiasBuffer, outputBuffer, batchSize, memoryDim);
+
+        // Step 9: Apply activation using helper method
+        var activationType = GetFusedActivationType();
+        IGpuBuffer finalOutputBuffer;
+        if (activationType != FusedActivationType.None)
         {
-            int offset = b * memorySlots;
-
-            float maxVal = float.MinValue;
-            for (int s = 0; s < memorySlots; s++)
-            {
-                maxVal = MathF.Max(maxVal, data[offset + s]);
-            }
-
-            float sumExp = 0f;
-            for (int s = 0; s < memorySlots; s++)
-            {
-                data[offset + s] = MathF.Exp(data[offset + s] - maxVal);
-                sumExp += data[offset + s];
-            }
-
-            float invSum = 1f / sumExp;
-            for (int s = 0; s < memorySlots; s++)
-            {
-                data[offset + s] *= invSum;
-            }
+            var activatedBuffer = backend.AllocateBuffer(projectedSize);
+            ApplyGpuActivation(backend, outputBuffer, activatedBuffer, projectedSize, activationType);
+            outputBuffer.Dispose();
+            finalOutputBuffer = activatedBuffer;
         }
-    }
-
-    /// <summary>
-    /// Applies activation function for write memory layer.
-    /// </summary>
-    private void ApplyWriteMemoryActivation(float[] data, int batchSize, int memoryDim)
-    {
-        var activation = ScalarActivation ?? (object?)VectorActivation;
-        string activationName = activation?.GetType().Name.ToLowerInvariant() ?? "identity";
-
-        if (activationName.Contains("relu"))
+        else
         {
-            for (int i = 0; i < data.Length; i++)
-                data[i] = MathF.Max(0f, data[i]);
+            finalOutputBuffer = outputBuffer;
         }
-        else if (activationName.Contains("sigmoid"))
-        {
-            for (int i = 0; i < data.Length; i++)
-                data[i] = 1f / (1f + MathF.Exp(-data[i]));
-        }
-        else if (activationName.Contains("tanh"))
-        {
-            for (int i = 0; i < data.Length; i++)
-                data[i] = MathF.Tanh(data[i]);
-        }
-        // Identity or unknown - keep as is
+
+        return new GpuTensor<T>(backend, finalOutputBuffer, [batchSize, memoryDim], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

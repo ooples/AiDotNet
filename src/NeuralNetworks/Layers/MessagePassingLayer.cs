@@ -1294,73 +1294,141 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var tempBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
         var nodeOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
 
+        // Allocate temporary buffers for GRU computation
+        var onesBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        backend.Fill(onesBuffer, 1.0f, numNodes * _outputFeatures);
+        var oneMinusZBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        var hiddenTermBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        var msgTermBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+
         // Process each batch
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract batch input using download/copy/upload pattern
-            int batchOffset = b * numNodes * inputFeatures;
-            int batchInputSize = numNodes * inputFeatures;
-            var fullInputData = backend.DownloadBuffer(input.Buffer);
-            var batchInputData = new float[batchInputSize];
-            Array.Copy(fullInputData, batchOffset, batchInputData, 0, batchInputSize);
-            using var batchInputBuffer = backend.AllocateBuffer(batchInputData);
+            // For single batch, use input directly; for multi-batch, extract slice
+            IGpuBuffer batchInputBuffer;
+            bool ownsBatchBuffer = false;
+            if (batchSize == 1)
+            {
+                batchInputBuffer = input.Buffer;
+            }
+            else
+            {
+                // Multi-batch: need to extract slice (TODO: optimize with GPU slice view)
+                int batchOffset = b * numNodes * inputFeatures;
+                var fullData = backend.DownloadBuffer(input.Buffer);
+                var batchData = new float[numNodes * inputFeatures];
+                Array.Copy(fullData, batchOffset, batchData, 0, numNodes * inputFeatures);
+                batchInputBuffer = backend.AllocateBuffer(batchData);
+                ownsBatchBuffer = true;
+            }
 
-            // Step 1: Gather source and target features for each edge (CPU fallback)
-            GatherFeaturesCpu(backend, batchInputBuffer, edgeSources, edgeSrcFeatBuffer, numEdges, _inputFeatures);
-            GatherFeaturesCpu(backend, batchInputBuffer, edgeTargets, edgeTgtFeatBuffer, numEdges, _inputFeatures);
+            // Step 1: Gather source and target features for each edge using GPU
+            backend.Gather(batchInputBuffer, srcIdxBuffer, edgeSrcFeatBuffer, numEdges, _inputFeatures);
+            backend.Gather(batchInputBuffer, tgtIdxBuffer, edgeTgtFeatBuffer, numEdges, _inputFeatures);
 
-            // Step 2: Concatenate source and target features for each edge (CPU fallback)
-            ConcatFeaturesCpu(backend, edgeSrcFeatBuffer, edgeTgtFeatBuffer, edgeConcatBuffer, numEdges, _inputFeatures, _inputFeatures);
+            // Step 2: Concatenate source and target features
+            // Copy source features to first half, target features to second half
+            backend.Copy(edgeSrcFeatBuffer, edgeConcatBuffer, numEdges * _inputFeatures);
+            // For second half, need to copy with offset - use ScatterAdd pattern
+            var concatOffsetIndices = new int[numEdges * _inputFeatures];
+            for (int e = 0; e < numEdges; e++)
+            {
+                for (int f = 0; f < _inputFeatures; f++)
+                {
+                    concatOffsetIndices[e * _inputFeatures + f] = e * messageInputDim + _inputFeatures + f;
+                }
+            }
+            using var concatIdxBuffer = backend.AllocateIntBuffer(concatOffsetIndices);
+            backend.ScatterAdd(edgeTgtFeatBuffer, concatIdxBuffer, edgeConcatBuffer, numEdges * _inputFeatures, numEdges * messageInputDim);
 
-            // Step 3: Per-edge message MLP - Layer 1 with ReLU
-            // edgeMsgHidden = ReLU(edgeConcat @ W1 + b1)
-            backend.Gemm(edgeConcatBuffer, msgW1Buffer, edgeMsgHiddenBuffer,
-                numEdges, _messageFeatures, messageInputDim);
-            backend.BiasAdd(edgeMsgHiddenBuffer, msgB1Buffer, edgeMsgHiddenBuffer, numEdges, _messageFeatures);
-            backend.Relu(edgeMsgHiddenBuffer, edgeMsgHiddenBuffer, numEdges * _messageFeatures);
+            // Step 3: Per-edge message MLP - Layer 1 with ReLU (fused GPU operation)
+            var msgHiddenResult = backend.GemmBiasRelu(edgeConcatBuffer, msgW1Buffer, msgB1Buffer, numEdges, _messageFeatures, messageInputDim);
+            backend.Copy(msgHiddenResult, edgeMsgHiddenBuffer, numEdges * _messageFeatures);
+            msgHiddenResult.Dispose();
 
-            // Step 4: Per-edge message MLP - Layer 2
-            // edgeMsg = edgeMsgHidden @ W2 + b2
-            backend.Gemm(edgeMsgHiddenBuffer, msgW2Buffer, edgeMsgBuffer,
-                numEdges, _messageFeatures, _messageFeatures);
-            backend.BiasAdd(edgeMsgBuffer, msgB2Buffer, edgeMsgBuffer, numEdges, _messageFeatures);
+            // Step 4: Per-edge message MLP - Layer 2 (fused GPU operation)
+            var msgResult = backend.GemmBias(edgeMsgHiddenBuffer, msgW2Buffer, msgB2Buffer, numEdges, _messageFeatures, _messageFeatures);
+            backend.Copy(msgResult, edgeMsgBuffer, numEdges * _messageFeatures);
+            msgResult.Dispose();
 
-            // Step 5: Scatter-add messages to aggregate per target node (CPU fallback)
-            FillBufferCpu(backend, aggregatedBuffer, 0.0f, numNodes * _messageFeatures);
-            ScatterAddCpu(backend, edgeMsgBuffer, edgeTargets, aggregatedBuffer, numEdges, numNodes, _messageFeatures);
+            // Step 5: Scatter-add messages to aggregate per target node using GPU
+            backend.Fill(aggregatedBuffer, 0.0f, numNodes * _messageFeatures);
+            backend.ScatterAddEdges(edgeMsgBuffer, srcIdxBuffer, tgtIdxBuffer, null, aggregatedBuffer, numNodes, numEdges, _messageFeatures);
 
             // Step 6: Compute reset gate: r = sigmoid(h @ W_r + m @ W_rm + b_r)
-            backend.Gemm(batchInputBuffer, resetWBuffer, resetGateBuffer,
-                numNodes, _outputFeatures, _inputFeatures);
-            backend.Gemm(aggregatedBuffer, resetMsgWBuffer, tempBuffer,
-                numNodes, _outputFeatures, _messageFeatures);
+            backend.Gemm(batchInputBuffer, resetWBuffer, resetGateBuffer, numNodes, _outputFeatures, _inputFeatures);
+            backend.Gemm(aggregatedBuffer, resetMsgWBuffer, tempBuffer, numNodes, _outputFeatures, _messageFeatures);
             backend.Add(resetGateBuffer, tempBuffer, resetGateBuffer, numNodes * _outputFeatures);
             backend.BiasAdd(resetGateBuffer, resetBBuffer, resetGateBuffer, numNodes, _outputFeatures);
             backend.Sigmoid(resetGateBuffer, resetGateBuffer, numNodes * _outputFeatures);
 
             // Step 7: Compute update gate: z = sigmoid(h @ W_z + m @ W_zm + b_z)
-            backend.Gemm(batchInputBuffer, updateWBuffer, updateGateBuffer,
-                numNodes, _outputFeatures, _inputFeatures);
-            backend.Gemm(aggregatedBuffer, updateMsgWBuffer, tempBuffer,
-                numNodes, _outputFeatures, _messageFeatures);
+            backend.Gemm(batchInputBuffer, updateWBuffer, updateGateBuffer, numNodes, _outputFeatures, _inputFeatures);
+            backend.Gemm(aggregatedBuffer, updateMsgWBuffer, tempBuffer, numNodes, _outputFeatures, _messageFeatures);
             backend.Add(updateGateBuffer, tempBuffer, updateGateBuffer, numNodes * _outputFeatures);
             backend.BiasAdd(updateGateBuffer, updateBBuffer, updateGateBuffer, numNodes, _outputFeatures);
             backend.Sigmoid(updateGateBuffer, updateGateBuffer, numNodes * _outputFeatures);
 
-            // Step 8: GRU-style update: h' = (1 - z) * h + z * m (CPU fallback)
-            GruUpdateCpu(backend, batchInputBuffer, aggregatedBuffer, updateGateBuffer, nodeOutputBuffer,
-                numNodes, Math.Min(_inputFeatures, _outputFeatures), Math.Min(_messageFeatures, _outputFeatures));
+            // Step 8: GRU-style update on GPU: h' = (1 - z) * h + z * m
+            // oneMinusZ = 1 - z
+            backend.Subtract(onesBuffer, updateGateBuffer, oneMinusZBuffer, numNodes * _outputFeatures);
+            // hiddenTerm = (1 - z) * h (use first _outputFeatures of input if dimensions match)
+            int effectiveHiddenSize = Math.Min(_inputFeatures, _outputFeatures);
+            if (_inputFeatures == _outputFeatures)
+            {
+                backend.Multiply(oneMinusZBuffer, batchInputBuffer, hiddenTermBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                // Need to handle dimension mismatch - project input first
+                backend.Fill(hiddenTermBuffer, 0.0f, numNodes * _outputFeatures);
+            }
+            // msgTerm = z * m
+            int effectiveMsgSize = Math.Min(_messageFeatures, _outputFeatures);
+            if (_messageFeatures >= _outputFeatures)
+            {
+                backend.Multiply(updateGateBuffer, aggregatedBuffer, msgTermBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                backend.Fill(msgTermBuffer, 0.0f, numNodes * _outputFeatures);
+            }
+            // output = hiddenTerm + msgTerm
+            backend.Add(hiddenTermBuffer, msgTermBuffer, nodeOutputBuffer, numNodes * _outputFeatures);
 
             // Copy to output buffer at correct batch offset
-            int outputOffset = b * numNodes * _outputFeatures;
-            CopyToOffsetCpu(backend, nodeOutputBuffer, outputBuffer, outputOffset, numNodes * _outputFeatures);
+            if (batchSize == 1)
+            {
+                backend.Copy(nodeOutputBuffer, outputBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                // Multi-batch: need to write to offset (download, modify, upload)
+                int outputOffset = b * numNodes * _outputFeatures;
+                var outputData = backend.DownloadBuffer(outputBuffer);
+                var nodeData = backend.DownloadBuffer(nodeOutputBuffer);
+                Array.Copy(nodeData, 0, outputData, outputOffset, numNodes * _outputFeatures);
+                using var tempOut = backend.AllocateBuffer(outputData);
+                backend.Copy(tempOut, outputBuffer, outputSize);
+            }
+
+            if (ownsBatchBuffer)
+            {
+                batchInputBuffer.Dispose();
+            }
         }
 
-        // Apply activation
+        // Clean up GRU buffers
+        onesBuffer.Dispose();
+        oneMinusZBuffer.Dispose();
+        hiddenTermBuffer.Dispose();
+        msgTermBuffer.Dispose();
+
+        // Apply activation using base class GPU activation method
         var activationType = GetFusedActivationType();
         if (activationType != FusedActivationType.None)
         {
-            ApplyActivationCpu(backend, outputBuffer, outputSize, activationType);
+            ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, activationType);
         }
 
         // Clean up
@@ -1483,181 +1551,4 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         return output;
     }
-
-    #region GPU Helper Methods
-
-    /// <summary>
-    /// Gathers features for specified node indices (CPU fallback).
-    /// </summary>
-    private static void GatherFeaturesCpu(IDirectGpuBackend backend, IGpuBuffer inputBuffer, int[] indices,
-        IGpuBuffer outputBuffer, int numIndices, int featureSize)
-    {
-        var inputData = backend.DownloadBuffer(inputBuffer);
-        var outputData = new float[numIndices * featureSize];
-
-        for (int i = 0; i < numIndices; i++)
-        {
-            int srcIdx = indices[i];
-            int srcOffset = srcIdx * featureSize;
-            int dstOffset = i * featureSize;
-
-            for (int f = 0; f < featureSize; f++)
-            {
-                if (srcOffset + f < inputData.Length)
-                {
-                    outputData[dstOffset + f] = inputData[srcOffset + f];
-                }
-            }
-        }
-
-        using var tempBuffer = backend.AllocateBuffer(outputData);
-        backend.Copy(tempBuffer, outputBuffer, outputData.Length);
-    }
-
-    /// <summary>
-    /// Concatenates two feature buffers (CPU fallback).
-    /// </summary>
-    private static void ConcatFeaturesCpu(IDirectGpuBackend backend, IGpuBuffer srcBuffer1, IGpuBuffer srcBuffer2,
-        IGpuBuffer outputBuffer, int numItems, int featureSize1, int featureSize2)
-    {
-        var data1 = backend.DownloadBuffer(srcBuffer1);
-        var data2 = backend.DownloadBuffer(srcBuffer2);
-        int totalFeatures = featureSize1 + featureSize2;
-        var outputData = new float[numItems * totalFeatures];
-
-        for (int i = 0; i < numItems; i++)
-        {
-            int src1Offset = i * featureSize1;
-            int src2Offset = i * featureSize2;
-            int dstOffset = i * totalFeatures;
-
-            for (int f = 0; f < featureSize1; f++)
-            {
-                outputData[dstOffset + f] = data1[src1Offset + f];
-            }
-            for (int f = 0; f < featureSize2; f++)
-            {
-                outputData[dstOffset + featureSize1 + f] = data2[src2Offset + f];
-            }
-        }
-
-        using var tempBuffer = backend.AllocateBuffer(outputData);
-        backend.Copy(tempBuffer, outputBuffer, outputData.Length);
-    }
-
-    /// <summary>
-    /// Fills a buffer with a constant value (CPU fallback).
-    /// </summary>
-    private static void FillBufferCpu(IDirectGpuBackend backend, IGpuBuffer buffer, float value, int size)
-    {
-        var data = new float[size];
-        Array.Fill(data, value);
-        using var tempBuffer = backend.AllocateBuffer(data);
-        backend.Copy(tempBuffer, buffer, size);
-    }
-
-    /// <summary>
-    /// Scatter-adds messages to aggregate per target node (CPU fallback).
-    /// </summary>
-    private static void ScatterAddCpu(IDirectGpuBackend backend, IGpuBuffer messageBuffer, int[] targetIndices,
-        IGpuBuffer aggregatedBuffer, int numEdges, int numNodes, int featureSize)
-    {
-        var messageData = backend.DownloadBuffer(messageBuffer);
-        var aggregatedData = backend.DownloadBuffer(aggregatedBuffer);
-
-        for (int e = 0; e < numEdges; e++)
-        {
-            int targetIdx = targetIndices[e];
-            int msgOffset = e * featureSize;
-            int aggOffset = targetIdx * featureSize;
-
-            for (int f = 0; f < featureSize; f++)
-            {
-                aggregatedData[aggOffset + f] += messageData[msgOffset + f];
-            }
-        }
-
-        using var tempBuffer = backend.AllocateBuffer(aggregatedData);
-        backend.Copy(tempBuffer, aggregatedBuffer, aggregatedData.Length);
-    }
-
-    /// <summary>
-    /// Performs GRU-style update (CPU fallback).
-    /// h' = (1 - z) * h + z * m
-    /// </summary>
-    private static void GruUpdateCpu(IDirectGpuBackend backend, IGpuBuffer hiddenBuffer, IGpuBuffer messageBuffer,
-        IGpuBuffer updateGateBuffer, IGpuBuffer outputBuffer, int numNodes, int hiddenSize, int messageSize)
-    {
-        var hidden = backend.DownloadBuffer(hiddenBuffer);
-        var message = backend.DownloadBuffer(messageBuffer);
-        var updateGate = backend.DownloadBuffer(updateGateBuffer);
-        int outputSize = Math.Min(hiddenSize, messageSize);
-        var output = new float[numNodes * outputSize];
-
-        for (int n = 0; n < numNodes; n++)
-        {
-            for (int f = 0; f < outputSize; f++)
-            {
-                int hiddenIdx = n * hiddenSize + f;
-                int msgIdx = n * messageSize + f;
-                int gateIdx = n * outputSize + f;
-                int outIdx = n * outputSize + f;
-
-                float h = hiddenIdx < hidden.Length ? hidden[hiddenIdx] : 0f;
-                float m = msgIdx < message.Length ? message[msgIdx] : 0f;
-                float z = gateIdx < updateGate.Length ? updateGate[gateIdx] : 0.5f;
-
-                output[outIdx] = (1f - z) * h + z * m;
-            }
-        }
-
-        using var tempBuffer = backend.AllocateBuffer(output);
-        backend.Copy(tempBuffer, outputBuffer, output.Length);
-    }
-
-    /// <summary>
-    /// Copies data to a destination buffer at a specified offset (CPU fallback).
-    /// </summary>
-    private static void CopyToOffsetCpu(IDirectGpuBackend backend, IGpuBuffer sourceBuffer, IGpuBuffer destBuffer,
-        int destOffset, int size)
-    {
-        var sourceData = backend.DownloadBuffer(sourceBuffer);
-        var destData = backend.DownloadBuffer(destBuffer);
-
-        for (int i = 0; i < size && i < sourceData.Length; i++)
-        {
-            if (destOffset + i < destData.Length)
-            {
-                destData[destOffset + i] = sourceData[i];
-            }
-        }
-
-        using var tempBuffer = backend.AllocateBuffer(destData);
-        backend.Copy(tempBuffer, destBuffer, destData.Length);
-    }
-
-    /// <summary>
-    /// Applies activation function (CPU fallback).
-    /// </summary>
-    private static void ApplyActivationCpu(IDirectGpuBackend backend, IGpuBuffer buffer, int size, FusedActivationType activationType)
-    {
-        var data = backend.DownloadBuffer(buffer);
-        for (int i = 0; i < size && i < data.Length; i++)
-        {
-            data[i] = activationType switch
-            {
-                FusedActivationType.ReLU => Math.Max(0, data[i]),
-                FusedActivationType.Sigmoid => 1.0f / (1.0f + MathF.Exp(-data[i])),
-                FusedActivationType.Tanh => MathF.Tanh(data[i]),
-                FusedActivationType.GELU => data[i] * 0.5f * (1.0f + MathF.Tanh(MathF.Sqrt(2.0f / MathF.PI) * (data[i] + 0.044715f * data[i] * data[i] * data[i]))),
-                FusedActivationType.LeakyReLU => data[i] >= 0 ? data[i] : 0.01f * data[i],
-                _ => data[i]
-            };
-        }
-
-        using var tempBuffer = backend.AllocateBuffer(data);
-        backend.Copy(tempBuffer, buffer, data.Length);
-    }
-
-    #endregion
 }

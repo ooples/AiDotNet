@@ -1028,6 +1028,119 @@ public sealed class CudaBackend : IAsyncGpuBackend
             "cuLaunchKernel");
     }
 
+    /// <inheritdoc/>
+    public unsafe void CsrSegmentedMax(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_max", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: csr_segmented_max");
+
+        using var _ = PushContext();
+
+        // Launch configuration: rows x ceil(N/blockSize) grid
+        uint gridX = (uint)M;
+        uint gridY = (uint)((N + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr colIndicesPtr = csrColIndices.Handle;
+        IntPtr rowPointersPtr = csrRowPointers.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &colIndicesPtr;
+        args[1] = &rowPointersPtr;
+        args[2] = &inputPtr;
+        args[3] = &outputPtr;
+        args[4] = &M;
+        args[5] = &K;
+        args[6] = &N;
+
+        LaunchKernel2D(kernel, gridX, gridY, (uint)DefaultBlockSize, 1, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void CsrSegmentedMin(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_min", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: csr_segmented_min");
+
+        using var _ = PushContext();
+
+        // Launch configuration: rows x ceil(N/blockSize) grid
+        uint gridX = (uint)M;
+        uint gridY = (uint)((N + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr colIndicesPtr = csrColIndices.Handle;
+        IntPtr rowPointersPtr = csrRowPointers.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &colIndicesPtr;
+        args[1] = &rowPointersPtr;
+        args[2] = &inputPtr;
+        args[3] = &outputPtr;
+        args[4] = &M;
+        args[5] = &K;
+        args[6] = &N;
+
+        LaunchKernel2D(kernel, gridX, gridY, (uint)DefaultBlockSize, 1, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void CsrSegmentedStdDev(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N,
+        float epsilon = 1e-8f)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_stddev", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: csr_segmented_stddev");
+
+        using var _ = PushContext();
+
+        // Launch configuration: rows x ceil(N/blockSize) grid
+        uint gridX = (uint)M;
+        uint gridY = (uint)((N + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr colIndicesPtr = csrColIndices.Handle;
+        IntPtr rowPointersPtr = csrRowPointers.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[8];
+        args[0] = &colIndicesPtr;
+        args[1] = &rowPointersPtr;
+        args[2] = &inputPtr;
+        args[3] = &outputPtr;
+        args[4] = &M;
+        args[5] = &K;
+        args[6] = &N;
+        args[7] = &epsilon;
+
+        LaunchKernel2D(kernel, gridX, gridY, (uint)DefaultBlockSize, 1, args);
+    }
+
     #endregion
 
     public float Sum(IGpuBuffer A, int size)
@@ -2901,6 +3014,133 @@ public sealed class CudaBackend : IAsyncGpuBackend
             "cuMemsetD32");
     }
 
+    /// <inheritdoc/>
+    public unsafe void Copy2DStrided(IGpuBuffer source, IGpuBuffer destination, int numRows, int srcCols, int destTotalCols, int destColOffset)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (!_kernelCache.TryGetValue("copy_2d_strided", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: copy_2d_strided");
+
+        using var _ = PushContext();
+
+        // Launch configuration: srcCols x numRows grid
+        uint gridX = (uint)((srcCols + DefaultBlockSize - 1) / DefaultBlockSize);
+        uint gridY = (uint)numRows;
+
+        IntPtr srcPtr = source.Handle;
+        IntPtr dstPtr = destination.Handle;
+
+        void** args = stackalloc void*[6];
+        args[0] = &srcPtr;
+        args[1] = &dstPtr;
+        args[2] = &numRows;
+        args[3] = &srcCols;
+        args[4] = &destTotalCols;
+        args[5] = &destColOffset;
+
+        CuBlasNative.CheckCudaResult(
+            CudaNativeBindings.cuLaunchKernel(
+                kernel,
+                gridX, gridY, 1,
+                (uint)DefaultBlockSize, 1, 1,
+                0,
+                _stream,
+                (IntPtr)args,
+                IntPtr.Zero),
+            "cuLaunchKernel (copy_2d_strided)");
+    }
+
+    /// <inheritdoc/>
+    public unsafe void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        // Check for the kernel, if not available fall back to CPU implementation via memcpy pattern
+        if (!_kernelCache.TryGetValue("nearest_neighbor_upsample", out var kernel))
+        {
+            // Fallback: Download, upsample on CPU, upload
+            NearestNeighborUpsampleFallback(input, output, batchChannels, height, width, scaleFactor);
+            return;
+        }
+
+        using var _ = PushContext();
+
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        // Launch configuration: output elements / block size
+        uint grid = (uint)((outputSize + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr srcPtr = input.Handle;
+        IntPtr dstPtr = output.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &srcPtr;
+        args[1] = &dstPtr;
+        args[2] = &batchChannels;
+        args[3] = &height;
+        args[4] = &width;
+        args[5] = &scaleFactor;
+        args[6] = &outputSize;
+
+        CuBlasNative.CheckCudaResult(
+            CudaNativeBindings.cuLaunchKernel(
+                kernel,
+                grid, 1, 1,
+                (uint)DefaultBlockSize, 1, 1,
+                0,
+                _stream,
+                (IntPtr)args,
+                IntPtr.Zero),
+            "cuLaunchKernel (nearest_neighbor_upsample)");
+    }
+
+    /// <summary>
+    /// CPU fallback for nearest-neighbor upsampling when kernel is not available.
+    /// </summary>
+    private unsafe void NearestNeighborUpsampleFallback(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+    {
+        int inputSize = batchChannels * height * width;
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        // Download input using existing method
+        var inputData = new float[inputSize];
+        DownloadBuffer(input, inputData);
+
+        // Perform CPU upsampling
+        var outputData = new float[outputSize];
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int ih = oh / scaleFactor;
+                    int iw = ow / scaleFactor;
+                    int inputIdx = bc * height * width + ih * width + iw;
+                    int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                    outputData[outputIdx] = inputData[inputIdx];
+                }
+            }
+        }
+
+        // Upload output using CUDA memory copy
+        using var _ = PushContext();
+        ulong byteSize = (ulong)outputSize * sizeof(float);
+        fixed (float* src = outputData)
+        {
+            CuBlasNative.CheckCudaResult(
+                CuBlasNative.cuMemcpyHtoD(output.Handle, (IntPtr)src, byteSize),
+                "cuMemcpyHtoD (upsample fallback)");
+        }
+    }
+
     #endregion
 
 
@@ -3538,6 +3778,23 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[2] = &bPtr;
         args[3] = &cPtr;
         args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void NotEqualScalar(IGpuBuffer A, IGpuBuffer C, float scalar, int size)
+    {
+        if (!_kernelCache.TryGetValue("not_equal_scalar", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: not_equal_scalar");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr aPtr = A.Handle;
+        IntPtr cPtr = C.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &aPtr;
+        args[1] = &cPtr;
+        args[2] = &scalar;
+        args[3] = &size;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 

@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 
@@ -169,11 +171,16 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// - It will improve its performance as it sees more data
     /// - It participates in the learning process of the neural network
     /// 
-    /// When you train a neural network containing this layer, the weights and biases will 
+    /// When you train a neural network containing this layer, the weights and biases will
     /// automatically adjust to better recognize patterns in your sequence data.
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RecurrentLayer{T}"/> class with a scalar activation function.
@@ -413,6 +420,132 @@ public class RecurrentLayer<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after RNN processing.</returns>
+    /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        int rank = shape.Length;
+        int hiddenSize = _inputWeights.Shape[0];
+        int inputSize = _inputWeights.Shape[1];
+
+        // Determine sequence length, batch size from shape
+        int sequenceLength;
+        int batchSize;
+        if (rank == 1)
+        {
+            sequenceLength = 1;
+            batchSize = 1;
+        }
+        else if (rank == 2)
+        {
+            sequenceLength = shape[0];
+            batchSize = 1;
+        }
+        else if (rank == 3)
+        {
+            sequenceLength = shape[0];
+            batchSize = shape[1];
+        }
+        else
+        {
+            // Higher rank: collapse middle dims into batch
+            sequenceLength = shape[0];
+            int flatBatch = 1;
+            for (int d = 1; d < rank - 1; d++)
+                flatBatch *= shape[d];
+            batchSize = flatBatch;
+        }
+
+        int hiddenBufferSize = batchSize * hiddenSize;
+        int inputSliceSize = batchSize * inputSize;
+        int outputSize = sequenceLength * batchSize * hiddenSize;
+        int[] outputShape = [sequenceLength, batchSize, hiddenSize];
+
+        // Allocate output buffer
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Upload transposed weights to GPU
+        using var inputWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_inputWeights).ToArray()));
+        using var hiddenWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_hiddenWeights).ToArray()));
+        using var biasesBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biases.ToArray()));
+
+        // Allocate hidden state buffers
+        var currentHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        backend.Fill(currentHBuffer, 0.0f, hiddenBufferSize); // Initialize to zeros
+
+        // Allocate temporary buffers
+        using var tempBuffer1 = backend.AllocateBuffer(hiddenBufferSize);
+        using var tempBuffer2 = backend.AllocateBuffer(hiddenBufferSize);
+        using var preActivationBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var newHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+
+        try
+        {
+            // Process each time step
+            for (int t = 0; t < sequenceLength; t++)
+            {
+                // Get input slice for this timestep
+                int inputSliceOffset = t * inputSliceSize;
+                var inputSlice = input.CreateView(inputSliceOffset, [batchSize, inputSize]);
+
+                // h_t = activation(input @ W_input^T + h_{t-1} @ W_hidden^T + biases)
+                // Compute input contribution: input @ W_input^T
+                backend.Gemm(inputSlice.Buffer, inputWeightsBuffer, tempBuffer1, batchSize, hiddenSize, inputSize);
+
+                // Compute hidden contribution: h_{t-1} @ W_hidden^T
+                backend.Gemm(currentHBuffer, hiddenWeightsBuffer, tempBuffer2, batchSize, hiddenSize, hiddenSize);
+
+                // Sum contributions: preAct = inputContrib + hiddenContrib
+                backend.Add(tempBuffer1, tempBuffer2, preActivationBuffer, hiddenBufferSize);
+
+                // Add biases
+                backend.BiasAdd(preActivationBuffer, biasesBuffer, preActivationBuffer, batchSize, hiddenSize);
+
+                // Apply activation (Tanh is the default for RNN)
+                backend.Tanh(preActivationBuffer, newHBuffer, hiddenBufferSize);
+
+                // Store hidden state in output
+                int outputOffset = t * hiddenBufferSize;
+                backend.Copy2DStrided(newHBuffer, outputBuffer, 1, hiddenBufferSize, outputSize, outputOffset);
+
+                // Swap hidden state buffers
+                var tempH = currentHBuffer;
+                currentHBuffer = newHBuffer;
+                newHBuffer = tempH;
+            }
+
+            // Dispose the buffer we're not returning
+            newHBuffer.Dispose();
+            currentHBuffer.Dispose();
+
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        catch
+        {
+            // Clean up on error
+            outputBuffer.Dispose();
+            currentHBuffer.Dispose();
+            newHBuffer.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
