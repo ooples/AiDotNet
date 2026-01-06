@@ -133,10 +133,15 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor on GPU.</param>
     /// <returns>The pooled output as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var input = inputs[0];
 
         // Ensure input is 4D [batch, channels, height, width]
         IGpuTensor<T> input4D;

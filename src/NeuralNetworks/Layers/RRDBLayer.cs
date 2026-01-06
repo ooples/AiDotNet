@@ -1,6 +1,8 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -104,6 +106,11 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
     /// <inheritdoc />
     public override bool SupportsJitCompilation
     {
@@ -204,6 +211,24 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         // Global residual: output = RDB3_output * residualScale + input
         return AddResidual(x, input, _residualScale);
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after RRDB processing.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        // RRDB chains 3 ResidualDenseBlocks with global residual - use CPU fallback for complex chained operations
+        var cpuInput = inputs[0].ToTensor();
+        var cpuOutput = Forward(cpuInput);
+        return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
     }
 
     #endregion

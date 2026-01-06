@@ -1,5 +1,6 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -350,6 +351,11 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SubpixelConvolutionalLayer{T}"/> class with scalar activation function.

@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -1025,6 +1026,11 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     /// <inheritdoc/>
     public override bool SupportsJitCompilation

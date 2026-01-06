@@ -395,6 +395,200 @@ extern ""C"" __global__ void argmin_axis(
     indices[outer] = (float)minIdx;
 }
 
+// Mean reduction along axis: output[i] = mean(input[i, :])
+extern ""C"" __global__ void mean_axis(
+    const float* input, float* output, int outerSize, int reduceSize)
+{
+    int outer = blockIdx.x * blockDim.x + threadIdx.x;
+    if (outer >= outerSize) return;
+
+    int baseIdx = outer * reduceSize;
+    float sum = 0.0f;
+    for (int i = 0; i < reduceSize; i++) {
+        sum += input[baseIdx + i];
+    }
+    output[outer] = sum / (float)reduceSize;
+}
+
+// Max reduction along axis: output[i] = max(input[i, :])
+extern ""C"" __global__ void max_axis(
+    const float* input, float* output, int outerSize, int reduceSize)
+{
+    int outer = blockIdx.x * blockDim.x + threadIdx.x;
+    if (outer >= outerSize) return;
+
+    int baseIdx = outer * reduceSize;
+    float maxVal = input[baseIdx];
+    for (int i = 1; i < reduceSize; i++) {
+        float val = input[baseIdx + i];
+        if (val > maxVal) maxVal = val;
+    }
+    output[outer] = maxVal;
+}
+
+// Variance reduction along axis: output[i] = var(input[i, :])
+extern ""C"" __global__ void var_axis(
+    const float* input, const float* mean, float* variance, int outerSize, int reduceSize)
+{
+    int outer = blockIdx.x * blockDim.x + threadIdx.x;
+    if (outer >= outerSize) return;
+
+    int baseIdx = outer * reduceSize;
+    float m = mean[outer];
+    float varSum = 0.0f;
+    for (int i = 0; i < reduceSize; i++) {
+        float diff = input[baseIdx + i] - m;
+        varSum += diff * diff;
+    }
+    variance[outer] = varSum / (float)reduceSize;
+}
+
+// ===========================================================================
+// BROADCAST OPERATIONS
+// ===========================================================================
+
+// Broadcast multiply: C = A * B where B is broadcast along last axis
+// A has shape (outerSize * innerSize), B has shape (innerSize), C has shape (outerSize * innerSize)
+// output[i * innerSize + j] = input[i * innerSize + j] * broadcast[j]
+extern ""C"" __global__ void broadcast_multiply_last_axis(
+    const float* input, const float* broadcast, float* output,
+    int outerSize, int innerSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = outerSize * innerSize;
+    if (idx >= totalSize) return;
+
+    int innerIdx = idx % innerSize;
+    output[idx] = input[idx] * broadcast[innerIdx];
+}
+
+// Broadcast multiply: C = A * B where B is broadcast along first axis
+// A has shape (outerSize * innerSize), B has shape (outerSize), C has shape (outerSize * innerSize)
+// output[i * innerSize + j] = input[i * innerSize + j] * broadcast[i]
+extern ""C"" __global__ void broadcast_multiply_first_axis(
+    const float* input, const float* broadcast, float* output,
+    int outerSize, int innerSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = outerSize * innerSize;
+    if (idx >= totalSize) return;
+
+    int outerIdx = idx / innerSize;
+    output[idx] = input[idx] * broadcast[outerIdx];
+}
+
+// General broadcast multiply for tensors with compatible shapes
+// Uses strides to handle arbitrary broadcasting patterns
+extern ""C"" __global__ void broadcast_multiply_general(
+    const float* A, const float* B, float* C,
+    const int* aStrides, const int* bStrides, const int* cShape,
+    int rank, int totalSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalSize) return;
+
+    int aIdx = 0;
+    int bIdx = 0;
+    int remaining = idx;
+
+    for (int d = rank - 1; d >= 0; d--) {
+        int dimIdx = remaining % cShape[d];
+        remaining /= cShape[d];
+        aIdx += dimIdx * aStrides[d];
+        bIdx += dimIdx * bStrides[d];
+    }
+
+    C[idx] = A[aIdx] * B[bIdx];
+}
+
+// ===========================================================================
+// CAPSULE NETWORK OPERATIONS
+// ===========================================================================
+
+// Squash activation for capsule networks
+// squash(v) = ||v||^2 / (1 + ||v||^2) * v / ||v||
+extern ""C"" __global__ void squash(
+    const float* input, float* output,
+    int numCapsules, int capsuleDim, float epsilon)
+{
+    int capsuleIdx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (capsuleIdx >= numCapsules) return;
+
+    int baseIdx = capsuleIdx * capsuleDim;
+
+    float normSquared = 0.0f;
+    for (int i = 0; i < capsuleDim; i++) {
+        float val = input[baseIdx + i];
+        normSquared += val * val;
+    }
+
+    float norm = sqrtf(normSquared + epsilon);
+    float scale = normSquared / ((1.0f + normSquared) * norm);
+
+    for (int i = 0; i < capsuleDim; i++) {
+        output[baseIdx + i] = input[baseIdx + i] * scale;
+    }
+}
+
+extern ""C"" __global__ void squash_backward(
+    const float* gradOutput, const float* input, float* gradInput,
+    int numCapsules, int capsuleDim, float epsilon)
+{
+    int capsuleIdx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (capsuleIdx >= numCapsules) return;
+
+    int baseIdx = capsuleIdx * capsuleDim;
+
+    float normSquared = 0.0f;
+    for (int i = 0; i < capsuleDim; i++) {
+        float val = input[baseIdx + i];
+        normSquared += val * val;
+    }
+
+    float scale = 1.0f / (1.0f + normSquared);
+    for (int i = 0; i < capsuleDim; i++) {
+        gradInput[baseIdx + i] = gradOutput[baseIdx + i] * scale;
+    }
+}
+
+// ===========================================================================
+// TILE/REPEAT KERNELS
+// ===========================================================================
+
+// Tile tensor along batch dimension (axis 0)
+extern ""C"" __global__ void tile_batch(
+    const float* input, float* output,
+    int repeats, int innerSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = repeats * innerSize;
+    if (idx >= totalSize) return;
+
+    int innerIdx = idx % innerSize;
+    output[idx] = input[innerIdx];
+}
+
+// General tile along any axis
+extern ""C"" __global__ void tile_axis(
+    const float* input, float* output,
+    int outerSize, int axisSize, int innerSize, int repeats)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = outerSize * axisSize * repeats * innerSize;
+    if (idx >= totalSize) return;
+
+    int outputAxisSize = axisSize * repeats;
+    int innerIdx = idx % innerSize;
+    int temp = idx / innerSize;
+    int outputAxisIdx = temp % outputAxisSize;
+    int outerIdx = temp / outputAxisSize;
+
+    int inputAxisIdx = outputAxisIdx % axisSize;
+    int inputIdx = outerIdx * axisSize * innerSize + inputAxisIdx * innerSize + innerIdx;
+
+    output[idx] = input[inputIdx];
+}
+
 // ===========================================================================
 // OPTIMIZER KERNELS
 // ===========================================================================
@@ -577,7 +771,10 @@ extern ""C"" __global__ void permute_general(
             "mse_loss", "mse_backward", "smooth_l1_loss", "smooth_l1_backward",
             "clamp", "l2_norm_squared", "scale", "copy_buffer",
             "greater_than", "less_than", "equals", "where_cond",
-            "compute_mean_var", "argmax_axis", "argmin_axis",
+            "compute_mean_var", "argmax_axis", "argmin_axis", "mean_axis", "max_axis", "var_axis",
+            "broadcast_multiply_last_axis", "broadcast_multiply_first_axis", "broadcast_multiply_general",
+            "squash", "squash_backward",
+            "tile_batch", "tile_axis",
             "sgd_step", "adam_step", "adamw_step",
             "dropout_forward", "dropout_backward", "embedding_forward", "embedding_backward",
             "transpose_2d", "batched_transpose", "permute_general"

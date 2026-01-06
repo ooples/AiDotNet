@@ -962,8 +962,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
         EnsureInitialized();
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
@@ -971,6 +974,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
         }
+
+        var input = inputs[0];
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (input.Shape.Length < 3)

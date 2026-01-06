@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -107,6 +110,111 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => _innerLayer?.SupportsTraining ?? false;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <value>
+    /// Returns <c>true</c> if the inner layer supports GPU execution or if there is no inner layer
+    /// (pass-through with activation); otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// The residual layer can execute on GPU when its inner layer (if present) supports GPU execution.
+    /// If there is no inner layer, the residual layer acts as a pass-through with activation, which
+    /// can be done efficiently on GPU.
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsGpuExecution =>
+        _innerLayer == null || _innerLayer.CanExecuteOnGpu;
+
+    /// <summary>
+    /// Performs the forward pass of the residual layer on the GPU.
+    /// </summary>
+    /// <param name="input">The input GPU tensor to process.</param>
+    /// <returns>The output GPU tensor after processing through the residual layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the GPU-accelerated forward pass: output = activation(input + innerLayer(input)).
+    /// All operations remain on GPU until explicit download is requested.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var input = inputs[0];
+
+        IGpuTensor<T> result;
+
+        if (_innerLayer != null && _innerLayer.CanExecuteOnGpu)
+        {
+            // Run inner layer on GPU
+            var innerOutput = _innerLayer.ForwardGpu(input);
+
+            // Add input + innerOutput on GPU
+            result = gpuEngine.AddGpu(input, innerOutput);
+
+            // Cache state for backward pass only during training
+            // Skip this expensive download during inference (50% overhead reduction)
+            if (IsTrainingMode)
+            {
+                _lastInput = input.ToTensor();
+                _lastInnerOutput = innerOutput.ToTensor();
+            }
+        }
+        else if (_innerLayer != null)
+        {
+            // Inner layer doesn't support GPU - must use CPU for inner layer
+            var inputCpu = input.ToTensor();
+            var innerOutputCpu = _innerLayer.Forward(inputCpu);
+
+            // Cache state for backward pass only during training
+            if (IsTrainingMode)
+            {
+                _lastInput = inputCpu;
+                _lastInnerOutput = innerOutputCpu;
+            }
+
+            // Upload inner output to GPU and add
+            var backend = gpuEngine.GetBackend();
+            if (backend == null)
+                throw new InvalidOperationException("GPU backend is not available");
+
+            var innerOutputGpu = new GpuTensor<T>(
+                backend,
+                innerOutputCpu.Data,
+                innerOutputCpu.Shape,
+                GpuTensorRole.Intermediate);
+
+            result = gpuEngine.AddGpu(input, innerOutputGpu);
+        }
+        else
+        {
+            // No inner layer - input passes through
+            result = input;
+
+            // Cache state for backward pass only during training
+            if (IsTrainingMode)
+            {
+                _lastInput = input.ToTensor();
+                _lastInnerOutput = null;
+            }
+        }
+
+        // Apply activation on GPU
+        var fusedType = MapActivationToFused();
+        if (fusedType != FusedActivationType.None)
+        {
+            result = gpuEngine.ActivationGpu(result, fusedType);
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ResidualLayer{T}"/> class with the specified input shape,

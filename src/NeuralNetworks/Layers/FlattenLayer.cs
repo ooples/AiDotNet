@@ -448,8 +448,13 @@ public class FlattenLayer<T> : LayerBase<T>
     /// but still points to the exact same memory on the GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
         // Handle unbatched input (3D: [C, H, W] or 2D: [H, W] or 1D)
         if (input.Shape.Length <= 3)
         {

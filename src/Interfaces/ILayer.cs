@@ -70,7 +70,8 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// <summary>
     /// Performs a GPU-resident forward pass, keeping the result on the GPU.
     /// </summary>
-    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="inputs">GPU-resident input tensor(s). Most layers use only the first input,
+    /// but some layers like cross-attention require multiple inputs.</param>
     /// <returns>GPU-resident output tensor. Caller is responsible for disposal.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown if <see cref="CanExecuteOnGpu"/> is false or no GPU backend is available.
@@ -89,7 +90,7 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     ///
     /// The result stays on the GPU until you call ToTensor() to download it to CPU memory.
     /// </remarks>
-    IGpuTensor<T> ForwardGpu(IGpuTensor<T> input);
+    IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs);
 
     /// <summary>
     /// Gets whether this layer can execute on GPU.

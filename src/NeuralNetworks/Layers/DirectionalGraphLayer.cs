@@ -1,5 +1,8 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -154,6 +157,9 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -466,6 +472,400 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for DirectionalGraphLayer.
+    /// Uses sparse matrix operations for efficient directed graph aggregation.
+    /// </summary>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine tensorEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        if (!tensorEngine.TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+        }
+
+        var input = inputs[0];
+
+        // Handle batch dimension
+        int[] inputShape = input.Shape;
+        int batchSize;
+        int numNodes;
+        int inputFeatures;
+
+        if (inputShape.Length == 2)
+        {
+            batchSize = 1;
+            numNodes = inputShape[0];
+            inputFeatures = inputShape[1];
+        }
+        else if (inputShape.Length == 3)
+        {
+            batchSize = inputShape[0];
+            numNodes = inputShape[1];
+            inputFeatures = inputShape[2];
+        }
+        else
+        {
+            throw new ArgumentException($"Input must be 2D [nodes, features] or 3D [batch, nodes, features], got {inputShape.Length}D");
+        }
+
+        // Upload weight matrices to GPU
+        using var inWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_incomingWeights.Data));
+        using var outWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outgoingWeights.Data));
+        using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data));
+        using var combWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_combinationWeights.Data));
+
+        // Upload bias vectors to GPU
+        using var inBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_incomingBias.Data));
+        using var outBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outgoingBias.Data));
+        using var selfBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfBias.Data));
+        using var combBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_combinationBias.Data));
+
+        // Upload gate weights and bias if gating is enabled
+        IGpuBuffer? gateWeightsBuffer = null;
+        IGpuBuffer? gateBiasBuffer = null;
+        if (_useGating && _gateWeights != null && _gateBias != null)
+        {
+            gateWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_gateWeights.Data));
+            gateBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_gateBias.Data));
+        }
+
+        // Convert adjacency matrix to CSR format for sparse operations
+        // A[i,j] = 1 means edge from j to i (j→i) for incoming aggregation
+        var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix);
+        using var adjCsr = new CsrGpuTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+
+        // Create transposed adjacency for outgoing aggregation
+        // A^T[i,j] = A[j,i], so A^T represents edges where i→j (outgoing from i)
+        var (adjTValues, adjTColIndices, adjTRowPointers) = ConvertToCSRTranspose(_adjacencyMatrix);
+        using var adjTCsr = new CsrGpuTensor<T>(backend, adjTValues, adjTColIndices, adjTRowPointers, numNodes, numNodes);
+
+        // Allocate output buffer [batch, nodes, outputFeatures]
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        using var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Allocate intermediate buffers for each path
+        int transformedSize = numNodes * _outputFeatures;
+        int concatenatedSize = numNodes * 3 * _outputFeatures;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Get current batch input slice
+            int batchInputOffset = b * numNodes * inputFeatures;
+            using var batchInputBuffer = tensorEngine.GetOrAllocateBufferSlice(
+                input.Buffer, batchInputOffset, numNodes * inputFeatures);
+
+            // ========================================
+            // STEP 1: Incoming aggregation A @ (X @ W_in) + b_in
+            // ========================================
+
+            // X @ W_in: [nodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [nodes, outputFeatures]
+            using var xwInBuffer = backend.AllocateBuffer(transformedSize);
+            backend.Gemm(
+                batchInputBuffer, inWeightsBuffer, xwInBuffer,
+                numNodes, _outputFeatures, inputFeatures,
+                transposeA: false, transposeB: false,
+                alpha: 1.0f, beta: 0.0f);
+
+            // A @ (X @ W_in): SpMM with sparse adjacency
+            using var incomingBuffer = backend.AllocateBuffer(transformedSize);
+            backend.CsrSpMM(
+                adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                xwInBuffer, incomingBuffer,
+                numNodes, _outputFeatures, numNodes, adjCsr.Nnz);
+
+            // Add bias: incoming + b_in
+            backend.AddBias(incomingBuffer, inBiasBuffer, incomingBuffer, numNodes, _outputFeatures);
+
+            // ========================================
+            // STEP 2: Outgoing aggregation A^T @ (X @ W_out) + b_out
+            // ========================================
+
+            // X @ W_out
+            using var xwOutBuffer = backend.AllocateBuffer(transformedSize);
+            backend.Gemm(
+                batchInputBuffer, outWeightsBuffer, xwOutBuffer,
+                numNodes, _outputFeatures, inputFeatures,
+                transposeA: false, transposeB: false,
+                alpha: 1.0f, beta: 0.0f);
+
+            // A^T @ (X @ W_out): SpMM with transposed sparse adjacency
+            using var outgoingBuffer = backend.AllocateBuffer(transformedSize);
+            backend.CsrSpMM(
+                adjTCsr.Values, adjTCsr.ColumnIndices, adjTCsr.RowPointers,
+                xwOutBuffer, outgoingBuffer,
+                numNodes, _outputFeatures, numNodes, adjTCsr.Nnz);
+
+            // Add bias: outgoing + b_out
+            backend.AddBias(outgoingBuffer, outBiasBuffer, outgoingBuffer, numNodes, _outputFeatures);
+
+            // ========================================
+            // STEP 3: Self transformation X @ W_self + b_self
+            // ========================================
+
+            using var selfBuffer = backend.AllocateBuffer(transformedSize);
+            backend.Gemm(
+                batchInputBuffer, selfWeightsBuffer, selfBuffer,
+                numNodes, _outputFeatures, inputFeatures,
+                transposeA: false, transposeB: false,
+                alpha: 1.0f, beta: 0.0f);
+
+            // Add bias: self + b_self
+            backend.AddBias(selfBuffer, selfBiasBuffer, selfBuffer, numNodes, _outputFeatures);
+
+            // ========================================
+            // STEP 4: Concatenate [incoming, outgoing, self]
+            // ========================================
+
+            // Concatenate along feature dimension: [nodes, 3*outputFeatures]
+            using var concatenatedBuffer = backend.AllocateBuffer(concatenatedSize);
+            backend.ConcatFeatures(
+                incomingBuffer, outgoingBuffer,
+                concatenatedBuffer, numNodes, _outputFeatures, _outputFeatures);
+
+            // Now concatenate the partially concatenated buffer with self
+            // First, create buffer for [incoming, outgoing]
+            using var inOutBuffer = backend.AllocateBuffer(numNodes * 2 * _outputFeatures);
+            backend.ConcatFeatures(
+                incomingBuffer, outgoingBuffer,
+                inOutBuffer, numNodes, _outputFeatures, _outputFeatures);
+
+            // Full concatenation: [[incoming, outgoing], self] -> [incoming, outgoing, self]
+            using var fullConcatBuffer = backend.AllocateBuffer(concatenatedSize);
+            backend.ConcatFeatures(
+                inOutBuffer, selfBuffer,
+                fullConcatBuffer, numNodes, 2 * _outputFeatures, _outputFeatures);
+
+            IGpuBuffer gatedBuffer = fullConcatBuffer;
+
+            // ========================================
+            // STEP 5: Optional gating mechanism
+            // ========================================
+
+            if (_useGating && gateWeightsBuffer != null && gateBiasBuffer != null)
+            {
+                // Compute gates: concat @ W_gate + b_gate
+                using var gateLogitsBuffer = backend.AllocateBuffer(numNodes * 3);
+                backend.Gemm(
+                    fullConcatBuffer, gateWeightsBuffer, gateLogitsBuffer,
+                    numNodes, 3, 3 * _outputFeatures,
+                    transposeA: false, transposeB: false,
+                    alpha: 1.0f, beta: 0.0f);
+
+                // Add gate bias
+                backend.AddBias(gateLogitsBuffer, gateBiasBuffer, gateLogitsBuffer, numNodes, 3);
+
+                // Apply sigmoid to get gates
+                using var gatesBuffer = backend.AllocateBuffer(numNodes * 3);
+                backend.Sigmoid(gateLogitsBuffer, gatesBuffer, numNodes * 3);
+
+                // Apply gates to each of the three feature groups
+                // gate[i,0] applies to incoming[i,:], gate[i,1] to outgoing[i,:], gate[i,2] to self[i,:]
+                using var gatedFeaturesBuffer = backend.AllocateBuffer(concatenatedSize);
+                ApplyGatesToFeaturesGpu(
+                    backend, fullConcatBuffer, gatesBuffer, gatedFeaturesBuffer,
+                    numNodes, _outputFeatures);
+
+                // gatedBuffer now points to the gated features
+                gatedBuffer = gatedFeaturesBuffer;
+
+                // ========================================
+                // STEP 6: Final combination with gated features
+                // ========================================
+
+                int batchOutputOffset = b * numNodes * _outputFeatures;
+                using var batchOutputBuffer = tensorEngine.GetOrAllocateBufferSlice(
+                    outputBuffer, batchOutputOffset, numNodes * _outputFeatures);
+
+                backend.Gemm(
+                    gatedFeaturesBuffer, combWeightsBuffer, batchOutputBuffer,
+                    numNodes, _outputFeatures, 3 * _outputFeatures,
+                    transposeA: false, transposeB: false,
+                    alpha: 1.0f, beta: 0.0f);
+
+                // Add combination bias
+                backend.AddBias(batchOutputBuffer, combBiasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
+
+                // Apply activation if specified
+                var fusedActivation = GetFusedActivationType();
+                if (fusedActivation == FusedActivationType.ReLU)
+                {
+                    backend.ReLU(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+                }
+                else if (fusedActivation == FusedActivationType.Sigmoid)
+                {
+                    backend.Sigmoid(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+                }
+                else if (fusedActivation == FusedActivationType.Tanh)
+                {
+                    backend.Tanh(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+                }
+            }
+            else
+            {
+                // ========================================
+                // STEP 6: Final combination without gating
+                // ========================================
+
+                int batchOutputOffset = b * numNodes * _outputFeatures;
+                using var batchOutputBuffer = tensorEngine.GetOrAllocateBufferSlice(
+                    outputBuffer, batchOutputOffset, numNodes * _outputFeatures);
+
+                backend.Gemm(
+                    fullConcatBuffer, combWeightsBuffer, batchOutputBuffer,
+                    numNodes, _outputFeatures, 3 * _outputFeatures,
+                    transposeA: false, transposeB: false,
+                    alpha: 1.0f, beta: 0.0f);
+
+                // Add combination bias
+                backend.AddBias(batchOutputBuffer, combBiasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
+
+                // Apply activation if specified
+                var fusedActivation = GetFusedActivationType();
+                if (fusedActivation == FusedActivationType.ReLU)
+                {
+                    backend.ReLU(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+                }
+                else if (fusedActivation == FusedActivationType.Sigmoid)
+                {
+                    backend.Sigmoid(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+                }
+                else if (fusedActivation == FusedActivationType.Tanh)
+                {
+                    backend.Tanh(batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+                }
+            }
+        }
+
+        // Clean up gate buffers if allocated
+        gateWeightsBuffer?.Dispose();
+        gateBiasBuffer?.Dispose();
+
+        // Return GPU tensor with appropriate shape
+        int[] outputShape = batchSize == 1
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        return new GpuTensor<T>(outputBuffer, outputShape, backend);
+    }
+
+    /// <summary>
+    /// Converts a dense adjacency matrix to CSR format.
+    /// </summary>
+    private (float[] Values, int[] ColIndices, int[] RowPointers) ConvertToCSR(Tensor<T> adjMatrix)
+    {
+        int rows = adjMatrix.Shape[0];
+        int cols = adjMatrix.Shape[1];
+
+        var values = new List<float>();
+        var colIndices = new List<int>();
+        var rowPointers = new List<int> { 0 };
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                float val = (float)NumOps.ToDouble(adjMatrix[i, j]);
+                if (MathF.Abs(val) > 1e-6f)
+                {
+                    values.Add(val);
+                    colIndices.Add(j);
+                }
+            }
+            rowPointers.Add(values.Count);
+        }
+
+        return (values.ToArray(), colIndices.ToArray(), rowPointers.ToArray());
+    }
+
+    /// <summary>
+    /// Converts a dense adjacency matrix to CSR format of its transpose.
+    /// A^T[i,j] = A[j,i]
+    /// </summary>
+    private (float[] Values, int[] ColIndices, int[] RowPointers) ConvertToCSRTranspose(Tensor<T> adjMatrix)
+    {
+        int rows = adjMatrix.Shape[0];
+        int cols = adjMatrix.Shape[1];
+
+        // For transpose, we build CSR of A^T which has shape [cols, rows]
+        // A^T[i,j] = A[j,i], so row i of A^T is column i of A
+        var values = new List<float>();
+        var colIndices = new List<int>();
+        var rowPointers = new List<int> { 0 };
+
+        for (int i = 0; i < cols; i++)
+        {
+            for (int j = 0; j < rows; j++)
+            {
+                float val = (float)NumOps.ToDouble(adjMatrix[j, i]); // A[j,i] = A^T[i,j]
+                if (MathF.Abs(val) > 1e-6f)
+                {
+                    values.Add(val);
+                    colIndices.Add(j);
+                }
+            }
+            rowPointers.Add(values.Count);
+        }
+
+        return (values.ToArray(), colIndices.ToArray(), rowPointers.ToArray());
+    }
+
+    /// <summary>
+    /// Applies learned gates to feature groups on GPU.
+    /// Each gate[n,g] scales the corresponding feature group g for node n.
+    /// </summary>
+    private void ApplyGatesToFeaturesGpu(
+        IDirectGpuBackend backend,
+        IGpuBuffer concatenatedFeatures,
+        IGpuBuffer gates,
+        IGpuBuffer output,
+        int numNodes,
+        int featuresPerGroup)
+    {
+        // gates shape: [numNodes, 3] where gates[n, 0] = incoming, gates[n, 1] = outgoing, gates[n, 2] = self
+        // concatenatedFeatures shape: [numNodes, 3 * featuresPerGroup]
+        // output shape: [numNodes, 3 * featuresPerGroup]
+
+        // We need to broadcast each gate value across all features in its group
+        // For node n:
+        //   output[n, 0:F] = concat[n, 0:F] * gates[n, 0]
+        //   output[n, F:2F] = concat[n, F:2F] * gates[n, 1]
+        //   output[n, 2F:3F] = concat[n, 2F:3F] * gates[n, 2]
+
+        // Download, process, re-upload (fallback for complex per-group gating)
+        // In a full implementation, this would be a custom kernel
+        float[] concatData = backend.DownloadBuffer(concatenatedFeatures);
+        float[] gatesData = backend.DownloadBuffer(gates);
+        float[] outputData = new float[numNodes * 3 * featuresPerGroup];
+
+        for (int n = 0; n < numNodes; n++)
+        {
+            float gate0 = gatesData[n * 3 + 0];
+            float gate1 = gatesData[n * 3 + 1];
+            float gate2 = gatesData[n * 3 + 2];
+
+            int baseOffset = n * 3 * featuresPerGroup;
+
+            for (int f = 0; f < featuresPerGroup; f++)
+            {
+                outputData[baseOffset + f] = concatData[baseOffset + f] * gate0;
+                outputData[baseOffset + featuresPerGroup + f] = concatData[baseOffset + featuresPerGroup + f] * gate1;
+                outputData[baseOffset + 2 * featuresPerGroup + f] = concatData[baseOffset + 2 * featuresPerGroup + f] * gate2;
+            }
+        }
+
+        backend.UploadBuffer(output, outputData);
     }
 
     /// <summary>

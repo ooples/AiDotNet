@@ -408,8 +408,13 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// the view will have shape [32, 784] but still points to the same GPU memory.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
         // Calculate full target shape including batch dimension
         int batchSize = input.Shape[0];
         int[] targetShape = new int[_outputShape.Length + 1];

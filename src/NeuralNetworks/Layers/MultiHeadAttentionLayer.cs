@@ -734,10 +734,15 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <param name="input">GPU-resident input tensor.</param>
     /// <returns>GPU-resident output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
 
         // Handle input shape - flatten to 3D [batch, seq, embedding]
         int[] inputShape = input.Shape;
@@ -785,8 +790,22 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var vPermuted = gpuEngine.PermuteGpu(vReshaped, new[] { 0, 2, 1, 3 });
 
         // 5. Compute scaled dot-product attention
+        // Use overload that returns attention weights during training for backward pass
         double scale = 1.0 / Math.Sqrt(_headDimension);
-        var attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(qPermuted, kPermuted, vPermuted, scale);
+        IGpuTensor<T> attentionOutput;
+        IGpuTensor<T>? attentionWeightsGpu = null;
+
+        if (IsTrainingMode)
+        {
+            // Training mode: get attention weights for backward pass
+            attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(
+                qPermuted, kPermuted, vPermuted, scale, out attentionWeightsGpu);
+        }
+        else
+        {
+            // Inference mode: no need for attention weights
+            attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(qPermuted, kPermuted, vPermuted, scale);
+        }
 
         // 6. Transpose back to [batch, seq, heads, headDim]
         var contextPermuted = gpuEngine.PermuteGpu(attentionOutput, new[] { 0, 2, 1, 3 });
@@ -799,6 +818,27 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 9. Add output bias
         var outputWithBias = gpuEngine.AddBiasGpu(outputProjected, _outputBias);
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            // Download GPU tensors to CPU for backward pass
+            _lastInput = input3D.ToTensor();
+
+            // Cache projected Q, K, V for backward pass
+            _lastProjectedQueries = qPermuted.ToTensor();
+            _lastProjectedKeys = kPermuted.ToTensor();
+            _lastProjectedValues = vPermuted.ToTensor();
+
+            // Cache attention context for output weights gradient
+            _lastAttentionContext = contextFlat.ToTensor();
+
+            // Cache attention weights for backward pass
+            _lastAttentionScores = attentionWeightsGpu?.ToTensor();
+
+            _lastOutput = outputWithBias.ToTensor();
+        }
 
         // 10. Reshape back to original batch dimensions if needed
         if (inputShape.Length != 3 || inputShape[0] != batchSize)

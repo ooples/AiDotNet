@@ -673,8 +673,11 @@ public class ActivationLayer<T> : LayerBase<T>
     /// because GPUs can process thousands of values in parallel.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
 
@@ -683,6 +686,7 @@ public class ActivationLayer<T> : LayerBase<T>
                 $"Activation function '{GetActivationTypeName()}' does not support GPU execution. " +
                 $"Use the CPU Forward method instead.");
 
+        var input = inputs[0];
         return gpuEngine.ActivationGpu<T>(input, fusedType);
     }
 

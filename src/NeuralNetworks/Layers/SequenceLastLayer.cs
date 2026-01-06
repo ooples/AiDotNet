@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -34,6 +37,11 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
     public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new SequenceLastLayer.
@@ -101,6 +109,33 @@ public class SequenceLastLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"SequenceLastLayer expects 1D, 2D, or 3D input, got {rank}D.");
         }
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass that extracts the last timestep from a sequence.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensors.</param>
+    /// <returns>GPU-resident output tensor containing the last timestep.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var input = inputs[0];
+
+        // Download to CPU, extract last timestep, upload result
+        // This is a simple extraction operation that doesn't benefit from GPU compute
+        var cpuInput = input.ToTensor();
+        var cpuOutput = Forward(cpuInput);
+
+        // Upload result to GPU using proper API
+        return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
     }
 
     /// <summary>

@@ -189,6 +189,22 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual void Softmax(IGpuBuffer A, IGpuBuffer B, int batchSize, int features) => Inner.Softmax(A, B, batchSize, features);
 
+    /// <inheritdoc/>
+    public virtual void Squash(IGpuBuffer input, IGpuBuffer output, int numCapsules, int capsuleDim, float epsilon)
+        => Inner.Squash(input, output, numCapsules, capsuleDim, epsilon);
+
+    /// <inheritdoc/>
+    public virtual void SquashBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int numCapsules, int capsuleDim, float epsilon)
+        => Inner.SquashBackward(gradOutput, input, gradInput, numCapsules, capsuleDim, epsilon);
+
+    /// <inheritdoc/>
+    public virtual void TileBatch(IGpuBuffer input, IGpuBuffer output, int repeats, int innerSize)
+        => Inner.TileBatch(input, output, repeats, innerSize);
+
+    /// <inheritdoc/>
+    public virtual void TileAxis(IGpuBuffer input, IGpuBuffer output, int outerSize, int axisSize, int innerSize, int repeats)
+        => Inner.TileAxis(input, output, outerSize, axisSize, innerSize, repeats);
+
     #endregion
 
     #region Trigonometric Operations
@@ -277,6 +293,18 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual IGpuBuffer SparseGemmBiasRelu(IGpuBuffer sparseAValues, IGpuBuffer sparseAIndices, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
         => Inner.SparseGemmBiasRelu(sparseAValues, sparseAIndices, B, bias, M, N, K);
+
+    /// <inheritdoc/>
+    public virtual void CsrSpMM(IGpuBuffer csrValues, IGpuBuffer csrColIndices, IGpuBuffer csrRowPointers, IGpuBuffer denseB, IGpuBuffer output, int M, int K, int N, int nnz)
+        => Inner.CsrSpMM(csrValues, csrColIndices, csrRowPointers, denseB, output, M, K, N, nnz);
+
+    /// <inheritdoc/>
+    public virtual void CsrSpMMBias(IGpuBuffer csrValues, IGpuBuffer csrColIndices, IGpuBuffer csrRowPointers, IGpuBuffer denseB, IGpuBuffer bias, IGpuBuffer output, int M, int K, int N, int nnz)
+        => Inner.CsrSpMMBias(csrValues, csrColIndices, csrRowPointers, denseB, bias, output, M, K, N, nnz);
+
+    /// <inheritdoc/>
+    public virtual void ScatterAddEdges(IGpuBuffer input, IGpuBuffer sourceIndices, IGpuBuffer targetIndices, IGpuBuffer? edgeValues, IGpuBuffer output, int numNodes, int numEdges, int features)
+        => Inner.ScatterAddEdges(input, sourceIndices, targetIndices, edgeValues, output, numNodes, numEdges, features);
 
     /// <inheritdoc/>
     public virtual IGpuBuffer AllocateByteBuffer(int size) => Inner.AllocateByteBuffer(size);
@@ -747,6 +775,18 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
         => Inner.ArgMin(A, indices, outerSize, reduceSize);
+
+    /// <inheritdoc/>
+    public virtual void MaxAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
+        => Inner.MaxAxis(A, B, outerSize, reduceSize);
+
+    /// <inheritdoc/>
+    public virtual void BroadcastMultiplyLastAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)
+        => Inner.BroadcastMultiplyLastAxis(A, B, C, outerSize, innerSize);
+
+    /// <inheritdoc/>
+    public virtual void BroadcastMultiplyFirstAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)
+        => Inner.BroadcastMultiplyFirstAxis(A, B, C, outerSize, innerSize);
 
     #endregion
 

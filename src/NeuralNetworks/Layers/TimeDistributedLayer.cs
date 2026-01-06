@@ -1,4 +1,6 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -124,6 +126,12 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU execution.
+    /// GPU support depends on the inner layer's GPU capabilities.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TimeDistributedLayer{T}"/> class with scalar activation function.
@@ -339,7 +347,6 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         _lastOutput = activated;
         return _lastOutput;
     }
-
 
     /// <summary>
     /// Performs the backward pass of the time distributed layer.

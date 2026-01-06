@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -137,6 +138,16 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// GraphAttentionLayer supports GPU execution with multi-head attention computed on GPU.
+    /// When sparse aggregation is enabled via SetEdges(), the layer uses O(E) GPU operations
+    /// for efficient attention computation on large graphs.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public override int ParameterCount => _weights.Length + _attentionWeights.Length + _bias.Length;
@@ -1382,6 +1393,319 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _weightsGradient = null;
         _attentionWeightsGradient = null;
         _biasGradient = null;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for Graph Attention Networks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Implements multi-head graph attention with GPU acceleration. The computation involves:
+    /// 1. Linear transformation for each attention head: H_h = X * W_h
+    /// 2. Attention score computation: e_ij = LeakyReLU(a_source^T * H_hi + a_target^T * H_hj)
+    /// 3. Softmax normalization over neighbors: α_ij = softmax_j(e_ij)
+    /// 4. Weighted aggregation: output_i = Σ_j α_ij * H_hj
+    /// 5. Head averaging and bias addition
+    /// </para>
+    /// <para>
+    /// For sparse graphs, uses efficient O(E) edge-based computation instead of O(N²) dense operations.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+        if (input.Shape == null || input.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
+
+        // Check that either adjacency matrix or edge indices are set
+        if (_adjacencyMatrix == null && !_useSparseAggregation)
+        {
+            throw new InvalidOperationException(
+                "Graph structure must be set using SetAdjacencyMatrix or SetEdges before calling ForwardGpu.");
+        }
+
+        // Get GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetGpuBackend();
+        if (backend == null)
+            throw new InvalidOperationException("No GPU backend available.");
+
+        int rank = input.Shape.Length;
+        int batchSize, numNodes, inputFeatures;
+
+        // Determine dimensions
+        if (rank == 2)
+        {
+            batchSize = 1;
+            numNodes = input.Shape[0];
+            inputFeatures = input.Shape[1];
+        }
+        else
+        {
+            // Handle 3D+ tensors - flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            numNodes = input.Shape[rank - 2];
+            inputFeatures = input.Shape[rank - 1];
+        }
+
+        if (inputFeatures != _inputFeatures)
+            throw new ArgumentException($"Input features ({inputFeatures}) doesn't match layer input features ({_inputFeatures}).");
+
+        // Allocate output buffer on GPU: [batchSize, numNodes, outputFeatures]
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        var outputBuffer = backend.AllocateBuffer(new float[outputSize]);
+
+        // Upload weights to GPU for each head
+        var headWeightBuffers = new IGpuBuffer[_numHeads];
+        var attnSourceBuffers = new IGpuBuffer[_numHeads];
+        var attnTargetBuffers = new IGpuBuffer[_numHeads];
+
+        for (int h = 0; h < _numHeads; h++)
+        {
+            // Extract and upload head weights
+            var headWeightData = new float[_inputFeatures * _outputFeatures];
+            for (int i = 0; i < _inputFeatures; i++)
+            {
+                for (int j = 0; j < _outputFeatures; j++)
+                {
+                    headWeightData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_weights[h, i, j]);
+                }
+            }
+            headWeightBuffers[h] = backend.AllocateBuffer(headWeightData);
+
+            // Extract attention source and target vectors
+            var attnSourceData = new float[_outputFeatures];
+            var attnTargetData = new float[_outputFeatures];
+            for (int f = 0; f < _outputFeatures; f++)
+            {
+                attnSourceData[f] = (float)NumOps.ToDouble(_attentionWeights[h, f]);
+                attnTargetData[f] = (float)NumOps.ToDouble(_attentionWeights[h, _outputFeatures + f]);
+            }
+            attnSourceBuffers[h] = backend.AllocateBuffer(attnSourceData);
+            attnTargetBuffers[h] = backend.AllocateBuffer(attnTargetData);
+        }
+
+        // Upload bias
+        var biasData = new float[_outputFeatures];
+        for (int f = 0; f < _outputFeatures; f++)
+            biasData[f] = (float)NumOps.ToDouble(_bias[f]);
+        var biasBuffer = backend.AllocateBuffer(biasData);
+
+        // Allocate temporary buffers for intermediate results
+        int transformedSize = numNodes * _outputFeatures;
+        var transformedBuffer = backend.AllocateBuffer(new float[transformedSize]);
+        var attnScoreBuffer = backend.AllocateBuffer(new float[numNodes * numNodes]);
+        var headOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+
+        // Zero the output buffer
+        backend.Fill(outputBuffer, 0.0f, outputSize);
+
+        float alphaValue = (float)NumOps.ToDouble(_alpha);
+
+        // Process each batch
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Extract batch input slice from GPU tensor
+            int batchOffset = b * numNodes * inputFeatures;
+            var batchInputBuffer = gpuEngine.GetOrAllocateBufferSlice(input.Buffer, batchOffset, numNodes * inputFeatures, backend);
+
+            // Zero the temporary head accumulator
+            backend.Fill(headOutputBuffer, 0.0f, numNodes * _outputFeatures);
+
+            // Process each attention head
+            for (int h = 0; h < _numHeads; h++)
+            {
+                // Step 1: Transform input - transformed = input @ headWeight
+                // [numNodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [numNodes, outputFeatures]
+                backend.Gemm(
+                    batchInputBuffer,
+                    headWeightBuffers[h],
+                    transformedBuffer,
+                    numNodes, _outputFeatures, inputFeatures,
+                    alpha: 1.0f, beta: 0.0f,
+                    transposeA: false, transposeB: false);
+
+                // Step 2: Compute attention scores
+                // For each node i, compute score_ij = LeakyReLU(source_i + target_j)
+                // source_i = transformed[i, :] @ attnSource -> [numNodes]
+                // target_j = transformed[j, :] @ attnTarget -> [numNodes]
+                var sourceScoreBuffer = backend.AllocateBuffer(new float[numNodes]);
+                var targetScoreBuffer = backend.AllocateBuffer(new float[numNodes]);
+
+                // Compute source and target scores using matmul
+                backend.Gemm(
+                    transformedBuffer,
+                    attnSourceBuffers[h],
+                    sourceScoreBuffer,
+                    numNodes, 1, _outputFeatures,
+                    alpha: 1.0f, beta: 0.0f,
+                    transposeA: false, transposeB: false);
+
+                backend.Gemm(
+                    transformedBuffer,
+                    attnTargetBuffers[h],
+                    targetScoreBuffer,
+                    numNodes, 1, _outputFeatures,
+                    alpha: 1.0f, beta: 0.0f,
+                    transposeA: false, transposeB: false);
+
+                // Compute pairwise attention scores with LeakyReLU and masking
+                // This needs to be done with adjacency matrix consideration
+                if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
+                {
+                    // Sparse attention: compute scores only for existing edges
+                    int numEdges = _edgeSourceIndices.Length;
+                    var edgeScoreBuffer = backend.AllocateBuffer(new float[numEdges]);
+
+                    // Upload edge indices
+                    var sourceIndicesData = new int[numEdges];
+                    var targetIndicesData = new int[numEdges];
+                    for (int e = 0; e < numEdges; e++)
+                    {
+                        sourceIndicesData[e] = _edgeSourceIndices.GetFlat(e);
+                        targetIndicesData[e] = _edgeTargetIndices.GetFlat(e);
+                    }
+                    var srcIdxBuffer = backend.AllocateIntBuffer(sourceIndicesData);
+                    var tgtIdxBuffer = backend.AllocateIntBuffer(targetIndicesData);
+
+                    // Compute edge scores using GPU kernel: score[e] = LeakyReLU(source[src[e]] + target[tgt[e]])
+                    backend.ComputeEdgeAttentionScores(
+                        sourceScoreBuffer,
+                        targetScoreBuffer,
+                        srcIdxBuffer,
+                        tgtIdxBuffer,
+                        edgeScoreBuffer,
+                        numEdges,
+                        alphaValue);
+
+                    // Compute softmax over edges per target node (scatter-softmax)
+                    var normalizedScoreBuffer = backend.AllocateBuffer(new float[numEdges]);
+                    backend.EdgeSoftmax(
+                        edgeScoreBuffer,
+                        tgtIdxBuffer,
+                        normalizedScoreBuffer,
+                        numEdges,
+                        numNodes);
+
+                    // Weighted scatter-add: output[tgt[e]] += score[e] * transformed[src[e]]
+                    var headResultBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+                    backend.Fill(headResultBuffer, 0.0f, numNodes * _outputFeatures);
+
+                    backend.WeightedScatterAdd(
+                        transformedBuffer,
+                        srcIdxBuffer,
+                        tgtIdxBuffer,
+                        normalizedScoreBuffer,
+                        headResultBuffer,
+                        numEdges,
+                        numNodes,
+                        _outputFeatures);
+
+                    // Accumulate head result into headOutputBuffer
+                    backend.Add(headOutputBuffer, headResultBuffer, headOutputBuffer, numNodes * _outputFeatures);
+
+                    // Clean up sparse buffers
+                    srcIdxBuffer.Dispose();
+                    tgtIdxBuffer.Dispose();
+                    edgeScoreBuffer.Dispose();
+                    normalizedScoreBuffer.Dispose();
+                    headResultBuffer.Dispose();
+                }
+                else if (_adjacencyMatrix != null)
+                {
+                    // Dense attention: compute full attention matrix
+                    // Upload adjacency matrix for this batch
+                    var adjData = new float[numNodes * numNodes];
+                    bool adj2D = _adjacencyMatrix.Shape.Length == 2;
+                    for (int i = 0; i < numNodes; i++)
+                    {
+                        for (int j = 0; j < numNodes; j++)
+                        {
+                            T adjVal = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[b, i, j];
+                            adjData[i * numNodes + j] = (float)NumOps.ToDouble(adjVal);
+                        }
+                    }
+                    var adjBuffer = backend.AllocateBuffer(adjData);
+
+                    // Compute attention matrix with LeakyReLU and masking
+                    backend.ComputeDenseAttentionMatrix(
+                        sourceScoreBuffer,
+                        targetScoreBuffer,
+                        adjBuffer,
+                        attnScoreBuffer,
+                        numNodes,
+                        alphaValue);
+
+                    // Apply row-wise softmax (over neighbors)
+                    backend.RowSoftmax(attnScoreBuffer, numNodes, numNodes);
+
+                    // Aggregate: output = attention @ transformed
+                    // [numNodes, numNodes] @ [numNodes, outputFeatures] -> [numNodes, outputFeatures]
+                    var headResultBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+                    backend.Gemm(
+                        attnScoreBuffer,
+                        transformedBuffer,
+                        headResultBuffer,
+                        numNodes, _outputFeatures, numNodes,
+                        alpha: 1.0f, beta: 0.0f,
+                        transposeA: false, transposeB: false);
+
+                    // Accumulate head result
+                    backend.Add(headOutputBuffer, headResultBuffer, headOutputBuffer, numNodes * _outputFeatures);
+
+                    adjBuffer.Dispose();
+                    headResultBuffer.Dispose();
+                }
+
+                sourceScoreBuffer.Dispose();
+                targetScoreBuffer.Dispose();
+            }
+
+            // Average across heads
+            float headScale = 1.0f / _numHeads;
+            backend.MultiplyScalar(headOutputBuffer, headScale, headOutputBuffer, numNodes * _outputFeatures);
+
+            // Add bias (broadcast to all nodes)
+            backend.AddBias(headOutputBuffer, biasBuffer, headOutputBuffer, numNodes, _outputFeatures);
+
+            // Copy to output buffer at correct batch offset
+            int outputOffset = b * numNodes * _outputFeatures;
+            backend.Copy(headOutputBuffer, 0, outputBuffer, outputOffset, numNodes * _outputFeatures);
+        }
+
+        // Apply activation
+        var activationType = GetFusedActivationType();
+        if (activationType != FusedActivationType.None)
+        {
+            backend.ApplyActivation(outputBuffer, outputBuffer, outputSize, activationType);
+        }
+
+        // Clean up weight buffers
+        for (int h = 0; h < _numHeads; h++)
+        {
+            headWeightBuffers[h].Dispose();
+            attnSourceBuffers[h].Dispose();
+            attnTargetBuffers[h].Dispose();
+        }
+        biasBuffer.Dispose();
+        transformedBuffer.Dispose();
+        attnScoreBuffer.Dispose();
+        headOutputBuffer.Dispose();
+
+        // Determine output shape
+        int[] outputShape = rank == 2
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        return new GpuTensor<T>(outputBuffer, outputShape, backend);
     }
 
     /// <inheritdoc/>

@@ -1,6 +1,8 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -67,6 +69,11 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TransitionLayer{T}"/> class.

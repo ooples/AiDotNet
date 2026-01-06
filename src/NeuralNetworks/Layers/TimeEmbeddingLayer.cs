@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -99,6 +100,11 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     /// <summary>
     /// The maximum timestep value for scaling embeddings.

@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -138,6 +141,9 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TemporalMemoryLayer{T}"/> class.
     /// </summary>
@@ -241,6 +247,55 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         var output = Engine.TensorMultiply(mask, flatCellStates);
 
         return output;
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        var input = inputs[0];
+        int inputSize = input.ElementCount;
+        int outputSize = ColumnCount * CellsPerColumn;
+
+        // Download input data from GPU
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
+        // Get cell states as float array
+        var cellStatesData = DirectGpuEngine.ToFloatArray<T>(CellStates.Data);
+
+        // Create mask by repeating each input element CellsPerColumn times
+        var maskData = new float[outputSize];
+        for (int c = 0; c < ColumnCount; c++)
+        {
+            float inputVal = inputData[c];
+            for (int cell = 0; cell < CellsPerColumn; cell++)
+            {
+                maskData[c * CellsPerColumn + cell] = inputVal;
+            }
+        }
+
+        // Upload mask and cell states to GPU
+        var maskBuffer = backend.AllocateBuffer(maskData);
+        var cellStatesBuffer = backend.AllocateBuffer(cellStatesData);
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Element-wise multiply on GPU: output = mask * cellStates
+        backend.Multiply(maskBuffer, cellStatesBuffer, outputBuffer, outputSize);
+
+        // Clean up intermediate buffers
+        maskBuffer.Dispose();
+        cellStatesBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { outputSize }, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

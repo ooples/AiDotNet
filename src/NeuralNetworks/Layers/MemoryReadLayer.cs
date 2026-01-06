@@ -1,4 +1,6 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -223,6 +225,9 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MemoryReadLayer{T}"/> class with the specified dimensions
@@ -839,6 +844,172 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return Forward(input, defaultMemory);
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine tensorEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        if (!tensorEngine.TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        var input = inputs[0];
+        int[] inputShape = input.Shape;
+        int batchSize = inputShape.Length >= 2 ? inputShape[0] : 1;
+        int inputDim = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
+
+        // Get or create default memory if not provided
+        int memoryDim = _keyWeights.Shape[1];
+        float[] memoryData;
+        int memorySlots;
+
+        if (inputs.Length >= 2)
+        {
+            var memoryInput = inputs[1];
+            memorySlots = memoryInput.Shape[0];
+            using (var memBuffer = memoryInput.GetBuffer())
+            {
+                memoryData = backend.DownloadBuffer(memBuffer);
+            }
+        }
+        else
+        {
+            // Use default identity memory
+            memorySlots = memoryDim;
+            memoryData = new float[memorySlots * memoryDim];
+            for (int i = 0; i < memorySlots; i++)
+            {
+                memoryData[i * memoryDim + i] = 1.0f;
+            }
+        }
+
+        // Download input data
+        float[] inputData;
+        using (var inputBuffer = input.GetBuffer())
+        {
+            inputData = backend.DownloadBuffer(inputBuffer);
+        }
+
+        // Upload weights
+        using var keyWBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_keyWeights.Data));
+        using var valueWBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_valueWeights.Data));
+        using var outputWBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputBias.Data));
+        using var memoryBuffer = backend.AllocateBuffer(memoryData);
+
+        // Step 1: keys = input @ keyWeights: [batch, inputDim] @ [inputDim, memoryDim] = [batch, memoryDim]
+        using var inputBuffer = backend.AllocateBuffer(inputData);
+        using var keysBuffer = backend.AllocateBuffer(new float[batchSize * memoryDim]);
+        backend.Gemm(inputBuffer, keyWBuffer, keysBuffer, batchSize, memoryDim, inputDim);
+
+        // Step 2: attentionScores = keys @ memory^T: [batch, memoryDim] @ [memoryDim, memorySlots] = [batch, memorySlots]
+        // Transpose memory: [memorySlots, memoryDim] -> [memoryDim, memorySlots]
+        var memoryT = new float[memoryDim * memorySlots];
+        for (int i = 0; i < memorySlots; i++)
+        {
+            for (int j = 0; j < memoryDim; j++)
+            {
+                memoryT[j * memorySlots + i] = memoryData[i * memoryDim + j];
+            }
+        }
+        using var memoryTBuffer = backend.AllocateBuffer(memoryT);
+        using var scoresBuffer = backend.AllocateBuffer(new float[batchSize * memorySlots]);
+        backend.Gemm(keysBuffer, memoryTBuffer, scoresBuffer, batchSize, memorySlots, memoryDim);
+
+        // Step 3: Apply softmax over memorySlots dimension
+        var scoresData = backend.DownloadBuffer(scoresBuffer);
+        ApplySoftmaxMemory(scoresData, batchSize, memorySlots);
+        using var attentionBuffer = backend.AllocateBuffer(scoresData);
+
+        // Step 4: readValues = attention @ memory: [batch, memorySlots] @ [memorySlots, memoryDim] = [batch, memoryDim]
+        using var readBuffer = backend.AllocateBuffer(new float[batchSize * memoryDim]);
+        backend.Gemm(attentionBuffer, memoryBuffer, readBuffer, batchSize, memoryDim, memorySlots);
+
+        // Step 5: transformed = readValues @ valueWeights: [batch, memoryDim] @ [memoryDim, outputDim]
+        int outputDim = _valueWeights.Shape[1];
+        using var transformedBuffer = backend.AllocateBuffer(new float[batchSize * outputDim]);
+        backend.Gemm(readBuffer, valueWBuffer, transformedBuffer, batchSize, outputDim, memoryDim);
+
+        // Step 6: projected = transformed @ outputWeights: [batch, outputDim] @ [outputDim, outputDim]
+        using var projectedBuffer = backend.AllocateBuffer(new float[batchSize * outputDim]);
+        backend.Gemm(transformedBuffer, outputWBuffer, projectedBuffer, batchSize, outputDim, outputDim);
+
+        // Step 7: Add bias and apply activation
+        var projectedData = backend.DownloadBuffer(projectedBuffer);
+        var biasData = backend.DownloadBuffer(biasBuffer);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int o = 0; o < outputDim; o++)
+            {
+                projectedData[b * outputDim + o] += biasData[o];
+            }
+        }
+
+        // Apply activation
+        ApplyMemoryActivation(projectedData, batchSize, outputDim);
+
+        return new GpuTensor<T>(backend, projectedData, [batchSize, outputDim]);
+    }
+
+    /// <summary>
+    /// Applies softmax over memory slots dimension.
+    /// </summary>
+    private void ApplySoftmaxMemory(float[] data, int batchSize, int memorySlots)
+    {
+        for (int b = 0; b < batchSize; b++)
+        {
+            int offset = b * memorySlots;
+
+            float maxVal = float.MinValue;
+            for (int s = 0; s < memorySlots; s++)
+            {
+                maxVal = MathF.Max(maxVal, data[offset + s]);
+            }
+
+            float sumExp = 0f;
+            for (int s = 0; s < memorySlots; s++)
+            {
+                data[offset + s] = MathF.Exp(data[offset + s] - maxVal);
+                sumExp += data[offset + s];
+            }
+
+            float invSum = 1f / sumExp;
+            for (int s = 0; s < memorySlots; s++)
+            {
+                data[offset + s] *= invSum;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies activation function for memory layer.
+    /// </summary>
+    private void ApplyMemoryActivation(float[] data, int batchSize, int outputDim)
+    {
+        string activationName = ActivationFunction.GetType().Name.ToLowerInvariant();
+
+        if (activationName.Contains("relu"))
+        {
+            for (int i = 0; i < data.Length; i++)
+                data[i] = MathF.Max(0f, data[i]);
+        }
+        else if (activationName.Contains("sigmoid"))
+        {
+            for (int i = 0; i < data.Length; i++)
+                data[i] = 1f / (1f + MathF.Exp(-data[i]));
+        }
+        else if (activationName.Contains("tanh"))
+        {
+            for (int i = 0; i < data.Length; i++)
+                data[i] = MathF.Tanh(data[i]);
+        }
+        // Identity or unknown - keep as is
     }
 
     /// <summary>

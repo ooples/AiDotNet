@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -70,6 +74,11 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiplyLayer{T}"/> class with the specified input shapes
@@ -254,6 +263,60 @@ public class MultiplyLayer<T> : LayerBase<T>
         }
 
         return activated;
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU using actual GPU element-wise multiplication.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length < 2)
+            throw new ArgumentException("MultiplyLayer requires at least two inputs.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        int size = inputs[0].ElementCount;
+
+        // Perform GPU element-wise multiplication of all inputs
+        // Start with first two inputs
+        var resultBuffer = backend.AllocateBuffer(size);
+        backend.Multiply(inputs[0].Buffer, inputs[1].Buffer, resultBuffer, size);
+
+        // Multiply with remaining inputs
+        for (int i = 2; i < inputs.Length; i++)
+        {
+            using var tempBuffer = resultBuffer;
+            resultBuffer = backend.AllocateBuffer(size);
+            backend.Multiply(tempBuffer, inputs[i].Buffer, resultBuffer, size);
+        }
+
+        // Apply activation if needed
+        var fusedActivation = GetFusedActivationType();
+        if (fusedActivation != FusedActivationType.None)
+        {
+            var activatedBuffer = backend.AllocateBuffer(size);
+            ApplyGpuActivation(backend, resultBuffer, activatedBuffer, size, fusedActivation);
+            resultBuffer.Dispose();
+            resultBuffer = activatedBuffer;
+        }
+
+        // Store for backward pass during training
+        if (IsTrainingMode)
+        {
+            var cpuInputs = new Tensor<T>[inputs.Length];
+            for (int i = 0; i < inputs.Length; i++)
+                cpuInputs[i] = inputs[i].ToTensor();
+            _lastInputs = cpuInputs;
+        }
+
+        return new GpuTensor<T>(backend, resultBuffer, inputs[0].Shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

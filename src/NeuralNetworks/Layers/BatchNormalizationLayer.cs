@@ -440,13 +440,18 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// and then downloaded back to CPU for persistence.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
         {
             throw new InvalidOperationException(
                 "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
         }
+
+        var input = inputs[0];
 
         // Store input shape for backward pass
         _lastInput = null; // GPU path doesn't store CPU tensor

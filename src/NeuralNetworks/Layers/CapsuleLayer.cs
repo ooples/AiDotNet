@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -128,6 +132,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CapsuleLayer{T}"/> class with specified dimensions and routing iterations.
@@ -577,6 +584,257 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastCouplingCoefficients = couplingCoefficients;
 
         return _lastOutput;
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        var input = inputs[0];
+        int[] inputShape = input.Shape;
+        int rank = inputShape.Length;
+
+        // Parse dimensions
+        int batchSize, inputCapsules, inputDimension;
+        if (rank == 2)
+        {
+            batchSize = 1;
+            inputCapsules = inputShape[0];
+            inputDimension = inputShape[1];
+        }
+        else if (rank == 3)
+        {
+            batchSize = inputShape[0];
+            inputCapsules = inputShape[1];
+            inputDimension = inputShape[2];
+        }
+        else if (rank > 3)
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= inputShape[d];
+            batchSize = flatBatch;
+            inputCapsules = inputShape[rank - 2];
+            inputDimension = inputShape[rank - 1];
+        }
+        else
+        {
+            throw new ArgumentException($"CapsuleLayer requires at least 2D input, got {rank}D");
+        }
+
+        // Download input data for processing
+        float[] inputData = backend.DownloadBuffer(input.Buffer);
+
+        // Upload transformation matrix and bias
+        using var transformBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_transformationMatrix.Data));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bias.Data));
+
+        // ===== Step 1: Transform input capsules using per-capsule weight matrices =====
+        // transformedInput: [batchSize, inputCapsules, numCapsules, capsuleDimension]
+        int transformedSize = batchSize * inputCapsules * _numCapsules * _capsuleDimension;
+        var transformedData = new float[transformedSize];
+
+        // For each input capsule, compute: inputSlice @ weightsSlice
+        for (int i = 0; i < inputCapsules; i++)
+        {
+            // Extract input slice [batch, inputDimension]
+            var inputSlice = new float[batchSize * inputDimension];
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int d = 0; d < inputDimension; d++)
+                {
+                    inputSlice[b * inputDimension + d] = inputData[(b * inputCapsules + i) * inputDimension + d];
+                }
+            }
+
+            // Extract weight slice [inputDimension, numCapsules * capsuleDimension]
+            var weightsSlice = new float[inputDimension * _numCapsules * _capsuleDimension];
+            var transformData = backend.DownloadBuffer(transformBuffer);
+            int weightOffset = i * inputDimension * _numCapsules * _capsuleDimension;
+            Array.Copy(transformData, weightOffset, weightsSlice, 0, weightsSlice.Length);
+
+            // GEMM: [batch, inputDim] @ [inputDim, numCaps*capsDim] = [batch, numCaps*capsDim]
+            using var inputSliceBuffer = backend.AllocateBuffer(inputSlice);
+            using var weightsSliceBuffer = backend.AllocateBuffer(weightsSlice);
+            using var resultBuffer = backend.AllocateBuffer(new float[batchSize * _numCapsules * _capsuleDimension]);
+
+            backend.Gemm(inputSliceBuffer, weightsSliceBuffer, resultBuffer,
+                batchSize, _numCapsules * _capsuleDimension, inputDimension);
+
+            var resultData = backend.DownloadBuffer(resultBuffer);
+
+            // Copy to transformedData at [b, i, :, :]
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int c = 0; c < _numCapsules * _capsuleDimension; c++)
+                {
+                    int targetIdx = ((b * inputCapsules + i) * _numCapsules * _capsuleDimension) + c;
+                    transformedData[targetIdx] = resultData[b * _numCapsules * _capsuleDimension + c];
+                }
+            }
+        }
+
+        // ===== Step 2: Initialize coupling coefficients =====
+        var couplingData = new float[batchSize * inputCapsules * _numCapsules];
+        float initCoef = 1.0f / _numCapsules;
+        for (int i = 0; i < couplingData.Length; i++)
+            couplingData[i] = initCoef;
+
+        // ===== Step 3: Dynamic Routing =====
+        float[] outputData = new float[batchSize * _numCapsules * _capsuleDimension];
+
+        for (int iter = 0; iter < _numRoutingIterations; iter++)
+        {
+            // Compute weighted sum: [batch, numCapsules, capsuleDimension]
+            var weightedSum = new float[batchSize * _numCapsules * _capsuleDimension];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int k = 0; k < _numCapsules; k++)
+                {
+                    for (int d = 0; d < _capsuleDimension; d++)
+                    {
+                        float sum = 0f;
+                        for (int j = 0; j < inputCapsules; j++)
+                        {
+                            float coef = couplingData[(b * inputCapsules + j) * _numCapsules + k];
+                            float val = transformedData[((b * inputCapsules + j) * _numCapsules + k) * _capsuleDimension + d];
+                            sum += coef * val;
+                        }
+                        weightedSum[(b * _numCapsules + k) * _capsuleDimension + d] = sum;
+                    }
+                }
+            }
+
+            // Add bias using GPU
+            var biasData = backend.DownloadBuffer(biasBuffer);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int k = 0; k < _numCapsules; k++)
+                {
+                    for (int d = 0; d < _capsuleDimension; d++)
+                    {
+                        weightedSum[(b * _numCapsules + k) * _capsuleDimension + d] += biasData[k * _capsuleDimension + d];
+                    }
+                }
+            }
+
+            // Apply Squash activation: v = ||s||^2 / (1 + ||s||^2) * s / ||s||
+            ApplySquashGpu(weightedSum, outputData, batchSize, _numCapsules, _capsuleDimension);
+
+            // Update coupling coefficients (except last iteration)
+            if (iter < _numRoutingIterations - 1)
+            {
+                // Compute agreement: dot product between transformedInput and output
+                var agreement = new float[batchSize * inputCapsules * _numCapsules];
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int j = 0; j < inputCapsules; j++)
+                    {
+                        for (int k = 0; k < _numCapsules; k++)
+                        {
+                            float dot = 0f;
+                            for (int d = 0; d < _capsuleDimension; d++)
+                            {
+                                float tVal = transformedData[((b * inputCapsules + j) * _numCapsules + k) * _capsuleDimension + d];
+                                float oVal = outputData[(b * _numCapsules + k) * _capsuleDimension + d];
+                                dot += tVal * oVal;
+                            }
+                            agreement[(b * inputCapsules + j) * _numCapsules + k] = dot;
+                        }
+                    }
+                }
+
+                // Update coupling: coupling += agreement, then softmax over numCapsules
+                for (int i = 0; i < couplingData.Length; i++)
+                    couplingData[i] += agreement[i];
+
+                // Apply softmax over numCapsules dimension
+                ApplySoftmaxOverCapsules(couplingData, batchSize, inputCapsules, _numCapsules);
+            }
+        }
+
+        // Create output GPU tensor
+        var outputBuffer = backend.AllocateBuffer(outputData);
+        return new GpuTensor<T>(backend, outputBuffer, new[] { batchSize, _numCapsules, _capsuleDimension }, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Applies Squash activation function on GPU data.
+    /// </summary>
+    private void ApplySquashGpu(float[] input, float[] output, int batchSize, int numCapsules, int capsuleDimension)
+    {
+        // Squash: v = ||s||^2 / (1 + ||s||^2) * s / ||s||
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int k = 0; k < numCapsules; k++)
+            {
+                int offset = (b * numCapsules + k) * capsuleDimension;
+
+                // Compute squared norm
+                float normSq = 0f;
+                for (int d = 0; d < capsuleDimension; d++)
+                {
+                    float val = input[offset + d];
+                    normSq += val * val;
+                }
+
+                float norm = MathF.Sqrt(normSq);
+                float scale = normSq / (1f + normSq);
+                float invNorm = norm > 1e-8f ? 1f / norm : 0f;
+
+                for (int d = 0; d < capsuleDimension; d++)
+                {
+                    output[offset + d] = scale * invNorm * input[offset + d];
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies softmax over the capsules dimension.
+    /// </summary>
+    private void ApplySoftmaxOverCapsules(float[] data, int batchSize, int inputCapsules, int numCapsules)
+    {
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < inputCapsules; j++)
+            {
+                int baseIdx = (b * inputCapsules + j) * numCapsules;
+
+                // Find max for numerical stability
+                float maxVal = float.MinValue;
+                for (int k = 0; k < numCapsules; k++)
+                {
+                    maxVal = MathF.Max(maxVal, data[baseIdx + k]);
+                }
+
+                // Compute exp and sum
+                float sumExp = 0f;
+                for (int k = 0; k < numCapsules; k++)
+                {
+                    data[baseIdx + k] = MathF.Exp(data[baseIdx + k] - maxVal);
+                    sumExp += data[baseIdx + k];
+                }
+
+                // Normalize
+                float invSum = 1f / sumExp;
+                for (int k = 0; k < numCapsules; k++)
+                {
+                    data[baseIdx + k] *= invSum;
+                }
+            }
+        }
     }
 
     /// <summary>

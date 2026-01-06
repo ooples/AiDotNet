@@ -573,10 +573,15 @@ public class DropoutLayer<T> : LayerBase<T>
     /// including random mask generation. This is much faster than CPU dropout for large tensors.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var input = inputs[0];
 
         // During inference (non-training), dropout is identity - just pass through
         if (!IsTrainingMode)

@@ -899,11 +899,14 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Use this for chained layer execution to avoid CPU round-trips.
     /// Supports any-rank tensor input (1D, 2D, or ND), matching CPU Forward behavior.
     /// </summary>
-    /// <param name="input">GPU-resident input tensor of any rank. Last dimension is features.</param>
+    /// <param name="inputs">GPU-resident input tensors (uses first input). Last dimension is features.</param>
     /// <returns>GPU-resident output tensor with same batch dimensions, outputSize as last dim.</returns>
     /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
-    public override IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
         EnsureInitialized();
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
@@ -911,6 +914,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException(
                 "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
         }
+
+        var input = inputs[0];
 
         // Store for potential backward pass
         _originalInputShape = input.Shape;
@@ -973,6 +978,24 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Use GPU-resident FusedLinear - NO CPU round-trip
         // Result is [batchDim, outputSize]
         var result = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, fusedActivation);
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+
+            // For fused activations, we need pre-activation for gradient computation
+            if (fusedActivation != FusedActivationType.None)
+            {
+                var preActivation = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, FusedActivationType.None);
+                _lastOutput = preActivation.ToTensor();
+            }
+            else
+            {
+                _lastOutput = result.ToTensor();
+            }
+        }
 
         // Reshape output back to original batch dimensions if needed
         if (input.Shape.Length == 1)

@@ -257,6 +257,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 }
                 Console.WriteLine($"[OpenClBackend] Sparse GEMM kernels: {string.Join(", ", SparseGemmKernels.GetKernelNames())}");
 
+                // Compile CSR sparse kernels (general sparsity for GNN)
+                Console.WriteLine("[OpenClBackend] Compiling CSR sparse kernels...");
+                var csrSparseProgram = new DirectOpenClProgram(_context, CsrSparseKernels.GetSource());
+                csrSparseProgram.Build(optimizationFlags);
+                _programs.Add(csrSparseProgram);
+                foreach (var name in CsrSparseKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, csrSparseProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] CSR sparse kernels: {string.Join(", ", CsrSparseKernels.GetKernelNames())}");
+
                 // Compile convolution kernels
                 Console.WriteLine("[OpenClBackend] Compiling convolution kernels...");
                 var convProgram = new DirectOpenClProgram(_context, ConvolutionKernels.GetSource());
@@ -2267,6 +2278,86 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             // No sync - can be chained asynchronously
         }
 
+        public void Squash(IGpuBuffer input, IGpuBuffer output, int numCapsules, int capsuleDim, float epsilon)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferInput = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            var kernel = _kernelCache["squash"];
+            kernel.SetArg(0, bufferInput.Handle);
+            kernel.SetArg(1, bufferOutput.Handle);
+            kernel.SetArg(2, numCapsules);
+            kernel.SetArg(3, capsuleDim);
+            kernel.SetArg(4, epsilon);
+
+            int localSize = CalculateOptimalWorkGroupSize1D(numCapsules);
+            kernel.Execute1D(numCapsules, localSize);
+        }
+
+        public void SquashBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int numCapsules, int capsuleDim, float epsilon)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferGradOutput = ((DirectOpenClGpuBuffer)gradOutput).Buffer;
+            var bufferInput = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferGradInput = ((DirectOpenClGpuBuffer)gradInput).Buffer;
+
+            var kernel = _kernelCache["squash_backward"];
+            kernel.SetArg(0, bufferGradOutput.Handle);
+            kernel.SetArg(1, bufferInput.Handle);
+            kernel.SetArg(2, bufferGradInput.Handle);
+            kernel.SetArg(3, numCapsules);
+            kernel.SetArg(4, capsuleDim);
+            kernel.SetArg(5, epsilon);
+
+            int localSize = CalculateOptimalWorkGroupSize1D(numCapsules);
+            kernel.Execute1D(numCapsules, localSize);
+        }
+
+        public void TileBatch(IGpuBuffer input, IGpuBuffer output, int repeats, int innerSize)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferInput = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            var kernel = _kernelCache["tile_batch"];
+            kernel.SetArg(0, bufferInput.Handle);
+            kernel.SetArg(1, bufferOutput.Handle);
+            kernel.SetArg(2, repeats);
+            kernel.SetArg(3, innerSize);
+
+            int totalSize = repeats * innerSize;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalSize);
+            kernel.Execute1D(totalSize, localSize);
+        }
+
+        public void TileAxis(IGpuBuffer input, IGpuBuffer output, int outerSize, int axisSize, int innerSize, int repeats)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferInput = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            var kernel = _kernelCache["tile_axis"];
+            kernel.SetArg(0, bufferInput.Handle);
+            kernel.SetArg(1, bufferOutput.Handle);
+            kernel.SetArg(2, outerSize);
+            kernel.SetArg(3, axisSize);
+            kernel.SetArg(4, innerSize);
+            kernel.SetArg(5, repeats);
+
+            int totalSize = outerSize * axisSize * repeats * innerSize;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalSize);
+            kernel.Execute1D(totalSize, localSize);
+        }
+
         #endregion
 
         #region Reduction Operations
@@ -2476,6 +2567,131 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             _context.Finish();  // Sync when returning buffer for immediate use
 
             return C;
+        }
+
+        #endregion
+
+        #region CSR Sparse Operations (General Sparsity)
+
+        /// <inheritdoc/>
+        public void CsrSpMM(
+            IGpuBuffer csrValues,
+            IGpuBuffer csrColIndices,
+            IGpuBuffer csrRowPointers,
+            IGpuBuffer denseB,
+            IGpuBuffer output,
+            int M, int K, int N, int nnz)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var kernel = _kernelCache["csr_spmm"];
+            var bufferValues = ((DirectOpenClGpuBuffer)csrValues).Buffer;
+            var bufferColIndices = ((DirectOpenClGpuBuffer)csrColIndices).Buffer;
+            var bufferRowPointers = ((DirectOpenClGpuBuffer)csrRowPointers).Buffer;
+            var bufferDenseB = ((DirectOpenClGpuBuffer)denseB).Buffer;
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            kernel.SetArg(0, bufferValues.Handle);
+            kernel.SetArg(1, bufferColIndices.Handle);
+            kernel.SetArg(2, bufferRowPointers.Handle);
+            kernel.SetArg(3, bufferDenseB.Handle);
+            kernel.SetArg(4, bufferOutput.Handle);
+            kernel.SetArg(5, M);
+            kernel.SetArg(6, K);
+            kernel.SetArg(7, N);
+            kernel.SetArg(8, nnz);
+
+            // Global work size: [N, M] - columns then rows for coalesced memory access
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(N, M);
+            kernel.Execute2D(N, M, localSizeX, localSizeY);
+        }
+
+        /// <inheritdoc/>
+        public void CsrSpMMBias(
+            IGpuBuffer csrValues,
+            IGpuBuffer csrColIndices,
+            IGpuBuffer csrRowPointers,
+            IGpuBuffer denseB,
+            IGpuBuffer bias,
+            IGpuBuffer output,
+            int M, int K, int N, int nnz)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var kernel = _kernelCache["csr_spmm_bias"];
+            var bufferValues = ((DirectOpenClGpuBuffer)csrValues).Buffer;
+            var bufferColIndices = ((DirectOpenClGpuBuffer)csrColIndices).Buffer;
+            var bufferRowPointers = ((DirectOpenClGpuBuffer)csrRowPointers).Buffer;
+            var bufferDenseB = ((DirectOpenClGpuBuffer)denseB).Buffer;
+            var bufferBias = ((DirectOpenClGpuBuffer)bias).Buffer;
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+
+            kernel.SetArg(0, bufferValues.Handle);
+            kernel.SetArg(1, bufferColIndices.Handle);
+            kernel.SetArg(2, bufferRowPointers.Handle);
+            kernel.SetArg(3, bufferDenseB.Handle);
+            kernel.SetArg(4, bufferBias.Handle);
+            kernel.SetArg(5, bufferOutput.Handle);
+            kernel.SetArg(6, M);
+            kernel.SetArg(7, K);
+            kernel.SetArg(8, N);
+            kernel.SetArg(9, nnz);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(N, M);
+            kernel.Execute2D(N, M, localSizeX, localSizeY);
+        }
+
+        /// <inheritdoc/>
+        public void ScatterAddEdges(
+            IGpuBuffer input,
+            IGpuBuffer sourceIndices,
+            IGpuBuffer targetIndices,
+            IGpuBuffer? edgeValues,
+            IGpuBuffer output,
+            int numNodes, int numEdges, int features)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            // First zero the output buffer
+            var zeroKernel = _kernelCache["zero_buffer"];
+            var bufferOutput = ((DirectOpenClGpuBuffer)output).Buffer;
+            int outputSize = numNodes * features;
+            zeroKernel.SetArg(0, bufferOutput.Handle);
+            zeroKernel.SetArg(1, outputSize);
+            zeroKernel.Execute1D(outputSize, 256);
+            _context.Finish();
+
+            // Then scatter-add
+            var kernel = _kernelCache["scatter_add_edges"];
+            var bufferInput = ((DirectOpenClGpuBuffer)input).Buffer;
+            var bufferSource = ((DirectOpenClGpuBuffer)sourceIndices).Buffer;
+            var bufferTarget = ((DirectOpenClGpuBuffer)targetIndices).Buffer;
+
+            kernel.SetArg(0, bufferInput.Handle);
+            kernel.SetArg(1, bufferSource.Handle);
+            kernel.SetArg(2, bufferTarget.Handle);
+
+            if (edgeValues is not null)
+            {
+                var bufferEdgeValues = ((DirectOpenClGpuBuffer)edgeValues).Buffer;
+                kernel.SetArg(3, bufferEdgeValues.Handle);
+            }
+            else
+            {
+                kernel.SetArg(3, IntPtr.Zero);
+            }
+
+            kernel.SetArg(4, bufferOutput.Handle);
+            kernel.SetArg(5, numNodes);
+            kernel.SetArg(6, numEdges);
+            kernel.SetArg(7, features);
+            kernel.SetArg(8, edgeValues is not null ? 1 : 0);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(features, numEdges);
+            kernel.Execute2D(features, numEdges, localSizeX, localSizeY);
         }
 
         #endregion
@@ -5869,6 +6085,46 @@ KERNEL VARIANTS (A/B testing):
             k.SetArg(arg++, reduceSize);
 
             k.Execute1D(outerSize, Math.Min(64, outerSize));
+        }
+
+        public void MaxAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
+        {
+            var k = _kernelCache["max_axis"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, outerSize);
+            k.SetArg(arg++, reduceSize);
+
+            k.Execute1D(outerSize, Math.Min(64, outerSize));
+        }
+
+        public void BroadcastMultiplyLastAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)
+        {
+            var k = _kernelCache["broadcast_multiply_last_axis"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, outerSize);
+            k.SetArg(arg++, innerSize);
+
+            int totalSize = outerSize * innerSize;
+            k.Execute1D(totalSize, Math.Min(256, totalSize));
+        }
+
+        public void BroadcastMultiplyFirstAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)
+        {
+            var k = _kernelCache["broadcast_multiply_first_axis"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, outerSize);
+            k.SetArg(arg++, innerSize);
+
+            int totalSize = outerSize * innerSize;
+            k.Execute1D(totalSize, Math.Min(256, totalSize));
         }
 
         #endregion

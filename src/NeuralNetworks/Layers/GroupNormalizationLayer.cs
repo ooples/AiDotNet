@@ -1,5 +1,6 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -45,6 +46,11 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _betaGradient;
 
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -868,6 +869,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <para>
     /// This property indicates whether the derived class has implemented GPU execution.
     /// The actual <see cref="CanExecuteOnGpu"/> property combines this with engine availability.
+    /// Default is false - layers must explicitly override to enable GPU support.
     /// </para>
     /// <para><b>For Beginners:</b> This is a simple flag that derived classes set to true
     /// when they have implemented the ForwardGpu method. You don't need to check if the GPU
@@ -876,30 +878,25 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     protected virtual bool SupportsGpuExecution => false;
 
+
     /// <summary>
-    /// Performs a GPU-resident forward pass.
+    /// Executes the forward pass on GPU with multiple input tensors.
     /// </summary>
-    /// <param name="input">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident output tensor.</returns>
-    /// <exception cref="NotSupportedException">
-    /// Thrown by default. Override this method to provide GPU implementation.
-    /// </exception>
+    /// <param name="inputs">The input tensors.</param>
+    /// <returns>The output tensor on GPU.</returns>
     /// <remarks>
     /// <para>
-    /// By default, this method throws <see cref="NotSupportedException"/>. Derived classes that support
-    /// GPU execution should override both this method and <see cref="SupportsGpuExecution"/>.
+    /// This overload is used for layers that require multiple inputs, such as cross-attention
+    /// where queries come from one source and keys/values from another.
     /// </para>
-    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
-    /// If a layer hasn't been GPU-optimized yet, calling this will throw an error.
-    /// Always check <see cref="CanExecuteOnGpu"/> before calling this method, or use the
-    /// network's ForwardGpu which handles fallback automatically.
+    /// <para>
+    /// The default implementation throws NotSupportedException. Layers that support GPU execution
+    /// should override this method and set SupportsGpuExecution to true.
     /// </para>
     /// </remarks>
-    public virtual IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    public virtual IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
-        throw new NotSupportedException(
-            $"Layer {GetType().Name} does not support GPU execution. " +
-            $"Check CanExecuteOnGpu before calling ForwardGpu, or use the CPU Forward method.");
+        throw new NotSupportedException($"GPU execution is not supported by {GetType().Name}. Use Forward() instead.");
     }
 
     /// <summary>
@@ -2153,6 +2150,47 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             SiLUActivation<T> => FusedActivationType.Swish, // SiLU is the same as Swish
             _ => FusedActivationType.None
         };
+    }
+
+    /// <summary>
+    /// Applies the specified activation function on GPU using the direct backend operations.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for activation.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <param name="activation">The type of activation function to apply.</param>
+    /// <remarks>
+    /// This method provides a reusable GPU activation function that can be called by any layer
+    /// that implements custom GPU forward passes. It maps FusedActivationType enum values to
+    /// the corresponding backend activation kernels.
+    /// </remarks>
+    protected static void ApplyGpuActivation(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size, FusedActivationType activation)
+    {
+        switch (activation)
+        {
+            case FusedActivationType.ReLU:
+                backend.Relu(input, output, size);
+                break;
+            case FusedActivationType.Sigmoid:
+                backend.Sigmoid(input, output, size);
+                break;
+            case FusedActivationType.Tanh:
+                backend.Tanh(input, output, size);
+                break;
+            case FusedActivationType.GELU:
+                backend.Gelu(input, output, size);
+                break;
+            case FusedActivationType.LeakyReLU:
+                backend.LeakyRelu(input, output, 0.01f, size);
+                break;
+            case FusedActivationType.Swish:
+                backend.Swish(input, output, size);
+                break;
+            default:
+                backend.Copy(input, output, size);
+                break;
+        }
     }
 
     #endregion

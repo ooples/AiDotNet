@@ -1,4 +1,6 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -403,6 +405,25 @@ public class RBMLayer<T> : LayerBase<T>
         return hiddenProbs.Reshape(outputShape);
     }
 
+    /// <summary>
+    /// Performs the forward pass on GPU using CPU fallback.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        // CPU fallback: download, process, upload
+        var cpuInput = inputs[0].ToTensor();
+        var cpuOutput = Forward(cpuInput);
+
+        return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+    }
 
     /// <summary>
     /// Trains the RBM using contrastive divergence with the given data.
@@ -977,6 +998,11 @@ public class RBMLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {

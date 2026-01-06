@@ -1,4 +1,6 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -69,6 +71,12 @@ public class PixelShuffleLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU execution.
+    /// PixelShuffle is a structural rearrangement operation.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     #endregion
 

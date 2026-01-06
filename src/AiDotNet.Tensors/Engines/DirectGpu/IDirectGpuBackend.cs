@@ -200,6 +200,28 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="spatialSize">Height * Width (spatial dimensions).</param>
     void Conv2DBiasAdd(IGpuBuffer output, IGpuBuffer bias, int batch, int channels, int spatialSize);
 
+    /// <summary>
+    /// Broadcast multiply along last axis: C[i,j] = A[i,j] * B[j]
+    /// where A has shape (outerSize, innerSize) and B has shape (innerSize).
+    /// </summary>
+    /// <param name="A">Input buffer (outerSize * innerSize elements).</param>
+    /// <param name="B">Broadcast buffer (innerSize elements).</param>
+    /// <param name="C">Output buffer (outerSize * innerSize elements).</param>
+    /// <param name="outerSize">Number of outer elements (rows).</param>
+    /// <param name="innerSize">Number of inner elements (columns / broadcast dimension).</param>
+    void BroadcastMultiplyLastAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize);
+
+    /// <summary>
+    /// Broadcast multiply along first axis: C[i,j] = A[i,j] * B[i]
+    /// where A has shape (outerSize, innerSize) and B has shape (outerSize).
+    /// </summary>
+    /// <param name="A">Input buffer (outerSize * innerSize elements).</param>
+    /// <param name="B">Broadcast buffer (outerSize elements).</param>
+    /// <param name="C">Output buffer (outerSize * innerSize elements).</param>
+    /// <param name="outerSize">Number of outer elements (rows / broadcast dimension).</param>
+    /// <param name="innerSize">Number of inner elements (columns).</param>
+    void BroadcastMultiplyFirstAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize);
+
     #endregion
 
     #region Element-wise Operations
@@ -318,6 +340,30 @@ public interface IDirectGpuBackend : IDisposable
     /// Softmax activation along last dimension.
     /// </summary>
     void Softmax(IGpuBuffer A, IGpuBuffer B, int batchSize, int features);
+
+    /// <summary>
+    /// Squash activation for capsule networks: output = ||v||² / (1 + ||v||²) × v / ||v||
+    /// </summary>
+    void Squash(IGpuBuffer input, IGpuBuffer output, int numCapsules, int capsuleDim, float epsilon);
+
+    /// <summary>
+    /// Backward pass for squash activation.
+    /// </summary>
+    void SquashBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int numCapsules, int capsuleDim, float epsilon);
+
+    /// <summary>
+    /// Tile tensor along batch dimension (axis 0).
+    /// Input: [1, innerSize], Output: [repeats, innerSize]
+    /// </summary>
+    void TileBatch(IGpuBuffer input, IGpuBuffer output, int repeats, int innerSize);
+
+    /// <summary>
+    /// Tile tensor along any axis.
+    /// outerSize = product of dimensions before axis
+    /// axisSize = dimension at axis (original)
+    /// innerSize = product of dimensions after axis
+    /// </summary>
+    void TileAxis(IGpuBuffer input, IGpuBuffer output, int outerSize, int axisSize, int innerSize, int repeats);
 
     #endregion
 
@@ -484,6 +530,73 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="size">Number of bytes.</param>
     /// <returns>GPU buffer for byte data.</returns>
     IGpuBuffer AllocateByteBuffer(int size);
+
+    #endregion
+
+    #region CSR Sparse Operations (General Sparsity)
+
+    /// <summary>
+    /// Sparse Matrix-Dense Matrix multiplication (SpMM) in CSR format: C = A_csr * B
+    /// Efficient for general sparse matrices like graph adjacency matrices.
+    /// </summary>
+    /// <param name="csrValues">Non-zero values of sparse A [nnz].</param>
+    /// <param name="csrColIndices">Column indices for each value [nnz] (int32).</param>
+    /// <param name="csrRowPointers">Row pointers [M+1] (int32).</param>
+    /// <param name="denseB">Dense matrix B [K x N].</param>
+    /// <param name="output">Output matrix C [M x N].</param>
+    /// <param name="M">Rows of A and C.</param>
+    /// <param name="K">Columns of A (rows of B).</param>
+    /// <param name="N">Columns of B and C.</param>
+    /// <param name="nnz">Number of non-zero elements in A.</param>
+    void CsrSpMM(
+        IGpuBuffer csrValues,
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer denseB,
+        IGpuBuffer output,
+        int M, int K, int N, int nnz);
+
+    /// <summary>
+    /// Fused CSR SpMM with bias addition: C = A_csr * B + bias
+    /// </summary>
+    /// <param name="csrValues">Non-zero values of sparse A [nnz].</param>
+    /// <param name="csrColIndices">Column indices for each value [nnz] (int32).</param>
+    /// <param name="csrRowPointers">Row pointers [M+1] (int32).</param>
+    /// <param name="denseB">Dense matrix B [K x N].</param>
+    /// <param name="bias">Bias vector [N] to add to each row.</param>
+    /// <param name="output">Output matrix C [M x N].</param>
+    /// <param name="M">Rows of A and C.</param>
+    /// <param name="K">Columns of A (rows of B).</param>
+    /// <param name="N">Columns of B and C.</param>
+    /// <param name="nnz">Number of non-zero elements in A.</param>
+    void CsrSpMMBias(
+        IGpuBuffer csrValues,
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer denseB,
+        IGpuBuffer bias,
+        IGpuBuffer output,
+        int M, int K, int N, int nnz);
+
+    /// <summary>
+    /// Scatter-add operation for graph aggregation: output[target[i]] += values[i] * input[source[i]]
+    /// Efficient for edge-based message passing in GNNs.
+    /// </summary>
+    /// <param name="input">Input node features [numNodes x features].</param>
+    /// <param name="sourceIndices">Source node indices [numEdges] (int32).</param>
+    /// <param name="targetIndices">Target node indices [numEdges] (int32).</param>
+    /// <param name="edgeValues">Edge weights [numEdges]. Can be null for unweighted graphs.</param>
+    /// <param name="output">Output aggregated features [numNodes x features]. Must be zero-initialized.</param>
+    /// <param name="numNodes">Number of nodes.</param>
+    /// <param name="numEdges">Number of edges.</param>
+    /// <param name="features">Number of features per node.</param>
+    void ScatterAddEdges(
+        IGpuBuffer input,
+        IGpuBuffer sourceIndices,
+        IGpuBuffer targetIndices,
+        IGpuBuffer? edgeValues,
+        IGpuBuffer output,
+        int numNodes, int numEdges, int features);
 
     #endregion
 
@@ -811,6 +924,15 @@ public interface IDirectGpuBackend : IDisposable
     void VarAxis(IGpuBuffer A, IGpuBuffer mean, IGpuBuffer variance, int outerSize, int reduceSize);
     void ArgMax(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize);
     void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize);
+
+    /// <summary>
+    /// Maximum reduction along axis: B[i] = max(A[i, :]).
+    /// </summary>
+    /// <param name="A">Input buffer with shape [outerSize, reduceSize] in row-major order.</param>
+    /// <param name="B">Output buffer with shape [outerSize].</param>
+    /// <param name="outerSize">Number of output elements (rows).</param>
+    /// <param name="reduceSize">Size of the axis to reduce (columns).</param>
+    void MaxAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize);
 
     #endregion
 

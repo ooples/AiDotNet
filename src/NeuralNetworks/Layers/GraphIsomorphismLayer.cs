@@ -1,4 +1,6 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -118,6 +120,15 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// GraphIsomorphismLayer (GIN) supports GPU execution with efficient neighbor sum aggregation
+    /// and GPU-accelerated MLP computation.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public override int ParameterCount =>
@@ -736,6 +747,198 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _mlpBias1Gradient = null;
         _mlpBias2Gradient = null;
         _epsilonGradient = NumOps.Zero;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for Graph Isomorphism Network (GIN).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Implements GPU-accelerated GIN computation:
+    /// h_v^(k) = MLP((1 + ε) * h_v^(k-1) + Σ_{u∈N(v)} h_u^(k-1))
+    /// </para>
+    /// <para>
+    /// The MLP is a two-layer network with ReLU activation.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+        if (input.Shape == null || input.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
+
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+        }
+
+        // Get GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetGpuBackend();
+        if (backend == null)
+            throw new InvalidOperationException("No GPU backend available.");
+
+        int rank = input.Shape.Length;
+        int batchSize, numNodes, inputFeatures;
+
+        // Determine dimensions
+        if (rank == 2)
+        {
+            batchSize = 1;
+            numNodes = input.Shape[0];
+            inputFeatures = input.Shape[1];
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            numNodes = input.Shape[rank - 2];
+            inputFeatures = input.Shape[rank - 1];
+        }
+
+        if (inputFeatures != _inputFeatures)
+            throw new ArgumentException($"Input features ({inputFeatures}) doesn't match layer input features ({_inputFeatures}).");
+
+        // Upload MLP weights to GPU
+        var weights1Data = new float[_inputFeatures * _mlpHiddenDim];
+        var weights2Data = new float[_mlpHiddenDim * _outputFeatures];
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _mlpHiddenDim; j++)
+            {
+                weights1Data[i * _mlpHiddenDim + j] = (float)NumOps.ToDouble(_mlpWeights1[i, j]);
+            }
+        }
+        for (int i = 0; i < _mlpHiddenDim; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                weights2Data[i * _outputFeatures + j] = (float)NumOps.ToDouble(_mlpWeights2[i, j]);
+            }
+        }
+        var weights1Buffer = backend.AllocateBuffer(weights1Data);
+        var weights2Buffer = backend.AllocateBuffer(weights2Data);
+
+        // Upload biases
+        var bias1Data = new float[_mlpHiddenDim];
+        var bias2Data = new float[_outputFeatures];
+        for (int i = 0; i < _mlpHiddenDim; i++)
+            bias1Data[i] = (float)NumOps.ToDouble(_mlpBias1[i]);
+        for (int i = 0; i < _outputFeatures; i++)
+            bias2Data[i] = (float)NumOps.ToDouble(_mlpBias2[i]);
+        var bias1Buffer = backend.AllocateBuffer(bias1Data);
+        var bias2Buffer = backend.AllocateBuffer(bias2Data);
+
+        // Upload adjacency matrix
+        bool adj2D = _adjacencyMatrix.Shape.Length == 2;
+        var adjData = new float[numNodes * numNodes];
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                T adjVal = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[0, i, j];
+                adjData[i * numNodes + j] = (float)NumOps.ToDouble(adjVal);
+            }
+        }
+        var adjBuffer = backend.AllocateBuffer(adjData);
+
+        // Compute (1 + epsilon)
+        float onePlusEpsilon = 1.0f + (float)NumOps.ToDouble(_epsilon);
+
+        // Allocate output buffer
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        var outputBuffer = backend.AllocateBuffer(new float[outputSize]);
+
+        // Allocate temporary buffers
+        var aggregatedBuffer = backend.AllocateBuffer(new float[numNodes * _inputFeatures]);
+        var neighborSumBuffer = backend.AllocateBuffer(new float[numNodes * _inputFeatures]);
+        var hiddenBuffer = backend.AllocateBuffer(new float[numNodes * _mlpHiddenDim]);
+        var mlpOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+
+        // Process each batch
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Extract batch input slice
+            int batchOffset = b * numNodes * inputFeatures;
+            var batchInputBuffer = gpuEngine.GetOrAllocateBufferSlice(input.Buffer, batchOffset, numNodes * inputFeatures, backend);
+
+            // Step 1: Compute neighbor sum = adj @ input
+            backend.Gemm(
+                adjBuffer,
+                batchInputBuffer,
+                neighborSumBuffer,
+                numNodes, _inputFeatures, numNodes,
+                alpha: 1.0f, beta: 0.0f,
+                transposeA: false, transposeB: false);
+
+            // Step 2: Aggregate = (1 + epsilon) * self + neighbor_sum
+            // First: aggregated = onePlusEpsilon * input
+            backend.MultiplyScalar(batchInputBuffer, onePlusEpsilon, aggregatedBuffer, numNodes * _inputFeatures);
+            // Then: aggregated += neighborSum
+            backend.Add(aggregatedBuffer, neighborSumBuffer, aggregatedBuffer, numNodes * _inputFeatures);
+
+            // Step 3: MLP Layer 1 with ReLU
+            // hidden = aggregated @ weights1 + bias1
+            backend.Gemm(
+                aggregatedBuffer,
+                weights1Buffer,
+                hiddenBuffer,
+                numNodes, _mlpHiddenDim, _inputFeatures,
+                alpha: 1.0f, beta: 0.0f,
+                transposeA: false, transposeB: false);
+            backend.AddBias(hiddenBuffer, bias1Buffer, hiddenBuffer, numNodes, _mlpHiddenDim);
+
+            // Apply ReLU
+            backend.ReLU(hiddenBuffer, hiddenBuffer, numNodes * _mlpHiddenDim);
+
+            // Step 4: MLP Layer 2
+            // output = hidden @ weights2 + bias2
+            backend.Gemm(
+                hiddenBuffer,
+                weights2Buffer,
+                mlpOutputBuffer,
+                numNodes, _outputFeatures, _mlpHiddenDim,
+                alpha: 1.0f, beta: 0.0f,
+                transposeA: false, transposeB: false);
+            backend.AddBias(mlpOutputBuffer, bias2Buffer, mlpOutputBuffer, numNodes, _outputFeatures);
+
+            // Copy to output buffer at correct batch offset
+            int outputOffset = b * numNodes * _outputFeatures;
+            backend.Copy(mlpOutputBuffer, 0, outputBuffer, outputOffset, numNodes * _outputFeatures);
+        }
+
+        // Apply activation
+        var activationType = GetFusedActivationType();
+        if (activationType != FusedActivationType.None)
+        {
+            backend.ApplyActivation(outputBuffer, outputBuffer, outputSize, activationType);
+        }
+
+        // Clean up
+        weights1Buffer.Dispose();
+        weights2Buffer.Dispose();
+        bias1Buffer.Dispose();
+        bias2Buffer.Dispose();
+        adjBuffer.Dispose();
+        aggregatedBuffer.Dispose();
+        neighborSumBuffer.Dispose();
+        hiddenBuffer.Dispose();
+        mlpOutputBuffer.Dispose();
+
+        // Determine output shape
+        int[] outputShape = rank == 2
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        return new GpuTensor<T>(outputBuffer, outputShape, backend);
     }
 
     /// <inheritdoc/>

@@ -1,6 +1,8 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -24,6 +26,11 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _relu2Out;
 
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     public DenseBlockLayer(int inputChannels, int growthRate, int height, int width, double bnMomentum = 0.1)
         : base([inputChannels, height, width], [growthRate, height, width])

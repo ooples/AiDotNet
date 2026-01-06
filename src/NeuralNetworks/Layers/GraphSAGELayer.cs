@@ -1,4 +1,6 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -120,6 +122,15 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// GraphSAGELayer supports GPU execution with efficient sparse aggregation when using
+    /// Sum or Mean aggregators. MaxPool aggregation uses a hybrid approach.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public override int ParameterCount => _selfWeights.Length + _neighborWeights.Length + _bias.Length;
@@ -864,6 +875,220 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _selfWeightsGradient = null;
         _neighborWeightsGradient = null;
         _biasGradient = null;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for GraphSAGE layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Implements GPU-accelerated GraphSAGE aggregation:
+    /// h_v = σ(W_self * h_v + W_neigh * AGG({h_u : u ∈ N(v)}) + b)
+    /// </para>
+    /// <para>
+    /// Supports Sum, Mean, and MaxPool aggregators on GPU.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+        if (input.Shape == null || input.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
+
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+        }
+
+        // Get GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetGpuBackend();
+        if (backend == null)
+            throw new InvalidOperationException("No GPU backend available.");
+
+        int rank = input.Shape.Length;
+        int batchSize, numNodes, inputFeatures;
+
+        // Determine dimensions
+        if (rank == 2)
+        {
+            batchSize = 1;
+            numNodes = input.Shape[0];
+            inputFeatures = input.Shape[1];
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            numNodes = input.Shape[rank - 2];
+            inputFeatures = input.Shape[rank - 1];
+        }
+
+        if (inputFeatures != _inputFeatures)
+            throw new ArgumentException($"Input features ({inputFeatures}) doesn't match layer input features ({_inputFeatures}).");
+
+        // Upload weights to GPU
+        var selfWeightData = new float[_inputFeatures * _outputFeatures];
+        var neighborWeightData = new float[_inputFeatures * _outputFeatures];
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                selfWeightData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_selfWeights[i, j]);
+                neighborWeightData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_neighborWeights[i, j]);
+            }
+        }
+        var selfWeightBuffer = backend.AllocateBuffer(selfWeightData);
+        var neighborWeightBuffer = backend.AllocateBuffer(neighborWeightData);
+
+        // Upload bias
+        var biasData = new float[_outputFeatures];
+        for (int f = 0; f < _outputFeatures; f++)
+            biasData[f] = (float)NumOps.ToDouble(_bias[f]);
+        var biasBuffer = backend.AllocateBuffer(biasData);
+
+        // Upload adjacency matrix
+        bool adj2D = _adjacencyMatrix.Shape.Length == 2;
+        var adjData = new float[numNodes * numNodes];
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                T adjVal = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[0, i, j];
+                adjData[i * numNodes + j] = (float)NumOps.ToDouble(adjVal);
+            }
+        }
+        var adjBuffer = backend.AllocateBuffer(adjData);
+
+        // Compute degrees for mean aggregation
+        var degreeData = new float[numNodes];
+        for (int i = 0; i < numNodes; i++)
+        {
+            float deg = 0;
+            for (int j = 0; j < numNodes; j++)
+            {
+                deg += adjData[i * numNodes + j];
+            }
+            degreeData[i] = Math.Max(deg, 1.0f); // Avoid division by zero
+        }
+        var degreeBuffer = backend.AllocateBuffer(degreeData);
+
+        // Allocate output buffer
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        var outputBuffer = backend.AllocateBuffer(new float[outputSize]);
+
+        // Allocate temporary buffers
+        var selfTransformedBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+        var aggregatedBuffer = backend.AllocateBuffer(new float[numNodes * _inputFeatures]);
+        var neighborTransformedBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+
+        // Process each batch
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Extract batch input slice
+            int batchOffset = b * numNodes * inputFeatures;
+            var batchInputBuffer = gpuEngine.GetOrAllocateBufferSlice(input.Buffer, batchOffset, numNodes * inputFeatures, backend);
+
+            // Step 1: Transform self features
+            // selfTransformed = input @ selfWeights
+            backend.Gemm(
+                batchInputBuffer,
+                selfWeightBuffer,
+                selfTransformedBuffer,
+                numNodes, _outputFeatures, _inputFeatures,
+                alpha: 1.0f, beta: 0.0f,
+                transposeA: false, transposeB: false);
+
+            // Step 2: Aggregate neighbor features
+            switch (_aggregatorType)
+            {
+                case SAGEAggregatorType.Sum:
+                    // aggregated = adj @ input
+                    backend.Gemm(
+                        adjBuffer,
+                        batchInputBuffer,
+                        aggregatedBuffer,
+                        numNodes, _inputFeatures, numNodes,
+                        alpha: 1.0f, beta: 0.0f,
+                        transposeA: false, transposeB: false);
+                    break;
+
+                case SAGEAggregatorType.Mean:
+                    // aggregated = adj @ input, then divide by degree
+                    backend.Gemm(
+                        adjBuffer,
+                        batchInputBuffer,
+                        aggregatedBuffer,
+                        numNodes, _inputFeatures, numNodes,
+                        alpha: 1.0f, beta: 0.0f,
+                        transposeA: false, transposeB: false);
+
+                    // Divide each row by its degree
+                    backend.DivideByRowDegree(aggregatedBuffer, degreeBuffer, numNodes, _inputFeatures);
+                    break;
+
+                case SAGEAggregatorType.MaxPool:
+                    // For MaxPool, we need to compute max over neighbors for each feature
+                    backend.MaxPoolNeighbors(batchInputBuffer, adjBuffer, aggregatedBuffer, numNodes, _inputFeatures);
+                    break;
+            }
+
+            // Step 3: Transform aggregated features
+            // neighborTransformed = aggregated @ neighborWeights
+            backend.Gemm(
+                aggregatedBuffer,
+                neighborWeightBuffer,
+                neighborTransformedBuffer,
+                numNodes, _outputFeatures, _inputFeatures,
+                alpha: 1.0f, beta: 0.0f,
+                transposeA: false, transposeB: false);
+
+            // Step 4: Combine: self + neighbor + bias
+            backend.Add(selfTransformedBuffer, neighborTransformedBuffer, selfTransformedBuffer, numNodes * _outputFeatures);
+            backend.AddBias(selfTransformedBuffer, biasBuffer, selfTransformedBuffer, numNodes, _outputFeatures);
+
+            // Step 5: Apply L2 normalization if enabled
+            if (_normalize)
+            {
+                backend.L2NormalizeRows(selfTransformedBuffer, numNodes, _outputFeatures);
+            }
+
+            // Copy to output buffer at correct batch offset
+            int outputOffset = b * numNodes * _outputFeatures;
+            backend.Copy(selfTransformedBuffer, 0, outputBuffer, outputOffset, numNodes * _outputFeatures);
+        }
+
+        // Apply activation
+        var activationType = GetFusedActivationType();
+        if (activationType != FusedActivationType.None)
+        {
+            backend.ApplyActivation(outputBuffer, outputBuffer, outputSize, activationType);
+        }
+
+        // Clean up
+        selfWeightBuffer.Dispose();
+        neighborWeightBuffer.Dispose();
+        biasBuffer.Dispose();
+        adjBuffer.Dispose();
+        degreeBuffer.Dispose();
+        selfTransformedBuffer.Dispose();
+        aggregatedBuffer.Dispose();
+        neighborTransformedBuffer.Dispose();
+
+        // Determine output shape
+        int[] outputShape = rank == 2
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        return new GpuTensor<T>(outputBuffer, outputShape, backend);
     }
 
     /// <inheritdoc/>

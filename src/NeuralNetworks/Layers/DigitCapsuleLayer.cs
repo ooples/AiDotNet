@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -234,6 +238,9 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DigitCapsuleLayer{T}"/> class.
@@ -473,6 +480,207 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
 
         // Standard 2D output [batch, numClasses * outputCapsuleDimension]
         return flattenedOutput;
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        var input = inputs[0];
+        int[] inputShape = input.Shape;
+        int rank = inputShape.Length;
+
+        // Parse dimensions - expect [batch, inputCapsules, inputDimension] or compatible
+        int batchSize;
+        if (rank == 2)
+        {
+            batchSize = 1;
+        }
+        else if (rank == 3)
+        {
+            batchSize = inputShape[0];
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= inputShape[d];
+            batchSize = flatBatch;
+        }
+
+        // Download input data
+        float[] inputData = backend.DownloadBuffer(input.Buffer);
+
+        // Upload weights: [inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension]
+        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data));
+        var weightsData = backend.DownloadBuffer(weightsBuffer);
+
+        // ===== Step 1: Compute Predictions =====
+        // predictions[b, i, c, d] = sum_k(input[b, i, k] * weights[i, c, k, d])
+        int predSize = batchSize * _inputCapsules * _numClasses * _outputCapsuleDimension;
+        var predictions = new float[predSize];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < _inputCapsules; i++)
+            {
+                for (int c = 0; c < _numClasses; c++)
+                {
+                    for (int d = 0; d < _outputCapsuleDimension; d++)
+                    {
+                        float sum = 0f;
+                        for (int k = 0; k < _inputCapsuleDimension; k++)
+                        {
+                            float inputVal = inputData[(b * _inputCapsules + i) * _inputCapsuleDimension + k];
+                            float weightVal = weightsData[((i * _numClasses + c) * _inputCapsuleDimension + k) * _outputCapsuleDimension + d];
+                            sum += inputVal * weightVal;
+                        }
+                        predictions[((b * _inputCapsules + i) * _numClasses + c) * _outputCapsuleDimension + d] = sum;
+                    }
+                }
+            }
+        }
+
+        // ===== Step 2: Initialize Couplings =====
+        var couplings = new float[batchSize * _inputCapsules * _numClasses];
+        // Initialize to zero (will be converted to uniform via softmax)
+
+        // ===== Step 3: Dynamic Routing =====
+        var outputData = new float[batchSize * _numClasses * _outputCapsuleDimension];
+
+        for (int iter = 0; iter < _routingIterations; iter++)
+        {
+            // Apply softmax over classes to get routing weights
+            var routingWeights = new float[batchSize * _inputCapsules * _numClasses];
+            Array.Copy(couplings, routingWeights, couplings.Length);
+            ApplySoftmaxDigitGpu(routingWeights, batchSize, _inputCapsules, _numClasses);
+
+            // Compute weighted sum: weightedSum[b, c, d] = sum_i(routingWeights[b, i, c] * predictions[b, i, c, d])
+            var weightedSum = new float[batchSize * _numClasses * _outputCapsuleDimension];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int c = 0; c < _numClasses; c++)
+                {
+                    for (int d = 0; d < _outputCapsuleDimension; d++)
+                    {
+                        float sum = 0f;
+                        for (int i = 0; i < _inputCapsules; i++)
+                        {
+                            float routing = routingWeights[(b * _inputCapsules + i) * _numClasses + c];
+                            float pred = predictions[((b * _inputCapsules + i) * _numClasses + c) * _outputCapsuleDimension + d];
+                            sum += routing * pred;
+                        }
+                        weightedSum[(b * _numClasses + c) * _outputCapsuleDimension + d] = sum;
+                    }
+                }
+            }
+
+            // Apply Squash activation
+            ApplySquashDigitGpu(weightedSum, outputData, batchSize, _numClasses, _outputCapsuleDimension);
+
+            // Update couplings (except last iteration)
+            if (iter < _routingIterations - 1)
+            {
+                // Agreement: agreement[b, i, c] = sum_d(predictions[b, i, c, d] * output[b, c, d])
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < _inputCapsules; i++)
+                    {
+                        for (int c = 0; c < _numClasses; c++)
+                        {
+                            float dot = 0f;
+                            for (int d = 0; d < _outputCapsuleDimension; d++)
+                            {
+                                float predVal = predictions[((b * _inputCapsules + i) * _numClasses + c) * _outputCapsuleDimension + d];
+                                float outVal = outputData[(b * _numClasses + c) * _outputCapsuleDimension + d];
+                                dot += predVal * outVal;
+                            }
+                            couplings[(b * _inputCapsules + i) * _numClasses + c] += dot;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Flatten output to [batch, numClasses * outputCapsuleDimension]
+        var outputBuffer = backend.AllocateBuffer(outputData);
+        return new GpuTensor<T>(backend, outputBuffer, new[] { batchSize, _numClasses * _outputCapsuleDimension }, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Applies Squash activation for DigitCapsule.
+    /// </summary>
+    private void ApplySquashDigitGpu(float[] input, float[] output, int batchSize, int numClasses, int capsuleDim)
+    {
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < numClasses; c++)
+            {
+                int offset = (b * numClasses + c) * capsuleDim;
+
+                float normSq = 0f;
+                for (int d = 0; d < capsuleDim; d++)
+                {
+                    float val = input[offset + d];
+                    normSq += val * val;
+                }
+
+                float norm = MathF.Sqrt(normSq);
+                float scale = normSq / (1f + normSq);
+                float invNorm = norm > 1e-8f ? 1f / norm : 0f;
+
+                for (int d = 0; d < capsuleDim; d++)
+                {
+                    output[offset + d] = scale * invNorm * input[offset + d];
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies softmax over classes dimension for DigitCapsule.
+    /// </summary>
+    private void ApplySoftmaxDigitGpu(float[] data, int batchSize, int inputCapsules, int numClasses)
+    {
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < inputCapsules; i++)
+            {
+                int baseIdx = (b * inputCapsules + i) * numClasses;
+
+                // Max for numerical stability
+                float maxVal = float.MinValue;
+                for (int c = 0; c < numClasses; c++)
+                {
+                    maxVal = MathF.Max(maxVal, data[baseIdx + c]);
+                }
+
+                // Exp and sum
+                float sumExp = 0f;
+                for (int c = 0; c < numClasses; c++)
+                {
+                    data[baseIdx + c] = MathF.Exp(data[baseIdx + c] - maxVal);
+                    sumExp += data[baseIdx + c];
+                }
+
+                // Normalize
+                float invSum = 1f / sumExp;
+                for (int c = 0; c < numClasses; c++)
+                {
+                    data[baseIdx + c] *= invSum;
+                }
+            }
+        }
     }
 
     /// <summary>

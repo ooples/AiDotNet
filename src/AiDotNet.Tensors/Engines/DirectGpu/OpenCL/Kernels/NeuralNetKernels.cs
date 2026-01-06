@@ -785,6 +785,161 @@ __kernel void argmin_axis(
     indices[outer] = (float)minIdx;
 }
 
+// Broadcast multiply: C = A * B where B is broadcast along last axis
+// A has shape (outerSize * innerSize), B has shape (innerSize), C has shape (outerSize * innerSize)
+__kernel void broadcast_multiply_last_axis(
+    __global const float* input,
+    __global const float* broadcast,
+    __global float* output,
+    const int outerSize,
+    const int innerSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = outerSize * innerSize;
+    if (idx >= totalSize) return;
+
+    const int innerIdx = idx % innerSize;
+    output[idx] = input[idx] * broadcast[innerIdx];
+}
+
+// Broadcast multiply: C = A * B where B is broadcast along first axis
+// A has shape (outerSize * innerSize), B has shape (outerSize), C has shape (outerSize * innerSize)
+__kernel void broadcast_multiply_first_axis(
+    __global const float* input,
+    __global const float* broadcast,
+    __global float* output,
+    const int outerSize,
+    const int innerSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = outerSize * innerSize;
+    if (idx >= totalSize) return;
+
+    const int outerIdx = idx / innerSize;
+    output[idx] = input[idx] * broadcast[outerIdx];
+}
+
+// General broadcast multiply for tensors with compatible shapes
+__kernel void broadcast_multiply_general(
+    __global const float* A,
+    __global const float* B,
+    __global float* C,
+    __global const int* aStrides,
+    __global const int* bStrides,
+    __global const int* cShape,
+    const int rank,
+    const int totalSize)
+{
+    const int idx = get_global_id(0);
+    if (idx >= totalSize) return;
+
+    int aIdx = 0;
+    int bIdx = 0;
+    int remaining = idx;
+
+    for (int d = rank - 1; d >= 0; d--) {
+        int dimIdx = remaining % cShape[d];
+        remaining /= cShape[d];
+        aIdx += dimIdx * aStrides[d];
+        bIdx += dimIdx * bStrides[d];
+    }
+
+    C[idx] = A[aIdx] * B[bIdx];
+}
+
+// Squash activation for capsule networks
+// squash(v) = ||v||^2 / (1 + ||v||^2) * v / ||v||
+__kernel void squash(
+    __global const float* input,
+    __global float* output,
+    const int numCapsules,
+    const int capsuleDim,
+    const float epsilon)
+{
+    const int capsuleIdx = get_global_id(0);
+    if (capsuleIdx >= numCapsules) return;
+
+    const int baseIdx = capsuleIdx * capsuleDim;
+
+    float normSquared = 0.0f;
+    for (int i = 0; i < capsuleDim; i++) {
+        float val = input[baseIdx + i];
+        normSquared += val * val;
+    }
+
+    float norm = sqrt(normSquared + epsilon);
+    float scale = normSquared / ((1.0f + normSquared) * norm);
+
+    for (int i = 0; i < capsuleDim; i++) {
+        output[baseIdx + i] = input[baseIdx + i] * scale;
+    }
+}
+
+__kernel void squash_backward(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global float* gradInput,
+    const int numCapsules,
+    const int capsuleDim,
+    const float epsilon)
+{
+    const int capsuleIdx = get_global_id(0);
+    if (capsuleIdx >= numCapsules) return;
+
+    const int baseIdx = capsuleIdx * capsuleDim;
+
+    float normSquared = 0.0f;
+    for (int i = 0; i < capsuleDim; i++) {
+        float val = input[baseIdx + i];
+        normSquared += val * val;
+    }
+
+    float scale = 1.0f / (1.0f + normSquared);
+    for (int i = 0; i < capsuleDim; i++) {
+        gradInput[baseIdx + i] = gradOutput[baseIdx + i] * scale;
+    }
+}
+
+// Tile tensor along batch dimension (axis 0)
+__kernel void tile_batch(
+    __global const float* input,
+    __global float* output,
+    const int repeats,
+    const int innerSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = repeats * innerSize;
+    if (idx >= totalSize) return;
+
+    const int innerIdx = idx % innerSize;
+    output[idx] = input[innerIdx];
+}
+
+// General tile along any axis
+__kernel void tile_axis(
+    __global const float* input,
+    __global float* output,
+    const int outerSize,
+    const int axisSize,
+    const int innerSize,
+    const int repeats)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = outerSize * axisSize * repeats * innerSize;
+    if (idx >= totalSize) return;
+
+    const int outputAxisSize = axisSize * repeats;
+    const int innerIdx = idx % innerSize;
+    int temp = idx / innerSize;
+    const int outputAxisIdx = temp % outputAxisSize;
+    const int outerIdx = temp / outputAxisSize;
+
+    const int inputAxisIdx = outputAxisIdx % axisSize;
+    const int inputIdx = outerIdx * axisSize * innerSize + inputAxisIdx * innerSize + innerIdx;
+
+    output[idx] = input[inputIdx];
+}
+
 // Dropout forward
 __kernel void dropout_forward(
     __global const float* input,
@@ -948,6 +1103,9 @@ __kernel void scatter_add_kernel(
                 "fill_buffer", "copy_buffer",
                 "greater_than", "less_than", "equal_values", "where_select",
                 "mean_axis", "var_axis", "argmax_axis", "argmin_axis",
+                "broadcast_multiply_last_axis", "broadcast_multiply_first_axis", "broadcast_multiply_general",
+                "squash", "squash_backward",
+                "tile_batch", "tile_axis",
                 "dropout_forward", "dropout_backward",
                 "embedding_lookup", "embedding_backward",
                 "fma_kernel", "gather_kernel", "scatter_add_kernel"
