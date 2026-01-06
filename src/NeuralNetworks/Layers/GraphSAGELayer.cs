@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -908,7 +909,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.GetGpuBackend();
+        var backend = gpuEngine.GetBackend();
         if (backend == null)
             throw new InvalidOperationException("No GPU backend available.");
 
@@ -995,7 +996,10 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         {
             // Extract batch input slice
             int batchOffset = b * numNodes * inputFeatures;
-            var batchInputBuffer = gpuEngine.GetOrAllocateBufferSlice(input.Buffer, batchOffset, numNodes * inputFeatures, backend);
+            float[] batchData = new float[numNodes * inputFeatures];
+            float[] fullInputData = backend.DownloadBuffer(input.Buffer);
+            Array.Copy(fullInputData, batchOffset, batchData, 0, numNodes * inputFeatures);
+            var batchInputBuffer = backend.AllocateBuffer(batchData);
 
             // Step 1: Transform self features
             // selfTransformed = input @ selfWeights
@@ -1003,9 +1007,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 batchInputBuffer,
                 selfWeightBuffer,
                 selfTransformedBuffer,
-                numNodes, _outputFeatures, _inputFeatures,
-                alpha: 1.0f, beta: 0.0f,
-                transposeA: false, transposeB: false);
+                numNodes, _outputFeatures, _inputFeatures);
 
             // Step 2: Aggregate neighbor features
             switch (_aggregatorType)
@@ -1016,9 +1018,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                         adjBuffer,
                         batchInputBuffer,
                         aggregatedBuffer,
-                        numNodes, _inputFeatures, numNodes,
-                        alpha: 1.0f, beta: 0.0f,
-                        transposeA: false, transposeB: false);
+                        numNodes, _inputFeatures, numNodes);
                     break;
 
                 case SAGEAggregatorType.Mean:
@@ -1027,17 +1027,15 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                         adjBuffer,
                         batchInputBuffer,
                         aggregatedBuffer,
-                        numNodes, _inputFeatures, numNodes,
-                        alpha: 1.0f, beta: 0.0f,
-                        transposeA: false, transposeB: false);
+                        numNodes, _inputFeatures, numNodes);
 
-                    // Divide each row by its degree
-                    backend.DivideByRowDegree(aggregatedBuffer, degreeBuffer, numNodes, _inputFeatures);
+                    // Divide each row by its degree (CPU fallback for this operation)
+                    DivideByRowDegreeCpu(backend, aggregatedBuffer, degreeBuffer, numNodes, _inputFeatures);
                     break;
 
                 case SAGEAggregatorType.MaxPool:
-                    // For MaxPool, we need to compute max over neighbors for each feature
-                    backend.MaxPoolNeighbors(batchInputBuffer, adjBuffer, aggregatedBuffer, numNodes, _inputFeatures);
+                    // For MaxPool, compute max over neighbors for each feature (CPU fallback)
+                    MaxPoolNeighborsCpu(backend, batchInputBuffer, adjBuffer, aggregatedBuffer, numNodes, _inputFeatures);
                     break;
             }
 
@@ -1047,30 +1045,31 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 aggregatedBuffer,
                 neighborWeightBuffer,
                 neighborTransformedBuffer,
-                numNodes, _outputFeatures, _inputFeatures,
-                alpha: 1.0f, beta: 0.0f,
-                transposeA: false, transposeB: false);
+                numNodes, _outputFeatures, _inputFeatures);
 
             // Step 4: Combine: self + neighbor + bias
             backend.Add(selfTransformedBuffer, neighborTransformedBuffer, selfTransformedBuffer, numNodes * _outputFeatures);
-            backend.AddBias(selfTransformedBuffer, biasBuffer, selfTransformedBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(selfTransformedBuffer, biasBuffer, selfTransformedBuffer, numNodes, _outputFeatures);
 
             // Step 5: Apply L2 normalization if enabled
             if (_normalize)
             {
-                backend.L2NormalizeRows(selfTransformedBuffer, numNodes, _outputFeatures);
+                L2NormalizeRowsCpu(backend, selfTransformedBuffer, numNodes, _outputFeatures);
             }
 
             // Copy to output buffer at correct batch offset
             int outputOffset = b * numNodes * _outputFeatures;
-            backend.Copy(selfTransformedBuffer, 0, outputBuffer, outputOffset, numNodes * _outputFeatures);
+            CopyToOffsetCpu(backend, selfTransformedBuffer, outputBuffer, outputOffset, numNodes * _outputFeatures);
+
+            // Dispose batch input buffer for this iteration
+            batchInputBuffer.Dispose();
         }
 
         // Apply activation
         var activationType = GetFusedActivationType();
         if (activationType != FusedActivationType.None)
         {
-            backend.ApplyActivation(outputBuffer, outputBuffer, outputSize, activationType);
+            ApplyActivationCpu(backend, outputBuffer, outputSize, activationType);
         }
 
         // Clean up
@@ -1088,8 +1087,125 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(outputBuffer, outputShape, backend);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
+
+    #region GPU Helper Methods
+
+    /// <summary>
+    /// CPU fallback for dividing each row by its degree.
+    /// </summary>
+    private static void DivideByRowDegreeCpu(IDirectGpuBackend backend, IGpuBuffer dataBuffer, IGpuBuffer degreeBuffer, int numNodes, int features)
+    {
+        float[] data = backend.DownloadBuffer(dataBuffer);
+        float[] degrees = backend.DownloadBuffer(degreeBuffer);
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            float deg = MathF.Max(degrees[i], 1.0f);
+            for (int f = 0; f < features; f++)
+            {
+                data[i * features + f] /= deg;
+            }
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(data);
+        backend.Copy(tempBuffer, dataBuffer, data.Length);
+    }
+
+    /// <summary>
+    /// CPU fallback for max pooling over neighbors.
+    /// </summary>
+    private static void MaxPoolNeighborsCpu(IDirectGpuBackend backend, IGpuBuffer inputBuffer, IGpuBuffer adjBuffer, IGpuBuffer outputBuffer, int numNodes, int features)
+    {
+        float[] input = backend.DownloadBuffer(inputBuffer);
+        float[] adj = backend.DownloadBuffer(adjBuffer);
+        float[] result = new float[numNodes * features];
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int f = 0; f < features; f++)
+            {
+                float maxVal = float.NegativeInfinity;
+                bool hasNeighbor = false;
+                for (int j = 0; j < numNodes; j++)
+                {
+                    if (adj[i * numNodes + j] > 0)
+                    {
+                        hasNeighbor = true;
+                        maxVal = MathF.Max(maxVal, input[j * features + f]);
+                    }
+                }
+                result[i * features + f] = hasNeighbor ? maxVal : 0;
+            }
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(result);
+        backend.Copy(tempBuffer, outputBuffer, result.Length);
+    }
+
+    /// <summary>
+    /// CPU fallback for L2 row normalization.
+    /// </summary>
+    private static void L2NormalizeRowsCpu(IDirectGpuBackend backend, IGpuBuffer buffer, int numNodes, int features)
+    {
+        float[] data = backend.DownloadBuffer(buffer);
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            float sumSq = 0;
+            for (int f = 0; f < features; f++)
+            {
+                float val = data[i * features + f];
+                sumSq += val * val;
+            }
+            float norm = MathF.Sqrt(sumSq + 1e-12f);
+            for (int f = 0; f < features; f++)
+            {
+                data[i * features + f] /= norm;
+            }
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(data);
+        backend.Copy(tempBuffer, buffer, data.Length);
+    }
+
+    /// <summary>
+    /// CPU fallback for copying data to an offset in a destination buffer.
+    /// </summary>
+    private static void CopyToOffsetCpu(IDirectGpuBackend backend, IGpuBuffer sourceBuffer, IGpuBuffer destBuffer, int destOffset, int size)
+    {
+        float[] source = backend.DownloadBuffer(sourceBuffer);
+        float[] dest = backend.DownloadBuffer(destBuffer);
+        Array.Copy(source, 0, dest, destOffset, size);
+        using var tempBuffer = backend.AllocateBuffer(dest);
+        backend.Copy(tempBuffer, destBuffer, dest.Length);
+    }
+
+    /// <summary>
+    /// CPU fallback for applying activation function.
+    /// </summary>
+    private static void ApplyActivationCpu(IDirectGpuBackend backend, IGpuBuffer buffer, int size, FusedActivationType activationType)
+    {
+        switch (activationType)
+        {
+            case FusedActivationType.ReLU:
+                backend.Relu(buffer, buffer, size);
+                break;
+            case FusedActivationType.Sigmoid:
+                backend.Sigmoid(buffer, buffer, size);
+                break;
+            case FusedActivationType.Tanh:
+                backend.Tanh(buffer, buffer, size);
+                break;
+            case FusedActivationType.GELU:
+                backend.Gelu(buffer, buffer, size);
+                break;
+            // None/Identity does nothing
+        }
+    }
+
+    #endregion
 
     /// <inheritdoc/>
     public override bool SupportsJitCompilation => true;

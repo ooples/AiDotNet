@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -780,7 +781,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.GetGpuBackend();
+        var backend = gpuEngine.GetBackend();
         if (backend == null)
             throw new InvalidOperationException("No GPU backend available.");
 
@@ -863,25 +864,28 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var hiddenBuffer = backend.AllocateBuffer(new float[numNodes * _mlpHiddenDim]);
         var mlpOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
 
+        // Download input data for batch processing
+        float[] inputData = backend.DownloadBuffer(input.Buffer);
+
         // Process each batch
         for (int b = 0; b < batchSize; b++)
         {
             // Extract batch input slice
             int batchOffset = b * numNodes * inputFeatures;
-            var batchInputBuffer = gpuEngine.GetOrAllocateBufferSlice(input.Buffer, batchOffset, numNodes * inputFeatures, backend);
+            float[] batchData = new float[numNodes * inputFeatures];
+            Array.Copy(inputData, batchOffset, batchData, 0, numNodes * inputFeatures);
+            var batchInputBuffer = backend.AllocateBuffer(batchData);
 
             // Step 1: Compute neighbor sum = adj @ input
             backend.Gemm(
                 adjBuffer,
                 batchInputBuffer,
                 neighborSumBuffer,
-                numNodes, _inputFeatures, numNodes,
-                alpha: 1.0f, beta: 0.0f,
-                transposeA: false, transposeB: false);
+                numNodes, _inputFeatures, numNodes);
 
             // Step 2: Aggregate = (1 + epsilon) * self + neighbor_sum
             // First: aggregated = onePlusEpsilon * input
-            backend.MultiplyScalar(batchInputBuffer, onePlusEpsilon, aggregatedBuffer, numNodes * _inputFeatures);
+            backend.Scale(batchInputBuffer, aggregatedBuffer, onePlusEpsilon, numNodes * _inputFeatures);
             // Then: aggregated += neighborSum
             backend.Add(aggregatedBuffer, neighborSumBuffer, aggregatedBuffer, numNodes * _inputFeatures);
 
@@ -891,13 +895,11 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 aggregatedBuffer,
                 weights1Buffer,
                 hiddenBuffer,
-                numNodes, _mlpHiddenDim, _inputFeatures,
-                alpha: 1.0f, beta: 0.0f,
-                transposeA: false, transposeB: false);
-            backend.AddBias(hiddenBuffer, bias1Buffer, hiddenBuffer, numNodes, _mlpHiddenDim);
+                numNodes, _mlpHiddenDim, _inputFeatures);
+            backend.BiasAdd(hiddenBuffer, bias1Buffer, hiddenBuffer, numNodes, _mlpHiddenDim);
 
             // Apply ReLU
-            backend.ReLU(hiddenBuffer, hiddenBuffer, numNodes * _mlpHiddenDim);
+            backend.Relu(hiddenBuffer, hiddenBuffer, numNodes * _mlpHiddenDim);
 
             // Step 4: MLP Layer 2
             // output = hidden @ weights2 + bias2
@@ -905,21 +907,22 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 hiddenBuffer,
                 weights2Buffer,
                 mlpOutputBuffer,
-                numNodes, _outputFeatures, _mlpHiddenDim,
-                alpha: 1.0f, beta: 0.0f,
-                transposeA: false, transposeB: false);
-            backend.AddBias(mlpOutputBuffer, bias2Buffer, mlpOutputBuffer, numNodes, _outputFeatures);
+                numNodes, _outputFeatures, _mlpHiddenDim);
+            backend.BiasAdd(mlpOutputBuffer, bias2Buffer, mlpOutputBuffer, numNodes, _outputFeatures);
 
             // Copy to output buffer at correct batch offset
             int outputOffset = b * numNodes * _outputFeatures;
-            backend.Copy(mlpOutputBuffer, 0, outputBuffer, outputOffset, numNodes * _outputFeatures);
+            CopyToOffsetCpu(backend, mlpOutputBuffer, outputBuffer, outputOffset, numNodes * _outputFeatures);
+
+            // Dispose batch buffer
+            batchInputBuffer.Dispose();
         }
 
         // Apply activation
         var activationType = GetFusedActivationType();
         if (activationType != FusedActivationType.None)
         {
-            backend.ApplyActivation(outputBuffer, outputBuffer, outputSize, activationType);
+            ApplyActivationCpu(backend, outputBuffer, outputSize, activationType);
         }
 
         // Clean up
@@ -938,8 +941,47 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(outputBuffer, outputShape, backend);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
+
+    #region GPU Helper Methods
+
+    /// <summary>
+    /// CPU fallback for copying data to an offset in a destination buffer.
+    /// </summary>
+    private static void CopyToOffsetCpu(IDirectGpuBackend backend, IGpuBuffer sourceBuffer, IGpuBuffer destBuffer, int destOffset, int size)
+    {
+        float[] source = backend.DownloadBuffer(sourceBuffer);
+        float[] dest = backend.DownloadBuffer(destBuffer);
+        Array.Copy(source, 0, dest, destOffset, size);
+        using var tempBuffer = backend.AllocateBuffer(dest);
+        backend.Copy(tempBuffer, destBuffer, dest.Length);
+    }
+
+    /// <summary>
+    /// CPU fallback for applying activation function.
+    /// </summary>
+    private static void ApplyActivationCpu(IDirectGpuBackend backend, IGpuBuffer buffer, int size, FusedActivationType activationType)
+    {
+        switch (activationType)
+        {
+            case FusedActivationType.ReLU:
+                backend.Relu(buffer, buffer, size);
+                break;
+            case FusedActivationType.Sigmoid:
+                backend.Sigmoid(buffer, buffer, size);
+                break;
+            case FusedActivationType.Tanh:
+                backend.Tanh(buffer, buffer, size);
+                break;
+            case FusedActivationType.GELU:
+                backend.Gelu(buffer, buffer, size);
+                break;
+            // None/Identity does nothing
+        }
+    }
+
+    #endregion
 
     /// <inheritdoc/>
     public override bool SupportsJitCompilation => true;

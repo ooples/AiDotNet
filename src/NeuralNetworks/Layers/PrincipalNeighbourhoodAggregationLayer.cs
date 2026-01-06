@@ -357,7 +357,8 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         if (Engine is not DirectGpuTensorEngine tensorEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
 
-        if (!tensorEngine.TryGetBackend(out var backend))
+        var backend = tensorEngine.GetBackend();
+        if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable");
 
         if (_adjacencyMatrix == null)
@@ -416,11 +417,16 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         int preTransformFeatures = _preTransformWeights.Shape[1];
         int numAggregatorScalerCombinations = _aggregators.Length * _scalers.Length;
 
+        // Download full input for batch processing
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
         for (int b = 0; b < batchSize; b++)
         {
             int batchInputOffset = b * numNodes * inputFeatures;
-            using var batchInputBuffer = tensorEngine.GetOrAllocateBufferSlice(
-                input.Buffer, batchInputOffset, numNodes * inputFeatures);
+            // Extract batch slice and upload as separate buffer
+            float[] batchInputData = new float[numNodes * inputFeatures];
+            Array.Copy(inputData, batchInputOffset, batchInputData, 0, numNodes * inputFeatures);
+            using var batchInputBuffer = backend.AllocateBuffer(batchInputData);
 
             // ========================================
             // STEP 1: Pre-transform: X @ W_pre + b_pre
@@ -429,12 +435,10 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             using var transformedBuffer = backend.AllocateBuffer(numNodes * preTransformFeatures);
             backend.Gemm(
                 batchInputBuffer, preTransformWeightsBuffer, transformedBuffer,
-                numNodes, preTransformFeatures, inputFeatures,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+                numNodes, preTransformFeatures, inputFeatures);
 
             // Add bias
-            backend.AddBias(transformedBuffer, preTransformBiasBuffer, transformedBuffer, numNodes, preTransformFeatures);
+            backend.BiasAdd(transformedBuffer, preTransformBiasBuffer, transformedBuffer, numNodes, preTransformFeatures);
 
             // ========================================
             // STEP 2: Multiple aggregators and scalers
@@ -474,7 +478,10 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                         // This is a simplified approach - full GPU would need segment operations
                         var aggResult = ComputeAggregatorCpu(transformedBuffer, backend, adjCsr,
                             aggregator, degrees, numNodes, preTransformFeatures);
-                        backend.UploadBuffer(aggregatedBuffer, aggResult);
+                        using (var tempBuffer = backend.AllocateBuffer(aggResult))
+                        {
+                            backend.Copy(tempBuffer, aggregatedBuffer, aggResult.Length);
+                        }
                         break;
 
                     default:
@@ -527,12 +534,10 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             using var hidden1Buffer = backend.AllocateBuffer(numNodes * _hiddenDim);
             backend.Gemm(
                 concatenatedBuffer, postWeights1Buffer, hidden1Buffer,
-                numNodes, _hiddenDim, _combinedFeatures,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+                numNodes, _hiddenDim, _combinedFeatures);
 
-            backend.AddBias(hidden1Buffer, postBias1Buffer, hidden1Buffer, numNodes, _hiddenDim);
-            backend.ReLU(hidden1Buffer, hidden1Buffer, numNodes * _hiddenDim);
+            backend.BiasAdd(hidden1Buffer, postBias1Buffer, hidden1Buffer, numNodes, _hiddenDim);
+            backend.Relu(hidden1Buffer, hidden1Buffer, numNodes * _hiddenDim);
 
             // ========================================
             // STEP 4: Post-aggregation MLP Layer 2
@@ -541,11 +546,9 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             using var mlpOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
             backend.Gemm(
                 hidden1Buffer, postWeights2Buffer, mlpOutputBuffer,
-                numNodes, _outputFeatures, _hiddenDim,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+                numNodes, _outputFeatures, _hiddenDim);
 
-            backend.AddBias(mlpOutputBuffer, postBias2Buffer, mlpOutputBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(mlpOutputBuffer, postBias2Buffer, mlpOutputBuffer, numNodes, _outputFeatures);
 
             // ========================================
             // STEP 5: Self-loop transformation
@@ -554,24 +557,31 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             using var selfBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
             backend.Gemm(
                 batchInputBuffer, selfWeightsBuffer, selfBuffer,
-                numNodes, _outputFeatures, inputFeatures,
-                transposeA: false, transposeB: false,
-                alpha: 1.0f, beta: 0.0f);
+                numNodes, _outputFeatures, inputFeatures);
 
             // ========================================
             // STEP 6: Combine MLP output + self + bias
             // ========================================
 
-            int batchOutputOffset = b * numNodes * _outputFeatures;
-            using var batchOutputBuffer = tensorEngine.GetOrAllocateBufferSlice(
-                outputBuffer, batchOutputOffset, numNodes * _outputFeatures);
+            // Create temporary buffer for this batch's output
+            using var batchOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
 
             // output = mlpOutput + self + bias
             backend.Add(mlpOutputBuffer, selfBuffer, batchOutputBuffer, numNodes * _outputFeatures);
-            backend.AddBias(batchOutputBuffer, biasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(batchOutputBuffer, biasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
 
             // Apply activation if needed
             ApplyFusedActivation(backend, batchOutputBuffer, numNodes * _outputFeatures);
+
+            // Copy batch result to correct position in output buffer
+            float[] batchResult = backend.DownloadBuffer(batchOutputBuffer);
+            int batchOutputOffset = b * numNodes * _outputFeatures;
+            float[] outputData = backend.DownloadBuffer(outputBuffer);
+            Array.Copy(batchResult, 0, outputData, batchOutputOffset, numNodes * _outputFeatures);
+            using (var tempOutput = backend.AllocateBuffer(outputData))
+            {
+                backend.Copy(tempOutput, outputBuffer, outputSize);
+            }
         }
 
         // Create output tensor
@@ -642,7 +652,9 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             }
         }
 
-        backend.UploadBuffer(buffer, data);
+        // Upload modified data via new buffer and copy
+        using var tempBuffer = backend.AllocateBuffer(data);
+        backend.Copy(tempBuffer, buffer, data.Length);
     }
 
     /// <summary>
@@ -739,7 +751,9 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             }
         }
 
-        backend.UploadBuffer(destBuffer, result);
+        // Upload via temp buffer and copy
+        using var tempBuffer = backend.AllocateBuffer(result);
+        backend.Copy(tempBuffer, destBuffer, result.Length);
     }
 
     /// <summary>
@@ -759,7 +773,9 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             }
         }
 
-        backend.UploadBuffer(concatBuffer, concat);
+        // Upload via temp buffer and copy
+        using var tempBuffer = backend.AllocateBuffer(concat);
+        backend.Copy(tempBuffer, concatBuffer, concat.Length);
     }
 
     /// <summary>
@@ -771,7 +787,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         switch (activation)
         {
             case FusedActivationType.ReLU:
-                backend.ReLU(buffer, buffer, size);
+                backend.Relu(buffer, buffer, size);
                 break;
             case FusedActivationType.Sigmoid:
                 backend.Sigmoid(buffer, buffer, size);
@@ -780,7 +796,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                 backend.Tanh(buffer, buffer, size);
                 break;
             case FusedActivationType.GELU:
-                backend.GELU(buffer, buffer, size);
+                backend.Gelu(buffer, buffer, size);
                 break;
             // Identity does nothing
         }

@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -1431,7 +1432,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.GetGpuBackend();
+        var backend = gpuEngine.GetBackend();
         if (backend == null)
             throw new InvalidOperationException("No GPU backend available.");
 
@@ -1506,32 +1507,31 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var headOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
 
         // Zero the output buffer
-        backend.Fill(outputBuffer, 0.0f, outputSize);
+        FillBufferCpu(backend, outputBuffer, 0.0f, outputSize);
 
         float alphaValue = (float)NumOps.ToDouble(_alpha);
 
         // Process each batch
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract batch input slice from GPU tensor
+            // Extract batch input using download/copy/upload pattern
             int batchOffset = b * numNodes * inputFeatures;
-            var batchInputBuffer = gpuEngine.GetOrAllocateBufferSlice(input.Buffer, batchOffset, numNodes * inputFeatures, backend);
+            int batchInputSize = numNodes * inputFeatures;
+            var fullInputData = backend.DownloadBuffer(input.Buffer);
+            var batchInputData = new float[batchInputSize];
+            Array.Copy(fullInputData, batchOffset, batchInputData, 0, batchInputSize);
+            using var batchInputBuffer = backend.AllocateBuffer(batchInputData);
 
             // Zero the temporary head accumulator
-            backend.Fill(headOutputBuffer, 0.0f, numNodes * _outputFeatures);
+            FillBufferCpu(backend, headOutputBuffer, 0.0f, numNodes * _outputFeatures);
 
             // Process each attention head
             for (int h = 0; h < _numHeads; h++)
             {
                 // Step 1: Transform input - transformed = input @ headWeight
                 // [numNodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [numNodes, outputFeatures]
-                backend.Gemm(
-                    batchInputBuffer,
-                    headWeightBuffers[h],
-                    transformedBuffer,
-                    numNodes, _outputFeatures, inputFeatures,
-                    alpha: 1.0f, beta: 0.0f,
-                    transposeA: false, transposeB: false);
+                backend.Gemm(batchInputBuffer, headWeightBuffers[h], transformedBuffer,
+                    numNodes, _outputFeatures, inputFeatures);
 
                 // Step 2: Compute attention scores
                 // For each node i, compute score_ij = LeakyReLU(source_i + target_j)
@@ -1541,31 +1541,21 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 var targetScoreBuffer = backend.AllocateBuffer(new float[numNodes]);
 
                 // Compute source and target scores using matmul
-                backend.Gemm(
-                    transformedBuffer,
-                    attnSourceBuffers[h],
-                    sourceScoreBuffer,
-                    numNodes, 1, _outputFeatures,
-                    alpha: 1.0f, beta: 0.0f,
-                    transposeA: false, transposeB: false);
+                backend.Gemm(transformedBuffer, attnSourceBuffers[h], sourceScoreBuffer,
+                    numNodes, 1, _outputFeatures);
 
-                backend.Gemm(
-                    transformedBuffer,
-                    attnTargetBuffers[h],
-                    targetScoreBuffer,
-                    numNodes, 1, _outputFeatures,
-                    alpha: 1.0f, beta: 0.0f,
-                    transposeA: false, transposeB: false);
+                backend.Gemm(transformedBuffer, attnTargetBuffers[h], targetScoreBuffer,
+                    numNodes, 1, _outputFeatures);
 
                 // Compute pairwise attention scores with LeakyReLU and masking
                 // This needs to be done with adjacency matrix consideration
                 if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
                 {
-                    // Sparse attention: compute scores only for existing edges
+                    // Sparse attention: compute scores only for existing edges (CPU fallback)
                     int numEdges = _edgeSourceIndices.Length;
                     var edgeScoreBuffer = backend.AllocateBuffer(new float[numEdges]);
 
-                    // Upload edge indices
+                    // Collect edge indices
                     var sourceIndicesData = new int[numEdges];
                     var targetIndicesData = new int[numEdges];
                     for (int e = 0; e < numEdges; e++)
@@ -1573,48 +1563,26 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                         sourceIndicesData[e] = _edgeSourceIndices.GetFlat(e);
                         targetIndicesData[e] = _edgeTargetIndices.GetFlat(e);
                     }
-                    var srcIdxBuffer = backend.AllocateIntBuffer(sourceIndicesData);
-                    var tgtIdxBuffer = backend.AllocateIntBuffer(targetIndicesData);
 
-                    // Compute edge scores using GPU kernel: score[e] = LeakyReLU(source[src[e]] + target[tgt[e]])
-                    backend.ComputeEdgeAttentionScores(
-                        sourceScoreBuffer,
-                        targetScoreBuffer,
-                        srcIdxBuffer,
-                        tgtIdxBuffer,
-                        edgeScoreBuffer,
-                        numEdges,
-                        alphaValue);
+                    // Compute edge scores using CPU fallback
+                    ComputeEdgeAttentionScoresCpu(backend, sourceScoreBuffer, targetScoreBuffer,
+                        sourceIndicesData, targetIndicesData, edgeScoreBuffer, numEdges, alphaValue);
 
-                    // Compute softmax over edges per target node (scatter-softmax)
+                    // Compute softmax over edges per target node (CPU fallback)
                     var normalizedScoreBuffer = backend.AllocateBuffer(new float[numEdges]);
-                    backend.EdgeSoftmax(
-                        edgeScoreBuffer,
-                        tgtIdxBuffer,
-                        normalizedScoreBuffer,
-                        numEdges,
-                        numNodes);
+                    EdgeSoftmaxCpu(backend, edgeScoreBuffer, targetIndicesData, normalizedScoreBuffer, numEdges, numNodes);
 
-                    // Weighted scatter-add: output[tgt[e]] += score[e] * transformed[src[e]]
+                    // Weighted scatter-add (CPU fallback)
                     var headResultBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
-                    backend.Fill(headResultBuffer, 0.0f, numNodes * _outputFeatures);
+                    FillBufferCpu(backend, headResultBuffer, 0.0f, numNodes * _outputFeatures);
 
-                    backend.WeightedScatterAdd(
-                        transformedBuffer,
-                        srcIdxBuffer,
-                        tgtIdxBuffer,
-                        normalizedScoreBuffer,
-                        headResultBuffer,
-                        numEdges,
-                        numNodes,
-                        _outputFeatures);
+                    WeightedScatterAddCpu(backend, transformedBuffer, sourceIndicesData, targetIndicesData,
+                        normalizedScoreBuffer, headResultBuffer, numEdges, numNodes, _outputFeatures);
 
                     // Accumulate head result into headOutputBuffer
                     backend.Add(headOutputBuffer, headResultBuffer, headOutputBuffer, numNodes * _outputFeatures);
 
                     // Clean up sparse buffers
-                    srcIdxBuffer.Dispose();
-                    tgtIdxBuffer.Dispose();
                     edgeScoreBuffer.Dispose();
                     normalizedScoreBuffer.Dispose();
                     headResultBuffer.Dispose();
@@ -1635,28 +1603,18 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     }
                     var adjBuffer = backend.AllocateBuffer(adjData);
 
-                    // Compute attention matrix with LeakyReLU and masking
-                    backend.ComputeDenseAttentionMatrix(
-                        sourceScoreBuffer,
-                        targetScoreBuffer,
-                        adjBuffer,
-                        attnScoreBuffer,
-                        numNodes,
-                        alphaValue);
+                    // Compute attention matrix with LeakyReLU and masking (CPU fallback)
+                    ComputeDenseAttentionMatrixCpu(backend, sourceScoreBuffer, targetScoreBuffer,
+                        adjBuffer, attnScoreBuffer, numNodes, alphaValue);
 
-                    // Apply row-wise softmax (over neighbors)
-                    backend.RowSoftmax(attnScoreBuffer, numNodes, numNodes);
+                    // Apply row-wise softmax (CPU fallback)
+                    RowSoftmaxCpu(backend, attnScoreBuffer, numNodes, numNodes);
 
                     // Aggregate: output = attention @ transformed
                     // [numNodes, numNodes] @ [numNodes, outputFeatures] -> [numNodes, outputFeatures]
                     var headResultBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
-                    backend.Gemm(
-                        attnScoreBuffer,
-                        transformedBuffer,
-                        headResultBuffer,
-                        numNodes, _outputFeatures, numNodes,
-                        alpha: 1.0f, beta: 0.0f,
-                        transposeA: false, transposeB: false);
+                    backend.Gemm(attnScoreBuffer, transformedBuffer, headResultBuffer,
+                        numNodes, _outputFeatures, numNodes);
 
                     // Accumulate head result
                     backend.Add(headOutputBuffer, headResultBuffer, headOutputBuffer, numNodes * _outputFeatures);
@@ -1671,21 +1629,21 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
             // Average across heads
             float headScale = 1.0f / _numHeads;
-            backend.MultiplyScalar(headOutputBuffer, headScale, headOutputBuffer, numNodes * _outputFeatures);
+            backend.Scale(headOutputBuffer, headOutputBuffer, headScale, numNodes * _outputFeatures);
 
             // Add bias (broadcast to all nodes)
-            backend.AddBias(headOutputBuffer, biasBuffer, headOutputBuffer, numNodes, _outputFeatures);
+            backend.BiasAdd(headOutputBuffer, biasBuffer, headOutputBuffer, numNodes, _outputFeatures);
 
             // Copy to output buffer at correct batch offset
             int outputOffset = b * numNodes * _outputFeatures;
-            backend.Copy(headOutputBuffer, 0, outputBuffer, outputOffset, numNodes * _outputFeatures);
+            CopyToOffsetCpu(backend, headOutputBuffer, outputBuffer, outputOffset, numNodes * _outputFeatures);
         }
 
         // Apply activation
         var activationType = GetFusedActivationType();
         if (activationType != FusedActivationType.None)
         {
-            backend.ApplyActivation(outputBuffer, outputBuffer, outputSize, activationType);
+            ApplyActivationCpu(backend, outputBuffer, outputSize, activationType);
         }
 
         // Clean up weight buffers
@@ -1705,7 +1663,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(outputBuffer, outputShape, backend);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
 
     /// <inheritdoc/>
@@ -1843,4 +1801,238 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         return output;
     }
+
+    #region GPU Helper Methods
+
+    /// <summary>
+    /// Fills a buffer with a constant value (CPU fallback).
+    /// </summary>
+    private static void FillBufferCpu(IDirectGpuBackend backend, IGpuBuffer buffer, float value, int size)
+    {
+        var data = new float[size];
+        Array.Fill(data, value);
+        using var tempBuffer = backend.AllocateBuffer(data);
+        backend.Copy(tempBuffer, buffer, size);
+    }
+
+    /// <summary>
+    /// Computes edge attention scores: score[e] = LeakyReLU(source[src[e]] + target[tgt[e]]) (CPU fallback).
+    /// </summary>
+    private static void ComputeEdgeAttentionScoresCpu(IDirectGpuBackend backend, IGpuBuffer sourceScoreBuffer,
+        IGpuBuffer targetScoreBuffer, int[] sourceIndices, int[] targetIndices, IGpuBuffer edgeScoreBuffer,
+        int numEdges, float alpha)
+    {
+        var sourceScores = backend.DownloadBuffer(sourceScoreBuffer);
+        var targetScores = backend.DownloadBuffer(targetScoreBuffer);
+        var edgeScores = new float[numEdges];
+
+        for (int e = 0; e < numEdges; e++)
+        {
+            int srcIdx = sourceIndices[e];
+            int tgtIdx = targetIndices[e];
+            float score = sourceScores[srcIdx] + targetScores[tgtIdx];
+            // LeakyReLU
+            edgeScores[e] = score >= 0 ? score : alpha * score;
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(edgeScores);
+        backend.Copy(tempBuffer, edgeScoreBuffer, numEdges);
+    }
+
+    /// <summary>
+    /// Computes softmax over edges per target node (CPU fallback).
+    /// </summary>
+    private static void EdgeSoftmaxCpu(IDirectGpuBackend backend, IGpuBuffer edgeScoreBuffer, int[] targetIndices,
+        IGpuBuffer normalizedScoreBuffer, int numEdges, int numNodes)
+    {
+        var edgeScores = backend.DownloadBuffer(edgeScoreBuffer);
+        var normalizedScores = new float[numEdges];
+
+        // Compute max per target node for numerical stability
+        var maxPerNode = new float[numNodes];
+        Array.Fill(maxPerNode, float.NegativeInfinity);
+        for (int e = 0; e < numEdges; e++)
+        {
+            int tgtIdx = targetIndices[e];
+            if (edgeScores[e] > maxPerNode[tgtIdx])
+                maxPerNode[tgtIdx] = edgeScores[e];
+        }
+
+        // Compute exp(score - max) and sum per target node
+        var expScores = new float[numEdges];
+        var sumPerNode = new float[numNodes];
+        for (int e = 0; e < numEdges; e++)
+        {
+            int tgtIdx = targetIndices[e];
+            float maxVal = float.IsNegativeInfinity(maxPerNode[tgtIdx]) ? 0 : maxPerNode[tgtIdx];
+            expScores[e] = MathF.Exp(edgeScores[e] - maxVal);
+            sumPerNode[tgtIdx] += expScores[e];
+        }
+
+        // Normalize
+        for (int e = 0; e < numEdges; e++)
+        {
+            int tgtIdx = targetIndices[e];
+            normalizedScores[e] = sumPerNode[tgtIdx] > 0 ? expScores[e] / sumPerNode[tgtIdx] : 0;
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(normalizedScores);
+        backend.Copy(tempBuffer, normalizedScoreBuffer, numEdges);
+    }
+
+    /// <summary>
+    /// Weighted scatter-add: output[tgt[e]] += score[e] * features[src[e]] (CPU fallback).
+    /// </summary>
+    private static void WeightedScatterAddCpu(IDirectGpuBackend backend, IGpuBuffer featuresBuffer,
+        int[] sourceIndices, int[] targetIndices, IGpuBuffer scoreBuffer, IGpuBuffer outputBuffer,
+        int numEdges, int numNodes, int featureSize)
+    {
+        var features = backend.DownloadBuffer(featuresBuffer);
+        var scores = backend.DownloadBuffer(scoreBuffer);
+        var output = backend.DownloadBuffer(outputBuffer);
+
+        for (int e = 0; e < numEdges; e++)
+        {
+            int srcIdx = sourceIndices[e];
+            int tgtIdx = targetIndices[e];
+            float score = scores[e];
+
+            for (int f = 0; f < featureSize; f++)
+            {
+                int srcOffset = srcIdx * featureSize + f;
+                int tgtOffset = tgtIdx * featureSize + f;
+                if (srcOffset < features.Length && tgtOffset < output.Length)
+                {
+                    output[tgtOffset] += score * features[srcOffset];
+                }
+            }
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(output);
+        backend.Copy(tempBuffer, outputBuffer, output.Length);
+    }
+
+    /// <summary>
+    /// Computes dense attention matrix with LeakyReLU and masking (CPU fallback).
+    /// </summary>
+    private static void ComputeDenseAttentionMatrixCpu(IDirectGpuBackend backend, IGpuBuffer sourceScoreBuffer,
+        IGpuBuffer targetScoreBuffer, IGpuBuffer adjBuffer, IGpuBuffer attnScoreBuffer, int numNodes, float alpha)
+    {
+        var sourceScores = backend.DownloadBuffer(sourceScoreBuffer);
+        var targetScores = backend.DownloadBuffer(targetScoreBuffer);
+        var adjMatrix = backend.DownloadBuffer(adjBuffer);
+        var attnScores = new float[numNodes * numNodes];
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                int idx = i * numNodes + j;
+                float adj = adjMatrix[idx];
+                if (adj > 0)
+                {
+                    float score = sourceScores[i] + targetScores[j];
+                    // LeakyReLU
+                    attnScores[idx] = score >= 0 ? score : alpha * score;
+                }
+                else
+                {
+                    attnScores[idx] = float.NegativeInfinity;
+                }
+            }
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(attnScores);
+        backend.Copy(tempBuffer, attnScoreBuffer, attnScores.Length);
+    }
+
+    /// <summary>
+    /// Applies row-wise softmax (CPU fallback).
+    /// </summary>
+    private static void RowSoftmaxCpu(IDirectGpuBackend backend, IGpuBuffer buffer, int numRows, int numCols)
+    {
+        var data = backend.DownloadBuffer(buffer);
+
+        for (int i = 0; i < numRows; i++)
+        {
+            int rowOffset = i * numCols;
+
+            // Find max for numerical stability
+            float maxVal = float.NegativeInfinity;
+            for (int j = 0; j < numCols; j++)
+            {
+                if (data[rowOffset + j] > maxVal)
+                    maxVal = data[rowOffset + j];
+            }
+
+            // Compute exp and sum
+            float sum = 0;
+            for (int j = 0; j < numCols; j++)
+            {
+                float expVal = float.IsNegativeInfinity(data[rowOffset + j])
+                    ? 0
+                    : MathF.Exp(data[rowOffset + j] - maxVal);
+                data[rowOffset + j] = expVal;
+                sum += expVal;
+            }
+
+            // Normalize
+            if (sum > 0)
+            {
+                for (int j = 0; j < numCols; j++)
+                {
+                    data[rowOffset + j] /= sum;
+                }
+            }
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(data);
+        backend.Copy(tempBuffer, buffer, data.Length);
+    }
+
+    /// <summary>
+    /// Copies data to a destination buffer at a specified offset (CPU fallback).
+    /// </summary>
+    private static void CopyToOffsetCpu(IDirectGpuBackend backend, IGpuBuffer sourceBuffer, IGpuBuffer destBuffer,
+        int destOffset, int size)
+    {
+        var sourceData = backend.DownloadBuffer(sourceBuffer);
+        var destData = backend.DownloadBuffer(destBuffer);
+
+        for (int i = 0; i < size && i < sourceData.Length; i++)
+        {
+            if (destOffset + i < destData.Length)
+            {
+                destData[destOffset + i] = sourceData[i];
+            }
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(destData);
+        backend.Copy(tempBuffer, destBuffer, destData.Length);
+    }
+
+    /// <summary>
+    /// Applies activation function (CPU fallback).
+    /// </summary>
+    private static void ApplyActivationCpu(IDirectGpuBackend backend, IGpuBuffer buffer, int size, FusedActivationType activationType)
+    {
+        var data = backend.DownloadBuffer(buffer);
+        for (int i = 0; i < size && i < data.Length; i++)
+        {
+            data[i] = activationType switch
+            {
+                FusedActivationType.ReLU => Math.Max(0, data[i]),
+                FusedActivationType.Sigmoid => 1.0f / (1.0f + MathF.Exp(-data[i])),
+                FusedActivationType.Tanh => MathF.Tanh(data[i]),
+                FusedActivationType.GELU => data[i] * 0.5f * (1.0f + MathF.Tanh(MathF.Sqrt(2.0f / MathF.PI) * (data[i] + 0.044715f * data[i] * data[i] * data[i]))),
+                FusedActivationType.LeakyReLU => data[i] >= 0 ? data[i] : 0.01f * data[i],
+                _ => data[i]
+            };
+        }
+
+        using var tempBuffer = backend.AllocateBuffer(data);
+        backend.Copy(tempBuffer, buffer, data.Length);
+    }
+
+    #endregion
 }
