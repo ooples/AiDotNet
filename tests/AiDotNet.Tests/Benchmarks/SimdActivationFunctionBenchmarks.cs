@@ -1,6 +1,6 @@
+using System.Diagnostics;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.NumericOperations;
-using System.Diagnostics;
 using Xunit;
 
 namespace AiDotNet.Tests.Benchmarks;
