@@ -304,7 +304,6 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         return updatedParams;
     }
 
-
     /// <summary>
     /// Updates the adaptive parameters of the Adagrad optimizer.
     /// </summary>

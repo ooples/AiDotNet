@@ -158,20 +158,42 @@ The following methods have been added to LayerBase:
 | Gradient checkpointing on GPU | ❌ | Memory-efficient backward with GPU recompute |
 | Mixed precision training | ❌ | FP16 forward/backward with FP32 accumulation |
 
-### Phase 3: Optimizer GPU Integration ✅ COMPLETE FOR DENSELAYER
-All optimizer kernels exist and DenseLayer has full wiring. Other layers need the same pattern.
+### Phase 3: Optimizer GPU Integration 🔄 IN PROGRESS
+All gradient-based optimizers need GPU kernels and integration.
 
-| Optimizer | Kernel Status | Integration Status |
-|-----------|---------------|-------------------|
-| SGD | ✅ `sgd_step` | ✅ Wired in DenseLayer |
-| Adam | ✅ `adam_step` | ✅ Wired in DenseLayer |
-| AdamW | ✅ `adamw_step` | ✅ Wired in DenseLayer |
-| Momentum | ✅ In sgd_step | ✅ Wired in DenseLayer |
-| RMSprop | ✅ `rmsprop_step` | ✅ Wired in DenseLayer |
-| Adagrad | ✅ `adagrad_step` | ✅ Wired in DenseLayer |
-| NAG | ✅ `nag_step` | ✅ Wired in DenseLayer |
-| LARS | ✅ `lars_step` | ✅ Wired in DenseLayer |
-| LAMB | ✅ `lamb_step` | ✅ Wired in DenseLayer |
+| Optimizer | Kernel Status | Integration Status | Notes |
+|-----------|---------------|-------------------|-------|
+| **Currently Implemented** |
+| SGD (StochasticGradientDescentOptimizer) | ✅ `sgd_step` | ✅ Wired | Basic SGD |
+| Momentum (MomentumOptimizer) | ✅ In `sgd_step` | ✅ Wired | SGD with momentum |
+| Adam (AdamOptimizer) | ✅ `adam_step` | ✅ Wired | Adaptive moments |
+| AdamW (AdamWOptimizer) | ✅ `adamw_step` | ✅ Wired | Adam with weight decay |
+| RMSprop (RootMeanSquarePropagationOptimizer) | ✅ `rmsprop_step` | ✅ Wired | Root mean square prop |
+| Adagrad (AdagradOptimizer) | ✅ `adagrad_step` | ✅ Wired | Adaptive gradient |
+| NAG (NesterovAcceleratedGradientOptimizer) | ✅ `nag_step` | ✅ Wired | Nesterov momentum |
+| LARS (LARSOptimizer) | ✅ `lars_step` | ✅ Wired | Layer-wise adaptive rate |
+| LAMB (LAMBOptimizer) | ✅ `lamb_step` | ✅ Wired | Layer-wise Adam |
+| **Need Implementation** |
+| AdaDelta | ❌ | ❌ | Adaptive delta |
+| AdaMax | ❌ | ❌ | Adam with infinity norm |
+| AMSGrad | ❌ | ❌ | Adam with long-term memory |
+| Nadam | ❌ | ❌ | Adam + Nesterov |
+| Lion | ❌ | ❌ | EvoLved Sign Momentum |
+| FTRL | ❌ | ❌ | Follow the regularized leader |
+| GradientDescent | ❌ | ❌ | Basic GD |
+| MiniBatchGradientDescent | ❌ | ❌ | Mini-batch GD |
+| ModifiedGradientDescent | ❌ | ❌ | Modified GD |
+| ProximalGradientDescent | ❌ | ❌ | Proximal methods |
+| CoordinateDescent | ❌ | ❌ | Coordinate-wise |
+| ConjugateGradient | ❌ | ❌ | Conjugate gradients |
+| **Quasi-Newton (Complex)** |
+| BFGS | ❌ | ❌ | Hessian approximation |
+| LBFGS | ❌ | ❌ | Limited memory BFGS |
+| DFP | ❌ | ❌ | Davidon-Fletcher-Powell |
+| NewtonMethod | ❌ | ❌ | Second-order |
+| LevenbergMarquardt | ❌ | ❌ | Damped least squares |
+| TrustRegion | ❌ | ❌ | Trust region methods |
+| ADMM | ❌ | ❌ | Alternating direction |
 
 **Backend Implementation Status:**
 - CUDA: ✅ All 9 optimizer update methods
@@ -187,9 +209,14 @@ All optimizer kernels exist and DenseLayer has full wiring. Other layers need th
 | ReshapeLayer | ✅ | ➖ No params | ✅ |
 | ActivationLayer | ✅ | ➖ No params | ❌ (needs update) |
 
-**Remaining Work:**
+**Remaining Work for Full Optimizer Coverage:**
+- Implement GPU kernels for 20+ additional optimizers (see table above)
+- Add `UpdateParametersGpu()` override to each optimizer
+- Wire kernel calls in DenseLayer and other trainable layers
 - Add BackwardGpu + UpdateParametersGpu to other trainable layers (Conv, LSTM, Attention, etc.)
 - Update ActivationLayer.SupportsGpuTraining to true
+
+**Status:** Phase 3 optimizer work is **partially complete** (9/29 optimizers have full GPU support)
 
 ### Phase 3: Loss Function GPU Integration
 | Loss Function | Status | Description |
