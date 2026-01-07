@@ -519,6 +519,154 @@ __kernel void adamw_update(
     param[idx] -= learningRate * m_hat / (sqrt(v_hat) + epsilon);
 }
 
+// RMSprop optimizer update
+__kernel void rmsprop_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* squaredAvg,
+    const float learningRate,
+    const float rho,
+    const float epsilon,
+    const float weightDecay,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    // Update moving average of squared gradients
+    float sqAvg = rho * squaredAvg[idx] + (1.0f - rho) * grad * grad;
+    squaredAvg[idx] = sqAvg;
+
+    // Update parameters
+    param[idx] -= learningRate * grad / (sqrt(sqAvg) + epsilon);
+}
+
+// Adagrad optimizer update
+__kernel void adagrad_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* accumulatedGrad,
+    const float learningRate,
+    const float epsilon,
+    const float weightDecay,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    // Accumulate squared gradients
+    float accum = accumulatedGrad[idx] + grad * grad;
+    accumulatedGrad[idx] = accum;
+
+    // Update parameters
+    param[idx] -= learningRate * grad / (sqrt(accum) + epsilon);
+}
+
+// Nesterov Accelerated Gradient (NAG) optimizer update
+__kernel void nag_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* velocity,
+    const float learningRate,
+    const float momentum,
+    const float weightDecay,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    // Nesterov momentum
+    float v = velocity[idx];
+    float vNew = momentum * v - learningRate * grad;
+    velocity[idx] = vNew;
+
+    // NAG update with lookahead
+    param[idx] += momentum * vNew - learningRate * grad;
+}
+
+// LARS (Layer-wise Adaptive Rate Scaling) optimizer update
+__kernel void lars_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* velocity,
+    const float learningRate,
+    const float momentum,
+    const float weightDecay,
+    const float trustCoeff,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    float p = param[idx];
+
+    // Apply weight decay
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * p;
+    }
+
+    // Update velocity with momentum
+    float v = momentum * velocity[idx] + grad;
+    velocity[idx] = v;
+
+    // Update parameters
+    param[idx] = p - learningRate * v;
+}
+
+// LAMB (Layer-wise Adaptive Moments) optimizer update
+__kernel void lamb_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* m,
+    __global float* v,
+    const float learningRate,
+    const float beta1,
+    const float beta2,
+    const float epsilon,
+    const float weightDecay,
+    const int step,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    float p = param[idx];
+
+    // Adam-like moment updates
+    float mVal = beta1 * m[idx] + (1.0f - beta1) * grad;
+    float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
+    m[idx] = mVal;
+    v[idx] = vVal;
+
+    // Bias correction
+    float mHat = mVal / (1.0f - pow(beta1, (float)step));
+    float vHat = vVal / (1.0f - pow(beta2, (float)step));
+
+    // LAMB: Adam update direction with weight decay
+    float adamUpdate = mHat / (sqrt(vHat) + epsilon);
+    float update = adamUpdate + weightDecay * p;
+
+    // Update parameters
+    param[idx] = p - learningRate * update;
+}
+
 // ===========================================================================
 // UTILITY KERNELS
 // ===========================================================================
@@ -1424,6 +1572,7 @@ __kernel void adaptive_avgpool_backward(
                 "smooth_l1_loss", "smooth_l1_backward",
                 // Optimizers
                 "sgd_momentum_update", "adam_update", "adamw_update",
+                "rmsprop_update", "adagrad_update", "nag_update", "lars_update", "lamb_update",
                 // Utilities
                 "clamp_values", "clip_by_value",
                 "transpose2d", "batched_transpose",

@@ -5548,6 +5548,97 @@ KERNEL VARIANTS (A/B testing):
             k.Execute1D(size, Math.Min(256, size));
         }
 
+        /// <inheritdoc/>
+        public void RmspropUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer squaredAvg,
+            float learningRate, float rho, float epsilon, float weightDecay, int size)
+        {
+            var k = _kernelCache["rmsprop_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)squaredAvg).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, rho);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void AdagradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumulatedGrad,
+            float learningRate, float epsilon, float weightDecay, int size)
+        {
+            var k = _kernelCache["adagrad_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)accumulatedGrad).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void NagUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+            float learningRate, float momentum, float weightDecay, int size)
+        {
+            var k = _kernelCache["nag_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)velocity).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, momentum);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void LarsUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+            float learningRate, float momentum, float weightDecay, float trustCoeff, int size)
+        {
+            var k = _kernelCache["lars_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)velocity).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, momentum);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, trustCoeff);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void LambUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+            float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        {
+            var k = _kernelCache["lamb_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)m).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)v).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, beta1);
+            k.SetArg(arg++, beta2);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, step);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
         #endregion
 
         #region FFT and Signal Processing

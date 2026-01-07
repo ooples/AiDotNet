@@ -462,6 +462,124 @@ extern ""C"" __global__ void adamw_step(
     param[idx] -= learningRate * (mHat / (sqrtf(vHat) + epsilon) + weightDecay * param[idx]);
 }
 
+extern ""C"" __global__ void rmsprop_step(
+    float* param, const float* gradient, float* squaredAvg,
+    float learningRate, float rho, float epsilon, float weightDecay, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    // Update moving average of squared gradients
+    float sqAvg = rho * squaredAvg[idx] + (1.0f - rho) * grad * grad;
+    squaredAvg[idx] = sqAvg;
+
+    // Update parameters
+    param[idx] -= learningRate * grad / (sqrtf(sqAvg) + epsilon);
+}
+
+extern ""C"" __global__ void adagrad_step(
+    float* param, const float* gradient, float* accumulatedGrad,
+    float learningRate, float epsilon, float weightDecay, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    // Accumulate squared gradients
+    float accum = accumulatedGrad[idx] + grad * grad;
+    accumulatedGrad[idx] = accum;
+
+    // Update parameters
+    param[idx] -= learningRate * grad / (sqrtf(accum) + epsilon);
+}
+
+extern ""C"" __global__ void nag_step(
+    float* param, const float* gradient, float* velocity,
+    float learningRate, float momentum, float weightDecay, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    // Nesterov momentum: v = momentum * v - lr * grad
+    // param = param + momentum * v - lr * grad (lookahead)
+    float v = velocity[idx];
+    float vNew = momentum * v - learningRate * grad;
+    velocity[idx] = vNew;
+
+    // NAG update: use velocity for lookahead
+    param[idx] += momentum * vNew - learningRate * grad;
+}
+
+extern ""C"" __global__ void lars_step(
+    float* param, const float* gradient, float* velocity,
+    float learningRate, float momentum, float weightDecay, float trustCoeff, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    // Note: LARS computes local learning rate based on layer-wise norms
+    // This simplified version applies uniform scaling; full LARS requires
+    // computing norms per layer before calling this kernel
+    float grad = gradient[idx];
+    float p = param[idx];
+
+    // Apply weight decay
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * p;
+    }
+
+    // Update velocity with momentum
+    float v = momentum * velocity[idx] + grad;
+    velocity[idx] = v;
+
+    // Update parameters
+    param[idx] = p - learningRate * v;
+}
+
+extern ""C"" __global__ void lamb_step(
+    float* param, const float* gradient, float* m, float* v,
+    float learningRate, float beta1, float beta2, float epsilon,
+    float weightDecay, int t, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    float p = param[idx];
+
+    // Adam-like moment updates
+    float mVal = beta1 * m[idx] + (1.0f - beta1) * grad;
+    float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
+    m[idx] = mVal;
+    v[idx] = vVal;
+
+    // Bias correction
+    float mHat = mVal / (1.0f - powf(beta1, (float)t));
+    float vHat = vVal / (1.0f - powf(beta2, (float)t));
+
+    // LAMB: Adam update direction with weight decay
+    float adamUpdate = mHat / (sqrtf(vHat) + epsilon);
+    float update = adamUpdate + weightDecay * p;
+
+    // Note: Full LAMB requires layer-wise trust ratio computation
+    // This simplified version applies the update directly
+    param[idx] = p - learningRate * update;
+}
+
 // ===========================================================================
 // DROPOUT AND EMBEDDING KERNELS
 // ===========================================================================
@@ -1249,6 +1367,11 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
                 "sgd_step",
                 "adam_step",
                 "adamw_step",
+                "rmsprop_step",
+                "adagrad_step",
+                "nag_step",
+                "lars_step",
+                "lamb_step",
                 // Dropout and embedding
                 "dropout_forward",
                 "dropout_backward",

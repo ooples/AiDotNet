@@ -811,6 +811,77 @@ public interface IDirectGpuBackend : IDisposable
     void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
 
+    /// <summary>
+    /// RMSprop optimizer update: maintains moving average of squared gradients.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="squaredAvg">Moving average of squared gradients (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="rho">Decay rate for moving average (typically 0.9).</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void RmspropUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer squaredAvg,
+        float learningRate, float rho, float epsilon, float weightDecay, int size);
+
+    /// <summary>
+    /// Adagrad optimizer update: accumulates squared gradients over time.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="accumulatedGrad">Accumulated squared gradients (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void AdagradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumulatedGrad,
+        float learningRate, float epsilon, float weightDecay, int size);
+
+    /// <summary>
+    /// Nesterov Accelerated Gradient (NAG) optimizer update with lookahead.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="velocity">Momentum velocity (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="momentum">Momentum coefficient.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void NagUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, int size);
+
+    /// <summary>
+    /// LARS (Layer-wise Adaptive Rate Scaling) optimizer update.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="velocity">Momentum velocity (state).</param>
+    /// <param name="learningRate">Global learning rate.</param>
+    /// <param name="momentum">Momentum coefficient.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="trustCoeff">Trust coefficient for scaling.</param>
+    /// <param name="size">Number of parameters.</param>
+    void LarsUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, float trustCoeff, int size);
+
+    /// <summary>
+    /// LAMB (Layer-wise Adaptive Moments) optimizer update.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">First moment estimate (state).</param>
+    /// <param name="v">Second moment estimate (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Exponential decay rate for first moment.</param>
+    /// <param name="beta2">Exponential decay rate for second moment.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">Weight decay coefficient.</param>
+    /// <param name="step">Current optimization step (for bias correction).</param>
+    /// <param name="size">Number of parameters.</param>
+    void LambUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
     #endregion
 
     #region FFT and Signal Processing
