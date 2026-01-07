@@ -60,8 +60,8 @@ This document tracks all GPU kernels needed for full GPU-resident training acros
 | col2im | ✅ | ✅ | ✅ | All conv backward |
 | conv2d_backward_input | ✅ | ✅ | ✅ | ConvolutionalLayer backward |
 | conv2d_backward_weights | ✅ | ✅ | ✅ | ConvolutionalLayer backward |
-| conv3d_backward_input | ❌ | ❌ | ❌ | Conv3DLayer backward |
-| conv3d_backward_weights | ❌ | ❌ | ❌ | Conv3DLayer backward |
+| conv3d_backward_input | ✅ | ✅ | ✅ | Conv3DLayer backward |
+| conv3d_backward_weights | ✅ | ✅ | ✅ | Conv3DLayer backward |
 | deconv_backward_input | ❌ | ❌ | ❌ | DeconvolutionalLayer backward |
 | deconv_backward_weights | ❌ | ❌ | ❌ | DeconvolutionalLayer backward |
 | depthwise_conv2d_backward | ❌ | ❌ | ❌ | DepthwiseSeparable backward |
@@ -81,8 +81,8 @@ This document tracks all GPU kernels needed for full GPU-resident training acros
 | batchnorm_backward | ✅ | ✅ | ✅ | BatchNormalizationLayer |
 | layernorm_backward | ✅ | ✅ | ✅ | LayerNormalizationLayer |
 | layernorm_grad_params | ✅ | ✅ | ✅ | LayerNorm gamma/beta grads |
-| groupnorm_backward | ❌ | ❌ | ❌ | GroupNormalizationLayer |
-| instancenorm_backward | ❌ | ❌ | ❌ | InstanceNormalizationLayer |
+| groupnorm_backward | ✅ | ✅ | ✅ | GroupNormalizationLayer |
+| instancenorm_backward | ✅ | ✅ | ✅ | InstanceNormalizationLayer |
 | rmsnorm_backward | ❌ | ❌ | ✅ | RMSNorm backward |
 | rmsnorm_grad_gamma | ❌ | ❌ | ✅ | RMSNorm gamma gradient |
 
@@ -99,9 +99,9 @@ This document tracks all GPU kernels needed for full GPU-resident training acros
 | **Backward** |
 | maxpool2d_backward | ✅ | ✅ | ✅ | MaxPoolingLayer ✓ |
 | avgpool2d_backward | ✅ | ✅ | ✅ | AveragePoolingLayer ✓ |
-| global_avgpool2d_backward | ❌ | ❌ | ❌ | GlobalPoolingLayer |
-| global_maxpool2d_backward | ❌ | ❌ | ❌ | GlobalPoolingLayer |
-| adaptive_avgpool2d_backward | ❌ | ❌ | ❌ | AdaptiveAveragePoolingLayer |
+| global_avgpool2d_backward | ✅ | ✅ | ✅ | GlobalPoolingLayer |
+| global_maxpool2d_backward | ✅ | ✅ | ✅ | GlobalPoolingLayer |
+| adaptive_avgpool2d_backward | ✅ | ✅ | ✅ | AdaptiveAveragePoolingLayer |
 | maxpool3d_backward | ❌ | ❌ | ❌ | MaxPool3DLayer |
 | avgpool3d_backward | ❌ | ❌ | ❌ | AveragePool3DLayer |
 
@@ -172,13 +172,13 @@ This document tracks all GPU kernels needed for full GPU-resident training acros
 | **LSTM** |
 | lstm_forward | ❌ | ❌ | ❌ | LSTMLayer |
 | lstm_backward | ❌ | ❌ | ❌ | LSTMLayer (BPTT) |
-| lstm_cell_forward | ❌ | ❌ | ❌ | Single LSTM step |
-| lstm_cell_backward | ❌ | ❌ | ❌ | Single LSTM backward |
+| lstm_cell_forward | ✅ | ✅ | ✅ | Single LSTM step |
+| lstm_cell_backward | ✅ | ✅ | ✅ | Single LSTM backward |
 | **GRU** |
 | gru_forward | ❌ | ❌ | ❌ | GRULayer |
 | gru_backward | ❌ | ❌ | ❌ | GRULayer (BPTT) |
-| gru_cell_forward | ❌ | ❌ | ❌ | Single GRU step |
-| gru_cell_backward | ❌ | ❌ | ❌ | Single GRU backward |
+| gru_cell_forward | ✅ | ✅ | ✅ | Single GRU step |
+| gru_cell_backward | ✅ | ✅ | ✅ | Single GRU backward |
 | **ConvLSTM** |
 | convlstm_forward | ❌ | ❌ | ❌ | ConvLSTMLayer |
 | convlstm_backward | ❌ | ❌ | ❌ | ConvLSTMLayer (Issue #700) |
@@ -348,3 +348,4 @@ These must be implemented first to enable any GPU training:
 4. sparse_mm_backward (unblocks GNN training)
 5. Conv3D backward (unblocks 3D CNNs)
 6. Remaining optimizer kernels
+
