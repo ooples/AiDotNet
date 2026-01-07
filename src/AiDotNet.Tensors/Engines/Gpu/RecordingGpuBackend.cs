@@ -24,6 +24,18 @@ namespace AiDotNet.Tensors.Engines.Gpu;
 /// recording.EndRecording();
 /// // Graph can now be compiled and executed
 /// </code>
+/// <para><b>Buffer Lifetime Contract:</b></para>
+/// <para>
+/// When recording operations, buffer references are captured by the execution graph nodes.
+/// Callers MUST NOT dispose or reuse buffers passed to recorded operations until after
+/// the graph has been executed. Disposing buffers before execution will result in undefined
+/// behavior when the graph runs.
+/// </para>
+/// <para>
+/// This is the standard contract for deferred execution systems - buffers must remain valid
+/// from recording time until execution completes. Use <see cref="DeferredScope"/> for
+/// automatic lifetime management when possible.
+/// </para>
 /// </remarks>
 public class RecordingGpuBackend : DelegatingGpuBackend
 {
