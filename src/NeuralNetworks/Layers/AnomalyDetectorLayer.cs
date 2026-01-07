@@ -1,4 +1,6 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -167,6 +169,11 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     public override bool SupportsTraining => false;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AnomalyDetectorLayer{T}"/> class.
     /// </summary>
     /// <param name="inputSize">The size of the input vector.</param>
@@ -268,6 +275,89 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         var output = new Tensor<T>([1]);
         output[0] = NumOps.FromDouble(meanScore);
         return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU acceleration.
+    /// </summary>
+    /// <param name="inputs">The input GPU tensor containing both predicted and actual states.</param>
+    /// <returns>A GPU tensor containing the anomaly score.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("No GPU backend available.");
+
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        _lastInputShape = shape;
+
+        int rank = shape.Length;
+        int featureSize = shape[^1];
+        if (featureSize % 2 != 0)
+            throw new ArgumentException("Input feature dimension must be even (actual + predicted).", nameof(inputs));
+
+        int halfSize = featureSize / 2;
+
+        // Download data for processing (this layer has stateful operations that need CPU-side updates)
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
+        // Calculate batch dimensions
+        int batchSize = 1;
+        for (int i = 0; i < rank - 1; i++)
+            batchSize *= shape[i];
+
+        // Calculate anomaly scores for each sample
+        double totalScore = 0.0;
+        int count = 0;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int baseIdx = b * featureSize;
+            double mismatchCount = 0;
+            double activeCount = 0;
+
+            for (int i = 0; i < halfSize; i++)
+            {
+                float actual = inputData[baseIdx + i];
+                float predicted = inputData[baseIdx + halfSize + i];
+
+                // Check if either value is "active" (close to 1)
+                bool actualActive = Math.Abs(actual - 1.0f) < 0.5f;
+                bool predictedActive = Math.Abs(predicted - 1.0f) < 0.5f;
+
+                if (actualActive || predictedActive)
+                {
+                    activeCount++;
+                    // Check if values mismatch
+                    if (Math.Abs(actual - predicted) > 0.5f)
+                        mismatchCount++;
+                }
+            }
+
+            double score = activeCount > 0 ? mismatchCount / activeCount : 0.0;
+            totalScore += score;
+            count++;
+        }
+
+        double meanScore = count > 0 ? totalScore / count : 0.0;
+
+        // Update stateful elements (CPU-side)
+        _smoothedAnomalyScore = (_smoothingFactor * meanScore) + ((1 - _smoothingFactor) * _smoothedAnomalyScore);
+        UpdateAnomalyHistory(meanScore);
+
+        // Create output tensor with single anomaly score
+        var outputData = new float[] { (float)meanScore };
+        var outputBuffer = backend.AllocateBuffer(outputData);
+        var outputShape = new int[] { 1 };
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
 

@@ -3,6 +3,8 @@ using AiDotNet.Autodiff;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -843,6 +845,122 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public abstract Tensor<T> Forward(Tensor<T> input);
+
+    /// <summary>
+    /// Gets whether this layer can execute on GPU.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// By default, layers do not support GPU execution. Derived classes should override this property
+    /// and return true when they have implemented <see cref="ForwardGpu"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if this layer can run on a graphics card (GPU)
+    /// for faster processing. By default, layers run on the CPU, but some layers have been optimized
+    /// to run on GPUs for much better performance.
+    /// </para>
+    /// </remarks>
+    public virtual bool CanExecuteOnGpu => SupportsGpuExecution && Engine is DirectGpuTensorEngine;
+
+    /// <summary>
+    /// Gets whether this layer has a GPU implementation.
+    /// Override this to return true when the layer implements <see cref="ForwardGpu"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the derived class has implemented GPU execution.
+    /// The actual <see cref="CanExecuteOnGpu"/> property combines this with engine availability.
+    /// Default is false - layers must explicitly override to enable GPU support.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simple flag that derived classes set to true
+    /// when they have implemented the ForwardGpu method. You don't need to check if the GPU
+    /// is available - that's handled automatically by CanExecuteOnGpu.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsGpuExecution => false;
+
+
+    /// <summary>
+    /// Executes the forward pass on GPU with multiple input tensors.
+    /// </summary>
+    /// <param name="inputs">The input tensors.</param>
+    /// <returns>The output tensor on GPU.</returns>
+    /// <remarks>
+    /// <para>
+    /// This overload is used for layers that require multiple inputs, such as cross-attention
+    /// where queries come from one source and keys/values from another.
+    /// </para>
+    /// <para>
+    /// The default implementation throws NotSupportedException. Layers that support GPU execution
+    /// should override this method and set SupportsGpuExecution to true.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        throw new NotSupportedException($"GPU execution is not supported by {GetType().Name}. Use Forward() instead.");
+    }
+
+    /// <summary>
+    /// Maps the layer's activation function to a <see cref="FusedActivationType"/> for GPU-fused operations.
+    /// </summary>
+    /// <returns>
+    /// The corresponding <see cref="FusedActivationType"/> for the layer's activation function,
+    /// or <see cref="FusedActivationType.None"/> if no activation is configured or the activation
+    /// type is not supported for GPU fusion.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method is used by GPU-optimized layers to determine which fused activation kernel to use.
+    /// Fused operations combine matrix multiplication, bias addition, and activation into a single
+    /// GPU kernel, reducing memory bandwidth and improving performance.
+    /// </para>
+    /// <para><b>For Beginners:</b> When running on a GPU, combining multiple operations (like
+    /// matrix multiply and activation) into one step is faster than doing them separately.
+    /// This method tells the GPU which activation function to include in the combined operation.
+    /// </para>
+    /// </remarks>
+    protected FusedActivationType MapActivationToFused()
+    {
+        // Check scalar activation first, then vector activation
+        if (ScalarActivation is not null)
+        {
+            return MapActivationInstanceToFused(ScalarActivation);
+        }
+
+        if (VectorActivation is not null)
+        {
+            return MapActivationInstanceToFused(VectorActivation);
+        }
+
+        return FusedActivationType.None;
+    }
+
+    /// <summary>
+    /// Maps an activation function instance to its corresponding <see cref="FusedActivationType"/>.
+    /// </summary>
+    /// <param name="activation">The activation function instance to map.</param>
+    /// <returns>The corresponding fused activation type.</returns>
+    private static FusedActivationType MapActivationInstanceToFused(object activation)
+    {
+        return activation switch
+        {
+            ReLUActivation<T> => FusedActivationType.ReLU,
+            GELUActivation<T> => FusedActivationType.GELU,
+            SigmoidActivation<T> => FusedActivationType.Sigmoid,
+            TanhActivation<T> => FusedActivationType.Tanh,
+            LeakyReLUActivation<T> => FusedActivationType.LeakyReLU,
+            SwishActivation<T> => FusedActivationType.Swish,
+            ELUActivation<T> => FusedActivationType.ELU,
+            SELUActivation<T> => FusedActivationType.SELU,
+            SoftPlusActivation<T> => FusedActivationType.Softplus,
+            SoftmaxActivation<T> => FusedActivationType.Softmax,
+            MishActivation<T> => FusedActivationType.Mish,
+            HardSwishActivation<T> => FusedActivationType.HardSwish,
+            HardSigmoidActivation<T> => FusedActivationType.HardSigmoid,
+            HardTanhActivation<T> => FusedActivationType.HardTanh,
+            IdentityActivation<T> => FusedActivationType.None,
+            _ => FusedActivationType.None
+        };
+    }
 
     /// <summary>
     /// Performs the backward pass of the layer.
@@ -2032,6 +2150,47 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             SiLUActivation<T> => FusedActivationType.Swish, // SiLU is the same as Swish
             _ => FusedActivationType.None
         };
+    }
+
+    /// <summary>
+    /// Applies the specified activation function on GPU using the direct backend operations.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for activation.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <param name="activation">The type of activation function to apply.</param>
+    /// <remarks>
+    /// This method provides a reusable GPU activation function that can be called by any layer
+    /// that implements custom GPU forward passes. It maps FusedActivationType enum values to
+    /// the corresponding backend activation kernels.
+    /// </remarks>
+    protected static void ApplyGpuActivation(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size, FusedActivationType activation)
+    {
+        switch (activation)
+        {
+            case FusedActivationType.ReLU:
+                backend.Relu(input, output, size);
+                break;
+            case FusedActivationType.Sigmoid:
+                backend.Sigmoid(input, output, size);
+                break;
+            case FusedActivationType.Tanh:
+                backend.Tanh(input, output, size);
+                break;
+            case FusedActivationType.GELU:
+                backend.Gelu(input, output, size);
+                break;
+            case FusedActivationType.LeakyReLU:
+                backend.LeakyRelu(input, output, 0.01f, size);
+                break;
+            case FusedActivationType.Swish:
+                backend.Swish(input, output, size);
+                break;
+            default:
+                backend.Copy(input, output, size);
+                break;
+        }
     }
 
     #endregion

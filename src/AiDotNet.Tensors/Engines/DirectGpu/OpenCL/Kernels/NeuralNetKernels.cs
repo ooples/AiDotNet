@@ -250,6 +250,49 @@ __kernel void hardswish_forward(
     output[idx] = x * fmin(fmax(x + 3.0f, 0.0f), 6.0f) / 6.0f;
 }
 
+// SELU: scale * (x if x > 0, else alpha * (exp(x) - 1))
+// Standard parameters: alpha ≈ 1.6733, scale ≈ 1.0507
+__kernel void selu_forward(
+    __global const float* input,
+    __global float* output,
+    const float alpha,
+    const float scale,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float x = input[idx];
+    output[idx] = scale * (x > 0.0f ? x : alpha * (exp(x) - 1.0f));
+}
+
+// Hardsigmoid: clip((x + 3) / 6, 0, 1)
+__kernel void hardsigmoid_forward(
+    __global const float* input,
+    __global float* output,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float x = input[idx];
+    output[idx] = fmin(fmax((x + 3.0f) / 6.0f, 0.0f), 1.0f);
+}
+
+// Hardtanh: clip(x, minVal, maxVal)
+__kernel void hardtanh_forward(
+    __global const float* input,
+    __global float* output,
+    const float minVal,
+    const float maxVal,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    output[idx] = fmin(fmax(input[idx], minVal), maxVal);
+}
+
 // ===========================================================================
 // LOSS FUNCTION KERNELS
 // ===========================================================================
@@ -647,6 +690,19 @@ __kernel void equal_values(
     C[idx] = A[idx] == B[idx] ? 1.0f : 0.0f;
 }
 
+// Comparison: not equal to scalar
+__kernel void not_equal_scalar(
+    __global const float* A,
+    __global float* C,
+    const float scalar,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    C[idx] = fabs(A[idx] - scalar) >= 1e-6f ? 1.0f : 0.0f;
+}
+
 // Where (conditional select)
 __kernel void where_select(
     __global const float* condition,
@@ -740,6 +796,161 @@ __kernel void argmin_axis(
         }
     }
     indices[outer] = (float)minIdx;
+}
+
+// Broadcast multiply: C = A * B where B is broadcast along last axis
+// A has shape (outerSize * innerSize), B has shape (innerSize), C has shape (outerSize * innerSize)
+__kernel void broadcast_multiply_last_axis(
+    __global const float* input,
+    __global const float* broadcast,
+    __global float* output,
+    const int outerSize,
+    const int innerSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = outerSize * innerSize;
+    if (idx >= totalSize) return;
+
+    const int innerIdx = idx % innerSize;
+    output[idx] = input[idx] * broadcast[innerIdx];
+}
+
+// Broadcast multiply: C = A * B where B is broadcast along first axis
+// A has shape (outerSize * innerSize), B has shape (outerSize), C has shape (outerSize * innerSize)
+__kernel void broadcast_multiply_first_axis(
+    __global const float* input,
+    __global const float* broadcast,
+    __global float* output,
+    const int outerSize,
+    const int innerSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = outerSize * innerSize;
+    if (idx >= totalSize) return;
+
+    const int outerIdx = idx / innerSize;
+    output[idx] = input[idx] * broadcast[outerIdx];
+}
+
+// General broadcast multiply for tensors with compatible shapes
+__kernel void broadcast_multiply_general(
+    __global const float* A,
+    __global const float* B,
+    __global float* C,
+    __global const int* aStrides,
+    __global const int* bStrides,
+    __global const int* cShape,
+    const int rank,
+    const int totalSize)
+{
+    const int idx = get_global_id(0);
+    if (idx >= totalSize) return;
+
+    int aIdx = 0;
+    int bIdx = 0;
+    int remaining = idx;
+
+    for (int d = rank - 1; d >= 0; d--) {
+        int dimIdx = remaining % cShape[d];
+        remaining /= cShape[d];
+        aIdx += dimIdx * aStrides[d];
+        bIdx += dimIdx * bStrides[d];
+    }
+
+    C[idx] = A[aIdx] * B[bIdx];
+}
+
+// Squash activation for capsule networks
+// squash(v) = ||v||^2 / (1 + ||v||^2) * v / ||v||
+__kernel void squash(
+    __global const float* input,
+    __global float* output,
+    const int numCapsules,
+    const int capsuleDim,
+    const float epsilon)
+{
+    const int capsuleIdx = get_global_id(0);
+    if (capsuleIdx >= numCapsules) return;
+
+    const int baseIdx = capsuleIdx * capsuleDim;
+
+    float normSquared = 0.0f;
+    for (int i = 0; i < capsuleDim; i++) {
+        float val = input[baseIdx + i];
+        normSquared += val * val;
+    }
+
+    float norm = sqrt(normSquared + epsilon);
+    float scale = normSquared / ((1.0f + normSquared) * norm);
+
+    for (int i = 0; i < capsuleDim; i++) {
+        output[baseIdx + i] = input[baseIdx + i] * scale;
+    }
+}
+
+__kernel void squash_backward(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global float* gradInput,
+    const int numCapsules,
+    const int capsuleDim,
+    const float epsilon)
+{
+    const int capsuleIdx = get_global_id(0);
+    if (capsuleIdx >= numCapsules) return;
+
+    const int baseIdx = capsuleIdx * capsuleDim;
+
+    float normSquared = 0.0f;
+    for (int i = 0; i < capsuleDim; i++) {
+        float val = input[baseIdx + i];
+        normSquared += val * val;
+    }
+
+    float scale = 1.0f / (1.0f + normSquared);
+    for (int i = 0; i < capsuleDim; i++) {
+        gradInput[baseIdx + i] = gradOutput[baseIdx + i] * scale;
+    }
+}
+
+// Tile tensor along batch dimension (axis 0)
+__kernel void tile_batch(
+    __global const float* input,
+    __global float* output,
+    const int repeats,
+    const int innerSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = repeats * innerSize;
+    if (idx >= totalSize) return;
+
+    const int innerIdx = idx % innerSize;
+    output[idx] = input[innerIdx];
+}
+
+// General tile along any axis
+__kernel void tile_axis(
+    __global const float* input,
+    __global float* output,
+    const int outerSize,
+    const int axisSize,
+    const int innerSize,
+    const int repeats)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = outerSize * axisSize * repeats * innerSize;
+    if (idx >= totalSize) return;
+
+    const int outputAxisSize = axisSize * repeats;
+    const int innerIdx = idx % innerSize;
+    int temp = idx / innerSize;
+    const int outputAxisIdx = temp % outputAxisSize;
+    const int outerIdx = temp / outputAxisSize;
+
+    const int inputAxisIdx = outputAxisIdx % axisSize;
+    const int inputIdx = outerIdx * axisSize * innerSize + inputAxisIdx * innerSize + innerIdx;
+
+    output[idx] = input[inputIdx];
 }
 
 // Dropout forward
@@ -874,6 +1085,124 @@ __kernel void scatter_add_kernel(
         destination[destIdx * featureSize + f] += source[idx * featureSize + f];
     }
 }
+
+// ===========================================================================
+// SPECIALIZED LAYER KERNELS
+// ===========================================================================
+
+// Radial Basis Function (Gaussian): exp(-epsilon * ||x - c||^2)
+__kernel void rbf_forward(
+    __global const float* input,
+    __global const float* centers,
+    __global const float* epsilons,
+    __global float* output,
+    const int batchSize,
+    const int numCenters,
+    const int inputDim)
+{
+    const int b = get_global_id(0);
+    const int c = get_global_id(1);
+
+    if (b >= batchSize || c >= numCenters) return;
+
+    float distSq = 0.0f;
+    for (int i = 0; i < inputDim; i++) {
+        float diff = input[b * inputDim + i] - centers[c * inputDim + i];
+        distSq += diff * diff;
+    }
+
+    output[b * numCenters + c] = exp(-epsilons[c] * distSq);
+}
+
+// Spike-Timing-Dependent Plasticity (STDP) Weight Update
+__kernel void stdp_update(
+    __global float* weights,
+    __global const float* preTrace,
+    __global const float* postTrace,
+    __global const float* preSpike,
+    __global const float* postSpike,
+    const float ltpRate,
+    const float ltdRate,
+    const float homeostasisRate,
+    const float minWeight,
+    const float maxWeight,
+    const int numPre,
+    const int numPost)
+{
+    const int i = get_global_id(0); // pre-synaptic index
+    const int j = get_global_id(1); // post-synaptic index
+
+    if (i >= numPre || j >= numPost) return;
+
+    int weightIdx = i * numPost + j;
+    if (i == j) return; // Skip self-connections if mapped that way, though usually separate layers
+
+    float w = weights[weightIdx];
+    float dw = 0.0f;
+
+    // LTP: Pre-synaptic spike BEFORE Post-synaptic spike
+    // If pre-neuron spiked just now (preSpike[i] == 1.0) and post-neuron has a trace (recent activity)
+    // Actually standard STDP rule:
+    // 1. On Pre-spike: LTD based on Post-trace (Post fired before Pre)? No.
+    //    Textbook STDP: 
+    //    - On Post-spike: LTP (Pre fired before Post). Strength proportional to Pre-trace.
+    //    - On Pre-spike: LTD (Post fired before Pre). Strength proportional to Post-trace.
+    
+    // Check if Post neuron spiked
+    if (postSpike[j] > 0.5f) {
+        // LTP event: Pre trace indicates recent pre activity
+        if (preTrace[i] > 0.0f) {
+            dw += ltpRate * preTrace[i] * (maxWeight - w);
+        }
+    }
+
+    // Check if Pre neuron spiked
+    if (preSpike[i] > 0.5f) {
+        // LTD event: Post trace indicates recent post activity
+        if (postTrace[j] > 0.0f) {
+            dw -= ltdRate * postTrace[j] * (w - minWeight);
+        }
+    }
+
+    // Homeostasis
+    float homeostasis = homeostasisRate * (w - 0.5f * (maxWeight + minWeight));
+    dw -= homeostasis;
+
+    // Apply update
+    w += dw;
+    
+    // Clamp
+    w = fmax(fmin(w, maxWeight), minWeight);
+    
+    weights[weightIdx] = w;
+}
+
+// Update traces and detect spikes
+__kernel void update_traces(
+    __global float* traces,
+    __global float* spikes,
+    __global const float* input,
+    const float decay,
+    const float threshold,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    // Decay existing trace
+    float tr = traces[idx] * decay;
+    
+    // Check for spike
+    float val = input[idx];
+    if (val > threshold) {
+        spikes[idx] = 1.0f;
+        tr = 1.0f; // Reset trace on spike
+    } else {
+        spikes[idx] = 0.0f;
+    }
+    
+    traces[idx] = tr;
+}
 ";
         }
 
@@ -891,6 +1220,7 @@ __kernel void scatter_add_kernel(
                 "elu_forward", "elu_backward",
                 "swish_forward", "swish_backward",
                 "silu_forward", "mish_forward", "softplus_forward", "hardswish_forward",
+                "selu_forward", "hardsigmoid_forward", "hardtanh_forward",
                 // Loss functions
                 "cross_entropy_loss", "cross_entropy_backward",
                 "bce_loss", "bce_backward",
@@ -904,9 +1234,14 @@ __kernel void scatter_add_kernel(
                 "fill_buffer", "copy_buffer",
                 "greater_than", "less_than", "equal_values", "where_select",
                 "mean_axis", "var_axis", "argmax_axis", "argmin_axis",
+                "broadcast_multiply_last_axis", "broadcast_multiply_first_axis", "broadcast_multiply_general",
+                "squash", "squash_backward",
+                "tile_batch", "tile_axis",
                 "dropout_forward", "dropout_backward",
                 "embedding_lookup", "embedding_backward",
-                "fma_kernel", "gather_kernel", "scatter_add_kernel"
+                "fma_kernel", "gather_kernel", "scatter_add_kernel",
+                // Specialized
+                "rbf_forward", "stdp_update", "update_traces"
             };
         }
     }

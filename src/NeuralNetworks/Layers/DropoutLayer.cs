@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -129,6 +132,20 @@ public class DropoutLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _dropoutMask;
+
+    /// <summary>
+    /// The GPU-resident dropout mask from the last GPU forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This stores the GPU mask needed for GPU-resident backward pass. It is kept separate
+    /// from _dropoutMask to support mixed CPU/GPU execution scenarios.
+    /// </remarks>
+    private IGpuTensor<T>? _gpuDropoutMask;
+
+    /// <summary>
+    /// Counter for generating unique random seeds per forward pass.
+    /// </summary>
+    private ulong _seedCounter;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
@@ -469,37 +486,6 @@ public class DropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Resets the internal state of the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method resets the internal state of the layer by clearing the cached input and dropout mask
-    /// from previous forward and backward passes. This is useful when starting to process a new batch of
-    /// data or when switching between training and inference modes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
-    /// When resetting the state:
-    /// - The saved input and dropout mask are cleared
-    /// - The layer forgets previous calculations it performed
-    /// - This frees up memory and prepares for new data
-    /// 
-    /// This is typically called:
-    /// - Between training batches
-    /// - When switching from training to evaluation mode
-    /// - When starting to process completely new data
-    /// 
-    /// It's like wiping a whiteboard clean before starting a new calculation.
-    /// </para>
-    /// </remarks>
-    public override void ResetState()
-    {
-        // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _dropoutMask = null;
-    }
-
-    /// <summary>
     /// Exports the dropout layer's computation graph for JIT compilation.
     /// </summary>
     /// <param name="inputNodes">List to populate with input computation nodes.</param>
@@ -552,4 +538,104 @@ public class DropoutLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU execution.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because dropout has full GPU support for both training and inference.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// GPU execution is fully supported:
+    /// - During inference: Identity pass-through (zero-copy view)
+    /// - During training: GPU-accelerated random mask generation with LCG RNG
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs the forward pass on GPU with full training support.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>
+    /// During inference: A view of the unchanged input tensor.
+    /// During training: A new tensor with dropout applied using GPU-accelerated mask generation.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements full GPU-resident dropout:
+    /// - During inference: Returns a view (zero-copy pass-through)
+    /// - During training: Uses GPU kernel with LCG random number generation for mask creation,
+    ///   applies inverted dropout scaling, and stores the mask for backward pass
+    /// </para>
+    /// <para><b>For Beginners:</b> The GPU version runs the entire dropout operation on the GPU,
+    /// including random mask generation. This is much faster than CPU dropout for large tensors.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var input = inputs[0];
+
+        if (!IsTrainingMode)
+        {
+            _gpuDropoutMask?.Dispose();
+            _gpuDropoutMask = null;
+            return input.CreateView(0, input.Shape);
+        }
+
+        float rate = (float)NumOps.ToDouble(_dropoutRate);
+        float scale = (float)NumOps.ToDouble(_scale);
+        ulong seed = _seedCounter++ ^ (uint)Environment.TickCount;
+
+        // Generate uniform random mask [0, 1) on GPU
+        var randoms = gpuEngine.RandomUniformGpu<T>(input.Shape, 0f, 1f, seed);
+
+        // Keep neurons where random > rate
+        var mask = gpuEngine.GreaterThanScalarGpu<T>(randoms, rate);
+        randoms.Dispose();
+
+        // Apply inverted dropout scaling: output = input * mask * scale
+        var masked = gpuEngine.MultiplyGpu(input, mask);
+        var output = gpuEngine.ScaleGpu(masked, scale);
+        masked.Dispose();
+
+        _gpuDropoutMask?.Dispose();
+        _gpuDropoutMask = mask;
+
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _dropoutMask = mask.ToTensor();
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the layer by clearing the cached input and dropout masks
+    /// (both CPU and GPU) from previous forward and backward passes. This is useful when starting to
+    /// process a new batch of data or when switching between training and inference modes.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached CPU values
+        _lastInput = null;
+        _dropoutMask = null;
+
+        // Clean up GPU resources
+        _gpuDropoutMask?.Dispose();
+        _gpuDropoutMask = null;
+    }
 }

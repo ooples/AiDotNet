@@ -1,5 +1,8 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -174,6 +177,9 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -512,6 +518,367 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for GraphTransformerLayer.
+    /// Implements multi-head self-attention with structural bias and FFN on GPU.
+    /// </summary>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine tensorEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = tensorEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+        }
+
+        var input = inputs[0];
+
+        // Handle batch dimension
+        int[] inputShape = input.Shape;
+        int batchSize;
+        int numNodes;
+        int inputFeatures;
+
+        if (inputShape.Length == 2)
+        {
+            batchSize = 1;
+            numNodes = inputShape[0];
+            inputFeatures = inputShape[1];
+        }
+        else if (inputShape.Length == 3)
+        {
+            batchSize = inputShape[0];
+            numNodes = inputShape[1];
+            inputFeatures = inputShape[2];
+        }
+        else
+        {
+            throw new ArgumentException($"Input must be 2D [nodes, features] or 3D [batch, nodes, features], got {inputShape.Length}D");
+        }
+
+        // Upload output projection weights and bias
+        using var outputWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data));
+        using var outputBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputBias.Data));
+
+        // Upload FFN weights and biases
+        using var ffnWeights1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnWeights1.Data));
+        using var ffnWeights2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnWeights2.Data));
+        using var ffnBias1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias1.Data));
+        using var ffnBias2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias2.Data));
+
+        // Upload structural bias if enabled - precompute per-head slices for efficient GPU access
+        IGpuBuffer[]? structuralBiasPerHead = null;
+        if (_useStructuralEncoding && _structuralBias != null)
+        {
+            // Precompute and upload each head's bias slice separately to avoid CPU fallbacks
+            structuralBiasPerHead = new IGpuBuffer[_numHeads];
+            for (int h = 0; h < _numHeads; h++)
+            {
+                int biasOffset = h * numNodes * numNodes;
+                float[] headBiasSlice = new float[numNodes * numNodes];
+                for (int i = 0; i < numNodes * numNodes; i++)
+                {
+                    int srcIdx = biasOffset + i;
+                    if (srcIdx < _structuralBias.Length)
+                    {
+                        headBiasSlice[i] = (float)NumOps.ToDouble(_structuralBias.Data[srcIdx]);
+                    }
+                }
+                structuralBiasPerHead[h] = backend.AllocateBuffer(headBiasSlice);
+            }
+        }
+
+        // Precompute graph mask for 2D adjacency matrices (shared across all heads/batches)
+        IGpuBuffer? graphMaskBuffer = null;
+        if (_useStructuralEncoding && _adjacencyMatrix.Shape.Length == 2)
+        {
+            // Create negative infinity mask: negInfMask[i,j] = -1e9 if adj[i,j] == 0, else 0
+            float[] negInfMask = new float[numNodes * numNodes];
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    float adjValue = (float)NumOps.ToDouble(_adjacencyMatrix[i, j]);
+                    negInfMask[i * numNodes + j] = MathF.Abs(adjValue) < 1e-6f ? -1e9f : 0f;
+                }
+            }
+            graphMaskBuffer = backend.AllocateBuffer(negInfMask);
+        }
+
+        // Allocate output buffer
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        using var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        float sqrtDk = MathF.Sqrt(_headDim);
+
+        // Process batches using GPU-native views
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Use GPU-native view for batch slicing (no CPU download)
+            int batchInputOffset = b * numNodes * inputFeatures;
+            var batchView = input.CreateView(batchInputOffset, [numNodes, inputFeatures]);
+            var batchInputBuffer = batchView.Buffer;
+
+            // ========================================
+            // MULTI-HEAD SELF-ATTENTION
+            // ========================================
+
+            // Allocate buffer for concatenated head outputs: [numNodes, numHeads * headDim]
+            using var concatenatedHeadsBuffer = backend.AllocateBuffer(numNodes * _numHeads * _headDim);
+
+            for (int h = 0; h < _numHeads; h++)
+            {
+                // Extract weight slices for this head
+                float[] qWeights = ExtractHeadWeightsFloat(h, _queryWeights);
+                float[] kWeights = ExtractHeadWeightsFloat(h, _keyWeights);
+                float[] vWeights = ExtractHeadWeightsFloat(h, _valueWeights);
+
+                using var qWeightsBuffer = backend.AllocateBuffer(qWeights);
+                using var kWeightsBuffer = backend.AllocateBuffer(kWeights);
+                using var vWeightsBuffer = backend.AllocateBuffer(vWeights);
+
+                // Compute Q = X @ W_q: [numNodes, headDim]
+                using var queriesBuffer = backend.AllocateBuffer(numNodes * _headDim);
+                backend.Gemm(
+                    batchInputBuffer, qWeightsBuffer, queriesBuffer,
+                    numNodes, _headDim, inputFeatures);
+
+                // Compute K = X @ W_k: [numNodes, headDim]
+                using var keysBuffer = backend.AllocateBuffer(numNodes * _headDim);
+                backend.Gemm(
+                    batchInputBuffer, kWeightsBuffer, keysBuffer,
+                    numNodes, _headDim, inputFeatures);
+
+                // Compute V = X @ W_v: [numNodes, headDim]
+                using var valuesBuffer = backend.AllocateBuffer(numNodes * _headDim);
+                backend.Gemm(
+                    batchInputBuffer, vWeightsBuffer, valuesBuffer,
+                    numNodes, _headDim, inputFeatures);
+
+                // Compute attention scores: Q @ K^T / sqrt(d_k)
+                // Use GPU-native transpose operation
+                using var keysTransposedBuffer = backend.AllocateBuffer(_headDim * numNodes);
+                backend.Transpose(keysBuffer, keysTransposedBuffer, numNodes, _headDim);
+
+                // [numNodes, headDim] @ [headDim, numNodes] -> [numNodes, numNodes]
+                using var scoresBuffer = backend.AllocateBuffer(numNodes * numNodes);
+                backend.Gemm(
+                    queriesBuffer, keysTransposedBuffer, scoresBuffer,
+                    numNodes, numNodes, _headDim);
+
+                // Scale by 1/sqrt(d_k)
+                backend.Scale(scoresBuffer, scoresBuffer, 1.0f / sqrtDk, numNodes * numNodes);
+
+                // Add structural bias if enabled - use precomputed per-head bias buffer
+                if (_useStructuralEncoding && structuralBiasPerHead != null)
+                {
+                    // Direct GPU Add using precomputed bias slice for this head
+                    backend.Add(scoresBuffer, structuralBiasPerHead[h], scoresBuffer, numNodes * numNodes);
+                }
+
+                // Apply graph mask: use precomputed mask buffer for 2D adjacency, fallback for 3D
+                if (_useStructuralEncoding)
+                {
+                    if (graphMaskBuffer != null)
+                    {
+                        // GPU-native masking: add negative infinity mask to scores
+                        // scores = scores + negInfMask (where negInfMask[i,j] = -1e9 for non-adjacent)
+                        backend.Add(scoresBuffer, graphMaskBuffer, scoresBuffer, numNodes * numNodes);
+                    }
+                    else if (_adjacencyMatrix.Shape.Length == 3)
+                    {
+                        // 3D adjacency matrix: per-batch masking requires CPU fallback
+                        ApplyGraphMaskGpu(backend, scoresBuffer, _adjacencyMatrix, numNodes, b);
+                    }
+                }
+
+                // Apply softmax row-wise to get attention weights
+                using var attentionWeightsBuffer = backend.AllocateBuffer(numNodes * numNodes);
+                backend.Softmax(scoresBuffer, attentionWeightsBuffer, numNodes, numNodes);
+
+                // Apply attention to values: attn @ V
+                // [numNodes, numNodes] @ [numNodes, headDim] -> [numNodes, headDim]
+                using var headOutputBuffer = backend.AllocateBuffer(numNodes * _headDim);
+                backend.Gemm(
+                    attentionWeightsBuffer, valuesBuffer, headOutputBuffer,
+                    numNodes, _headDim, numNodes);
+
+                // Copy head output to concatenated buffer at correct offset
+                int headOffset = h * _headDim;
+                CopyHeadToConcat(backend, headOutputBuffer, concatenatedHeadsBuffer, numNodes, _headDim, headOffset, _numHeads * _headDim);
+            }
+
+            // ========================================
+            // OUTPUT PROJECTION
+            // ========================================
+
+            // Output projection: concatenated @ W_out + b_out
+            // [numNodes, numHeads*headDim] @ [numHeads*headDim, outputFeatures] -> [numNodes, outputFeatures]
+            using var attnOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Gemm(
+                concatenatedHeadsBuffer, outputWeightsBuffer, attnOutputBuffer,
+                numNodes, _outputFeatures, _numHeads * _headDim);
+
+            backend.BiasAdd(attnOutputBuffer, outputBiasBuffer, attnOutputBuffer, numNodes, _outputFeatures);
+
+            // ========================================
+            // RESIDUAL CONNECTION 1
+            // ========================================
+
+            using var residual1Buffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            if (_inputFeatures == _outputFeatures)
+            {
+                // Add input to attention output: residual1 = attn + input
+                backend.Add(attnOutputBuffer, batchInputBuffer, residual1Buffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                // No residual if dimensions don't match, just copy attention output
+                backend.Copy(attnOutputBuffer, residual1Buffer, numNodes * _outputFeatures);
+            }
+
+            // ========================================
+            // FEED-FORWARD NETWORK
+            // ========================================
+
+            // FFN layer 1: hidden = residual1 @ W1 + b1
+            using var ffnHiddenBuffer = backend.AllocateBuffer(numNodes * _ffnHiddenDim);
+            backend.Gemm(
+                residual1Buffer, ffnWeights1Buffer, ffnHiddenBuffer,
+                numNodes, _ffnHiddenDim, _outputFeatures);
+
+            backend.BiasAdd(ffnHiddenBuffer, ffnBias1Buffer, ffnHiddenBuffer, numNodes, _ffnHiddenDim);
+
+            // Apply GELU activation
+            backend.Gelu(ffnHiddenBuffer, ffnHiddenBuffer, numNodes * _ffnHiddenDim);
+
+            // FFN layer 2: ffnOutput = hidden @ W2 + b2
+            using var ffnOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Gemm(
+                ffnHiddenBuffer, ffnWeights2Buffer, ffnOutputBuffer,
+                numNodes, _outputFeatures, _ffnHiddenDim);
+
+            backend.BiasAdd(ffnOutputBuffer, ffnBias2Buffer, ffnOutputBuffer, numNodes, _outputFeatures);
+
+            // ========================================
+            // RESIDUAL CONNECTION 2 + ACTIVATION
+            // ========================================
+
+            // Add residual: batchOutput = residual1 + ffnOutput
+            using var batchOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Add(residual1Buffer, ffnOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+
+            // Apply activation if specified
+            ApplyGpuActivation(backend, batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures, GetFusedActivationType());
+
+            // Copy batch output to the correct offset using GPU-native strided copy
+            int batchOutputOffset = b * numNodes * _outputFeatures;
+            int batchCopySize = numNodes * _outputFeatures;
+            backend.Copy2DStrided(batchOutputBuffer, outputBuffer, 1, batchCopySize, outputSize, batchOutputOffset);
+        }
+
+        // Clean up precomputed buffers
+        if (structuralBiasPerHead != null)
+        {
+            foreach (var buffer in structuralBiasPerHead)
+            {
+                buffer?.Dispose();
+            }
+        }
+        graphMaskBuffer?.Dispose();
+
+        // Return GPU tensor with appropriate shape
+        int[] outputShape = batchSize == 1
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        // Create a new buffer (non-using) and copy using GPU-native operation
+        var finalBuffer = backend.AllocateBuffer(outputSize);
+        backend.Copy(outputBuffer, finalBuffer, outputSize);
+        return new GpuTensor<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Extracts weight matrix for a specific head as a float array.
+    /// </summary>
+    private float[] ExtractHeadWeightsFloat(int headIndex, Tensor<T> weights)
+    {
+        float[] result = new float[_inputFeatures * _headDim];
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _headDim; j++)
+            {
+                result[i * _headDim + j] = (float)NumOps.ToDouble(weights[headIndex, i, j]);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Applies graph mask to attention scores for 3D adjacency matrices with per-batch masking.
+    /// For 2D adjacency matrices, use the precomputed graphMaskBuffer with GPU Add instead.
+    /// </summary>
+    /// <param name="backend">The GPU backend.</param>
+    /// <param name="scoresBuffer">The attention scores buffer to mask.</param>
+    /// <param name="adjacencyMatrix">The 3D adjacency matrix [batch, nodes, nodes].</param>
+    /// <param name="numNodes">Number of nodes in the graph.</param>
+    /// <param name="batchIndex">The batch index for 3D adjacency matrix lookup.</param>
+    private void ApplyGraphMaskGpu(
+        IDirectGpuBackend backend,
+        IGpuBuffer scoresBuffer,
+        Tensor<T> adjacencyMatrix,
+        int numNodes,
+        int batchIndex)
+    {
+        // This is only called for 3D adjacency matrices where per-batch masking is needed
+        float[] scores = backend.DownloadBuffer(scoresBuffer);
+        const float negInf = -1e9f; // Use large negative value for softmax stability
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                float adjValue = (float)NumOps.ToDouble(adjacencyMatrix[batchIndex, i, j]);
+
+                if (MathF.Abs(adjValue) < 1e-6f)
+                {
+                    scores[i * numNodes + j] = negInf;
+                }
+            }
+        }
+
+        // Re-upload by allocating new buffer and copying
+        using var tempBuffer = backend.AllocateBuffer(scores);
+        backend.Copy(tempBuffer, scoresBuffer, scores.Length);
+    }
+
+    /// <summary>
+    /// Copies a head's output to the correct position in the concatenated buffer.
+    /// </summary>
+    private void CopyHeadToConcat(
+        IDirectGpuBackend backend,
+        IGpuBuffer headBuffer,
+        IGpuBuffer concatBuffer,
+        int numNodes,
+        int headDim,
+        int headOffset,
+        int totalConcatDim)
+    {
+        // Use GPU-native Copy2DStrided for efficient head concatenation
+        // Each row of head [numNodes, headDim] is copied to the corresponding
+        // row of concat [numNodes, totalConcatDim] at offset headOffset
+        backend.Copy2DStrided(headBuffer, concatBuffer, numNodes, headDim, totalConcatDim, headOffset);
     }
 
     private Tensor<T> MultiHeadAttention(Tensor<T> input, int batchSize, int numNodes)

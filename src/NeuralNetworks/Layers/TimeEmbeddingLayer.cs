@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -99,6 +100,62 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    private Tensor<T>? _frequencies;
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0) throw new ArgumentException("TimeEmbeddingLayer requires an input tensor.");
+        var input = inputs[0];
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        if (_frequencies == null)
+        {
+            int halfDim = _embeddingDim / 2;
+            double logMax = Math.Log(10000.0);
+            _frequencies = new Tensor<T>([halfDim, 1]);
+            for (int i = 0; i < halfDim; i++)
+            {
+                double freq = Math.Exp(-logMax * i / halfDim);
+                _frequencies[i, 0] = NumOps.FromDouble(freq);
+            }
+            RegisterTrainableParameter(_frequencies, PersistentTensorRole.Constant);
+        }
+
+        int batch = input.Shape[0];
+        IGpuTensor<T> timesteps = input.Shape.Length == 1 
+            ? gpuEngine.ReshapeGpu(input, [batch, 1]) 
+            : input;
+
+        // Compute sinusoidal embedding args: timesteps @ frequencies^T
+        var freqsT = _frequencies.Transpose(); 
+        var args = gpuEngine.FusedLinearGpu(timesteps, freqsT, null, FusedActivationType.None);
+
+        var sinPart = gpuEngine.SinGpu(args);
+        var cosPart = gpuEngine.CosGpu(args);
+
+        // Concatenate sin and cos components along feature axis
+        var embedding = gpuEngine.ConcatGpu<T>([sinPart, cosPart], 1);
+
+        // MLP projection: Linear1 -> SiLU (Swish) -> Linear2
+        var hidden = gpuEngine.FusedLinearGpu(embedding, _linear1Weights, _linear1Bias, FusedActivationType.Swish);
+        var output = gpuEngine.FusedLinearGpu(hidden, _linear2Weights, _linear2Bias, FusedActivationType.None);
+
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastSinusoidalEmbed = embedding.ToTensor();
+            _lastHidden = hidden.ToTensor();
+        }
+
+        return output;
+    }
 
     /// <summary>
     /// The maximum timestep value for scaling embeddings.

@@ -622,6 +622,22 @@ __kernel void bias_add(
     const int idx = row * N + col;
     C[idx] = A[idx] + bias[col];
 }
+
+// Conv2D bias add in NCHW format: output[b,c,h,w] += bias[c]
+// Memory layout: output is [batch, channels, height, width] in row-major order
+__kernel void conv2d_bias_add(
+    __global float* output,
+    __global const float* bias,
+    const int batch,
+    const int channels,
+    const int spatialSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+    const int channel = (idx / spatialSize) % channels;
+    output[idx] += bias[channel];
+}
 ";
         }
 
@@ -656,7 +672,9 @@ __kernel void bias_add(
                 "negate_vector", "floor_vector", "ceil_vector",
                 "round_vector", "trunc_vector",
                 // Broadcast operations
-                "bias_add"
+                "bias_add",
+                // Conv2D operations
+                "conv2d_bias_add"
             };
         }
     }

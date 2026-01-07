@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -95,6 +98,11 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UpsamplingLayer{T}"/> class.
@@ -199,6 +207,24 @@ public class UpsamplingLayer<T> : LayerBase<T>
         _lastInput = input;
 
         return Engine.Upsample(input, _scaleFactor, _scaleFactor);
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after upsampling.</returns>
+    /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        return gpuEngine.UpsampleGpu(input, _scaleFactor);
     }
 
     /// <summary>

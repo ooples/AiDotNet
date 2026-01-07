@@ -1,8 +1,10 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -40,27 +42,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
-    /// <summary>
-    /// Specifies the type of regularization to apply to the layer's weights.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This determines how the network prevents overfitting in this layer.
-    ///
-    /// Regularization types:
-    /// - None: No regularization (default)
-    /// - L1: Encourages weights to become exactly zero (creates sparse networks)
-    /// - L2: Encourages weights to be small but not necessarily zero (smooths the network)
-    /// - L1L2: Combines both L1 and L2 regularization
-    /// </para>
-    /// </remarks>
-    public enum RegularizationType
-    {
-        None,
-        L1,
-        L2,
-        L1L2
-    }
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
     /// </summary>
@@ -602,7 +583,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T regularizationLoss = NumOps.Zero;
 
         // === Vectorized L1 Regularization: Σ|w| (Phase B: US-GPU-015) ===
-        if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.L1L2)
+        if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.ElasticNet)
         {
             // Use vectorized abs and sum operations
             var absWeights = Engine.TensorAbs(_weights);
@@ -612,7 +593,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // === Vectorized L2 Regularization: Σ(w²) (Phase B: US-GPU-015) ===
-        if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.L1L2)
+        if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.ElasticNet)
         {
             // Use vectorized element-wise multiply and sum operations
             var weightsSquared = Engine.TensorMultiply(_weights, _weights);
@@ -904,6 +885,134 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
             outputShape[^1] = OutputShape[0];
             result = result.Reshape(outputShape);
+        }
+        // 2D input: result is already [batch, outputSize]
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass, keeping tensors on GPU.
+    /// Use this for chained layer execution to avoid CPU round-trips.
+    /// Supports any-rank tensor input (1D, 2D, or ND), matching CPU Forward behavior.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensors (uses first input). Last dimension is features.</param>
+    /// <returns>GPU-resident output tensor with same batch dimensions, outputSize as last dim.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        EnsureInitialized();
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var input = inputs[0];
+
+        // Store for potential backward pass
+        _originalInputShape = input.Shape;
+
+        int actualInputSize = input.Shape[^1]; // Last dimension is always features
+        int expectedInputSize = _weights.Shape[0];
+
+        // Dynamic input size adaptation
+        if (actualInputSize != expectedInputSize)
+        {
+            EnsureWeightShapeForInput(actualInputSize);
+        }
+
+        int outputSize = OutputShape[0];
+
+        // Determine if reshape is needed and compute the effective batch dimension
+        int batchDim;
+        bool needsReshape = false;
+        int[] originalBatchDims = Array.Empty<int>();
+
+        if (input.Shape.Length == 1)
+        {
+            // 1D input [features] -> treat as single sample
+            batchDim = 1;
+            needsReshape = true;
+        }
+        else if (input.Shape.Length == 2)
+        {
+            // 2D input [batch, features] -> standard case, no reshape needed
+            batchDim = input.Shape[0];
+            needsReshape = false;
+        }
+        else
+        {
+            // ND input [dim0, dim1, ..., features] -> flatten batch dims, then reshape back
+            needsReshape = true;
+            originalBatchDims = new int[input.Shape.Length - 1];
+            batchDim = 1;
+            for (int i = 0; i < input.Shape.Length - 1; i++)
+            {
+                originalBatchDims[i] = input.Shape[i];
+                batchDim *= input.Shape[i];
+            }
+        }
+
+        // Reshape ND input to 2D [totalBatch, features] for matrix multiply
+        IGpuTensor<T> input2D = input;
+        if (needsReshape && input.Shape.Length > 2)
+        {
+            input2D = input.CreateView(0, [batchDim, actualInputSize]);
+        }
+        else if (needsReshape && input.Shape.Length == 1)
+        {
+            input2D = input.CreateView(0, [1, actualInputSize]);
+        }
+
+        // Get the fused activation type
+        var fusedActivation = GetFusedActivationType();
+
+        // Use GPU-resident FusedLinear - NO CPU round-trip
+        // Result is [batchDim, outputSize]
+        var result = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, fusedActivation);
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+
+            // For fused activations, we need pre-activation for gradient computation
+            if (fusedActivation != FusedActivationType.None)
+            {
+                var preActivation = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, FusedActivationType.None);
+                _lastOutput = preActivation.ToTensor();
+            }
+            else
+            {
+                _lastOutput = result.ToTensor();
+            }
+        }
+
+        // Reshape output back to original batch dimensions if needed
+        if (input.Shape.Length == 1)
+        {
+            // 1D input -> 1D output [outputSize]
+            result = result.CreateView(0, [outputSize]);
+        }
+        else if (input.Shape.Length > 2)
+        {
+            // ND input -> ND output [dim0, dim1, ..., outputSize]
+            int[] outputShape = new int[originalBatchDims.Length + 1];
+            for (int i = 0; i < originalBatchDims.Length; i++)
+            {
+                outputShape[i] = originalBatchDims[i];
+            }
+            outputShape[^1] = outputSize;
+            result = result.CreateView(0, outputShape);
         }
         // 2D input: result is already [batch, outputSize]
 
@@ -1244,6 +1353,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
     }
 
+    private Tensor<T>? _weightsVelocity;
+    private Tensor<T>? _biasesVelocity;
+
     /// <summary>
     /// Updates the layer's parameters (weights and biases) using the calculated gradients.
     /// </summary>
@@ -1270,12 +1382,37 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_weightsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
-        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        // Notify engine that weights/biases have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
+            // Initialize velocity tensors if needed (lazily)
+            if (_weightsVelocity == null)
+            {
+                _weightsVelocity = new Tensor<T>(_weights.Shape);
+                _weightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_biasesVelocity == null)
+            {
+                _biasesVelocity = new Tensor<T>(_biases.Shape);
+                _biasesVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            // Perform GPU-resident SGD update
+            gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
+            _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+
+            // Notify engine that weights/biases have changed (for GPU cache invalidation)
+            Engine.InvalidatePersistentTensor(_weights);
+            Engine.InvalidatePersistentTensor(_biases);
+        }
     }
 
     /// <summary>

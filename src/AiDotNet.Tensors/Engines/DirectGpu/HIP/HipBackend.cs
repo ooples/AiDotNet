@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines.DirectGpu.HIP.Kernels;
 using AiDotNet.Tensors.Engines.DirectGpu.Sparsity;
+using AiDotNet.Tensors.Engines.Gpu;
+using FusedActivationType = AiDotNet.Tensors.Engines.FusedActivationType;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.HIP;
 
@@ -26,9 +28,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.HIP;
 /// <item>RX 6800 XT: 8,000+ GFLOPS (optimized scalar)</item>
 /// </list>
 /// </remarks>
-public sealed class HipBackend : IDirectGpuBackend
+public sealed class HipBackend : IAsyncGpuBackend
 {
     private IntPtr _stream;
+    private HipStream? _defaultStream;
     private IntPtr _mfmaModule;
     private IntPtr _mfmaGemmF32;
     private IntPtr _mfmaGemmF16;
@@ -43,11 +46,15 @@ public sealed class HipBackend : IDirectGpuBackend
     private IntPtr _activationModule;
     private IntPtr _neuralNetModule;
     private IntPtr _convolutionModule;
+    private IntPtr _fusedConvolutionModule;
     private IntPtr _poolingModule;
     private IntPtr _normalizationModule;
     private IntPtr _fusedModule;
     private IntPtr _attentionModule;
     private IntPtr _fftModule;
+    private IntPtr _sparseModule;
+    private IntPtr _locallyConnectedModule;
+    private IntPtr _deformableConvModule;
 
     private const int DefaultBlockSize = 256;
 
@@ -92,10 +99,47 @@ public sealed class HipBackend : IDirectGpuBackend
 
     /// <summary>
     /// Gets whether elementwise operations are GPU-accelerated.
-    /// Returns false for HipBackend as elementwise operations currently use CPU fallback.
-    /// Only GEMM (matrix multiply) is GPU-accelerated via rocBLAS.
+    /// Returns true for HipBackend as all elementwise operations use GPU kernels.
     /// </summary>
-    public bool SupportsElementwiseGpu => false;
+    public bool SupportsElementwiseGpu => true;
+
+    #region IAsyncGpuBackend Properties
+
+    /// <inheritdoc/>
+    public bool SupportsMultiStream => true;
+
+    /// <inheritdoc/>
+    public bool SupportsEvents => true;
+
+    /// <inheritdoc/>
+    public bool SupportsAsyncTransfer => true;
+
+    /// <inheritdoc/>
+    public bool SupportsGraphCapture => false; // HIP graph capture is more limited
+
+    /// <inheritdoc/>
+    public int MaxConcurrentStreams => 16;
+
+    /// <inheritdoc/>
+    public IGpuStream DefaultStream
+    {
+        get
+        {
+            if (_defaultStream == null && IsAvailable)
+            {
+                var newStream = new HipStream(this, _stream, GpuStreamType.Default, true);
+                System.Threading.Interlocked.CompareExchange(ref _defaultStream, newStream, null);
+                // If another thread won the race, dispose our unused stream
+                if (_defaultStream != newStream)
+                {
+                    newStream.Dispose();
+                }
+            }
+            return _defaultStream ?? throw new InvalidOperationException("Backend not available");
+        }
+    }
+
+    #endregion
 
     public HipBackend() : this(0)
     {
@@ -245,6 +289,10 @@ public sealed class HipBackend : IDirectGpuBackend
             CompileKernelModule(HipConvolutionKernels.GetSource(), "convolution", ref _convolutionModule,
                 HipConvolutionKernels.GetKernelNames());
 
+            // Compile Fused Convolution kernels (Conv2D + Bias/BatchNorm + Activation)
+            CompileKernelModule(HipFusedConvolutionKernels.GetSource(), "fused_convolution", ref _fusedConvolutionModule,
+                HipFusedConvolutionKernels.GetKernelNames());
+
             // Compile Pooling kernels
             CompileKernelModule(HipPoolingKernels.GetSource(), "pooling", ref _poolingModule,
                 HipPoolingKernels.GetKernelNames());
@@ -264,6 +312,18 @@ public sealed class HipBackend : IDirectGpuBackend
             // Compile FFT kernels (Cooley-Tukey radix-2 FFT, STFT, Mel spectrogram)
             CompileKernelModule(HipFFTKernels.GetSource(), "fft", ref _fftModule,
                 HipFFTKernels.GetKernelNames());
+
+            // Compile Sparse kernels (CSR SpMM, GNN message passing)
+            CompileKernelModule(HipSparseKernels.GetSource(), "sparse", ref _sparseModule,
+                HipSparseKernels.GetKernelNames());
+
+            // Compile Locally Connected kernels (unique weights per spatial position)
+            CompileKernelModule(HipLocallyConnectedKernels.GetSource(), "locally_connected", ref _locallyConnectedModule,
+                HipLocallyConnectedKernels.GetKernelNames());
+
+            // Compile Deformable Convolution kernels (DCNv2 with learnable offsets and masks)
+            CompileKernelModule(HipDeformableConvolutionKernels.GetSource(), "deformable_conv", ref _deformableConvModule,
+                HipDeformableConvolutionKernels.GetKernelNames());
 
             Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Total: {_kernelCache.Count}");
@@ -351,12 +411,17 @@ public sealed class HipBackend : IDirectGpuBackend
 
     private unsafe void LaunchKernel(IntPtr kernel, uint gridX, uint blockSize, IntPtr[] args, uint sharedMem = 0)
     {
+        LaunchKernelOnStream(kernel, gridX, blockSize, args, _stream, sharedMem);
+    }
+
+    private unsafe void LaunchKernelOnStream(IntPtr kernel, uint gridX, uint blockSize, IntPtr[] args, IntPtr stream, uint sharedMem = 0)
+    {
         GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
         try
         {
             var result = HipNativeBindings.hipModuleLaunchKernel(
                 kernel, gridX, 1, 1, blockSize, 1, 1,
-                sharedMem, _stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
+                sharedMem, stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
             HipNativeBindings.CheckError(result, "hipModuleLaunchKernel");
         }
         finally
@@ -367,12 +432,17 @@ public sealed class HipBackend : IDirectGpuBackend
 
     private unsafe void LaunchKernel2D(IntPtr kernel, uint gridX, uint gridY, uint blockX, uint blockY, IntPtr[] args, uint sharedMem = 0)
     {
+        LaunchKernel2DOnStream(kernel, gridX, gridY, blockX, blockY, args, _stream, sharedMem);
+    }
+
+    private unsafe void LaunchKernel2DOnStream(IntPtr kernel, uint gridX, uint gridY, uint blockX, uint blockY, IntPtr[] args, IntPtr stream, uint sharedMem = 0)
+    {
         GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
         try
         {
             var result = HipNativeBindings.hipModuleLaunchKernel(
                 kernel, gridX, gridY, 1, blockX, blockY, 1,
-                sharedMem, _stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
+                sharedMem, stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
             HipNativeBindings.CheckError(result, "hipModuleLaunchKernel");
         }
         finally
@@ -383,12 +453,17 @@ public sealed class HipBackend : IDirectGpuBackend
 
     private unsafe void LaunchKernel3D(IntPtr kernel, uint gridX, uint gridY, uint gridZ, uint blockX, uint blockY, uint blockZ, IntPtr[] args, uint sharedMem = 0)
     {
+        LaunchKernel3DOnStream(kernel, gridX, gridY, gridZ, blockX, blockY, blockZ, args, _stream, sharedMem);
+    }
+
+    private unsafe void LaunchKernel3DOnStream(IntPtr kernel, uint gridX, uint gridY, uint gridZ, uint blockX, uint blockY, uint blockZ, IntPtr[] args, IntPtr stream, uint sharedMem = 0)
+    {
         GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
         try
         {
             var result = HipNativeBindings.hipModuleLaunchKernel(
                 kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
-                sharedMem, _stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
+                sharedMem, stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
             HipNativeBindings.CheckError(result, "hipModuleLaunchKernel");
         }
         finally
@@ -398,6 +473,11 @@ public sealed class HipBackend : IDirectGpuBackend
     }
 
     private unsafe void ExecuteFusedGemm(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output, int M, int N, int K)
+    {
+        ExecuteFusedGemmOnStream(kernelName, A, B, bias, output, M, N, K, _stream, synchronize: true);
+    }
+
+    private unsafe void ExecuteFusedGemmOnStream(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output, int M, int N, int K, IntPtr stream, bool synchronize)
     {
         if (!_kernelCache.TryGetValue(kernelName, out var kernel))
             throw new InvalidOperationException($"HIP fused kernel not found: {kernelName}");
@@ -428,8 +508,12 @@ public sealed class HipBackend : IDirectGpuBackend
                 handles[6].AddrOfPinnedObject()
             };
 
-            LaunchKernel2D(kernel, gridX, gridY, TILE_SIZE, TILE_SIZE, args);
-            Synchronize();
+            LaunchKernel2DOnStream(kernel, gridX, gridY, TILE_SIZE, TILE_SIZE, args, stream);
+            if (synchronize)
+            {
+                var syncResult = HipNativeBindings.hipStreamSynchronize(stream);
+                HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize");
+            }
         }
         finally
         {
@@ -755,25 +839,67 @@ public sealed class HipBackend : IDirectGpuBackend
         return output;
     }
 
-    public void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N)
+    public unsafe void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N)
     {
-        // Add bias vector to each row of the matrix
-        // A: [M, N] input matrix
-        // bias: [N] bias vector
-        // C: [M, N] output matrix
-        var aData = DownloadBuffer(A);
-        var biasData = DownloadBuffer(bias);
-        var cData = new float[M * N];
+        if (!_kernelCache.TryGetValue("bias_add", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: bias_add");
 
-        for (int row = 0; row < M; row++)
+        // First copy A to C (bias_add is in-place)
+        var size = (UIntPtr)(M * N * sizeof(float));
+        var result = HipNativeBindings.hipMemcpy(C.Handle, A.Handle, size, HipMemcpyKind.DeviceToDevice);
+        HipNativeBindings.CheckError(result, "hipMemcpy D2D");
+
+        var handles = new GCHandle[4];
+        try
         {
-            for (int col = 0; col < N; col++)
-            {
-                cData[row * N + col] = aData[row * N + col] + biasData[col];
-            }
-        }
+            handles[0] = GCHandle.Alloc(C.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(bias.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(M, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(N, GCHandleType.Pinned);
 
-        UploadToBuffer(C, cData);
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((M * N + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <summary>
+    /// Adds bias to Conv2D output in NCHW format.
+    /// Operation: output[b, c, h, w] += bias[c]
+    /// </summary>
+    public unsafe void Conv2DBiasAdd(IGpuBuffer output, IGpuBuffer bias, int batch, int channels, int spatialSize)
+    {
+        if (!_kernelCache.TryGetValue("conv2d_bias_add", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: conv2d_bias_add");
+
+        int totalSize = batch * channels * spatialSize;
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(bias.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(spatialSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     #endregion
@@ -782,328 +908,525 @@ public sealed class HipBackend : IDirectGpuBackend
 
     public void Add(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
-        // Simple CPU fallback for now - TODO: Add HIP elementwise kernels
-        var aData = DownloadBuffer(A);
-        var bData = DownloadBuffer(B);
-        var cData = new float[size];
+        if (!_kernelCache.TryGetValue("add_vectors", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: add_vectors");
 
-        for (int i = 0; i < size; i++)
-            cData[i] = aData[i] + bData[i];
-
-        UploadToBuffer(C, cData);
+        LaunchBinaryOp(krnl, A, B, C, size);
     }
 
     public void Subtract(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = DownloadBuffer(B);
-        var cData = new float[size];
+        if (!_kernelCache.TryGetValue("subtract_vectors", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: subtract_vectors");
 
-        for (int i = 0; i < size; i++)
-            cData[i] = aData[i] - bData[i];
-
-        UploadToBuffer(C, cData);
+        LaunchBinaryOp(krnl, A, B, C, size);
     }
 
     public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = DownloadBuffer(B);
-        var cData = new float[size];
+        if (!_kernelCache.TryGetValue("multiply_vectors", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: multiply_vectors");
 
-        for (int i = 0; i < size; i++)
-            cData[i] = aData[i] * bData[i];
-
-        UploadToBuffer(C, cData);
+        LaunchBinaryOp(krnl, A, B, C, size);
     }
 
     public void Divide(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = DownloadBuffer(B);
-        var cData = new float[size];
+        if (!_kernelCache.TryGetValue("divide_vectors", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: divide_vectors");
 
-        for (int i = 0; i < size; i++)
-            cData[i] = aData[i] / bData[i];
-
-        UploadToBuffer(C, cData);
+        LaunchBinaryOp(krnl, A, B, C, size);
     }
 
     public void Min(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = DownloadBuffer(B);
-        var cData = new float[size];
+        if (!_kernelCache.TryGetValue("min_vectors", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: min_vectors");
 
-        for (int i = 0; i < size; i++)
-            cData[i] = MathF.Min(aData[i], bData[i]);
-
-        UploadToBuffer(C, cData);
+        LaunchBinaryOp(krnl, A, B, C, size);
     }
 
     public void Max(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = DownloadBuffer(B);
-        var cData = new float[size];
+        if (!_kernelCache.TryGetValue("max_vectors", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: max_vectors");
 
-        for (int i = 0; i < size; i++)
-            cData[i] = MathF.Max(aData[i], bData[i]);
-
-        UploadToBuffer(C, cData);
+        LaunchBinaryOp(krnl, A, B, C, size);
     }
 
-    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)
+    public unsafe void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("scale_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: scale_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = aData[i] * scalar;
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(scalar, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
 
-        UploadToBuffer(B, bData);
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     public void Power(IGpuBuffer A, IGpuBuffer B, float exponent, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        // Power uses same pattern as Scale
+        if (!_kernelCache.TryGetValue("power_scalar", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: power_scalar");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Pow(aData[i], exponent);
+        LaunchScalarOp(krnl, A, B, exponent, size);
+    }
 
-        UploadToBuffer(B, bData);
+    private unsafe void LaunchScalarOp(IntPtr krnl, IGpuBuffer A, IGpuBuffer B, float scalar, int size)
+    {
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(scalar, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     public void Abs(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("abs_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: abs_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Abs(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Exp(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("exp_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: exp_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Exp(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Exp2(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("exp2_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: exp2_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Pow(2.0f, aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Exp10(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("exp10_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: exp10_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Pow(10.0f, aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void ExpM1(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("expm1_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: expm1_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Exp(aData[i]) - 1.0f;
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Log(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("log_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: log_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Log(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Log2(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("log2_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: log2_vector");
 
-        // net471 compatible: MathF.Log2 is .NET 5.0+, use log change of base
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Log(aData[i]) / MathF.Log(2.0f);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Log1P(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("log1p_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: log1p_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Log(1.0f + aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Sqrt(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("sqrt_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: sqrt_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Sqrt(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Sign(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("sign_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: sign_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = aData[i] > 0.0f ? 1.0f : (aData[i] < 0.0f ? -1.0f : 0.0f);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Relu(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("relu", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: relu");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = Math.Max(0, aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Sigmoid(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("sigmoid", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: sigmoid");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = 1.0f / (1.0f + MathF.Exp(-aData[i]));
+        LaunchUnaryOp(krnl, A, B, size);
+    }
 
-        UploadToBuffer(B, bData);
+    private unsafe void LaunchUnaryOp(IntPtr krnl, IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var handles = new GCHandle[3];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[3];
+            for (int i = 0; i < 3; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     public void Tanh(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("tanh_activation", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: tanh_activation");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Tanh(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Gelu(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("gelu", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: gelu");
 
-        const float SQRT_2_OVER_PI = 0.7978845608f;
-        const float COEFF = 0.044715f;
+        LaunchUnaryOp(krnl, A, B, size);
+    }
 
-        for (int i = 0; i < size; i++)
+    public unsafe void LeakyRelu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
+    {
+        if (!_kernelCache.TryGetValue("leaky_relu", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: leaky_relu");
+
+        var handles = new GCHandle[4];
+        try
         {
-            float x = aData[i];
-            float x3 = x * x * x;
-            float inner = SQRT_2_OVER_PI * (x + COEFF * x3);
-            bData[i] = 0.5f * x * (1.0f + MathF.Tanh(inner));
-        }
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
 
-        UploadToBuffer(B, bData);
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void LeakyReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, int size)
+    {
+        if (!_kernelCache.TryGetValue("leaky_relu_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: leaky_relu_backward");
+
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void Elu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
+    {
+        if (!_kernelCache.TryGetValue("elu", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: elu");
+
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void EluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer output, IGpuBuffer gradInput, float alpha, int size)
+    {
+        if (!_kernelCache.TryGetValue("elu_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: elu_backward");
+
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void Swish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        if (!_kernelCache.TryGetValue("swish", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: swish");
+
+        LaunchUnaryOp(krnl, A, B, size);
+    }
+
+    public unsafe void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("swish_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: swish_backward");
+
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void Silu(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        // SiLU is the same as Swish
+        Swish(A, B, size);
+    }
+
+    public void Mish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        if (!_kernelCache.TryGetValue("mish_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: mish_vector");
+
+        LaunchUnaryOp(krnl, A, B, size);
+    }
+
+    public void Softplus(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        if (!_kernelCache.TryGetValue("softplus_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: softplus_vector");
+
+        LaunchUnaryOp(krnl, A, B, size);
+    }
+
+    public void Hardswish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardswish_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: hardswish_vector");
+
+        LaunchUnaryOp(krnl, A, B, size);
+    }
+
+    public unsafe void Selu(IGpuBuffer A, IGpuBuffer B, float alpha, float scale, int size)
+    {
+        if (!_kernelCache.TryGetValue("selu_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: selu_vector");
+
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(scale, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void Hardsigmoid(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardsigmoid_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: hardsigmoid_vector");
+
+        LaunchUnaryOp(krnl, A, B, size);
+    }
+
+    public unsafe void Hardtanh(IGpuBuffer A, IGpuBuffer B, float minVal, float maxVal, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardtanh_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: hardtanh_vector");
+
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(minVal, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(maxVal, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     #region Trigonometric Operations
 
     public void Sin(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("sin_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: sin_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Sin(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Cos(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("cos_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: cos_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Cos(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Tan(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("tan_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: tan_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Tan(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Asin(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("asin_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: asin_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Asin(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Acos(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("acos_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: acos_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Acos(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Atan(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("atan_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: atan_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Atan(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     #endregion
@@ -1112,69 +1435,42 @@ public sealed class HipBackend : IDirectGpuBackend
 
     public void Sinh(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("sinh_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: sinh_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Sinh(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Cosh(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("cosh_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: cosh_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Cosh(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Asinh(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("asinh_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: asinh_vector");
 
-        // asinh(x) = ln(x + sqrt(x^2 + 1))
-        for (int i = 0; i < size; i++)
-        {
-            float x = aData[i];
-            bData[i] = MathF.Log(x + MathF.Sqrt(x * x + 1.0f));
-        }
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Acosh(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("acosh_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: acosh_vector");
 
-        // acosh(x) = ln(x + sqrt(x^2 - 1)), x >= 1
-        for (int i = 0; i < size; i++)
-        {
-            float x = aData[i];
-            bData[i] = MathF.Log(x + MathF.Sqrt(x * x - 1.0f));
-        }
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Atanh(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("atanh_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: atanh_vector");
 
-        // atanh(x) = 0.5 * ln((1+x) / (1-x)), |x| < 1
-        for (int i = 0; i < size; i++)
-        {
-            float x = aData[i];
-            bData[i] = 0.5f * MathF.Log((1.0f + x) / (1.0f - x));
-        }
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     #endregion
@@ -1183,129 +1479,205 @@ public sealed class HipBackend : IDirectGpuBackend
 
     public void Reciprocal(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("reciprocal_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: reciprocal_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = 1.0f / aData[i];
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Cbrt(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("cbrt_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: cbrt_vector");
 
-        // cbrt(x) = sign(x) * |x|^(1/3)
-        const float oneThird = 1.0f / 3.0f;
-        for (int i = 0; i < size; i++)
-        {
-            float x = aData[i];
-            float absX = MathF.Abs(x);
-            float sign = x >= 0.0f ? 1.0f : -1.0f;
-            bData[i] = sign * MathF.Pow(absX, oneThird);
-        }
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Log10(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("log10_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: log10_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Log10(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Negate(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("negate_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: negate_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = -aData[i];
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Floor(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("floor_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: floor_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Floor(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Ceiling(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("ceil_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: ceil_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Ceiling(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Round(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("round_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: round_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Round(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     public void Truncate(IGpuBuffer A, IGpuBuffer B, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[size];
+        if (!_kernelCache.TryGetValue("trunc_vector", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: trunc_vector");
 
-        for (int i = 0; i < size; i++)
-            bData[i] = MathF.Truncate(aData[i]);
-
-        UploadToBuffer(B, bData);
+        LaunchUnaryOp(krnl, A, B, size);
     }
 
     #endregion
 
-    public void Softmax(IGpuBuffer A, IGpuBuffer B, int batchSize, int features)
+    public unsafe void Softmax(IGpuBuffer A, IGpuBuffer B, int batchSize, int features)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[batchSize * features];
+        if (!_kernelCache.TryGetValue("softmax", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: softmax");
 
-        for (int b = 0; b < batchSize; b++)
+        var handles = new GCHandle[4];
+        try
         {
-            int offset = b * features;
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(features, GCHandleType.Pinned);
 
-            // Find max for numerical stability
-            float max = float.MinValue;
-            for (int f = 0; f < features; f++)
-                max = Math.Max(max, aData[offset + f]);
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
 
-            // Compute exp and sum
-            float sum = 0;
-            for (int f = 0; f < features; f++)
-            {
-                bData[offset + f] = MathF.Exp(aData[offset + f] - max);
-                sum += bData[offset + f];
-            }
-
-            // Normalize
-            for (int f = 0; f < features; f++)
-                bData[offset + f] /= sum;
+            uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
 
-        UploadToBuffer(B, bData);
+    public unsafe void Squash(IGpuBuffer input, IGpuBuffer output, int numCapsules, int capsuleDim, float epsilon)
+    {
+        if (!_kernelCache.TryGetValue("squash", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: squash");
+
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(numCapsules, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(capsuleDim, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((numCapsules + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void SquashBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int numCapsules, int capsuleDim, float epsilon)
+    {
+        if (!_kernelCache.TryGetValue("squash_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: squash_backward");
+
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(numCapsules, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(capsuleDim, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((numCapsules + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void TileBatch(IGpuBuffer input, IGpuBuffer output, int repeats, int innerSize)
+    {
+        if (!_kernelCache.TryGetValue("tile_batch", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: tile_batch");
+
+        int totalSize = repeats * innerSize;
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(repeats, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(innerSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void TileAxis(IGpuBuffer input, IGpuBuffer output, int outerSize, int axisSize, int innerSize, int repeats)
+    {
+        if (!_kernelCache.TryGetValue("tile_axis", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: tile_axis");
+
+        int totalSize = outerSize * axisSize * repeats * innerSize;
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(outerSize, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(axisSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(innerSize, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(repeats, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     private void UploadToBuffer(IGpuBuffer buffer, float[] data)
@@ -1446,6 +1818,371 @@ public sealed class HipBackend : IDirectGpuBackend
         return C;
     }
 
+    #region CSR Sparse Operations (General Sparsity)
+
+    /// <inheritdoc/>
+    public void CsrSpMM(
+        IGpuBuffer csrValues,
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer denseB,
+        IGpuBuffer output,
+        int M, int K, int N, int nnz)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_spmm", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: csr_spmm");
+
+        // Launch configuration: rows x ceil(N/blockSize) grid
+        int gridX = M;
+        int gridY = (N + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var valuesHandle = ((HipGpuBuffer)csrValues).Handle;
+        var colIndicesHandle = ((HipGpuBuffer)csrColIndices).Handle;
+        var rowPointersHandle = ((HipGpuBuffer)csrRowPointers).Handle;
+        var denseBHandle = ((HipGpuBuffer)denseB).Handle;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+
+        LaunchKernel2D(kernel, gridX, gridY, DefaultBlockSize, 1,
+            valuesHandle, colIndicesHandle, rowPointersHandle, denseBHandle, outputHandle,
+            M, K, N, nnz);
+    }
+
+    /// <inheritdoc/>
+    public void CsrSpMMBias(
+        IGpuBuffer csrValues,
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer denseB,
+        IGpuBuffer bias,
+        IGpuBuffer output,
+        int M, int K, int N, int nnz)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_spmm_bias", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: csr_spmm_bias");
+
+        int gridX = M;
+        int gridY = (N + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var valuesHandle = ((HipGpuBuffer)csrValues).Handle;
+        var colIndicesHandle = ((HipGpuBuffer)csrColIndices).Handle;
+        var rowPointersHandle = ((HipGpuBuffer)csrRowPointers).Handle;
+        var denseBHandle = ((HipGpuBuffer)denseB).Handle;
+        var biasHandle = ((HipGpuBuffer)bias).Handle;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+
+        LaunchKernel2DBias(kernel, gridX, gridY, DefaultBlockSize, 1,
+            valuesHandle, colIndicesHandle, rowPointersHandle, denseBHandle, biasHandle, outputHandle,
+            M, K, N, nnz);
+    }
+
+    /// <inheritdoc/>
+    public void ScatterAddEdges(
+        IGpuBuffer input,
+        IGpuBuffer sourceIndices,
+        IGpuBuffer targetIndices,
+        IGpuBuffer? edgeValues,
+        IGpuBuffer output,
+        int numNodes, int numEdges, int features)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("scatter_add_edges", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: scatter_add_edges");
+
+        if (!_kernelCache.TryGetValue("zero_buffer", out var zeroKernel))
+            throw new InvalidOperationException("HIP kernel not found: zero_buffer");
+
+        // First zero the output buffer
+        int outputSize = numNodes * features;
+        int zeroGrid = (outputSize + DefaultBlockSize - 1) / DefaultBlockSize;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+        LaunchKernel1D(zeroKernel, zeroGrid, DefaultBlockSize, outputHandle, outputSize);
+        Synchronize();
+
+        // Launch scatter-add kernel
+        int gridX = numEdges;
+        int gridY = (features + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var inputHandle = ((HipGpuBuffer)input).Handle;
+        var sourceHandle = ((HipGpuBuffer)sourceIndices).Handle;
+        var targetHandle = ((HipGpuBuffer)targetIndices).Handle;
+        var edgeValuesHandle = edgeValues is not null ? ((HipGpuBuffer)edgeValues).Handle : IntPtr.Zero;
+        int hasEdgeValues = edgeValues is not null ? 1 : 0;
+
+        LaunchScatterAddKernel(kernel, gridX, gridY, DefaultBlockSize, 1,
+            inputHandle, sourceHandle, targetHandle, edgeValuesHandle, outputHandle,
+            numNodes, numEdges, features, hasEdgeValues);
+    }
+
+    /// <inheritdoc/>
+    public void CsrSegmentedMax(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_max", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: csr_segmented_max");
+
+        int gridX = M;
+        int gridY = (N + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var colIndicesHandle = ((HipGpuBuffer)csrColIndices).Handle;
+        var rowPointersHandle = ((HipGpuBuffer)csrRowPointers).Handle;
+        var inputHandle = ((HipGpuBuffer)input).Handle;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+
+        LaunchCsrSegmentedKernel(kernel, gridX, gridY, DefaultBlockSize, 1,
+            colIndicesHandle, rowPointersHandle, inputHandle, outputHandle, M, K, N);
+    }
+
+    /// <inheritdoc/>
+    public void CsrSegmentedMin(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_min", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: csr_segmented_min");
+
+        int gridX = M;
+        int gridY = (N + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var colIndicesHandle = ((HipGpuBuffer)csrColIndices).Handle;
+        var rowPointersHandle = ((HipGpuBuffer)csrRowPointers).Handle;
+        var inputHandle = ((HipGpuBuffer)input).Handle;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+
+        LaunchCsrSegmentedKernel(kernel, gridX, gridY, DefaultBlockSize, 1,
+            colIndicesHandle, rowPointersHandle, inputHandle, outputHandle, M, K, N);
+    }
+
+    /// <inheritdoc/>
+    public void CsrSegmentedStdDev(
+        IGpuBuffer csrColIndices,
+        IGpuBuffer csrRowPointers,
+        IGpuBuffer input,
+        IGpuBuffer output,
+        int M, int K, int N,
+        float epsilon = 1e-8f)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("csr_segmented_stddev", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: csr_segmented_stddev");
+
+        int gridX = M;
+        int gridY = (N + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var colIndicesHandle = ((HipGpuBuffer)csrColIndices).Handle;
+        var rowPointersHandle = ((HipGpuBuffer)csrRowPointers).Handle;
+        var inputHandle = ((HipGpuBuffer)input).Handle;
+        var outputHandle = ((HipGpuBuffer)output).Handle;
+
+        LaunchCsrSegmentedStdDevKernel(kernel, gridX, gridY, DefaultBlockSize, 1,
+            colIndicesHandle, rowPointersHandle, inputHandle, outputHandle, M, K, N, epsilon);
+    }
+
+    private unsafe void LaunchCsrSegmentedKernel(IntPtr kernel, int gridX, int gridY, int blockX, int blockY,
+        IntPtr colIndices, IntPtr rowPointers, IntPtr input, IntPtr output, int M, int K, int N)
+    {
+        void*[] args = new void*[7];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [colIndices, rowPointers, input, output];
+            int[] ints = [M, K, N];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &h[2];
+                argsPtr[3] = &h[3];
+                argsPtr[4] = &i[0];
+                argsPtr[5] = &i[1];
+                argsPtr[6] = &i[2];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)blockX, (uint)blockY, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (csr_segmented)");
+            }
+        }
+    }
+
+    private unsafe void LaunchCsrSegmentedStdDevKernel(IntPtr kernel, int gridX, int gridY, int blockX, int blockY,
+        IntPtr colIndices, IntPtr rowPointers, IntPtr input, IntPtr output, int M, int K, int N, float epsilon)
+    {
+        void*[] args = new void*[8];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [colIndices, rowPointers, input, output];
+            int[] ints = [M, K, N];
+            float epsCopy = epsilon;
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &h[2];
+                argsPtr[3] = &h[3];
+                argsPtr[4] = &i[0];
+                argsPtr[5] = &i[1];
+                argsPtr[6] = &i[2];
+                argsPtr[7] = &epsCopy;
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)blockX, (uint)blockY, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (csr_segmented_stddev)");
+            }
+        }
+    }
+
+    private unsafe void LaunchKernel2D(IntPtr kernel, int gridX, int gridY, int blockX, int blockY,
+        IntPtr values, IntPtr colIndices, IntPtr rowPointers, IntPtr denseB, IntPtr output,
+        int M, int K, int N, int nnz)
+    {
+        void*[] args = new void*[9];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [values, colIndices, rowPointers, denseB, output];
+            int[] ints = [M, K, N, nnz];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &h[2];
+                argsPtr[3] = &h[3];
+                argsPtr[4] = &h[4];
+                argsPtr[5] = &i[0];
+                argsPtr[6] = &i[1];
+                argsPtr[7] = &i[2];
+                argsPtr[8] = &i[3];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)blockX, (uint)blockY, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (csr_spmm)");
+            }
+        }
+    }
+
+    private unsafe void LaunchKernel2DBias(IntPtr kernel, int gridX, int gridY, int blockX, int blockY,
+        IntPtr values, IntPtr colIndices, IntPtr rowPointers, IntPtr denseB, IntPtr bias, IntPtr output,
+        int M, int K, int N, int nnz)
+    {
+        void*[] args = new void*[10];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [values, colIndices, rowPointers, denseB, bias, output];
+            int[] ints = [M, K, N, nnz];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &h[2];
+                argsPtr[3] = &h[3];
+                argsPtr[4] = &h[4];
+                argsPtr[5] = &h[5];
+                argsPtr[6] = &i[0];
+                argsPtr[7] = &i[1];
+                argsPtr[8] = &i[2];
+                argsPtr[9] = &i[3];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)blockX, (uint)blockY, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (csr_spmm_bias)");
+            }
+        }
+    }
+
+    private unsafe void LaunchKernel1D(IntPtr kernel, int grid, int block, IntPtr buffer, int size)
+    {
+        void*[] args = new void*[2];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr bufferCopy = buffer;
+            int sizeCopy = size;
+            argsPtr[0] = &bufferCopy;
+            argsPtr[1] = &sizeCopy;
+
+            var result = HipNativeBindings.hipModuleLaunchKernel(
+                kernel,
+                (uint)grid, 1, 1,
+                (uint)block, 1, 1,
+                0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+            HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (zero_buffer)");
+        }
+    }
+
+    private unsafe void LaunchScatterAddKernel(IntPtr kernel, int gridX, int gridY, int blockX, int blockY,
+        IntPtr input, IntPtr source, IntPtr target, IntPtr edgeValues, IntPtr output,
+        int numNodes, int numEdges, int features, int hasEdgeValues)
+    {
+        void*[] args = new void*[9];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [input, source, target, edgeValues, output];
+            int[] ints = [numNodes, numEdges, features, hasEdgeValues];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &h[2];
+                argsPtr[3] = &h[3];
+                argsPtr[4] = &h[4];
+                argsPtr[5] = &i[0];
+                argsPtr[6] = &i[1];
+                argsPtr[7] = &i[2];
+                argsPtr[8] = &i[3];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)blockX, (uint)blockY, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (scatter_add_edges)");
+            }
+        }
+    }
+
+    #endregion
+
     private void UploadBytesToBuffer(HipGpuByteBuffer buffer, byte[] data)
     {
         var size = (UIntPtr)data.Length;
@@ -1495,36 +2232,129 @@ public sealed class HipBackend : IDirectGpuBackend
 
     public float Sum(IGpuBuffer A, int size)
     {
-        var data = DownloadBuffer(A);
-        float sum = 0;
-        for (int i = 0; i < size; i++)
-            sum += data[i];
-        return sum;
+        if (!_kernelCache.TryGetValue("reduce_sum", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: reduce_sum");
+
+        return ReduceToScalar(krnl, A, size);
     }
 
     public float Max(IGpuBuffer A, int size)
     {
-        var data = DownloadBuffer(A);
-        float max = float.MinValue;
-        for (int i = 0; i < size; i++)
-            if (data[i] > max) max = data[i];
-        return max;
+        if (!_kernelCache.TryGetValue("reduce_max", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: reduce_max");
+
+        return ReduceToScalar(krnl, A, size);
     }
 
-    public void SumAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
+    private unsafe float ReduceToScalar(IntPtr kernel, IGpuBuffer input, int size)
     {
-        var aData = DownloadBuffer(A);
-        var bData = new float[outerSize];
+        const int blockSize = 256;
+        int currentSize = size;
+        IGpuBuffer currentInput = input;
+        IGpuBuffer? tempBuffer1 = null;
+        IGpuBuffer? tempBuffer2 = null;
 
-        for (int o = 0; o < outerSize; o++)
+        try
         {
-            float sum = 0;
-            for (int r = 0; r < reduceSize; r++)
-                sum += aData[o * reduceSize + r];
-            bData[o] = sum;
-        }
+            while (currentSize > 1)
+            {
+                int gridSize = (currentSize + blockSize - 1) / blockSize;
+                int sharedMemSize = blockSize * sizeof(float);
 
-        UploadToBuffer(B, bData);
+                // Allocate output buffer for partial results
+                IGpuBuffer output;
+                if (tempBuffer1 is null)
+                {
+                    tempBuffer1 = AllocateBuffer(gridSize);
+                    output = tempBuffer1;
+                }
+                else if (currentInput == tempBuffer1)
+                {
+                    if (tempBuffer2 is null || ((HipGpuBuffer)tempBuffer2).Size < gridSize)
+                    {
+                        tempBuffer2?.Dispose();
+                        tempBuffer2 = AllocateBuffer(gridSize);
+                    }
+                    output = tempBuffer2;
+                }
+                else
+                {
+                    output = tempBuffer1;
+                }
+
+                var handles = new GCHandle[3];
+                try
+                {
+                    handles[0] = GCHandle.Alloc(currentInput.Handle, GCHandleType.Pinned);
+                    handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+                    handles[2] = GCHandle.Alloc(currentSize, GCHandleType.Pinned);
+
+                    var args = new IntPtr[3];
+                    for (int i = 0; i < 3; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+                    LaunchKernel(kernel, (uint)gridSize, (uint)blockSize, args, (uint)sharedMemSize);
+                    Synchronize();
+                }
+                finally
+                {
+                    foreach (var h in handles) if (h.IsAllocated) h.Free();
+                }
+
+                currentInput = output;
+                currentSize = gridSize;
+            }
+
+            // Download the single result
+            var result = new float[1];
+            var hipResult = (HipGpuBuffer)currentInput;
+            GCHandle handle = GCHandle.Alloc(result, GCHandleType.Pinned);
+            try
+            {
+                var res = HipNativeBindings.hipMemcpy(
+                    handle.AddrOfPinnedObject(),
+                    hipResult.Handle,
+                    (UIntPtr)sizeof(float),
+                    HipMemcpyKind.DeviceToHost);
+                HipNativeBindings.CheckError(res, "hipMemcpy D2H");
+            }
+            finally
+            {
+                handle.Free();
+            }
+
+            return result[0];
+        }
+        finally
+        {
+            tempBuffer1?.Dispose();
+            tempBuffer2?.Dispose();
+        }
+    }
+
+    public unsafe void SumAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
+    {
+        if (!_kernelCache.TryGetValue("sum_axis", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: sum_axis");
+
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(outerSize, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(reduceSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((outerSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     #endregion
@@ -2125,6 +2955,176 @@ public sealed class HipBackend : IDirectGpuBackend
         }
     }
 
+    public unsafe void MaxPool3D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int outDepth, int outHeight, int outWidth,
+        int kernelD, int kernelH, int kernelW,
+        int strideD, int strideH, int strideW)
+    {
+        if (!_kernelCache.TryGetValue("maxpool3d", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: maxpool3d");
+
+        int saveIndices = indices is not null ? 1 : 0;
+        IntPtr indicesPtr = indices?.Handle ?? IntPtr.Zero;
+
+        var handles = new GCHandle[18];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(indicesPtr, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inDepth, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outDepth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(kernelD, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideD, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(saveIndices, GCHandleType.Pinned);
+
+            var args = new IntPtr[18];
+            for (int i = 0; i < 18; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((outWidth + 7) / 8);
+            uint gridY = (uint)((outHeight + 7) / 8);
+            uint gridZ = (uint)(batch * channels * outDepth);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 8, 8, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void MaxPool3DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int outDepth, int outHeight, int outWidth)
+    {
+        if (!_kernelCache.TryGetValue("maxpool3d_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: maxpool3d_backward");
+
+        var handles = new GCHandle[11];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(indices.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inDepth, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outDepth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+
+            var args = new IntPtr[11];
+            for (int i = 0; i < 11; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((outWidth + 7) / 8);
+            uint gridY = (uint)((outHeight + 7) / 8);
+            uint gridZ = (uint)(batch * channels * outDepth);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 8, 8, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void NearestNeighborUpsample3D(IGpuBuffer input, IGpuBuffer output,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int scaleD, int scaleH, int scaleW)
+    {
+        if (!_kernelCache.TryGetValue("nearest_upsample3d", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: nearest_upsample3d");
+
+        int outDepth = inDepth * scaleD;
+        int outHeight = inHeight * scaleH;
+        int outWidth = inWidth * scaleW;
+
+        var handles = new GCHandle[10];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inDepth, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(scaleD, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(scaleH, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(scaleW, GCHandleType.Pinned);
+
+            var args = new IntPtr[10];
+            for (int i = 0; i < 10; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((outWidth + 7) / 8);
+            uint gridY = (uint)((outHeight + 7) / 8);
+            uint gridZ = (uint)(batch * channels * outDepth);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 8, 8, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void NearestNeighborUpsample3DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int scaleD, int scaleH, int scaleW)
+    {
+        if (!_kernelCache.TryGetValue("nearest_upsample3d_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: nearest_upsample3d_backward");
+
+        int outDepth = inDepth * scaleD;
+        int outHeight = inHeight * scaleH;
+        int outWidth = inWidth * scaleW;
+
+        var handles = new GCHandle[10];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inDepth, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(scaleD, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(scaleH, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(scaleW, GCHandleType.Pinned);
+
+            var args = new IntPtr[10];
+            for (int i = 0; i < 10; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((outWidth + 7) / 8);
+            uint gridY = (uint)((outHeight + 7) / 8);
+            uint gridZ = (uint)(batch * channels * outDepth);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 8, 8, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
     #endregion
 
     #region Normalization Operations
@@ -2637,6 +3637,498 @@ public sealed class HipBackend : IDirectGpuBackend
         return new HipGpuBuffer(devicePtr, size);
     }
 
+    #region Locally Connected Convolution Operations
+
+    public unsafe void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+    {
+        if (!_kernelCache.TryGetValue("locally_connected_conv2d", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: locally_connected_conv2d");
+
+        var handles = new GCHandle[14];
+        try
+        {
+            var pInput = input.Handle;
+            var pWeights = weights.Handle;
+            var pBias = bias?.Handle ?? IntPtr.Zero;
+            var pOutput = output.Handle;
+            int hasBias = bias != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pBias, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pOutput, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+
+            var extraHandles = new GCHandle[2];
+            extraHandles[0] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            extraHandles[1] = GCHandle.Alloc(hasBias, GCHandleType.Pinned);
+
+            var args = new IntPtr[16];
+            for (int i = 0; i < 14; i++) args[i] = handles[i].AddrOfPinnedObject();
+            args[14] = extraHandles[0].AddrOfPinnedObject();
+            args[15] = extraHandles[1].AddrOfPinnedObject();
+
+            // Grid dimensions: outWidth x outHeight x (batch * outChannels)
+            uint gridX = (uint)((outWidth + 15) / 16);
+            uint gridY = (uint)((outHeight + 15) / 16);
+            uint gridZ = (uint)(batch * outChannels);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+
+            foreach (var h in extraHandles) if (h.IsAllocated) h.Free();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void LocallyConnectedConv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+    {
+        if (!_kernelCache.TryGetValue("locally_connected_conv2d_backward_input", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: locally_connected_conv2d_backward_input");
+
+        var handles = new GCHandle[15];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(weights.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+
+            var args = new IntPtr[14];
+            for (int i = 0; i < 14; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalSize = batch * inChannels * inHeight * inWidth;
+            uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void LocallyConnectedConv2DBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+    {
+        if (!_kernelCache.TryGetValue("locally_connected_conv2d_backward_weights", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: locally_connected_conv2d_backward_weights");
+
+        var handles = new GCHandle[15];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradWeights.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+
+            var args = new IntPtr[14];
+            for (int i = 0; i < 14; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalWeights = outHeight * outWidth * outChannels * inChannels * kernelH * kernelW;
+            uint grid = (uint)((totalWeights + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void LocallyConnectedConv2DBackwardBias(IGpuBuffer gradOutput, IGpuBuffer gradBias,
+        int batch, int outChannels, int outHeight, int outWidth)
+    {
+        if (!_kernelCache.TryGetValue("locally_connected_conv2d_backward_bias", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: locally_connected_conv2d_backward_bias");
+
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradBias.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((outChannels + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    #endregion
+
+    #region Deformable Convolution Operations
+
+    public unsafe void DeformableConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d");
+
+        var handles = new GCHandle[22];
+        try
+        {
+            var pInput = input.Handle;
+            var pWeights = weights.Handle;
+            var pOffsets = offsets.Handle;
+            var pMask = mask?.Handle ?? IntPtr.Zero;
+            var pOutput = output.Handle;
+            int hasMask = mask != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pMask, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pOutput, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+
+            var extraHandle = GCHandle.Alloc(hasMask, GCHandleType.Pinned);
+
+            var args = new IntPtr[23];
+            for (int i = 0; i < 22; i++) args[i] = handles[i].AddrOfPinnedObject();
+            args[22] = extraHandle.AddrOfPinnedObject();
+
+            // Grid dimensions: outWidth x outHeight x (batch * outChannels)
+            uint gridX = (uint)((outWidth + 15) / 16);
+            uint gridY = (uint)((outHeight + 15) / 16);
+            uint gridZ = (uint)(batch * outChannels);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+
+            extraHandle.Free();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void DeformableConv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d_backward_input", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d_backward_input");
+
+        var handles = new GCHandle[22];
+        try
+        {
+            var pGradOutput = gradOutput.Handle;
+            var pWeights = weights.Handle;
+            var pOffsets = offsets.Handle;
+            var pMask = mask?.Handle ?? IntPtr.Zero;
+            var pGradInput = gradInput.Handle;
+            int hasMask = mask != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pGradOutput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pMask, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pGradInput, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+
+            var extraHandle = GCHandle.Alloc(hasMask, GCHandleType.Pinned);
+
+            var args = new IntPtr[23];
+            for (int i = 0; i < 22; i++) args[i] = handles[i].AddrOfPinnedObject();
+            args[22] = extraHandle.AddrOfPinnedObject();
+
+            int totalInputSize = batch * inChannels * inHeight * inWidth;
+            uint grid = (uint)((totalInputSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+
+            extraHandle.Free();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void DeformableConv2DBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradWeights,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d_backward_weights", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d_backward_weights");
+
+        var handles = new GCHandle[22];
+        try
+        {
+            var pGradOutput = gradOutput.Handle;
+            var pInput = input.Handle;
+            var pOffsets = offsets.Handle;
+            var pMask = mask?.Handle ?? IntPtr.Zero;
+            var pGradWeights = gradWeights.Handle;
+            int hasMask = mask != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pGradOutput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pMask, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pGradWeights, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+
+            var extraHandle = GCHandle.Alloc(hasMask, GCHandleType.Pinned);
+
+            var args = new IntPtr[23];
+            for (int i = 0; i < 22; i++) args[i] = handles[i].AddrOfPinnedObject();
+            args[22] = extraHandle.AddrOfPinnedObject();
+
+            int inChannelsPerGroup = inChannels / groups;
+            int totalWeights = outChannels * inChannelsPerGroup * kernelH * kernelW;
+            uint grid = (uint)((totalWeights + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+
+            extraHandle.Free();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void DeformableConv2DBackwardOffset(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradOffsets,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d_backward_offset", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d_backward_offset");
+
+        var handles = new GCHandle[24];
+        try
+        {
+            var pGradOutput = gradOutput.Handle;
+            var pInput = input.Handle;
+            var pWeights = weights.Handle;
+            var pOffsets = offsets.Handle;
+            var pMask = mask?.Handle ?? IntPtr.Zero;
+            var pGradOffsets = gradOffsets.Handle;
+            int hasMask = mask != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pGradOutput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pMask, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(pGradOffsets, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[22] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+            handles[23] = GCHandle.Alloc(hasMask, GCHandleType.Pinned);
+
+            var args = new IntPtr[24];
+            for (int i = 0; i < 24; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            // Grid for offset gradients: outWidth x outHeight x (batch * 2*kH*kW*deformGroups)
+            int offsetChannels = 2 * kernelH * kernelW * deformGroups;
+            uint gridX = (uint)((outWidth + 15) / 16);
+            uint gridY = (uint)((outHeight + 15) / 16);
+            uint gridZ = (uint)(batch * offsetChannels);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void DeformableConv2DBackwardMask(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer gradMask,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d_backward_mask", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d_backward_mask");
+
+        var handles = new GCHandle[23];
+        try
+        {
+            var pGradOutput = gradOutput.Handle;
+            var pInput = input.Handle;
+            var pWeights = weights.Handle;
+            var pOffsets = offsets.Handle;
+            var pGradMask = gradMask.Handle;
+
+            handles[0] = GCHandle.Alloc(pGradOutput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pGradMask, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+
+            var args = new IntPtr[22];
+            for (int i = 0; i < 22; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            // Grid for mask gradients: outWidth x outHeight x (batch * kH*kW*deformGroups)
+            int maskChannels = kernelH * kernelW * deformGroups;
+            uint gridX = (uint)((outWidth + 15) / 16);
+            uint gridY = (uint)((outHeight + 15) / 16);
+            uint gridZ = (uint)(batch * maskChannels);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    #endregion
+
     #endregion
 
     #region Attention Operations
@@ -3056,6 +4548,129 @@ public sealed class HipBackend : IDirectGpuBackend
         UploadToBuffer(buffer, data);
     }
 
+    /// <inheritdoc/>
+    public unsafe void Copy2DStrided(IGpuBuffer source, IGpuBuffer destination, int numRows, int srcCols, int destTotalCols, int destColOffset)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        if (!_kernelCache.TryGetValue("copy_2d_strided", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: copy_2d_strided");
+
+        int gridX = (srcCols + DefaultBlockSize - 1) / DefaultBlockSize;
+        int gridY = numRows;
+
+        var srcHandle = ((HipGpuBuffer)source).Handle;
+        var dstHandle = ((HipGpuBuffer)destination).Handle;
+
+        void*[] args = new void*[6];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [srcHandle, dstHandle];
+            int[] ints = [numRows, srcCols, destTotalCols, destColOffset];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &i[0];
+                argsPtr[3] = &i[1];
+                argsPtr[4] = &i[2];
+                argsPtr[5] = &i[3];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)gridX, (uint)gridY, 1,
+                    (uint)DefaultBlockSize, 1, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (copy_2d_strided)");
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        // Check for the kernel, if not available fall back to CPU implementation
+        if (!_kernelCache.TryGetValue("nearest_neighbor_upsample", out var kernel))
+        {
+            NearestNeighborUpsampleFallback(input, output, batchChannels, height, width, scaleFactor);
+            return;
+        }
+
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        int grid = (outputSize + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var srcHandle = ((HipGpuBuffer)input).Handle;
+        var dstHandle = ((HipGpuBuffer)output).Handle;
+
+        void*[] args = new void*[7];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [srcHandle, dstHandle];
+            int[] ints = [batchChannels, height, width, scaleFactor, outputSize];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &i[0];
+                argsPtr[3] = &i[1];
+                argsPtr[4] = &i[2];
+                argsPtr[5] = &i[3];
+                argsPtr[6] = &i[4];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)grid, 1, 1,
+                    (uint)DefaultBlockSize, 1, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (nearest_neighbor_upsample)");
+            }
+        }
+    }
+
+    /// <summary>
+    /// CPU fallback for nearest-neighbor upsampling when kernel is not available.
+    /// </summary>
+    private void NearestNeighborUpsampleFallback(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
+    {
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        // Download input using existing method
+        var inputData = DownloadBuffer(input);
+
+        // Perform CPU upsampling
+        var outputData = new float[outputSize];
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int ih = oh / scaleFactor;
+                    int iw = ow / scaleFactor;
+                    int inputIdx = bc * height * width + ih * width + iw;
+                    int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                    outputData[outputIdx] = inputData[inputIdx];
+                }
+            }
+        }
+
+        // Upload output using existing method
+        UploadToBuffer(output, outputData);
+    }
+
     #endregion
 
     #region Activation Gradient Operations
@@ -3119,124 +4734,9 @@ public sealed class HipBackend : IDirectGpuBackend
         }
     }
 
-    public unsafe void LeakyRelu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
-    {
-        if (!_kernelCache.TryGetValue("leaky_relu", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: leaky_relu");
+    #endregion
 
-        LaunchUnaryOpWithScalar(krnl, A.Handle, B.Handle, alpha, size);
-    }
-
-    public unsafe void LeakyReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, int size)
-    {
-        if (!_kernelCache.TryGetValue("leaky_relu_backward", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: leaky_relu_backward");
-
-        var handles = new GCHandle[5];
-        try
-        {
-            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
-            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
-            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
-            handles[3] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
-            handles[4] = GCHandle.Alloc(size, GCHandleType.Pinned);
-
-            var args = new IntPtr[5];
-            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
-
-            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
-            LaunchKernel(krnl, grid, DefaultBlockSize, args);
-            Synchronize();
-        }
-        finally
-        {
-            foreach (var h in handles) if (h.IsAllocated) h.Free();
-        }
-    }
-
-    public unsafe void Elu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
-    {
-        if (!_kernelCache.TryGetValue("elu", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: elu");
-
-        LaunchUnaryOpWithScalar(krnl, A.Handle, B.Handle, alpha, size);
-    }
-
-    public unsafe void EluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer output, IGpuBuffer gradInput, float alpha, int size)
-    {
-        if (!_kernelCache.TryGetValue("elu_backward", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: elu_backward");
-
-        var handles = new GCHandle[6];
-        try
-        {
-            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
-            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
-            handles[2] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
-            handles[3] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
-            handles[4] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
-            handles[5] = GCHandle.Alloc(size, GCHandleType.Pinned);
-
-            var args = new IntPtr[6];
-            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
-
-            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
-            LaunchKernel(krnl, grid, DefaultBlockSize, args);
-            Synchronize();
-        }
-        finally
-        {
-            foreach (var h in handles) if (h.IsAllocated) h.Free();
-        }
-    }
-
-    public unsafe void Swish(IGpuBuffer A, IGpuBuffer B, int size)
-    {
-        if (!_kernelCache.TryGetValue("swish", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: swish");
-
-        LaunchElementwiseOp(krnl, A.Handle, B.Handle, size);
-    }
-
-    public unsafe void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
-    {
-        if (!_kernelCache.TryGetValue("swish_backward", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: swish_backward");
-
-        LaunchUnaryOp(krnl, gradOutput.Handle, input.Handle, gradInput.Handle, size);
-    }
-
-    public unsafe void Silu(IGpuBuffer A, IGpuBuffer B, int size)
-    {
-        if (!_kernelCache.TryGetValue("silu", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: silu");
-
-        LaunchElementwiseOp(krnl, A.Handle, B.Handle, size);
-    }
-
-    public unsafe void Mish(IGpuBuffer A, IGpuBuffer B, int size)
-    {
-        if (!_kernelCache.TryGetValue("mish", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: mish");
-
-        LaunchElementwiseOp(krnl, A.Handle, B.Handle, size);
-    }
-
-    public unsafe void Softplus(IGpuBuffer A, IGpuBuffer B, int size)
-    {
-        if (!_kernelCache.TryGetValue("softplus", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: softplus");
-
-        LaunchElementwiseOp(krnl, A.Handle, B.Handle, size);
-    }
-
-    public unsafe void Hardswish(IGpuBuffer A, IGpuBuffer B, int size)
-    {
-        if (!_kernelCache.TryGetValue("hardswish", out var krnl))
-            throw new InvalidOperationException("HIP kernel not found: hardswish");
-
-        LaunchElementwiseOp(krnl, A.Handle, B.Handle, size);
-    }
+    #region Helper Methods
 
     private unsafe void LaunchElementwiseOp(IntPtr krnl, IntPtr input, IntPtr output, int size)
     {
@@ -3268,29 +4768,6 @@ public sealed class HipBackend : IDirectGpuBackend
             handles[0] = GCHandle.Alloc(a, GCHandleType.Pinned);
             handles[1] = GCHandle.Alloc(b, GCHandleType.Pinned);
             handles[2] = GCHandle.Alloc(c, GCHandleType.Pinned);
-            handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
-
-            var args = new IntPtr[4];
-            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
-
-            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
-            LaunchKernel(krnl, grid, DefaultBlockSize, args);
-            Synchronize();
-        }
-        finally
-        {
-            foreach (var h in handles) if (h.IsAllocated) h.Free();
-        }
-    }
-
-    private unsafe void LaunchUnaryOpWithScalar(IntPtr krnl, IntPtr input, IntPtr output, float scalar, int size)
-    {
-        var handles = new GCHandle[4];
-        try
-        {
-            handles[0] = GCHandle.Alloc(input, GCHandleType.Pinned);
-            handles[1] = GCHandle.Alloc(output, GCHandleType.Pinned);
-            handles[2] = GCHandle.Alloc(scalar, GCHandleType.Pinned);
             handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
 
             var args = new IntPtr[4];
@@ -3681,6 +5158,32 @@ public sealed class HipBackend : IDirectGpuBackend
         }
     }
 
+    public unsafe void NotEqualScalar(IGpuBuffer A, IGpuBuffer C, float scalar, int size)
+    {
+        if (!_kernelCache.TryGetValue("not_equal_scalar", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: not_equal_scalar");
+
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(C.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(scalar, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
     private unsafe void LaunchBinaryOp(IntPtr krnl, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
         var handles = new GCHandle[4];
@@ -3808,6 +5311,117 @@ public sealed class HipBackend : IDirectGpuBackend
             for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
 
             uint grid = (uint)((outerSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void MaxAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
+    {
+        if (!_kernelCache.TryGetValue("max_axis", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: max_axis");
+
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(outerSize, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(reduceSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((outerSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void TopK(IGpuBuffer A, IGpuBuffer values, IGpuBuffer indices, int outerSize, int reduceSize, int k, bool sorted = true)
+    {
+        // TODO: Implement HIP TopK kernel
+        throw new NotImplementedException("TopK kernel not yet implemented for HIP backend.");
+    }
+
+    public void AffineGrid(IGpuBuffer theta, IGpuBuffer grid, int batch, int outputHeight, int outputWidth)
+    {
+        // TODO: Implement HIP AffineGrid kernel
+        throw new NotImplementedException("AffineGrid kernel not yet implemented for HIP backend.");
+    }
+
+    public void GridSample(IGpuBuffer input, IGpuBuffer grid, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
+        int paddingMode = 0, bool alignCorners = false)
+    {
+        // TODO: Implement HIP GridSample kernel
+        throw new NotImplementedException("GridSample kernel not yet implemented for HIP backend.");
+    }
+
+    public void GridSampleBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer grid,
+        IGpuBuffer gradInput, IGpuBuffer gradGrid,
+        int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
+        int paddingMode = 0, bool alignCorners = false)
+    {
+        // TODO: Implement HIP GridSampleBackward kernel
+        throw new NotImplementedException("GridSampleBackward kernel not yet implemented for HIP backend.");
+    }
+
+    public unsafe void BroadcastMultiplyLastAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)
+    {
+        if (!_kernelCache.TryGetValue("broadcast_multiply_last_axis", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: broadcast_multiply_last_axis");
+
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(C.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(outerSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(innerSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalSize = outerSize * innerSize;
+            uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void BroadcastMultiplyFirstAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)
+    {
+        if (!_kernelCache.TryGetValue("broadcast_multiply_first_axis", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: broadcast_multiply_first_axis");
+
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(C.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(outerSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(innerSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalSize = outerSize * innerSize;
+            uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
             Synchronize();
         }
@@ -4680,6 +6294,323 @@ public sealed class HipBackend : IDirectGpuBackend
 
     #endregion
 
+    #region IAsyncGpuBackend Methods
+
+    /// <inheritdoc/>
+    public IGpuStream CreateStream(GpuStreamType streamType)
+    {
+        return new HipStream(this, streamType);
+    }
+
+    /// <inheritdoc/>
+    public IGpuStream CreateStream(GpuStreamType streamType, int priority)
+    {
+        return new HipStream(this, streamType, priority);
+    }
+
+    /// <inheritdoc/>
+    public IGpuEvent CreateEvent()
+    {
+        return new HipEvent(this, null, true);
+    }
+
+    /// <inheritdoc/>
+    public IGpuEvent CreateEvent(bool enableTiming)
+    {
+        return new HipEvent(this, null, enableTiming);
+    }
+
+    /// <inheritdoc/>
+    public void RecordEvent(IGpuEvent gpuEvent, IGpuStream stream)
+    {
+        if (gpuEvent is not HipEvent hipEvent)
+        {
+            throw new ArgumentException("Event must be a HipEvent", nameof(gpuEvent));
+        }
+
+        if (stream is not HipStream)
+        {
+            throw new ArgumentException("Stream must be a HipStream", nameof(stream));
+        }
+
+        hipEvent.Record(stream);
+    }
+
+    /// <inheritdoc/>
+    public void StreamWaitEvent(IGpuStream stream, IGpuEvent gpuEvent)
+    {
+        if (stream is not HipStream hipStream)
+        {
+            throw new ArgumentException("Stream must be a HipStream", nameof(stream));
+        }
+
+        hipStream.WaitEvent(gpuEvent);
+    }
+
+    /// <inheritdoc/>
+    public GpuSyncPoint CreateSyncPoint(IGpuStream stream)
+    {
+        if (stream is not HipStream hipStream)
+        {
+            throw new ArgumentException("Stream must be a HipStream", nameof(stream));
+        }
+
+        return new HipSyncPoint(this, hipStream);
+    }
+
+    /// <inheritdoc/>
+    public GpuSyncPoint CreateSyncPoint()
+    {
+        return CreateSyncPoint(DefaultStream);
+    }
+
+    /// <inheritdoc/>
+    public void UploadBufferAsync(float[] data, IGpuBuffer buffer, IGpuStream stream)
+    {
+        var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+        try
+        {
+            var size = (UIntPtr)(data.Length * sizeof(float));
+            var result = HipNativeBindings.hipMemcpyAsync(
+                buffer.Handle,
+                handle.AddrOfPinnedObject(),
+                size,
+                HipMemcpyKind.HostToDevice,
+                stream.Handle);
+            HipNativeBindings.CheckError(result, "hipMemcpyAsync H2D");
+            // Synchronize stream to ensure transfer completes before freeing the pinned handle
+            var syncResult = HipNativeBindings.hipStreamSynchronize(stream.Handle);
+            HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize");
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public void UploadBufferAsync(ReadOnlySpan<float> data, IGpuBuffer buffer, IGpuStream stream)
+    {
+        // Copy to array for pinning (ReadOnlySpan can't be pinned directly)
+        var array = data.ToArray();
+        UploadBufferAsync(array, buffer, stream);
+    }
+
+    /// <inheritdoc/>
+    public void DownloadBufferAsync(IGpuBuffer buffer, float[] destination, IGpuStream stream)
+    {
+        var handle = GCHandle.Alloc(destination, GCHandleType.Pinned);
+        try
+        {
+            var size = (UIntPtr)(destination.Length * sizeof(float));
+            var result = HipNativeBindings.hipMemcpyAsync(
+                handle.AddrOfPinnedObject(),
+                buffer.Handle,
+                size,
+                HipMemcpyKind.DeviceToHost,
+                stream.Handle);
+            HipNativeBindings.CheckError(result, "hipMemcpyAsync D2H");
+            // Synchronize stream to ensure transfer completes before freeing the pinned handle
+            var syncResult = HipNativeBindings.hipStreamSynchronize(stream.Handle);
+            HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize");
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public IGpuBuffer AllocateBufferAsync(float[] data, IGpuStream stream)
+    {
+        var buffer = AllocateBuffer(data.Length);
+        UploadBufferAsync(data, buffer, stream);
+        return buffer;
+    }
+
+    /// <inheritdoc/>
+    public void CopyBufferAsync(IGpuBuffer source, IGpuBuffer destination, int size, IGpuStream stream)
+    {
+        var byteSize = (UIntPtr)(size * sizeof(float));
+        var result = HipNativeBindings.hipMemcpyAsync(
+            destination.Handle,
+            source.Handle,
+            byteSize,
+            HipMemcpyKind.DeviceToDevice,
+            stream.Handle);
+        HipNativeBindings.CheckError(result, "hipMemcpyAsync D2D");
+    }
+
+    /// <inheritdoc/>
+    public void GemmAsync(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K,
+        float alpha, float beta, IGpuStream stream)
+    {
+        GemmOnStream(A, B, C, M, N, K, alpha, beta, stream.Handle, synchronize: false);
+    }
+
+    /// <inheritdoc/>
+    public void FusedGemmBiasActivationAsync(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output,
+        int M, int N, int K, FusedActivationType activation, IGpuStream stream)
+    {
+        // Map activation type to appropriate kernel
+        string kernelName = activation switch
+        {
+            FusedActivationType.ReLU => "gemm_bias_relu",
+            FusedActivationType.Sigmoid => "gemm_bias_sigmoid",
+            FusedActivationType.Tanh => "gemm_bias_tanh",
+            FusedActivationType.None => "gemm_bias",
+            _ => "gemm_bias_relu" // Default to ReLU
+        };
+
+        ExecuteFusedGemmOnStream(kernelName, A, B, bias, output, M, N, K, stream.Handle, synchronize: false);
+    }
+
+    /// <summary>
+    /// Executes GEMM on a specific stream with optional synchronization.
+    /// </summary>
+    private void GemmOnStream(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K,
+        float alpha, float beta, IntPtr stream, bool synchronize)
+    {
+        var bufferA = (HipGpuBuffer)A;
+        var bufferB = (HipGpuBuffer)B;
+        var bufferC = (HipGpuBuffer)C;
+
+        IntPtr kernel = SelectGemmKernel(M, N, K);
+        if (kernel == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("No suitable GEMM kernel available");
+        }
+
+        GemmKernelType kernelType = GetKernelType(kernel);
+
+        int tileM, tileN, blockSize;
+        switch (kernelType)
+        {
+            case GemmKernelType.Mfma:
+                tileM = 128;
+                tileN = 128;
+                blockSize = 256;
+                break;
+            case GemmKernelType.RdnaWave32:
+                tileM = 32;
+                tileN = 32;
+                blockSize = 256;
+                break;
+            case GemmKernelType.Scalar:
+            default:
+                tileM = 16;
+                tileN = 16;
+                blockSize = 256;
+                break;
+        }
+
+        uint gridDimX = (uint)((M + tileM - 1) / tileM);
+        uint gridDimY = (uint)((N + tileN - 1) / tileN);
+
+        IntPtr[] kernelArgs = new IntPtr[8];
+        GCHandle[] handles = new GCHandle[8];
+
+        try
+        {
+            var argA = bufferA.Handle;
+            var argB = bufferB.Handle;
+            var argC = bufferC.Handle;
+
+            handles[0] = GCHandle.Alloc(argA, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(argB, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(argC, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(M, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(N, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(K, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(beta, GCHandleType.Pinned);
+
+            for (int i = 0; i < 8; i++)
+            {
+                kernelArgs[i] = handles[i].AddrOfPinnedObject();
+            }
+
+            GCHandle kernelParamsHandle = GCHandle.Alloc(kernelArgs, GCHandleType.Pinned);
+            try
+            {
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    gridDimX, gridDimY, 1,
+                    (uint)blockSize, 1, 1,
+                    0,
+                    stream,
+                    kernelParamsHandle.AddrOfPinnedObject(),
+                    IntPtr.Zero);
+
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel");
+            }
+            finally
+            {
+                kernelParamsHandle.Free();
+            }
+        }
+        finally
+        {
+            foreach (var handle in handles)
+            {
+                if (handle.IsAllocated)
+                    handle.Free();
+            }
+        }
+
+        if (synchronize)
+        {
+            var syncResult = HipNativeBindings.hipStreamSynchronize(stream);
+            HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize");
+        }
+    }
+
+    /// <inheritdoc/>
+    public void SynchronizeStream(IGpuStream stream)
+    {
+        if (stream is not HipStream)
+        {
+            throw new ArgumentException("Stream must be a HipStream", nameof(stream));
+        }
+
+        stream.Synchronize();
+    }
+
+    /// <inheritdoc/>
+    public bool QueryStreamComplete(IGpuStream stream)
+    {
+        if (stream is not HipStream)
+        {
+            throw new ArgumentException("Stream must be a HipStream", nameof(stream));
+        }
+
+        return stream.Query();
+    }
+
+    /// <inheritdoc/>
+    public bool QueryEventComplete(IGpuEvent gpuEvent)
+    {
+        if (gpuEvent is not HipEvent)
+        {
+            throw new ArgumentException("Event must be a HipEvent", nameof(gpuEvent));
+        }
+
+        return gpuEvent.Query();
+    }
+
+    /// <inheritdoc/>
+    public float GetEventElapsedTime(IGpuEvent start, IGpuEvent end)
+    {
+        if (end is not HipEvent hipEnd)
+        {
+            throw new ArgumentException("Event must be a HipEvent", nameof(end));
+        }
+
+        return hipEnd.GetElapsedTime(start);
+    }
+
+    #endregion
+
     public void Synchronize()
     {
         if (_stream != IntPtr.Zero)
@@ -4693,9 +6624,49 @@ public sealed class HipBackend : IDirectGpuBackend
         }
     }
 
+    public void Copy(IGpuBuffer source, int sourceOffset, IGpuBuffer destination, int destinationOffset, int length)
+    {
+        throw new NotImplementedException("Strided copy not implemented for HIP backend yet.");
+    }
+
+    public void ArgMaxAxis(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("ArgMaxAxis not implemented for HIP backend yet.");
+    }
+
+    public void GenerateRandomUniform(IGpuBuffer output, int size, float min, float max, ulong seed)
+    {
+        throw new NotImplementedException("GenerateRandomUniform not implemented for HIP backend yet.");
+    }
+
+    public void GenerateRandomNormal(IGpuBuffer output, int size, float mean, float stdDev, ulong seed)
+    {
+        throw new NotImplementedException("GenerateRandomNormal not implemented for HIP backend yet.");
+    }
+
+    public void RbfForward(IGpuBuffer input, IGpuBuffer centers, IGpuBuffer epsilons, IGpuBuffer output, int batchSize, int numCenters, int inputDim)
+    {
+        throw new NotImplementedException("RbfForward not implemented for HIP backend yet.");
+    }
+
+    public void StdpUpdate(IGpuBuffer weights, IGpuBuffer preTrace, IGpuBuffer postTrace, IGpuBuffer preSpike, IGpuBuffer postSpike,
+        float ltpRate, float ltdRate, float homeostasisRate, float minWeight, float maxWeight, int numPre, int numPost)
+    {
+        throw new NotImplementedException("StdpUpdate not implemented for HIP backend yet.");
+    }
+
+    public void UpdateTraces(IGpuBuffer traces, IGpuBuffer spikes, IGpuBuffer input, float decay, float threshold, int size)
+    {
+        throw new NotImplementedException("UpdateTraces not implemented for HIP backend yet.");
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
+
+        // Dispose the default stream wrapper (does not destroy underlying stream)
+        _defaultStream?.Dispose();
+        _defaultStream = null;
 
         // Unload all kernel modules
         if (_mfmaModule != IntPtr.Zero)
@@ -4742,6 +6713,16 @@ public sealed class HipBackend : IDirectGpuBackend
         {
             HipNativeBindings.hipModuleUnload(_fftModule);
             _fftModule = IntPtr.Zero;
+        }
+        if (_locallyConnectedModule != IntPtr.Zero)
+        {
+            HipNativeBindings.hipModuleUnload(_locallyConnectedModule);
+            _locallyConnectedModule = IntPtr.Zero;
+        }
+        if (_deformableConvModule != IntPtr.Zero)
+        {
+            HipNativeBindings.hipModuleUnload(_deformableConvModule);
+            _deformableConvModule = IntPtr.Zero;
         }
 
         if (_stream != IntPtr.Zero)

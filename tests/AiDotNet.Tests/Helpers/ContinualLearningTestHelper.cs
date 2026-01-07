@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.Helpers;
@@ -444,6 +445,14 @@ public class MockLayer<T> : ILayer<T>
     }
 
     public bool SupportsJitCompilation => false;
+
+    // IGpuExecutable<T>
+    public bool CanExecuteOnGpu => false;
+
+    public IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        throw new NotSupportedException("Mock layer does not support GPU execution");
+    }
 
     // IDiagnosticsProvider
     public Dictionary<string, string> GetDiagnostics()

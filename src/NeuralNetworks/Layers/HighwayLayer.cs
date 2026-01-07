@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -281,6 +282,11 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Gets the total number of trainable parameters in this layer.
     /// </summary>
     /// <value>
@@ -517,6 +523,98 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _lastOutput = output;
         return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU using FusedLinearGpu for efficient computation.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        int inputDim = _transformWeights.Shape[0];
+
+        // Get fused activation types
+        var transformActivationType = _transformActivation switch
+        {
+            TanhActivation<T> => FusedActivationType.Tanh,
+            ReLUActivation<T> => FusedActivationType.ReLU,
+            SigmoidActivation<T> => FusedActivationType.Sigmoid,
+            GELUActivation<T> => FusedActivationType.GELU,
+            _ => FusedActivationType.None
+        };
+
+        var gateActivationType = _gateActivation switch
+        {
+            SigmoidActivation<T> => FusedActivationType.Sigmoid,
+            TanhActivation<T> => FusedActivationType.Tanh,
+            _ => FusedActivationType.Sigmoid // Default to sigmoid for gates
+        };
+
+        // Transform path: transform = activation(input @ transformWeights + transformBias)
+        // Note: HighwayLayer weights are [inputDim, inputDim], same as FusedLinearGpu expects
+        var transformOutput = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, transformActivationType);
+
+        // Handle vector activations with CPU fallback if needed
+        if (transformActivationType == FusedActivationType.None && _vectorTransformActivation != null)
+        {
+            var cpuTransform = transformOutput.ToTensor();
+            var cpuActivated = _vectorTransformActivation.Activate(cpuTransform);
+            transformOutput = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
+        }
+
+        // Gate path: gate = sigmoid(input @ gateWeights + gateBias)
+        var gateOutput = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, gateActivationType);
+
+        // Handle vector activations with CPU fallback if needed
+        if (gateActivationType == FusedActivationType.None && _vectorGateActivation != null)
+        {
+            var cpuGate = gateOutput.ToTensor();
+            var cpuGateActivated = _vectorGateActivation.Activate(cpuGate);
+            gateOutput = gpuEngine.UploadToGpu(cpuGateActivated, GpuTensorRole.Activation);
+        }
+
+        // Highway output: output = gate * (transform - input) + input
+        // This needs element-wise operations on GPU
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        int size = input.ElementCount;
+        var diffBuffer = backend.AllocateBuffer(size);
+        var gatedDiffBuffer = backend.AllocateBuffer(size);
+        var outputBuffer = backend.AllocateBuffer(size);
+
+        // diff = transform - input
+        backend.Subtract(transformOutput.Buffer, input.Buffer, diffBuffer, size);
+
+        // gatedDiff = gate * diff
+        backend.Multiply(gateOutput.Buffer, diffBuffer, gatedDiffBuffer, size);
+
+        // output = gatedDiff + input
+        backend.Add(gatedDiffBuffer, input.Buffer, outputBuffer, size);
+
+        // Clean up intermediate buffers
+        diffBuffer.Dispose();
+        gatedDiffBuffer.Dispose();
+
+        // Cache state for backward pass only during training
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastTransformOutput = transformOutput.ToTensor();
+            _lastGateOutput = gateOutput.ToTensor();
+            _lastOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: false).ToTensor();
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -126,6 +130,40 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0) throw new ArgumentException("GaussianNoiseLayer requires an input tensor.");
+        var input = inputs[0];
+
+        if (IsTrainingMode)
+        {
+            if (Engine is not DirectGpuTensorEngine gpuEngine)
+                throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+            ulong seed = (ulong)DateTime.UtcNow.Ticks;
+            float meanF = Convert.ToSingle(_mean);
+            float stdDevF = Convert.ToSingle(_standardDeviation);
+
+            // Generate Gaussian noise N(mean, stdDev) directly on GPU
+            var noise = gpuEngine.RandomNormalGpu<T>(input.Shape, meanF, stdDevF, seed);
+
+            var result = gpuEngine.AddGpu(input, noise);
+
+            _lastInput = input.ToTensor();
+            _lastNoise = noise.ToTensor();
+
+            noise.Dispose();
+
+            return result;
+        }
+
+        return input;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GaussianNoiseLayer{T}"/> class.

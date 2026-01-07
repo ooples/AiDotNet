@@ -1,4 +1,5 @@
-using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -124,6 +125,54 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0) throw new ArgumentException("TimeDistributedLayer requires an input tensor.");
+        var input = inputs[0];
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        int batch = input.Shape[0];
+        int time = input.Shape[1];
+        int[] inputShape = input.Shape;
+        
+        int[] flattenedShape = new int[inputShape.Length - 1];
+        flattenedShape[0] = batch * time;
+        Array.Copy(inputShape, 2, flattenedShape, 1, inputShape.Length - 2);
+
+        // Process all timesteps in parallel by flattening the time dimension into the batch dimension
+        var reshapedInput = gpuEngine.ReshapeGpu(input, flattenedShape);
+        var innerOutput = _innerLayer.ForwardGpu(reshapedInput);
+
+        int[] innerOutputShape = innerOutput.Shape;
+        int[] outputShape = new int[innerOutputShape.Length + 1];
+        outputShape[0] = batch;
+        outputShape[1] = time;
+        Array.Copy(innerOutputShape, 1, outputShape, 2, innerOutputShape.Length - 1);
+
+        var output = gpuEngine.ReshapeGpu(innerOutput, outputShape);
+
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None)
+        {
+            output = gpuEngine.ActivationGpu(output, fusedOp);
+        }
+
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastOutput = output.ToTensor();
+            _originalInputShape = input.Shape;
+        }
+
+        return output;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TimeDistributedLayer{T}"/> class with scalar activation function.
@@ -339,7 +388,6 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         _lastOutput = activated;
         return _lastOutput;
     }
-
 
     /// <summary>
     /// Performs the backward pass of the time distributed layer.

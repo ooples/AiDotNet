@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -330,6 +332,11 @@ public class GRULayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GRULayer{T}"/> class with the specified dimensions, return behavior, and element-wise activation functions.
     /// </summary>
     /// <param name="inputSize">The size of the input feature vector at each time step.</param>
@@ -558,7 +565,11 @@ public class GRULayer<T> : LayerBase<T>
             input3D = input.Reshape([flatBatch, sequenceLength, _inputSize]);
         }
 
-        _lastInput = input3D;
+        // Cache input only if training
+        if (IsTrainingMode)
+        {
+            _lastInput = input3D;
+        }
 
         // Reset hidden state if needed
         if (_lastHiddenState == null)
@@ -627,10 +638,13 @@ public class GRULayer<T> : LayerBase<T>
             }
         }
 
-        _lastZ = lastZ;
-        _lastR = lastR;
-        _lastH = lastH_candidate;
-        _lastHiddenState = currentHiddenState;
+        if (IsTrainingMode)
+        {
+            _lastZ = lastZ;
+            _lastR = lastR;
+            _lastH = lastH_candidate;
+            _lastHiddenState = currentHiddenState;
+        }
 
         // Return either the sequence of hidden states or just the final state
         Tensor<T> output;
@@ -675,6 +689,289 @@ public class GRULayer<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after GRU processing.</returns>
+    /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        int rank = shape.Length;
+        int hiddenSize = _hiddenSize;
+        int inputSize = _inputSize;
+
+        // Determine sequence length, batch size from shape
+        int sequenceLength;
+        int batchSize;
+        if (rank == 1)
+        {
+            sequenceLength = 1;
+            batchSize = 1;
+        }
+        else if (rank == 2)
+        {
+            sequenceLength = shape[0];
+            batchSize = 1;
+        }
+        else if (rank == 3)
+        {
+            sequenceLength = shape[1]; // [batch, seq, input] -> standard 3D is [batch, seq, input] in this codebase? 
+            // Checking Forward: 
+            // if (rank == 3) { batchSize = input.Shape[0]; sequenceLength = input.Shape[1]; }
+            batchSize = shape[0];
+        }
+        else
+        {
+            // Higher rank: collapse leading dims into batch
+            sequenceLength = shape[rank - 2];
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= shape[d];
+            batchSize = flatBatch;
+        }
+
+        int hiddenBufferSize = batchSize * _hiddenSize;
+        int inputSliceSize = batchSize * _inputSize;
+        int outputSize = sequenceLength * batchSize * _hiddenSize;
+        int[] outputShape = [batchSize, sequenceLength, _hiddenSize]; // Default for rank 3
+        
+        // Fix output shape logic to match existing ForwardGpu
+        if (_returnSequences)
+        {
+             // Already set above
+        }
+        else
+        {
+            outputShape = [batchSize, _hiddenSize];
+            outputSize = hiddenBufferSize;
+        }
+
+        // Cache input for backward pass if training
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor().Reshape([batchSize, sequenceLength, _inputSize]);
+            _originalInputShape = shape;
+        }
+
+        // Allocate output buffer
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Upload transposed weights to GPU
+        using var WzBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Wz).ToArray()));
+        using var WrBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Wr).ToArray()));
+        using var WhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Wh).ToArray()));
+        using var UzBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Uz).ToArray()));
+        using var UrBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Ur).ToArray()));
+        using var UhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_Uh).ToArray()));
+
+        // Upload biases to GPU
+        using var biasZBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bz.ToArray()));
+        using var biasRBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_br.ToArray()));
+        using var biasHBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bh.ToArray()));
+
+        // Allocate hidden state buffers
+        var currentHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        backend.Fill(currentHBuffer, 0.0f, hiddenBufferSize); // Initialize to zeros
+
+        // Allocate temporary buffers
+        using var tempBuffer1 = backend.AllocateBuffer(hiddenBufferSize);
+        using var tempBuffer2 = backend.AllocateBuffer(hiddenBufferSize);
+        using var zGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var rGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var hCandidateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var rGatedHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var onesBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        using var oneMinusZBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var newHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+
+        // Fill ones buffer
+        backend.Fill(onesBuffer, 1.0f, hiddenBufferSize);
+
+        // Lists to store intermediate states for backward pass
+        List<float[]>? cachedZ = null;
+        List<float[]>? cachedR = null;
+        List<float[]>? cachedHCan = null;
+        List<float[]>? cachedH = null;
+
+        // Store buffer snapshots for deferred download (keep data on GPU during loop)
+        List<IGpuBuffer>? zBufferSnapshots = null;
+        List<IGpuBuffer>? rBufferSnapshots = null;
+        List<IGpuBuffer>? hCanBufferSnapshots = null;
+        List<IGpuBuffer>? hBufferSnapshots = null;
+
+        if (IsTrainingMode)
+        {
+            cachedZ = new List<float[]>(sequenceLength);
+            cachedR = new List<float[]>(sequenceLength);
+            cachedHCan = new List<float[]>(sequenceLength);
+            cachedH = new List<float[]>(sequenceLength);
+            
+            // Allocate snapshot buffers to store intermediate states on GPU
+            zBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
+            rBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
+            hCanBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
+            hBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
+        }
+
+        try
+        {
+            // Process each time step
+            for (int t = 0; t < sequenceLength; t++)
+            {
+                // Get input slice for this timestep
+                int inputSliceOffset = t * inputSliceSize;
+                var inputSlice = input.CreateView(inputSliceOffset, [batchSize, _inputSize]);
+
+                // Update Gate: z = sigmoid(x @ Wz^T + h @ Uz^T + bz)
+                backend.Gemm(inputSlice.Buffer, WzBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(currentHBuffer, UzBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, zGateBuffer, hiddenBufferSize);
+                backend.BiasAdd(zGateBuffer, biasZBuffer, zGateBuffer, batchSize, _hiddenSize);
+                backend.Sigmoid(zGateBuffer, zGateBuffer, hiddenBufferSize);
+
+                // Reset Gate: r = sigmoid(x @ Wr^T + h @ Ur^T + br)
+                backend.Gemm(inputSlice.Buffer, WrBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(currentHBuffer, UrBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, rGateBuffer, hiddenBufferSize);
+                backend.BiasAdd(rGateBuffer, biasRBuffer, rGateBuffer, batchSize, _hiddenSize);
+                backend.Sigmoid(rGateBuffer, rGateBuffer, hiddenBufferSize);
+
+                // Candidate Hidden State: h_candidate = tanh(x @ Wh^T + (r * h) @ Uh^T + bh)
+                backend.Multiply(rGateBuffer, currentHBuffer, rGatedHBuffer, hiddenBufferSize);
+                backend.Gemm(inputSlice.Buffer, WhBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(rGatedHBuffer, UhBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, hCandidateBuffer, hiddenBufferSize);
+                backend.BiasAdd(hCandidateBuffer, biasHBuffer, hCandidateBuffer, batchSize, _hiddenSize);
+                backend.Tanh(hCandidateBuffer, hCandidateBuffer, hiddenBufferSize);
+
+                // Final Hidden State: h = z * h_prev + (1 - z) * h_candidate
+                // Compute (1 - z)
+                backend.Subtract(onesBuffer, zGateBuffer, oneMinusZBuffer, hiddenBufferSize);
+                // z * h_prev
+                backend.Multiply(zGateBuffer, currentHBuffer, tempBuffer1, hiddenBufferSize);
+                // (1 - z) * h_candidate
+                backend.Multiply(oneMinusZBuffer, hCandidateBuffer, tempBuffer2, hiddenBufferSize);
+                // h = z * h_prev + (1 - z) * h_candidate
+                backend.Add(tempBuffer1, tempBuffer2, newHBuffer, hiddenBufferSize);
+
+                // Store hidden state in output if returning sequences
+                if (_returnSequences)
+                {
+                    int outputOffset = t * hiddenBufferSize;
+                    backend.Copy2DStrided(newHBuffer, outputBuffer, 1, hiddenBufferSize, outputSize, outputOffset);
+                }
+
+                // Cache states if training - copy to GPU snapshot buffers (defer download until after loop)
+                if (IsTrainingMode && zBufferSnapshots != null)
+                {
+                    // Allocate snapshot buffers and copy current state
+                    var zSnapshot = backend.AllocateBuffer(hiddenBufferSize);
+                    var rSnapshot = backend.AllocateBuffer(hiddenBufferSize);
+                    var hCanSnapshot = backend.AllocateBuffer(hiddenBufferSize);
+                    var hSnapshot = backend.AllocateBuffer(hiddenBufferSize);
+                    
+                    backend.Copy(zGateBuffer, zSnapshot, hiddenBufferSize);
+                    backend.Copy(rGateBuffer, rSnapshot, hiddenBufferSize);
+                    backend.Copy(hCandidateBuffer, hCanSnapshot, hiddenBufferSize);
+                    backend.Copy(newHBuffer, hSnapshot, hiddenBufferSize);
+                    
+                    zBufferSnapshots.Add(zSnapshot);
+                    rBufferSnapshots!.Add(rSnapshot);
+                    hCanBufferSnapshots!.Add(hCanSnapshot);
+                    hBufferSnapshots!.Add(hSnapshot);
+                }
+
+                // Swap hidden state buffers
+                var tempH = currentHBuffer;
+                currentHBuffer = newHBuffer;
+                newHBuffer = tempH;
+            }
+
+            // If not returning sequences, copy final hidden state to output
+            if (!_returnSequences)
+            {
+                backend.Copy(currentHBuffer, outputBuffer, hiddenBufferSize);
+            }
+
+            // Batch download all cached states AFTER the compute loop completes
+            // This keeps all data on GPU during the loop for better performance
+            if (IsTrainingMode && zBufferSnapshots != null && sequenceLength > 0)
+            {
+                // Download all snapshots in sequence (GPU work is done, now we transfer)
+                for (int t = 0; t < sequenceLength; t++)
+                {
+                    cachedZ!.Add(backend.DownloadBuffer(zBufferSnapshots[t]));
+                    cachedR!.Add(backend.DownloadBuffer(rBufferSnapshots![t]));
+                    cachedHCan!.Add(backend.DownloadBuffer(hCanBufferSnapshots![t]));
+                    cachedH!.Add(backend.DownloadBuffer(hBufferSnapshots![t]));
+                    
+                    // Dispose snapshot buffers after download
+                    zBufferSnapshots[t].Dispose();
+                    rBufferSnapshots[t].Dispose();
+                    hCanBufferSnapshots[t].Dispose();
+                    hBufferSnapshots[t].Dispose();
+                }
+            }
+
+            // Reconstruct CPU tensors for backward pass if training
+            if (IsTrainingMode && cachedZ != null && cachedZ.Count > 0)
+            {
+                // Store last timestep activations for single-step backward compatibility
+                _lastZ = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedZ[sequenceLength - 1]), [batchSize, _hiddenSize]);
+                _lastR = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedR![sequenceLength - 1]), [batchSize, _hiddenSize]);
+                _lastH = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedHCan![sequenceLength - 1]), [batchSize, _hiddenSize]);
+                _lastHiddenState = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedH![sequenceLength - 1]), [batchSize, _hiddenSize]);
+
+                // Store full sequence of hidden states if needed
+                if (_returnSequences || _allHiddenStates != null)
+                {
+                    _allHiddenStates = new List<Tensor<T>>(sequenceLength);
+                    foreach (var hData in cachedH)
+                    {
+                        _allHiddenStates.Add(new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(hData), [batchSize, _hiddenSize]));
+                    }
+                }
+            }
+
+            // Dispose the buffer we're not returning
+            newHBuffer.Dispose();
+            // currentHBuffer is the last hidden state, keep it if needed for internal state tracking
+            currentHBuffer.Dispose();
+
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        catch
+        {
+            // Clean up on error
+            outputBuffer.Dispose();
+            currentHBuffer.Dispose();
+            newHBuffer.Dispose();
+            
+            // Clean up snapshot buffers on error
+            if (zBufferSnapshots != null)
+            {
+                foreach (var buf in zBufferSnapshots) buf?.Dispose();
+                foreach (var buf in rBufferSnapshots!) buf?.Dispose();
+                foreach (var buf in hCanBufferSnapshots!) buf?.Dispose();
+                foreach (var buf in hBufferSnapshots!) buf?.Dispose();
+            }
+            throw;
+        }
     }
 
     /// <summary>
@@ -1011,6 +1308,9 @@ public class GRULayer<T> : LayerBase<T>
         return ApplyActivation(gate, isRecurrent);
     }
 
+    private Tensor<T>? _WzVelocity, _WrVelocity, _WhVelocity, _UzVelocity, _UrVelocity, _UhVelocity;
+    private Tensor<T>? _bzVelocity, _brVelocity, _bhVelocity;
+
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
@@ -1041,29 +1341,66 @@ public class GRULayer<T> : LayerBase<T>
             _dbz == null || _dbr == null || _dbh == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Use Engine operations for GPU/CPU acceleration
-        _Wz = Engine.TensorSubtract(_Wz, Engine.TensorMultiplyScalar(_dWz, learningRate));
-        _Wr = Engine.TensorSubtract(_Wr, Engine.TensorMultiplyScalar(_dWr, learningRate));
-        _Wh = Engine.TensorSubtract(_Wh, Engine.TensorMultiplyScalar(_dWh, learningRate));
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        _Uz = Engine.TensorSubtract(_Uz, Engine.TensorMultiplyScalar(_dUz, learningRate));
-        _Ur = Engine.TensorSubtract(_Ur, Engine.TensorMultiplyScalar(_dUr, learningRate));
-        _Uh = Engine.TensorSubtract(_Uh, Engine.TensorMultiplyScalar(_dUh, learningRate));
+            if (_WzVelocity == null)
+            {
+                _WzVelocity = new Tensor<T>(_Wz.Shape); _WzVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_WzVelocity, PersistentTensorRole.OptimizerState);
+                _WrVelocity = new Tensor<T>(_Wr.Shape); _WrVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_WrVelocity, PersistentTensorRole.OptimizerState);
+                _WhVelocity = new Tensor<T>(_Wh.Shape); _WhVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_WhVelocity, PersistentTensorRole.OptimizerState);
+                _UzVelocity = new Tensor<T>(_Uz.Shape); _UzVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_UzVelocity, PersistentTensorRole.OptimizerState);
+                _UrVelocity = new Tensor<T>(_Ur.Shape); _UrVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_UrVelocity, PersistentTensorRole.OptimizerState);
+                _UhVelocity = new Tensor<T>(_Uh.Shape); _UhVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_UhVelocity, PersistentTensorRole.OptimizerState);
+                _bzVelocity = new Tensor<T>(_bz.Shape); _bzVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_bzVelocity, PersistentTensorRole.OptimizerState);
+                _brVelocity = new Tensor<T>(_br.Shape); _brVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_brVelocity, PersistentTensorRole.OptimizerState);
+                _bhVelocity = new Tensor<T>(_bh.Shape); _bhVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_bhVelocity, PersistentTensorRole.OptimizerState);
+            }
 
-        _bz = Engine.TensorSubtract(_bz, Engine.TensorMultiplyScalar(_dbz, learningRate));
-        _br = Engine.TensorSubtract(_br, Engine.TensorMultiplyScalar(_dbr, learningRate));
-        _bh = Engine.TensorSubtract(_bh, Engine.TensorMultiplyScalar(_dbh, learningRate));
+            gpuEngine.SgdMomentumUpdateGpu(_Wz, _dWz, _WzVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Wr, _dWr, _WrVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Wh, _dWh, _WhVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Uz, _dUz, _UzVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Ur, _dUr, _UrVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Uh, _dUh, _UhVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_bz, _dbz, _bzVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_br, _dbr, _brVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_bh, _dbh, _bhVelocity!, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            // Use Engine operations for parameter updates
+            var scaledWz = Engine.TensorMultiplyScalar(_dWz, learningRate);
+            var scaledWr = Engine.TensorMultiplyScalar(_dWr, learningRate);
+            var scaledWh = Engine.TensorMultiplyScalar(_dWh, learningRate);
+            var scaledUz = Engine.TensorMultiplyScalar(_dUz, learningRate);
+            var scaledUr = Engine.TensorMultiplyScalar(_dUr, learningRate);
+            var scaledUh = Engine.TensorMultiplyScalar(_dUh, learningRate);
+            var scaledBz = Engine.TensorMultiplyScalar(_dbz, learningRate);
+            var scaledBr = Engine.TensorMultiplyScalar(_dbr, learningRate);
+            var scaledBh = Engine.TensorMultiplyScalar(_dbh, learningRate);
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_Wz);
-        Engine.InvalidatePersistentTensor(_Wr);
-        Engine.InvalidatePersistentTensor(_Wh);
-        Engine.InvalidatePersistentTensor(_Uz);
-        Engine.InvalidatePersistentTensor(_Ur);
-        Engine.InvalidatePersistentTensor(_Uh);
-        Engine.InvalidatePersistentTensor(_bz);
-        Engine.InvalidatePersistentTensor(_br);
-        Engine.InvalidatePersistentTensor(_bh);
+            _Wz = Engine.TensorSubtract(_Wz, scaledWz);
+            _Wr = Engine.TensorSubtract(_Wr, scaledWr);
+            _Wh = Engine.TensorSubtract(_Wh, scaledWh);
+            _Uz = Engine.TensorSubtract(_Uz, scaledUz);
+            _Ur = Engine.TensorSubtract(_Ur, scaledUr);
+            _Uh = Engine.TensorSubtract(_Uh, scaledUh);
+            _bz = Engine.TensorSubtract(_bz, scaledBz);
+            _br = Engine.TensorSubtract(_br, scaledBr);
+            _bh = Engine.TensorSubtract(_bh, scaledBh);
+
+            Engine.InvalidatePersistentTensor(_Wz);
+            Engine.InvalidatePersistentTensor(_Wr);
+            Engine.InvalidatePersistentTensor(_Wh);
+            Engine.InvalidatePersistentTensor(_Uz);
+            Engine.InvalidatePersistentTensor(_Ur);
+            Engine.InvalidatePersistentTensor(_Uh);
+            Engine.InvalidatePersistentTensor(_bz);
+            Engine.InvalidatePersistentTensor(_br);
+            Engine.InvalidatePersistentTensor(_bh);
+        }
     }
 
     /// <summary>

@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -50,6 +52,11 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets metadata for serialization.
@@ -210,6 +217,112 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
 
         // Reshape output back to original shape
         return output.Reshape(_originalInputShape);
+    }
+
+    /// <summary>
+    /// Performs the forward pass of instance normalization on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after normalization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the native GPU InstanceNorm operation for efficient
+    /// normalization where each channel is normalized independently.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Store original shape for reshaping output
+        _originalInputShape = shape;
+
+        // Parse input dimensions - InstanceNorm expects [batch, channels, spatial]
+        int batch, channels, spatialSize;
+
+        if (shape.Length == 2)
+        {
+            // [batch, channels] - spatial size is 1
+            batch = shape[0];
+            channels = shape[1];
+            spatialSize = 1;
+        }
+        else if (shape.Length == 3)
+        {
+            // [batch, channels, length]
+            batch = shape[0];
+            channels = shape[1];
+            spatialSize = shape[2];
+        }
+        else if (shape.Length == 4)
+        {
+            // [batch, channels, height, width]
+            batch = shape[0];
+            channels = shape[1];
+            spatialSize = shape[2] * shape[3];
+        }
+        else if (shape.Length >= 5)
+        {
+            // [batch, channels, D, H, W, ...] - flatten all spatial dims
+            batch = shape[0];
+            channels = shape[1];
+            spatialSize = 1;
+            for (int i = 2; i < shape.Length; i++)
+                spatialSize *= shape[i];
+        }
+        else
+        {
+            throw new ArgumentException($"InstanceNorm requires at least 2D input, got {shape.Length}D.");
+        }
+
+        if (channels != _numChannels)
+            throw new ArgumentException($"Input has {channels} channels but layer expects {_numChannels} channels.");
+
+        // Allocate output buffer and save buffers for mean/variance
+        int totalSize = batch * channels * spatialSize;
+        int statsSize = batch * channels; // Mean and variance per sample per channel
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+        var saveMeanBuffer = backend.AllocateBuffer(statsSize);
+        var saveInvVarBuffer = backend.AllocateBuffer(statsSize);
+
+        // Upload gamma and beta parameters to GPU
+        var gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data);
+        var betaData = DirectGpuEngine.ToFloatArray<T>(_beta.Data);
+        using var gammaBuffer = backend.AllocateBuffer(gammaData);
+        using var betaBuffer = backend.AllocateBuffer(betaData);
+
+        // Use native GPU InstanceNorm operation
+        float epsilon = (float)NumOps.ToDouble(_epsilon);
+        backend.InstanceNorm(input.Buffer, outputBuffer, gammaBuffer, betaBuffer,
+            saveMeanBuffer, saveInvVarBuffer, batch, channels, spatialSize, epsilon);
+
+        // Cache mean/variance for backward pass if training
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            // Download mean and variance for backward pass compatibility
+            var meanData = new float[statsSize];
+            var varData = new float[statsSize];
+            backend.DownloadBuffer(saveMeanBuffer, meanData);
+            backend.DownloadBuffer(saveInvVarBuffer, varData);
+            _lastMean = new Tensor<T>([batch, channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(meanData)));
+            _lastVariance = new Tensor<T>([batch, channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(varData)));
+        }
+
+        // Dispose temp buffers
+        saveMeanBuffer.Dispose();
+        saveInvVarBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

@@ -1,5 +1,8 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -146,6 +149,9 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public int InputFeatures { get; private set; }
@@ -475,6 +481,305 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for HeterogeneousGraphLayer.
+    /// Implements type-specific graph convolution with fully GPU-native operations.
+    /// </summary>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (_adjacencyMatrices == null || _nodeTypeMap == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrices and node type map must be set before calling ForwardGpu.");
+        }
+
+        var input = inputs[0];
+        int[] inputShape = input.Shape;
+
+        // Handle shape normalization
+        int batchSize;
+        int numNodes;
+        int inputFeatures;
+
+        if (inputShape.Length == 2)
+        {
+            batchSize = 1;
+            numNodes = inputShape[0];
+            inputFeatures = inputShape[1];
+        }
+        else if (inputShape.Length == 3)
+        {
+            batchSize = inputShape[0];
+            numNodes = inputShape[1];
+            inputFeatures = inputShape[2];
+        }
+        else
+        {
+            throw new ArgumentException($"Input must be 2D or 3D, got {inputShape.Length}D");
+        }
+
+        int outputSize = batchSize * numNodes * _outputFeatures;
+
+        // Initialize output buffer to zero
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+        backend.Fill(outputBuffer, 0.0f, outputSize);
+
+        // ========================================
+        // EDGE-TYPE SPECIFIC GRAPH CONVOLUTIONS
+        // ========================================
+
+        foreach (var edgeType in _metadata.EdgeTypes)
+        {
+            if (!_adjacencyMatrices.TryGetValue(edgeType, out var adjacency))
+                continue;
+
+            var (sourceType, _) = _metadata.EdgeTypeSchema[edgeType];
+            int inFeatures = _metadata.NodeTypeFeatures[sourceType];
+
+            // Get or reconstruct weights for this edge type
+            Tensor<T> weights;
+            if (_useBasis && _basisMatrices != null && _basisCoefficients != null)
+            {
+                var coeffs = _basisCoefficients[edgeType];
+                weights = new Tensor<T>([InputFeatures, _outputFeatures]);
+                weights.Fill(NumOps.Zero);
+                for (int b = 0; b < _numBases; b++)
+                {
+                    var basisSlice = ExtractBasisMatrix(_basisMatrices, b, InputFeatures, _outputFeatures);
+                    var scaledBasis = Engine.TensorMultiplyScalar(basisSlice, coeffs[b]);
+                    weights = Engine.TensorAdd(weights, scaledBasis);
+                }
+            }
+            else
+            {
+                weights = _edgeTypeWeights[edgeType];
+            }
+
+            // Upload weights to GPU
+            using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weights.Data));
+
+            // Normalize adjacency matrix (precompute on CPU, upload once)
+            var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, numNodes);
+            using var adjBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(normalizedAdj.Data));
+
+            // GPU-native processing: For all batches at once
+            // If inFeatures == inputFeatures, use input directly; otherwise extract columns on GPU
+            IGpuBuffer inputSliceBuffer;
+            bool needsDisposeSlice = false;
+
+            if (inFeatures == inputFeatures)
+            {
+                inputSliceBuffer = input.Buffer;
+            }
+            else
+            {
+                // Extract first inFeatures columns - single CPU roundtrip for preprocessing
+                // This is O(1) roundtrips vs O(numNodes) in the original code
+                var fullData = backend.DownloadBuffer(input.Buffer);
+                var sliceData = new float[batchSize * numNodes * inFeatures];
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        int srcOffset = b * numNodes * inputFeatures + n * inputFeatures;
+                        int dstOffset = b * numNodes * inFeatures + n * inFeatures;
+                        for (int f = 0; f < inFeatures && f < inputFeatures; f++)
+                        {
+                            sliceData[dstOffset + f] = fullData[srcOffset + f];
+                        }
+                    }
+                }
+                inputSliceBuffer = backend.AllocateBuffer(sliceData);
+                needsDisposeSlice = true;
+            }
+
+            // Process all batches using batched GEMM
+            // xw = input @ weights : [batchSize * numNodes, inFeatures] @ [inFeatures, outputFeatures] -> [batchSize * numNodes, outputFeatures]
+            using var xwBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            backend.Gemm(inputSliceBuffer, weightsBuffer, xwBuffer, batchSize * numNodes, _outputFeatures, inFeatures);
+
+            // Apply adjacency matrix per batch: convOutput = adj @ xw
+            // For single batch or 2D adjacency, apply once to all
+            using var convOutputBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+
+            if (batchSize == 1)
+            {
+                // Single batch: direct GEMM
+                backend.Gemm(adjBuffer, xwBuffer, convOutputBuffer, numNodes, _outputFeatures, numNodes);
+            }
+            else if (normalizedAdj.Shape.Length == 2)
+            {
+                // 2D adjacency shared across batches: tile adjacency and use BatchedGemm
+                // Create tiled adjacency buffer [batchSize, numNodes, numNodes]
+                using var tiledAdjBuffer = backend.AllocateBuffer(batchSize * numNodes * numNodes);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    int dstOffset = b * numNodes * numNodes;
+                    backend.Copy2DStrided(adjBuffer, tiledAdjBuffer, 1, numNodes * numNodes, batchSize * numNodes * numNodes, dstOffset);
+                }
+                // BatchedGemm: [batch, numNodes, numNodes] @ [batch, numNodes, outputFeatures]
+                backend.BatchedGemm(tiledAdjBuffer, xwBuffer, convOutputBuffer, numNodes, _outputFeatures, numNodes, batchSize);
+            }
+            else
+            {
+                // Per-batch 3D adjacency: use BatchedGemm directly
+                backend.BatchedGemm(adjBuffer, xwBuffer, convOutputBuffer, numNodes, _outputFeatures, numNodes, batchSize);
+            }
+
+            // Accumulate to output using GPU Add
+            backend.Add(outputBuffer, convOutputBuffer, outputBuffer, outputSize);
+
+            if (needsDisposeSlice)
+            {
+                inputSliceBuffer.Dispose();
+            }
+        }
+
+        // ========================================
+        // SELF-LOOP WEIGHTS AND BIASES PER NODE TYPE
+        // (GPU-native batch processing with type masks)
+        // ========================================
+
+        // For each node type, pre-compute a mask and process all nodes in batched fashion
+        foreach (var nodeType in _metadata.NodeTypes)
+        {
+            var selfWeights = _selfLoopWeights[nodeType];
+            var bias = _biases[nodeType];
+            int inFeatures = _metadata.NodeTypeFeatures[nodeType];
+
+            // Upload weights and bias
+            using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(selfWeights.Data));
+            using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(bias.Data));
+
+            // Create a broadcast mask [numNodes, outputFeatures] where mask[n, :] = 1.0 if node n is of this type
+            var nodeMaskData = new float[numNodes * _outputFeatures];
+            for (int n = 0; n < numNodes; n++)
+            {
+                float maskVal = (_nodeTypeMap.TryGetValue(n, out var type) && type == nodeType) ? 1.0f : 0.0f;
+                for (int f = 0; f < _outputFeatures; f++)
+                {
+                    nodeMaskData[n * _outputFeatures + f] = maskVal;
+                }
+            }
+            using var nodeMaskBuffer = backend.AllocateBuffer(nodeMaskData);
+
+            // Extract input features for this node type (first inFeatures columns)
+            IGpuBuffer typeInputBuffer;
+            bool needsDisposeTypeInput = false;
+
+            if (inFeatures == inputFeatures)
+            {
+                typeInputBuffer = input.Buffer;
+            }
+            else
+            {
+                // Extract first inFeatures columns - single CPU roundtrip for preprocessing
+                var fullData = backend.DownloadBuffer(input.Buffer);
+                var sliceData = new float[batchSize * numNodes * inFeatures];
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        int srcOffset = b * numNodes * inputFeatures + n * inputFeatures;
+                        int dstOffset = b * numNodes * inFeatures + n * inFeatures;
+                        for (int f = 0; f < inFeatures && f < inputFeatures; f++)
+                        {
+                            sliceData[dstOffset + f] = fullData[srcOffset + f];
+                        }
+                    }
+                }
+                typeInputBuffer = backend.AllocateBuffer(sliceData);
+                needsDisposeTypeInput = true;
+            }
+
+            // Compute selfOutput = input @ selfWeights for ALL nodes
+            // [batchSize * numNodes, inFeatures] @ [inFeatures, outputFeatures] -> [batchSize * numNodes, outputFeatures]
+            using var selfOutputBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            backend.Gemm(typeInputBuffer, selfWeightsBuffer, selfOutputBuffer, batchSize * numNodes, _outputFeatures, inFeatures);
+
+            // Add bias using BiasAdd (broadcasts across nodes)
+            backend.BiasAdd(selfOutputBuffer, biasBuffer, selfOutputBuffer, batchSize * numNodes, _outputFeatures);
+
+            // Apply mask: maskedSelfOutput = selfOutput * mask (element-wise)
+            // The mask is [numNodes, outputFeatures], need to tile for batch dimension
+            using var tiledMaskBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            for (int b = 0; b < batchSize; b++)
+            {
+                int dstOffset = b * numNodes * _outputFeatures;
+                backend.Copy2DStrided(nodeMaskBuffer, tiledMaskBuffer, 1, numNodes * _outputFeatures, batchSize * numNodes * _outputFeatures, dstOffset);
+            }
+
+            // Element-wise multiply: selfOutput * tiledMask
+            using var maskedSelfOutputBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            backend.Multiply(selfOutputBuffer, tiledMaskBuffer, maskedSelfOutputBuffer, batchSize * numNodes * _outputFeatures);
+
+            // Accumulate to output using GPU Add
+            backend.Add(outputBuffer, maskedSelfOutputBuffer, outputBuffer, outputSize);
+
+            if (needsDisposeTypeInput)
+            {
+                typeInputBuffer.Dispose();
+            }
+        }
+
+        // ========================================
+        // APPLY ACTIVATION
+        // ========================================
+
+        ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, GetFusedActivationType());
+
+        // Create output tensor with appropriate shape
+        int[] outputShape = batchSize == 1
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        var finalBuffer = backend.AllocateBuffer(outputSize);
+        backend.Copy(outputBuffer, finalBuffer, outputSize);
+        outputBuffer.Dispose();
+        return new GpuTensor<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Converts a normalized adjacency tensor to CSR format (using first batch element).
+    /// </summary>
+    private (float[] Values, int[] ColIndices, int[] RowPointers) ConvertToCSR(Tensor<T> adjacency, int numNodes)
+    {
+        var values = new List<float>();
+        var colIndices = new List<int>();
+        var rowPointers = new List<int> { 0 };
+
+        bool is2D = adjacency.Shape.Length == 2;
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                float val = is2D
+                    ? (float)NumOps.ToDouble(adjacency[i, j])
+                    : (float)NumOps.ToDouble(adjacency[0, i, j]);
+
+                if (MathF.Abs(val) > 1e-6f)
+                {
+                    values.Add(val);
+                    colIndices.Add(j);
+                }
+            }
+            rowPointers.Add(values.Count);
+        }
+
+        return (values.ToArray(), colIndices.ToArray(), rowPointers.ToArray());
     }
 
     /// <summary>

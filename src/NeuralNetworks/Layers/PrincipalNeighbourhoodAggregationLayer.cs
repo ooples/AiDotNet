@@ -1,4 +1,7 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -87,6 +90,9 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -337,6 +343,398 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for PrincipalNeighbourhoodAggregationLayer.
+    /// Implements multiple aggregators and scalers on GPU using sparse operations.
+    /// </summary>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine tensorEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = tensorEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+        }
+
+        var input = inputs[0];
+
+        // Handle batch dimension
+        int[] inputShape = input.Shape;
+        int batchSize;
+        int numNodes;
+        int inputFeatures;
+
+        if (inputShape.Length == 2)
+        {
+            batchSize = 1;
+            numNodes = inputShape[0];
+            inputFeatures = inputShape[1];
+        }
+        else if (inputShape.Length == 3)
+        {
+            batchSize = inputShape[0];
+            numNodes = inputShape[1];
+            inputFeatures = inputShape[2];
+        }
+        else
+        {
+            throw new ArgumentException($"Input must be 2D [nodes, features] or 3D [batch, nodes, features], got {inputShape.Length}D");
+        }
+
+        // Upload weight tensors to GPU
+        using var preTransformWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_preTransformWeights.Data));
+        using var preTransformBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_preTransformBias.Data));
+        using var postWeights1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationWeights1.Data));
+        using var postWeights2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationWeights2.Data));
+        using var postBias1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationBias1.Data));
+        using var postBias2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationBias2.Data));
+        using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bias.Data));
+
+        // Convert adjacency matrix to CSR for sparse operations
+        var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix, numNodes);
+        using var adjCsr = new CsrGpuTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+
+        // Compute node degrees from adjacency matrix row sums
+        float[] degrees = ComputeDegrees(_adjacencyMatrix, numNodes);
+        using var degreesBuffer = backend.AllocateBuffer(degrees);
+
+        // Allocate output buffer
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        using var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        int preTransformFeatures = _preTransformWeights.Shape[1];
+        int numAggregatorScalerCombinations = _aggregators.Length * _scalers.Length;
+
+        // Download full input for batch processing
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int batchInputOffset = b * numNodes * inputFeatures;
+            // Extract batch slice and upload as separate buffer
+            float[] batchInputData = new float[numNodes * inputFeatures];
+            Array.Copy(inputData, batchInputOffset, batchInputData, 0, numNodes * inputFeatures);
+            using var batchInputBuffer = backend.AllocateBuffer(batchInputData);
+
+            // ========================================
+            // STEP 1: Pre-transform: X @ W_pre + b_pre
+            // ========================================
+
+            using var transformedBuffer = backend.AllocateBuffer(numNodes * preTransformFeatures);
+            backend.Gemm(
+                batchInputBuffer, preTransformWeightsBuffer, transformedBuffer,
+                numNodes, preTransformFeatures, inputFeatures);
+
+            // Add bias
+            backend.BiasAdd(transformedBuffer, preTransformBiasBuffer, transformedBuffer, numNodes, preTransformFeatures);
+
+            // ========================================
+            // STEP 2: Multiple aggregators and scalers
+            // ========================================
+
+            // Each combination produces [numNodes, preTransformFeatures]
+            // Concatenated result: [numNodes, numCombinations * preTransformFeatures]
+            using var concatenatedBuffer = backend.AllocateBuffer(numNodes * _combinedFeatures);
+
+            int combOffset = 0;
+            foreach (var aggregator in _aggregators)
+            {
+                // Compute aggregation
+                using var aggregatedBuffer = backend.AllocateBuffer(numNodes * preTransformFeatures);
+
+                switch (aggregator)
+                {
+                    case PNAAggregator.Sum:
+                    case PNAAggregator.Mean:
+                        // A @ transformed for sum; divide by degree for mean
+                        backend.CsrSpMM(
+                            adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            transformedBuffer, aggregatedBuffer,
+                            numNodes, preTransformFeatures, numNodes, adjCsr.Nnz);
+
+                        if (aggregator == PNAAggregator.Mean)
+                        {
+                            // Divide by degree (with safe minimum of 1)
+                            DivideByDegreeGpu(backend, aggregatedBuffer, degreesBuffer, numNodes, preTransformFeatures);
+                        }
+                        break;
+
+                    case PNAAggregator.Max:
+                        // Use GPU segmented max aggregation
+                        backend.CsrSegmentedMax(
+                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            transformedBuffer, aggregatedBuffer,
+                            numNodes, numNodes, preTransformFeatures);
+                        break;
+
+                    case PNAAggregator.Min:
+                        // Use GPU segmented min aggregation
+                        backend.CsrSegmentedMin(
+                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            transformedBuffer, aggregatedBuffer,
+                            numNodes, numNodes, preTransformFeatures);
+                        break;
+
+                    case PNAAggregator.StdDev:
+                        // Use GPU segmented stddev aggregation
+                        backend.CsrSegmentedStdDev(
+                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            transformedBuffer, aggregatedBuffer,
+                            numNodes, numNodes, preTransformFeatures);
+                        break;
+
+                    default:
+                        // Default to sum
+                        backend.CsrSpMM(
+                            adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            transformedBuffer, aggregatedBuffer,
+                            numNodes, preTransformFeatures, numNodes, adjCsr.Nnz);
+                        break;
+                }
+
+                // Apply scalers
+                foreach (var scaler in _scalers)
+                {
+                    using var scaledBuffer = backend.AllocateBuffer(numNodes * preTransformFeatures);
+
+                    switch (scaler)
+                    {
+                        case PNAScaler.Identity:
+                            backend.Copy(aggregatedBuffer, scaledBuffer, numNodes * preTransformFeatures);
+                            break;
+
+                        case PNAScaler.Amplification:
+                            // Scale by degree / avgDegree
+                            ApplyScalerGpu(backend, aggregatedBuffer, scaledBuffer, degreesBuffer,
+                                numNodes, preTransformFeatures, (float)_avgDegree, isAmplification: true);
+                            break;
+
+                        case PNAScaler.Attenuation:
+                            // Scale by avgDegree / degree
+                            ApplyScalerGpu(backend, aggregatedBuffer, scaledBuffer, degreesBuffer,
+                                numNodes, preTransformFeatures, (float)_avgDegree, isAmplification: false);
+                            break;
+
+                        default:
+                            backend.Copy(aggregatedBuffer, scaledBuffer, numNodes * preTransformFeatures);
+                            break;
+                    }
+
+                    // Copy to concatenated buffer at correct offset
+                    CopyToConcat(backend, scaledBuffer, concatenatedBuffer, numNodes, preTransformFeatures, combOffset);
+                    combOffset += preTransformFeatures;
+                }
+            }
+
+            // ========================================
+            // STEP 3: Post-aggregation MLP Layer 1 with ReLU
+            // ========================================
+
+            using var hidden1Buffer = backend.AllocateBuffer(numNodes * _hiddenDim);
+            backend.Gemm(
+                concatenatedBuffer, postWeights1Buffer, hidden1Buffer,
+                numNodes, _hiddenDim, _combinedFeatures);
+
+            backend.BiasAdd(hidden1Buffer, postBias1Buffer, hidden1Buffer, numNodes, _hiddenDim);
+            backend.Relu(hidden1Buffer, hidden1Buffer, numNodes * _hiddenDim);
+
+            // ========================================
+            // STEP 4: Post-aggregation MLP Layer 2
+            // ========================================
+
+            using var mlpOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Gemm(
+                hidden1Buffer, postWeights2Buffer, mlpOutputBuffer,
+                numNodes, _outputFeatures, _hiddenDim);
+
+            backend.BiasAdd(mlpOutputBuffer, postBias2Buffer, mlpOutputBuffer, numNodes, _outputFeatures);
+
+            // ========================================
+            // STEP 5: Self-loop transformation
+            // ========================================
+
+            using var selfBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Gemm(
+                batchInputBuffer, selfWeightsBuffer, selfBuffer,
+                numNodes, _outputFeatures, inputFeatures);
+
+            // ========================================
+            // STEP 6: Combine MLP output + self + bias
+            // ========================================
+
+            // Create temporary buffer for this batch's output
+            using var batchOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+
+            // output = mlpOutput + self + bias
+            backend.Add(mlpOutputBuffer, selfBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+            backend.BiasAdd(batchOutputBuffer, biasBuffer, batchOutputBuffer, numNodes, _outputFeatures);
+
+            // Apply activation if needed
+            ApplyFusedActivation(backend, batchOutputBuffer, numNodes * _outputFeatures);
+
+            // Copy batch result to correct position in output buffer
+            float[] batchResult = backend.DownloadBuffer(batchOutputBuffer);
+            int batchOutputOffset = b * numNodes * _outputFeatures;
+            float[] outputData = backend.DownloadBuffer(outputBuffer);
+            Array.Copy(batchResult, 0, outputData, batchOutputOffset, numNodes * _outputFeatures);
+            using (var tempOutput = backend.AllocateBuffer(outputData))
+            {
+                backend.Copy(tempOutput, outputBuffer, outputSize);
+            }
+        }
+
+        // Create output tensor
+        int[] outputShape = batchSize == 1 ? [numNodes, _outputFeatures] : [batchSize, numNodes, _outputFeatures];
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+    }
+
+    /// <summary>
+    /// Converts adjacency matrix to CSR format.
+    /// </summary>
+    private (float[] Values, int[] ColumnIndices, int[] RowPointers) ConvertToCSR(Tensor<T> adjacency, int numNodes)
+    {
+        var values = new List<float>();
+        var colIndices = new List<int>();
+        var rowPointers = new List<int> { 0 };
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                float val = (float)NumOps.ToDouble(adjacency[i, j]);
+                if (MathF.Abs(val) > 1e-6f)
+                {
+                    values.Add(val);
+                    colIndices.Add(j);
+                }
+            }
+            rowPointers.Add(values.Count);
+        }
+
+        return (values.ToArray(), colIndices.ToArray(), rowPointers.ToArray());
+    }
+
+    /// <summary>
+    /// Computes node degrees from adjacency matrix.
+    /// </summary>
+    private float[] ComputeDegrees(Tensor<T> adjacency, int numNodes)
+    {
+        var degrees = new float[numNodes];
+        for (int i = 0; i < numNodes; i++)
+        {
+            float sum = 0;
+            for (int j = 0; j < numNodes; j++)
+            {
+                sum += (float)NumOps.ToDouble(adjacency[i, j]);
+            }
+            degrees[i] = MathF.Max(sum, 1.0f); // Minimum degree of 1 to avoid division by zero
+        }
+        return degrees;
+    }
+
+    /// <summary>
+    /// Divides each feature row by the corresponding node degree on GPU.
+    /// </summary>
+    private void DivideByDegreeGpu(IDirectGpuBackend backend, IGpuBuffer buffer, IGpuBuffer degreesBuffer,
+        int numNodes, int features)
+    {
+        // Download degrees, compute division, upload
+        float[] data = backend.DownloadBuffer(buffer);
+        float[] degrees = backend.DownloadBuffer(degreesBuffer);
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            float deg = MathF.Max(degrees[i], 1.0f);
+            for (int f = 0; f < features; f++)
+            {
+                data[i * features + f] /= deg;
+            }
+        }
+
+        // Upload modified data via new buffer and copy
+        using var tempBuffer = backend.AllocateBuffer(data);
+        backend.Copy(tempBuffer, buffer, data.Length);
+    }
+
+    /// <summary>
+    /// Applies amplification or attenuation scaler on GPU.
+    /// Amplification: scale[i] = degree[i] / avgDegree
+    /// Attenuation: scale[i] = avgDegree / max(degree[i], 1)
+    /// </summary>
+    private void ApplyScalerGpu(IDirectGpuBackend backend, IGpuBuffer sourceBuffer, IGpuBuffer destBuffer,
+        IGpuBuffer degreesBuffer, int numNodes, int features, float avgDegree, bool isAmplification)
+    {
+        // Create scale factors buffer on GPU
+        using var scaleFactors = backend.AllocateBuffer(numNodes);
+        using var onesBuffer = backend.AllocateBuffer(numNodes);
+        using var tempBuffer = backend.AllocateBuffer(numNodes);
+
+        // Clamp degrees to minimum of 1 to avoid division by zero
+        // safeDegrees = max(degrees, 1)
+        backend.Fill(onesBuffer, 1.0f, numNodes);
+        backend.Max(degreesBuffer, onesBuffer, tempBuffer, numNodes);
+
+        if (isAmplification)
+        {
+            // scaleFactors[i] = safeDegrees[i] / avgDegree
+            backend.Scale(tempBuffer, scaleFactors, 1.0f / avgDegree, numNodes);
+        }
+        else
+        {
+            // scaleFactors[i] = avgDegree / safeDegrees[i]
+            // Use Divide: scaleFactors = avgDegree * ones / safeDegrees
+            using var avgBuffer = backend.AllocateBuffer(numNodes);
+            backend.Fill(avgBuffer, avgDegree, numNodes);
+            backend.Divide(avgBuffer, tempBuffer, scaleFactors, numNodes);
+        }
+
+        // Apply scale factors to each row: destBuffer[i,f] = sourceBuffer[i,f] * scaleFactors[i]
+        backend.BroadcastMultiplyFirstAxis(sourceBuffer, scaleFactors, destBuffer, numNodes, features);
+    }
+
+    /// <summary>
+    /// Copies scaled features to the concatenated buffer at the specified offset using GPU strided copy.
+    /// </summary>
+    private void CopyToConcat(IDirectGpuBackend backend, IGpuBuffer sourceBuffer, IGpuBuffer concatBuffer,
+        int numNodes, int features, int featureOffset)
+    {
+        backend.Copy2DStrided(sourceBuffer, concatBuffer, numNodes, features, _combinedFeatures, featureOffset);
+    }
+
+    /// <summary>
+    /// Applies the fused activation function on GPU.
+    /// </summary>
+    private void ApplyFusedActivation(IDirectGpuBackend backend, IGpuBuffer buffer, int size)
+    {
+        var activation = GetFusedActivationType();
+        switch (activation)
+        {
+            case FusedActivationType.ReLU:
+                backend.Relu(buffer, buffer, size);
+                break;
+            case FusedActivationType.Sigmoid:
+                backend.Sigmoid(buffer, buffer, size);
+                break;
+            case FusedActivationType.Tanh:
+                backend.Tanh(buffer, buffer, size);
+                break;
+            case FusedActivationType.GELU:
+                backend.Gelu(buffer, buffer, size);
+                break;
+            // Identity does nothing
+        }
     }
 
     /// <summary>

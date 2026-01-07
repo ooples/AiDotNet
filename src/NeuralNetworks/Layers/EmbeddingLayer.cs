@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -198,6 +199,14 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer can execute on GPU.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because embedding lookup has efficient GPU support.
+    /// </value>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the total number of trainable parameters in this layer.
@@ -448,6 +457,116 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return flatOutput.Reshape(outputShape);
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the embedding layer on GPU.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensor(s) containing token indices.</param>
+    /// <returns>A GPU-resident tensor containing the embedding vectors.</returns>
+    /// <exception cref="ArgumentException">Thrown when no inputs are provided.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when GPU engine is not available.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs embedding lookup entirely on GPU, keeping the output on GPU
+    /// for subsequent GPU-accelerated operations. This eliminates CPU-GPU data transfers
+    /// for intermediate results in deep networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of embedding lookup.
+    /// Instead of moving data between CPU and GPU, all computation stays on the GPU,
+    /// making it much faster for large vocabularies and batch sizes.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        int embeddingDim = _embeddingTensor.Shape[1];
+        int vocabularySize = _embeddingTensor.Shape[0];
+
+        // Download input to CPU to convert to integer indices
+        // (Indices are typically small, so this is acceptable)
+        var inputTensor = input.ToTensor();
+
+        // Store for potential backward pass (only in training mode)
+        if (IsTrainingMode)
+        {
+            _lastInput = inputTensor;
+            _originalInputShape = inputTensor.Shape;
+        }
+
+        // Detect if input is continuous
+        bool isContinuousInput = InputMode switch
+        {
+            EmbeddingInputMode.Continuous => true,
+            EmbeddingInputMode.Indices => false,
+            _ => _autoDetectedContinuous ??= IsContinuousInput(inputTensor, vocabularySize)
+        };
+
+        if (IsTrainingMode)
+        {
+            _lastInputWasContinuous = isContinuousInput;
+        }
+
+        if (isContinuousInput)
+        {
+            // Linear projection for continuous input: input @ _projectionWeights
+            int inputFeatures = inputTensor.Shape[^1];
+
+            // Create projection weights if needed (lazy initialization)
+            if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
+            {
+                _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim]);
+                // Xavier initialization
+                T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
+                var random = RandomHelper.CreateSecureRandom();
+                for (int i = 0; i < _projectionWeights.Length; i++)
+                {
+                    _projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+                }
+            }
+
+            // Flatten input to 2D [totalSamples, inputFeatures] for projection
+            int totalSamples = inputTensor.Length / inputFeatures;
+            var input2D = inputTensor.Reshape([totalSamples, inputFeatures]);
+
+            // Perform GPU matrix multiplication: [totalSamples, inputFeatures] @ [inputFeatures, embeddingDim]
+            var gpuProjectionOutput = gpuEngine.FusedLinearGpu(input2D, _projectionWeights, null, FusedActivationType.None);
+
+            // Calculate output shape: replace last dimension with embeddingDim
+            int[] outputShape = new int[inputTensor.Rank];
+            for (int i = 0; i < inputTensor.Rank - 1; i++)
+            {
+                outputShape[i] = inputTensor.Shape[i];
+            }
+            outputShape[^1] = embeddingDim;
+
+            // Reshape if needed (FusedLinearGpu returns [totalSamples, embeddingDim])
+            if (outputShape.Length != 2 || outputShape[0] != totalSamples)
+            {
+                return gpuEngine.ReshapeGpu(gpuProjectionOutput, outputShape);
+            }
+
+            return gpuProjectionOutput;
+        }
+
+        // Standard embedding lookup for integer token indices
+        int totalIndices = inputTensor.Length;
+        var flatIndices = new Tensor<int>([totalIndices]);
+        for (int i = 0; i < totalIndices; i++)
+        {
+            flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(inputTensor.Data[i]));
+        }
+
+        // Perform GPU embedding lookup - keeps result on GPU
+        var gpuOutput = gpuEngine.EmbeddingLookupGpu(_embeddingTensor, flatIndices);
+
+        return gpuOutput;
     }
 
     private bool IsContinuousInput(Tensor<T> input, int vocabularySize)

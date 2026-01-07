@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -542,6 +544,11 @@ public class LSTMLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Gets the total number of trainable parameters in this layer.
     /// </summary>
     /// <value>
@@ -1072,6 +1079,220 @@ public class LSTMLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Performs a GPU-resident forward pass using GPU-accelerated LSTM operations.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.
+    /// The LSTM gates (forget, input, cell, output) are computed using GPU matrix operations.</para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+
+        // Determine batch size and time steps from input shape
+        int batchSize, timeSteps;
+        int rank = input.Shape.Length;
+        bool reshaped2D = false;
+        bool reshapedHigherRank = false;
+        int[]? originalShape = null;
+
+        if (rank == 2)
+        {
+            // 2D input [timeSteps, inputSize] -> single batch
+            batchSize = 1;
+            timeSteps = input.Shape[0];
+            reshaped2D = true;
+            originalShape = input.Shape;
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D input [batchSize, timeSteps, inputSize]
+            batchSize = input.Shape[0];
+            timeSteps = input.Shape[1];
+        }
+        else
+        {
+            // Higher-rank tensor: collapse leading dims into batch
+            originalShape = input.Shape;
+            reshapedHigherRank = true;
+            timeSteps = input.Shape[rank - 2];
+            batchSize = 1;
+            for (int d = 0; d < rank - 2; d++)
+                batchSize *= input.Shape[d];
+        }
+
+        // Validate input size
+        int expectedInputSize = reshaped2D ? input.Shape[1] : (reshapedHigherRank ? input.Shape[rank - 1] : input.Shape[2]);
+        if (expectedInputSize != _inputSize)
+        {
+            throw new ArgumentException(
+                $"Expected input size {_inputSize}, but got {expectedInputSize}.");
+        }
+
+        // Upload weights to GPU (transposed for efficient matmul)
+        using var WfiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsFi).ToArray()));
+        using var WiiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsIi).ToArray()));
+        using var WciBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsCi).ToArray()));
+        using var WoiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsOi).ToArray()));
+        using var WfhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsFh).ToArray()));
+        using var WihBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsIh).ToArray()));
+        using var WchBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsCh).ToArray()));
+        using var WohBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsOh).ToArray()));
+        using var biasFBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasF.ToArray()));
+        using var biasIBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasI.ToArray()));
+        using var biasCBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasC.ToArray()));
+        using var biasOBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasO.ToArray()));
+
+        // Allocate hidden and cell state buffers
+        int hiddenBufferSize = batchSize * _hiddenSize;
+        var currentHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var currentCBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        backend.Fill(currentHBuffer, 0.0f, hiddenBufferSize); // Initialize to zero
+        backend.Fill(currentCBuffer, 0.0f, hiddenBufferSize);
+
+        // Allocate output buffer
+        int outputSize = batchSize * timeSteps * _hiddenSize;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Temporary buffers for gate computations
+        var tempBuffer1 = backend.AllocateBuffer(hiddenBufferSize);
+        var tempBuffer2 = backend.AllocateBuffer(hiddenBufferSize);
+        var fGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var iGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var cTildeBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var oGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var newCBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var newHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+
+        try
+        {
+            // Process each time step
+            for (int t = 0; t < timeSteps; t++)
+            {
+                // Get input slice for time step t
+                // Input shape is [batch, timeSteps, inputSize], so slice at offset t * batchSize * inputSize
+                int inputSliceOffset = t * batchSize * _inputSize;
+                int inputSliceSize = batchSize * _inputSize;
+
+                // Create view into input for this timestep
+                var inputSlice = input.CreateView(inputSliceOffset, [batchSize, _inputSize]);
+
+                // Forget Gate: f = sigmoid(x*Wfi^T + h*Wfh^T + biasF)
+                backend.Gemm(inputSlice.Buffer, WfiBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(currentHBuffer, WfhBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, fGateBuffer, hiddenBufferSize);
+                backend.BiasAdd(fGateBuffer, biasFBuffer, fGateBuffer, batchSize, _hiddenSize);
+                backend.Sigmoid(fGateBuffer, fGateBuffer, hiddenBufferSize);
+
+                // Input Gate: i = sigmoid(x*Wii^T + h*Wih^T + biasI)
+                backend.Gemm(inputSlice.Buffer, WiiBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(currentHBuffer, WihBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, iGateBuffer, hiddenBufferSize);
+                backend.BiasAdd(iGateBuffer, biasIBuffer, iGateBuffer, batchSize, _hiddenSize);
+                backend.Sigmoid(iGateBuffer, iGateBuffer, hiddenBufferSize);
+
+                // Cell Candidate: c_tilde = tanh(x*Wci^T + h*Wch^T + biasC)
+                backend.Gemm(inputSlice.Buffer, WciBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(currentHBuffer, WchBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, cTildeBuffer, hiddenBufferSize);
+                backend.BiasAdd(cTildeBuffer, biasCBuffer, cTildeBuffer, batchSize, _hiddenSize);
+                backend.Tanh(cTildeBuffer, cTildeBuffer, hiddenBufferSize);
+
+                // Output Gate: o = sigmoid(x*Woi^T + h*Woh^T + biasO)
+                backend.Gemm(inputSlice.Buffer, WoiBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
+                backend.Gemm(currentHBuffer, WohBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(tempBuffer1, tempBuffer2, oGateBuffer, hiddenBufferSize);
+                backend.BiasAdd(oGateBuffer, biasOBuffer, oGateBuffer, batchSize, _hiddenSize);
+                backend.Sigmoid(oGateBuffer, oGateBuffer, hiddenBufferSize);
+
+                // Update Cell State: C = f * C_prev + i * c_tilde
+                backend.Multiply(fGateBuffer, currentCBuffer, tempBuffer1, hiddenBufferSize);
+                backend.Multiply(iGateBuffer, cTildeBuffer, tempBuffer2, hiddenBufferSize);
+                backend.Add(tempBuffer1, tempBuffer2, newCBuffer, hiddenBufferSize);
+
+                // Update Hidden State: H = o * tanh(C)
+                backend.Tanh(newCBuffer, tempBuffer1, hiddenBufferSize);
+                backend.Multiply(oGateBuffer, tempBuffer1, newHBuffer, hiddenBufferSize);
+
+                // Copy new states to current state buffers
+                backend.Copy(newCBuffer, currentCBuffer, hiddenBufferSize);
+                backend.Copy(newHBuffer, currentHBuffer, hiddenBufferSize);
+
+                // Store hidden state in output at position t using Copy2DStrided
+                // Copy2DStrided(source, dest, numRows, srcCols, destTotalCols, destColOffset)
+                // We copy 1 "row" of hiddenBufferSize elements to outputBuffer at offset t * hiddenBufferSize
+                int outputOffset = t * hiddenBufferSize;
+                backend.Copy2DStrided(newHBuffer, outputBuffer, 1, hiddenBufferSize, outputSize, outputOffset);
+            }
+
+            // Determine output shape
+            int[] outputShape;
+            if (reshaped2D)
+            {
+                outputShape = [timeSteps, _hiddenSize];
+            }
+            else if (reshapedHigherRank && originalShape != null)
+            {
+                outputShape = new int[originalShape.Length];
+                for (int d = 0; d < originalShape.Length - 2; d++)
+                    outputShape[d] = originalShape[d];
+                outputShape[originalShape.Length - 2] = timeSteps;
+                outputShape[originalShape.Length - 1] = _hiddenSize;
+            }
+            else
+            {
+                outputShape = [batchSize, timeSteps, _hiddenSize];
+            }
+
+            // Cleanup temporary buffers
+            currentHBuffer.Dispose();
+            currentCBuffer.Dispose();
+            tempBuffer1.Dispose();
+            tempBuffer2.Dispose();
+            fGateBuffer.Dispose();
+            iGateBuffer.Dispose();
+            cTildeBuffer.Dispose();
+            oGateBuffer.Dispose();
+            newCBuffer.Dispose();
+            newHBuffer.Dispose();
+
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        catch
+        {
+            // Cleanup all buffers on error
+            currentHBuffer.Dispose();
+            currentCBuffer.Dispose();
+            tempBuffer1.Dispose();
+            tempBuffer2.Dispose();
+            fGateBuffer.Dispose();
+            iGateBuffer.Dispose();
+            cTildeBuffer.Dispose();
+            oGateBuffer.Dispose();
+            newCBuffer.Dispose();
+            newHBuffer.Dispose();
+            outputBuffer.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Performs the backward pass of the LSTM layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
@@ -1563,6 +1784,8 @@ public class LSTMLayer<T> : LayerBase<T>
         }
     }
 
+    private Dictionary<string, Tensor<T>> _velocities = new Dictionary<string, Tensor<T>>();
+
     /// <summary>
     /// Updates the parameters of the LSTM layer based on the calculated gradients.
     /// </summary>
@@ -1587,67 +1810,108 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        // Use Engine operations for GPU/CPU acceleration
+        bool useGpu = Engine is DirectGpuTensorEngine;
+        DirectGpuTensorEngine? gpuEngine = useGpu ? (DirectGpuTensorEngine)Engine : null;
+        float lr = useGpu ? (float)NumOps.ToDouble(learningRate) : 0.0f;
+
         foreach (var kvp in Gradients)
         {
             var paramName = kvp.Key;
             var gradient = kvp.Value;
-            var scaledGradient = Engine.TensorMultiplyScalar(gradient, learningRate);
 
-            switch (paramName)
+            if (useGpu)
             {
-                case "weightsFi":
-                    _weightsFi = Engine.TensorSubtract(_weightsFi, scaledGradient);
-                    break;
-                case "weightsIi":
-                    _weightsIi = Engine.TensorSubtract(_weightsIi, scaledGradient);
-                    break;
-                case "weightsCi":
-                    _weightsCi = Engine.TensorSubtract(_weightsCi, scaledGradient);
-                    break;
-                case "weightsOi":
-                    _weightsOi = Engine.TensorSubtract(_weightsOi, scaledGradient);
-                    break;
-                case "weightsFh":
-                    _weightsFh = Engine.TensorSubtract(_weightsFh, scaledGradient);
-                    break;
-                case "weightsIh":
-                    _weightsIh = Engine.TensorSubtract(_weightsIh, scaledGradient);
-                    break;
-                case "weightsCh":
-                    _weightsCh = Engine.TensorSubtract(_weightsCh, scaledGradient);
-                    break;
-                case "weightsOh":
-                    _weightsOh = Engine.TensorSubtract(_weightsOh, scaledGradient);
-                    break;
-                case "biasF":
-                    _biasF = Engine.TensorSubtract(_biasF, scaledGradient);
-                    break;
-                case "biasI":
-                    _biasI = Engine.TensorSubtract(_biasI, scaledGradient);
-                    break;
-                case "biasC":
-                    _biasC = Engine.TensorSubtract(_biasC, scaledGradient);
-                    break;
-                case "biasO":
-                    _biasO = Engine.TensorSubtract(_biasO, scaledGradient);
-                    break;
+                // GPU Update
+                Tensor<T> param = paramName switch
+                {
+                    "weightsFi" => _weightsFi,
+                    "weightsIi" => _weightsIi,
+                    "weightsCi" => _weightsCi,
+                    "weightsOi" => _weightsOi,
+                    "weightsFh" => _weightsFh,
+                    "weightsIh" => _weightsIh,
+                    "weightsCh" => _weightsCh,
+                    "weightsOh" => _weightsOh,
+                    "biasF" => _biasF,
+                    "biasI" => _biasI,
+                    "biasC" => _biasC,
+                    "biasO" => _biasO,
+                    _ => throw new InvalidOperationException($"Unknown parameter: {paramName}")
+                };
+
+                if (!_velocities.TryGetValue(paramName, out var velocity))
+                {
+                    velocity = new Tensor<T>(param.Shape);
+                    velocity.Fill(NumOps.Zero);
+                    gpuEngine!.RegisterPersistentTensor(velocity, PersistentTensorRole.OptimizerState);
+                    _velocities[paramName] = velocity;
+                }
+
+                gpuEngine!.SgdMomentumUpdateGpu(param, gradient, velocity, lr, 0.0f, 0.0f);
+            }
+            else
+            {
+                // CPU Update
+                var scaledGradient = Engine.TensorMultiplyScalar(gradient, learningRate);
+
+                switch (paramName)
+                {
+                    case "weightsFi":
+                        _weightsFi = Engine.TensorSubtract(_weightsFi, scaledGradient);
+                        break;
+                    case "weightsIi":
+                        _weightsIi = Engine.TensorSubtract(_weightsIi, scaledGradient);
+                        break;
+                    case "weightsCi":
+                        _weightsCi = Engine.TensorSubtract(_weightsCi, scaledGradient);
+                        break;
+                    case "weightsOi":
+                        _weightsOi = Engine.TensorSubtract(_weightsOi, scaledGradient);
+                        break;
+                    case "weightsFh":
+                        _weightsFh = Engine.TensorSubtract(_weightsFh, scaledGradient);
+                        break;
+                    case "weightsIh":
+                        _weightsIh = Engine.TensorSubtract(_weightsIh, scaledGradient);
+                        break;
+                    case "weightsCh":
+                        _weightsCh = Engine.TensorSubtract(_weightsCh, scaledGradient);
+                        break;
+                    case "weightsOh":
+                        _weightsOh = Engine.TensorSubtract(_weightsOh, scaledGradient);
+                        break;
+                    case "biasF":
+                        _biasF = Engine.TensorSubtract(_biasF, scaledGradient);
+                        break;
+                    case "biasI":
+                        _biasI = Engine.TensorSubtract(_biasI, scaledGradient);
+                        break;
+                    case "biasC":
+                        _biasC = Engine.TensorSubtract(_biasC, scaledGradient);
+                        break;
+                    case "biasO":
+                        _biasO = Engine.TensorSubtract(_biasO, scaledGradient);
+                        break;
+                }
             }
         }
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_weightsFi);
-        Engine.InvalidatePersistentTensor(_weightsIi);
-        Engine.InvalidatePersistentTensor(_weightsCi);
-        Engine.InvalidatePersistentTensor(_weightsOi);
-        Engine.InvalidatePersistentTensor(_weightsFh);
-        Engine.InvalidatePersistentTensor(_weightsIh);
-        Engine.InvalidatePersistentTensor(_weightsCh);
-        Engine.InvalidatePersistentTensor(_weightsOh);
-        Engine.InvalidatePersistentTensor(_biasF);
-        Engine.InvalidatePersistentTensor(_biasI);
-        Engine.InvalidatePersistentTensor(_biasC);
-        Engine.InvalidatePersistentTensor(_biasO);
+        if (!useGpu)
+        {
+            // Notify GPU that tensor data has changed
+            Engine.InvalidatePersistentTensor(_weightsFi);
+            Engine.InvalidatePersistentTensor(_weightsIi);
+            Engine.InvalidatePersistentTensor(_weightsCi);
+            Engine.InvalidatePersistentTensor(_weightsOi);
+            Engine.InvalidatePersistentTensor(_weightsFh);
+            Engine.InvalidatePersistentTensor(_weightsIh);
+            Engine.InvalidatePersistentTensor(_weightsCh);
+            Engine.InvalidatePersistentTensor(_weightsOh);
+            Engine.InvalidatePersistentTensor(_biasF);
+            Engine.InvalidatePersistentTensor(_biasI);
+            Engine.InvalidatePersistentTensor(_biasC);
+            Engine.InvalidatePersistentTensor(_biasO);
+        }
     }
 
     /// <summary>

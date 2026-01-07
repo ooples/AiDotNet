@@ -1,4 +1,6 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -403,6 +405,79 @@ public class RBMLayer<T> : LayerBase<T>
         return hiddenProbs.Reshape(outputShape);
     }
 
+    /// <summary>
+    /// Performs the forward pass on GPU using FusedLinearGpu with Sigmoid activation.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        _originalInputShape = input.Shape;
+
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException("Input must have at least one dimension.", nameof(input));
+
+        int visibleSize = input.Shape[^1];
+        if (visibleSize != _visibleUnits)
+            throw new ArgumentException($"Expected input feature size {_visibleUnits} but got {visibleSize}.", nameof(input));
+
+        // Calculate batch size from all dimensions except the last
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            flatBatch *= input.Shape[d];
+
+        // Reshape input to 2D [batch, visibleUnits] for matrix multiply
+        IGpuTensor<T> input2D = input;
+        if (rank == 1)
+        {
+            input2D = input.CreateView(0, [1, _visibleUnits]);
+            flatBatch = 1;
+        }
+        else if (rank > 2)
+        {
+            input2D = input.CreateView(0, [flatBatch, _visibleUnits]);
+        }
+
+        // Transpose weights for FusedLinearGpu (expects [inputFeatures, outputFeatures])
+        // RBM weights are [hiddenUnits, visibleUnits], need [visibleUnits, hiddenUnits]
+        var weightsT = Engine.TensorTranspose(_weights);
+
+        // Use FusedLinearGpu with Sigmoid activation - fully GPU-resident
+        var result = gpuEngine.FusedLinearGpu(input2D, weightsT, _hiddenBiases, FusedActivationType.Sigmoid);
+
+        // Cache state for backward pass only during training
+        if (IsTrainingMode)
+        {
+            _lastVisibleInput = input.ToTensor();
+            if (_lastVisibleInput.Shape.Length != 2)
+                _lastVisibleInput = _lastVisibleInput.Reshape([flatBatch, _visibleUnits]);
+            _lastHiddenOutput = result.ToTensor();
+        }
+
+        // Reshape output to match expected shape
+        if (rank == 1)
+        {
+            return result.CreateView(0, [_hiddenUnits]);
+        }
+        else if (rank > 2)
+        {
+            var outputShape = new int[rank];
+            for (int d = 0; d < rank - 1; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[rank - 1] = _hiddenUnits;
+            return result.CreateView(0, outputShape);
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Trains the RBM using contrastive divergence with the given data.
@@ -977,6 +1052,11 @@ public class RBMLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {

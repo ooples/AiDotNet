@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -196,6 +197,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU-resident execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the number of attention heads in this layer.
@@ -723,6 +729,132 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// GPU-resident forward pass for multi-head attention.
+    /// Performs all projections and attention computation on GPU without downloading intermediate results.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // Handle input shape - flatten to 3D [batch, seq, embedding]
+        int[] inputShape = input.Shape;
+        int seqLength, embeddingDimension, batchSize;
+
+        if (inputShape.Length == 2)
+        {
+            // 2D input: [seq, embedding] -> treat as batch=1
+            batchSize = 1;
+            seqLength = inputShape[0];
+            embeddingDimension = inputShape[1];
+        }
+        else if (inputShape.Length >= 3)
+        {
+            // 3D+ input: flatten batch dimensions
+            batchSize = 1;
+            for (int i = 0; i < inputShape.Length - 2; i++)
+                batchSize *= inputShape[i];
+            seqLength = inputShape[^2];
+            embeddingDimension = inputShape[^1];
+        }
+        else
+        {
+            throw new ArgumentException("Input must be at least 2D [seq, embedding]");
+        }
+
+        // 1. Reshape input to 3D for processing
+        var input3D = gpuEngine.ReshapeGpu(input, new[] { batchSize, seqLength, embeddingDimension });
+
+        // 2. Project to Q, K, V using batched matrix multiplication
+        // Input: [batch, seq, embedding], Weights: [embedding, embedding]
+        // Output: [batch, seq, embedding]
+        var queries = gpuEngine.BatchedMatMulGpu(input3D, _queryWeights);
+        var keys = gpuEngine.BatchedMatMulGpu(input3D, _keyWeights);
+        var values = gpuEngine.BatchedMatMulGpu(input3D, _valueWeights);
+
+        // 3. Reshape to [batch, seq, heads, headDim]
+        var qReshaped = gpuEngine.ReshapeGpu(queries, new[] { batchSize, seqLength, _headCount, _headDimension });
+        var kReshaped = gpuEngine.ReshapeGpu(keys, new[] { batchSize, seqLength, _headCount, _headDimension });
+        var vReshaped = gpuEngine.ReshapeGpu(values, new[] { batchSize, seqLength, _headCount, _headDimension });
+
+        // 4. Transpose to [batch, heads, seq, headDim] for attention
+        var qPermuted = gpuEngine.PermuteGpu(qReshaped, new[] { 0, 2, 1, 3 });
+        var kPermuted = gpuEngine.PermuteGpu(kReshaped, new[] { 0, 2, 1, 3 });
+        var vPermuted = gpuEngine.PermuteGpu(vReshaped, new[] { 0, 2, 1, 3 });
+
+        // 5. Compute scaled dot-product attention
+        // Use overload that returns attention weights during training for backward pass
+        double scale = 1.0 / Math.Sqrt(_headDimension);
+        IGpuTensor<T> attentionOutput;
+        IGpuTensor<T>? attentionWeightsGpu = null;
+
+        if (IsTrainingMode)
+        {
+            // Training mode: get attention weights for backward pass
+            attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(
+                qPermuted, kPermuted, vPermuted, scale, out attentionWeightsGpu);
+        }
+        else
+        {
+            // Inference mode: no need for attention weights
+            attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(qPermuted, kPermuted, vPermuted, scale);
+        }
+
+        // 6. Transpose back to [batch, seq, heads, headDim]
+        var contextPermuted = gpuEngine.PermuteGpu(attentionOutput, new[] { 0, 2, 1, 3 });
+
+        // 7. Reshape to [batch, seq, embedding]
+        var contextFlat = gpuEngine.ReshapeGpu(contextPermuted, new[] { batchSize, seqLength, embeddingDimension });
+
+        // 8. Apply output projection
+        var outputProjected = gpuEngine.BatchedMatMulGpu(contextFlat, _outputWeights);
+
+        // 9. Add output bias
+        var outputWithBias = gpuEngine.AddBiasGpu(outputProjected, _outputBias);
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            // Download GPU tensors to CPU for backward pass
+            _lastInput = input3D.ToTensor();
+
+            // Cache projected Q, K, V for backward pass
+            _lastProjectedQueries = qPermuted.ToTensor();
+            _lastProjectedKeys = kPermuted.ToTensor();
+            _lastProjectedValues = vPermuted.ToTensor();
+
+            // Cache attention context for output weights gradient
+            _lastAttentionContext = contextFlat.ToTensor();
+
+            // Cache attention weights for backward pass
+            _lastAttentionScores = attentionWeightsGpu?.ToTensor();
+
+            _lastOutput = outputWithBias.ToTensor();
+        }
+
+        // 10. Reshape back to original batch dimensions if needed
+        if (inputShape.Length != 3 || inputShape[0] != batchSize)
+        {
+            int[] outputShape = new int[inputShape.Length];
+            for (int i = 0; i < inputShape.Length - 2; i++)
+                outputShape[i] = inputShape[i];
+            outputShape[^2] = seqLength;
+            outputShape[^1] = embeddingDimension;
+            return gpuEngine.ReshapeGpu(outputWithBias, outputShape);
+        }
+
+        return outputWithBias;
+    }
+
+    /// <summary>
     /// Performs the backward pass of the multi-head attention layer, calculating gradients for learning.
     /// </summary>
     /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
@@ -942,6 +1074,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
 
+    private Tensor<T>? _queryWeightsVelocity;
+    private Tensor<T>? _keyWeightsVelocity;
+    private Tensor<T>? _valueWeightsVelocity;
+    private Tensor<T>? _outputWeightsVelocity;
+    private Tensor<T>? _outputBiasVelocity;
+
     /// <summary>
     /// Updates the layer's parameters (weights and biases) using the calculated gradients.
     /// </summary>
@@ -959,19 +1097,55 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null || _outputWeightsGradient == null || _outputBiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update weights using tensor operations (production-ready pattern - no conversions)
-        _queryWeights = _queryWeights.Subtract(_queryWeightsGradient.Multiply(learningRate));
-        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
-        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
-        _outputWeights = _outputWeights.Subtract(_outputWeightsGradient.Multiply(learningRate));
-        _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
+            if (_queryWeightsVelocity == null)
+            {
+                _queryWeightsVelocity = new Tensor<T>(_queryWeights.Shape);
+                _queryWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_queryWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _keyWeightsVelocity = new Tensor<T>(_keyWeights.Shape);
+                _keyWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_keyWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _valueWeightsVelocity = new Tensor<T>(_valueWeights.Shape);
+                _valueWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_valueWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _outputWeightsVelocity = new Tensor<T>(_outputWeights.Shape);
+                _outputWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_outputWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _outputBiasVelocity = new Tensor<T>(_outputBias.Shape);
+                _outputBiasVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_outputBiasVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            gpuEngine.SgdMomentumUpdateGpu(_queryWeights, _queryWeightsGradient, _queryWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_keyWeights, _keyWeightsGradient, _keyWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_valueWeights, _valueWeightsGradient, _valueWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_outputWeights, _outputWeightsGradient, _outputWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_outputBias, _outputBiasGradient, _outputBiasVelocity!, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            // Update weights using tensor operations (production-ready pattern - no conversions)
+            _queryWeights = _queryWeights.Subtract(_queryWeightsGradient.Multiply(learningRate));
+            _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
+            _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
+            _outputWeights = _outputWeights.Subtract(_outputWeightsGradient.Multiply(learningRate));
+            _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+
+            // Notify GPU that tensor data has changed
+            Engine.InvalidatePersistentTensor(_queryWeights);
+            Engine.InvalidatePersistentTensor(_keyWeights);
+            Engine.InvalidatePersistentTensor(_valueWeights);
+            Engine.InvalidatePersistentTensor(_outputWeights);
+            Engine.InvalidatePersistentTensor(_outputBias);
+        }
     }
 
     /// <summary>

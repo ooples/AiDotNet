@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -64,6 +65,11 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer can execute on GPU.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public override int ParameterCount =>
@@ -580,6 +586,211 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         {
             wSpan[i] = NumOps.Subtract(wSpan[i], NumOps.Multiply(learningRate, gSpan[i]));
         }
+    }
+
+    /// <summary>
+    /// GPU-resident forward pass for cross-attention with multiple inputs.
+    /// </summary>
+    /// <param name="inputs">Array containing [query] or [query, context] GPU tensors.</param>
+    /// <returns>GPU-resident output tensor with same shape as query.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        // Handle single or dual input
+        IGpuTensor<T> query = inputs[0];
+        IGpuTensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
+
+        int[] queryShape = query.Shape;
+        int[] contextShape = context.Shape;
+        int queryRank = queryShape.Length;
+
+        // Store original shape for output
+        int[] originalQueryShape = queryShape;
+        int batch, queryLen;
+        int height = 0, width = 0;
+        bool is4D = queryRank == 4;
+
+        if (queryRank == 2)
+        {
+            batch = 1;
+            queryLen = queryShape[0];
+        }
+        else if (queryRank == 3)
+        {
+            batch = queryShape[0];
+            queryLen = queryShape[1];
+        }
+        else if (is4D)
+        {
+            batch = queryShape[0];
+            height = queryShape[2];
+            width = queryShape[3];
+            queryLen = height * width;
+
+            // Reshape query from [B, C, H, W] to [B, H*W, C]
+            query = ReshapeNCHWToNLCGpu(gpuEngine, query);
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < queryRank - 2; d++)
+                flatBatch *= queryShape[d];
+            batch = flatBatch;
+            queryLen = queryShape[queryRank - 2];
+            query = gpuEngine.ReshapeGpu(query, new[] { flatBatch, queryLen, _queryDim });
+        }
+
+        // Handle context shape
+        int contextRank = contextShape.Length;
+        int contextLen;
+        int contextBatch;
+
+        if (contextRank == 1)
+        {
+            contextBatch = 1;
+            contextLen = 1;
+            context = gpuEngine.ReshapeGpu(context, new[] { 1, 1, _contextDim });
+        }
+        else if (contextRank == 2)
+        {
+            contextBatch = 1;
+            contextLen = contextShape[0];
+            context = gpuEngine.ReshapeGpu(context, new[] { 1, contextLen, _contextDim });
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < contextRank - 2; d++)
+                flatBatch *= contextShape[d];
+            contextBatch = flatBatch;
+            contextLen = contextShape[contextRank - 2];
+            if (contextRank != 3)
+            {
+                context = gpuEngine.ReshapeGpu(context, new[] { flatBatch, contextLen, _contextDim });
+            }
+        }
+
+        // Broadcast context if needed using GPU tile kernel
+        if (contextBatch != batch)
+        {
+            if (contextBatch == 1 && batch > 1)
+            {
+                // Tile context along batch dimension using proper GPU kernel
+                context = gpuEngine.TileBatchGpu<T>(context, batch);
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"Context batch dimension ({contextBatch}) must match query batch ({batch}) or be 1.");
+            }
+        }
+
+        // Project Q, K, V
+        var Q = gpuEngine.BatchedMatMulGpu(query, _queryWeights);   // [B, queryLen, queryDim]
+        var K = gpuEngine.BatchedMatMulGpu(context, _keyWeights);  // [B, contextLen, queryDim]
+        var V = gpuEngine.BatchedMatMulGpu(context, _valueWeights); // [B, contextLen, queryDim]
+
+        // Reshape to [batch, seqLen, heads, headDim]
+        var qReshaped = gpuEngine.ReshapeGpu(Q, new[] { batch, queryLen, _headCount, _headDim });
+        var kReshaped = gpuEngine.ReshapeGpu(K, new[] { batch, contextLen, _headCount, _headDim });
+        var vReshaped = gpuEngine.ReshapeGpu(V, new[] { batch, contextLen, _headCount, _headDim });
+
+        // Transpose to [batch, heads, seqLen, headDim]
+        var qPermuted = gpuEngine.PermuteGpu(qReshaped, new[] { 0, 2, 1, 3 });
+        var kPermuted = gpuEngine.PermuteGpu(kReshaped, new[] { 0, 2, 1, 3 });
+        var vPermuted = gpuEngine.PermuteGpu(vReshaped, new[] { 0, 2, 1, 3 });
+
+        // Scaled dot-product attention
+        // Use overload that returns attention weights during training for backward pass
+        double scale = 1.0 / Math.Sqrt(_headDim);
+        IGpuTensor<T> attended;
+        IGpuTensor<T>? attentionWeightsGpu = null;
+
+        if (IsTrainingMode)
+        {
+            // Training mode: get attention weights for backward pass
+            attended = gpuEngine.ScaledDotProductAttentionGpu(
+                qPermuted, kPermuted, vPermuted, scale, out attentionWeightsGpu);
+        }
+        else
+        {
+            // Inference mode: no need for attention weights
+            attended = gpuEngine.ScaledDotProductAttentionGpu(qPermuted, kPermuted, vPermuted, scale);
+        }
+
+        // Transpose back to [batch, seqLen, heads, headDim]
+        var contextPermuted = gpuEngine.PermuteGpu(attended, new[] { 0, 2, 1, 3 });
+
+        // Reshape to [batch, seqLen, queryDim]
+        var contextFlat = gpuEngine.ReshapeGpu(contextPermuted, new[] { batch, queryLen, _queryDim });
+
+        // Output projection
+        var output = gpuEngine.BatchedMatMulGpu(contextFlat, _outputWeights);
+
+        // Add bias
+        output = gpuEngine.AddBiasGpu(output, _outputBias);
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            _lastQuery = query.ToTensor();
+            _lastContext = context.ToTensor();
+            _lastAttentionScores = attentionWeightsGpu?.ToTensor();
+            _lastOutput = output.ToTensor();
+            _originalQueryShape = originalQueryShape;
+        }
+
+        // Restore original shape
+        if (originalQueryShape.Length == 2)
+        {
+            output = gpuEngine.ReshapeGpu(output, new[] { queryLen, _queryDim });
+        }
+        else if (is4D)
+        {
+            output = ReshapeNLCToNCHWGpu(gpuEngine, output, batch, _queryDim, height, width);
+        }
+        else if (originalQueryShape.Length > 3)
+        {
+            int[] newShape = new int[originalQueryShape.Length];
+            for (int d = 0; d < originalQueryShape.Length - 2; d++)
+                newShape[d] = originalQueryShape[d];
+            newShape[^2] = queryLen;
+            newShape[^1] = _queryDim;
+            output = gpuEngine.ReshapeGpu(output, newShape);
+        }
+
+        return output;
+    }
+
+    private static IGpuTensor<T> ReshapeNCHWToNLCGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> input)
+    {
+        int[] shape = input.Shape;
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+        int seqLen = height * width;
+
+        // Permute NCHW to NHWC: [B, C, H, W] -> [B, H, W, C]
+        var nhwc = gpuEngine.PermuteGpu(input, new[] { 0, 2, 3, 1 });
+
+        // Reshape to NLC: [B, H, W, C] -> [B, H*W, C]
+        return gpuEngine.ReshapeGpu(nhwc, new[] { batch, seqLen, channels });
+    }
+
+    private static IGpuTensor<T> ReshapeNLCToNCHWGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> input, int batch, int channels, int height, int width)
+    {
+        // Reshape NLC to NHWC: [B, H*W, C] -> [B, H, W, C]
+        var nhwc = gpuEngine.ReshapeGpu(input, new[] { batch, height, width, channels });
+
+        // Permute NHWC to NCHW: [B, H, W, C] -> [B, C, H, W]
+        return gpuEngine.PermuteGpu(nhwc, new[] { 0, 3, 1, 2 });
     }
 
     /// <inheritdoc/>

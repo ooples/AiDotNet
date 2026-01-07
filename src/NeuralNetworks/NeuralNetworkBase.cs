@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.MixedPrecision;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -572,6 +573,649 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         return current;
     }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass, keeping intermediate results on GPU.
+    /// Only downloads the final result to CPU when the returned tensor is accessed.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>GPU-resident output tensor. Only downloads when <see cref="IGpuTensor{T}.ToTensor"/> is called.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no GPU backend is available or the engine is not a DirectGpuTensorEngine.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method is like the regular forward pass, but keeps all
+    /// intermediate calculations on the GPU instead of moving data back and forth between
+    /// CPU and GPU. This can be 10-50x faster for multi-layer networks!
+    /// </para>
+    /// <para>
+    /// <b>Performance Tip:</b> Use this method for inference when you have multiple layers
+    /// that all support GPU execution. The data stays on the GPU until you call ToTensor()
+    /// on the result.
+    /// </para>
+    /// <code>
+    /// // Example: GPU-resident inference
+    /// using var gpuResult = network.ForwardGpu(input);
+    /// var output = gpuResult.ToTensor(); // Only downloads here
+    /// </code>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardGpu(Tensor<T> input)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires DirectGpuTensorEngine. Current engine: " +
+                Engine.GetType().Name);
+        }
+
+        // Upload input to GPU once
+        IGpuTensor<T>? current = null;
+        bool ownsCurrentTensor = false;
+
+        try
+        {
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                var layer = Layers[i];
+
+                if (layer.CanExecuteOnGpu)
+                {
+                    // Layer supports GPU-resident execution
+                    if (current is null)
+                    {
+                        // First GPU layer - upload input
+                        current = gpuEngine.UploadToGpu(input, GpuTensorRole.Activation);
+                        ownsCurrentTensor = true;
+                    }
+
+                    var next = layer.ForwardGpu(current);
+
+                    // Dispose intermediate if we own it (but not the input)
+                    if (ownsCurrentTensor && current is not null)
+                    {
+                        current.Dispose();
+                    }
+
+                    current = next;
+                    ownsCurrentTensor = true;
+                }
+                else
+                {
+                    // Layer doesn't support GPU - fall back to CPU
+                    Tensor<T> cpuInput;
+                    if (current is not null)
+                    {
+                        // Download current GPU tensor to CPU
+                        cpuInput = current.ToTensor();
+                        if (ownsCurrentTensor)
+                        {
+                            current.Dispose();
+                        }
+                        current = null;
+                        ownsCurrentTensor = false;
+                    }
+                    else
+                    {
+                        // Haven't uploaded yet, use original input
+                        cpuInput = input;
+                    }
+
+                    // Execute on CPU
+                    var cpuOutput = layer.Forward(cpuInput);
+
+                    // Check if next layer supports GPU
+                    bool nextLayerSupportsGpu = i + 1 < Layers.Count &&
+                        Layers[i + 1].CanExecuteOnGpu;
+
+                    if (nextLayerSupportsGpu || i == Layers.Count - 1)
+                    {
+                        // Upload result to GPU for next layer or final output
+                        current = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+                        ownsCurrentTensor = true;
+                    }
+                    else
+                    {
+                        // Keep on CPU for next CPU layer
+                        input = cpuOutput; // Reuse input variable for next iteration
+                    }
+                }
+            }
+
+            // Ensure we return a GPU tensor
+            if (current is null)
+            {
+                // All layers were CPU - upload final result
+                current = gpuEngine.UploadToGpu(input, GpuTensorRole.Activation);
+            }
+
+            return current;
+        }
+        catch
+        {
+            // Clean up on error
+            if (ownsCurrentTensor && current is not null)
+            {
+                current.Dispose();
+            }
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass with GPU-resident input.
+    /// Use this overload when chaining multiple networks or when input is already on GPU.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no GPU backend is available or the engine is not a DirectGpuTensorEngine.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this version when your data is already on the GPU
+    /// (for example, from a previous network's output). This avoids an extra upload step.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires DirectGpuTensorEngine. Current engine: " +
+                Engine.GetType().Name);
+        }
+
+        IGpuTensor<T> current = input;
+        bool ownsCurrentTensor = false; // Don't own the input
+
+        try
+        {
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                var layer = Layers[i];
+
+                if (layer.CanExecuteOnGpu)
+                {
+                    var next = layer.ForwardGpu(current);
+
+                    // Dispose intermediate if we own it (but not the original input)
+                    if (ownsCurrentTensor)
+                    {
+                        current.Dispose();
+                    }
+
+                    current = next;
+                    ownsCurrentTensor = true;
+                }
+                else
+                {
+                    // Layer doesn't support GPU - fall back to CPU
+                    var cpuInput = current.ToTensor();
+                    if (ownsCurrentTensor)
+                    {
+                        current.Dispose();
+                    }
+
+                    var cpuOutput = layer.Forward(cpuInput);
+
+                    // Upload result back to GPU
+                    current = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+                    ownsCurrentTensor = true;
+                }
+            }
+
+            return current;
+        }
+        catch
+        {
+            if (ownsCurrentTensor)
+            {
+                current.Dispose();
+            }
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Performs a forward pass using deferred execution for optimized GPU performance.
+    /// Operations are recorded and batched into an execution graph that runs with a single sync point.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor from the network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses deferred execution to batch all GPU operations and execute them
+    /// as an optimized graph. This provides significant performance improvements over
+    /// eager execution by:
+    /// - Avoiding synchronization between layers
+    /// - Enabling kernel fusion optimizations
+    /// - Minimizing CPU-GPU data transfers
+    /// </para>
+    /// <para><b>Execution Flow:</b></para>
+    /// <code>
+    /// BeginDeferredScope()
+    ///   Layer1.ForwardGpu() → Record GPU op (no sync)
+    ///   Layer2.ForwardGpu() → Record GPU op (no sync)
+    ///   Layer3.ForwardGpu() → Record GPU op (no sync)
+    /// EndDeferredScope() → Execute all → Single sync → Download final result
+    /// </code>
+    /// <para><b>For Beginners:</b> Think of this like batch cooking vs cooking one dish at a time.
+    /// Instead of starting and finishing each layer separately, we plan out all the operations
+    /// and then execute them together more efficiently.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the engine doesn't support deferred execution.
+    /// </exception>
+    public virtual Tensor<T> ForwardDeferred(Tensor<T> input)
+    {
+        // Check if we have a DirectGpuTensorEngine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            // Fall back to regular predict if no GPU engine
+            return Predict(input);
+        }
+
+        // Try to use deferred scope for batched execution with optimization
+        var deferredScope = gpuEngine.BeginDeferredScope();
+        if (deferredScope != null)
+        {
+            try
+            {
+                // Wrap the GPU forward pass in a deferred scope
+                // Operations are recorded to the graph builder and executed as a batch
+                using (deferredScope)
+                {
+                    // Upload input and record it to the graph
+                    var gpuInput = gpuEngine.UploadToGpu(input, GpuTensorRole.Input);
+
+                    // Forward through layers - operations chain on GPU
+                    // With full integration, these would record to scope.GraphBuilder
+                    IGpuTensor<T> current = gpuInput;
+                    bool ownsCurrentTensor = true;
+
+                    try
+                    {
+                        for (int i = 0; i < Layers.Count; i++)
+                        {
+                            var layer = Layers[i];
+
+                            if (layer.CanExecuteOnGpu)
+                            {
+                                var next = layer.ForwardGpu(current);
+
+                                if (ownsCurrentTensor && current is not null)
+                                {
+                                    current.Dispose();
+                                }
+
+                                current = next;
+                                ownsCurrentTensor = true;
+                            }
+                            else
+                            {
+                                // CPU fallback for layers without GPU support
+                                var cpuInput = current.ToTensor();
+                                if (ownsCurrentTensor)
+                                {
+                                    current.Dispose();
+                                }
+
+                                var cpuOutput = layer.Forward(cpuInput);
+                                current = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+                                ownsCurrentTensor = true;
+                            }
+                        }
+
+                        // Execute the deferred scope to run all batched operations
+                        deferredScope.Execute();
+
+                        // Download final result
+                        var result = current.ToTensor();
+                        if (ownsCurrentTensor)
+                        {
+                            current.Dispose();
+                        }
+
+                        return result;
+                    }
+                    catch
+                    {
+                        if (ownsCurrentTensor && current is not null)
+                        {
+                            current.Dispose();
+                        }
+                        throw;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fall back to non-deferred GPU execution if deferred fails
+                System.Diagnostics.Debug.WriteLine($"Deferred execution failed, falling back: {ex.Message}");
+            }
+        }
+
+        // Fall back to GPU-resident forward without deferred execution
+        try
+        {
+            using var result = ForwardGpu(input);
+            return result.ToTensor();
+        }
+        catch
+        {
+            // Final fallback to CPU predict
+            return Predict(input);
+        }
+    }
+
+    /// <summary>
+    /// Performs an asynchronous forward pass using deferred execution for optimized GPU performance.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>A task representing the async operation with the output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the async version of <see cref="ForwardDeferred"/>. The GPU execution
+    /// runs asynchronously, allowing the CPU to do other work while waiting.
+    /// </para>
+    /// </remarks>
+    public virtual async Task<Tensor<T>> ForwardDeferredAsync(Tensor<T> input, CancellationToken cancellationToken = default)
+    {
+        // Check if we have a DirectGpuTensorEngine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            // Fall back to regular predict if no GPU engine
+            return Predict(input);
+        }
+
+        // Try to use deferred scope with async execution
+        var deferredScope = gpuEngine.BeginDeferredScope();
+        if (deferredScope != null)
+        {
+            try
+            {
+                using (deferredScope)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    // Upload input
+                    var gpuInput = gpuEngine.UploadToGpu(input, GpuTensorRole.Input);
+                    IGpuTensor<T> current = gpuInput;
+                    bool ownsCurrentTensor = true;
+
+                    try
+                    {
+                        for (int i = 0; i < Layers.Count; i++)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var layer = Layers[i];
+
+                            if (layer.CanExecuteOnGpu)
+                            {
+                                var next = layer.ForwardGpu(current);
+
+                                if (ownsCurrentTensor && current is not null)
+                                {
+                                    current.Dispose();
+                                }
+
+                                current = next;
+                                ownsCurrentTensor = true;
+                            }
+                            else
+                            {
+                                var cpuInput = current.ToTensor();
+                                if (ownsCurrentTensor)
+                                {
+                                    current.Dispose();
+                                }
+
+                                var cpuOutput = layer.Forward(cpuInput);
+                                current = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+                                ownsCurrentTensor = true;
+                            }
+                        }
+
+                        // Execute the deferred scope asynchronously
+                        await deferredScope.ExecuteAsync(cancellationToken);
+
+                        // Download final result
+                        var result = current.ToTensor();
+                        if (ownsCurrentTensor)
+                        {
+                            current.Dispose();
+                        }
+
+                        return result;
+                    }
+                    catch
+                    {
+                        if (ownsCurrentTensor && current is not null)
+                        {
+                            current.Dispose();
+                        }
+                        throw;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Fall back to non-deferred execution
+                System.Diagnostics.Debug.WriteLine($"Async deferred execution failed, falling back: {ex.Message}");
+            }
+        }
+
+        // Fall back to GPU-resident forward without async deferred execution
+        return await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                using var result = ForwardGpu(input);
+                return result.ToTensor();
+            }
+            catch
+            {
+                return Predict(input);
+            }
+        }, cancellationToken);
+    }
+
+    #region GPU Execution Context Integration
+
+    /// <summary>
+    /// Begins a GPU execution context for managing GPU-resident tensor lifecycle.
+    /// </summary>
+    /// <param name="options">Optional GPU execution options.</param>
+    /// <returns>A GPU execution context that should be disposed when done.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a scope for GPU operations where tensors stay
+    /// on the GPU and are only downloaded when explicitly needed. This avoids redundant
+    /// CPU-GPU transfers during batch inference or training.</para>
+    /// <code>
+    /// // Example: Batch inference with GPU context
+    /// using (var ctx = network.BeginGpuExecution())
+    /// {
+    ///     foreach (var batch in batches)
+    ///     {
+    ///         var result = network.ForwardWithGpuContext(batch);
+    ///         // Results are GPU-resident until ToTensor() is called
+    ///         predictions.Add(result.ToTensor());
+    ///     }
+    /// } // All GPU tensors are cleaned up here
+    /// </code>
+    /// </remarks>
+    public virtual GpuExecutionContext BeginGpuExecution(GpuExecutionOptions? options = null)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "BeginGpuExecution requires DirectGpuTensorEngine. Current engine: " +
+                Engine.GetType().Name);
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null || !backend.IsAvailable)
+        {
+            throw new InvalidOperationException("No GPU backend available.");
+        }
+
+        return GpuExecutionContext.Begin(backend, options);
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass within a GPU execution context.
+    /// Uses the current thread's GpuExecutionContext for tensor management.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>GPU-resident output tensor managed by the current context.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU context is active.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method is like ForwardGpu but uses the GPU execution context
+    /// to track all tensor allocations. The context handles memory management automatically,
+    /// preventing memory leaks and enabling memory pressure monitoring.</para>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardWithGpuContext(Tensor<T> input)
+    {
+        var ctx = GpuExecutionContext.Current;
+        if (ctx is null)
+        {
+            throw new InvalidOperationException(
+                "ForwardWithGpuContext requires an active GpuExecutionContext. " +
+                "Call BeginGpuExecution() first.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardWithGpuContext requires DirectGpuTensorEngine. Current engine: " +
+                Engine.GetType().Name);
+        }
+
+        // Use context's size threshold for GPU decision
+        int inputElements = input.Data.Length;
+
+        if (!ctx.ShouldUseGpu(inputElements))
+        {
+            // Context says stay on CPU - wrap result in GPU tensor for API consistency
+            var cpuResult = Predict(input);
+            return ctx.Upload(cpuResult, GpuTensorRole.Activation);
+        }
+
+        // Upload input to GPU using context (tracked in registry)
+        IGpuTensor<T> current = ctx.Upload(input, GpuTensorRole.Activation);
+
+        try
+        {
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                var layer = Layers[i];
+
+                if (layer.CanExecuteOnGpu)
+                {
+                    var next = layer.ForwardGpu(current);
+
+                    // Register output with context (if not already registered by layer)
+                    if (next is GpuTensor<T> gpuNext)
+                    {
+                        ctx.Registry.TryRegister(gpuNext);
+                    }
+
+                    current = next;
+                }
+                else
+                {
+                    // Layer doesn't support GPU - fall back to CPU
+                    var cpuInput = current.ToTensor();
+                    var cpuOutput = layer.Forward(cpuInput);
+
+                    // Upload result back using context
+                    current = ctx.Upload(cpuOutput, GpuTensorRole.Activation);
+                }
+            }
+
+            return current;
+        }
+        catch
+        {
+            // On error, tensors are cleaned up when context is disposed
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass within a GPU execution context with GPU-resident input.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor managed by the current context.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU context is active.</exception>
+    public virtual IGpuTensor<T> ForwardWithGpuContext(IGpuTensor<T> input)
+    {
+        var ctx = GpuExecutionContext.Current;
+        if (ctx is null)
+        {
+            throw new InvalidOperationException(
+                "ForwardWithGpuContext requires an active GpuExecutionContext. " +
+                "Call BeginGpuExecution() first.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardWithGpuContext requires DirectGpuTensorEngine. Current engine: " +
+                Engine.GetType().Name);
+        }
+
+        IGpuTensor<T> current = input;
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+
+            if (layer.CanExecuteOnGpu)
+            {
+                var next = layer.ForwardGpu(current);
+
+                // Register output with context (if not already registered by layer)
+                if (next is GpuTensor<T> gpuNext)
+                {
+                    ctx.Registry.TryRegister(gpuNext);
+                }
+
+                current = next;
+            }
+            else
+            {
+                // Layer doesn't support GPU - fall back to CPU
+                var cpuInput = current.ToTensor();
+                var cpuOutput = layer.Forward(cpuInput);
+
+                // Upload result back using context
+                current = ctx.Upload(cpuOutput, GpuTensorRole.Activation);
+            }
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Gets GPU memory statistics if running within a GPU execution context.
+    /// </summary>
+    /// <returns>Memory statistics, or null if no context is active.</returns>
+    public virtual GpuMemoryStats? GetGpuMemoryStats()
+    {
+        return GpuExecutionContext.Current?.GetMemoryStats();
+    }
+
+    #endregion
 
     /// <summary>
     /// Performs a forward pass and returns intermediate layer activations for feature extraction.

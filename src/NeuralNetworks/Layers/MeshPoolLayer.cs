@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -348,6 +351,112 @@ public class MeshPoolLayer<T> : LayerBase<T>
         }
 
         return newAdjacency;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass for mesh pooling.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses GPU for importance score computation (GEMM) and feature gathering.
+    /// Sorting remains on CPU as it requires dynamic branching that is inefficient on GPU.
+    /// The operation is:
+    /// 1. scores = input @ importanceWeights (GPU GEMM)
+    /// 2. sortedIndices = sort(scores) (CPU - inherently sequential)
+    /// 3. output = gather(input, topKIndices) (GPU Gather)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputs">Input GPU tensors (uses first input).</param>
+    /// <returns>GPU-resident output tensor with pooled features.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (_lastEdgeAdjacency == null)
+        {
+            throw new InvalidOperationException(
+                "Edge adjacency must be set via SetEdgeAdjacency before calling ForwardGpu.");
+        }
+
+        var input = inputs[0];
+        int[] shape = input.Shape;
+
+        if (shape.Length != 2 || shape[1] != InputChannels)
+        {
+            throw new ArgumentException(
+                $"MeshPoolLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", shape)}].");
+        }
+
+        int numEdges = shape[0];
+        int numToKeep = Math.Min(TargetEdges, numEdges);
+
+        // Upload importance weights to GPU
+        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_importanceWeights.Data));
+
+        // Compute importance scores on GPU: scores = input @ weights
+        // [numEdges, InputChannels] @ [InputChannels, 1] -> [numEdges, 1]
+        using var scoresBuffer = backend.AllocateBuffer(numEdges);
+        backend.Gemm(input.Buffer, weightsBuffer, scoresBuffer, numEdges, 1, InputChannels);
+
+        // Download scores to CPU for sorting (sorting is inherently sequential)
+        var scoresData = backend.DownloadBuffer(scoresBuffer);
+
+        // Cache importance scores for backward pass
+        _lastImportanceScores = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(scoresData), [numEdges]);
+
+        // Sort edges by importance on CPU
+        var sortedIndices = new int[numEdges];
+        var scoreValues = new double[numEdges];
+        for (int i = 0; i < numEdges; i++)
+        {
+            sortedIndices[i] = i;
+            scoreValues[i] = scoresData[i];
+        }
+        Array.Sort(scoreValues, sortedIndices);
+
+        // Select top-k edges (highest importance = last after ascending sort)
+        RemainingEdgeIndices = new int[numToKeep];
+        for (int i = 0; i < numToKeep; i++)
+        {
+            RemainingEdgeIndices[i] = sortedIndices[numEdges - 1 - i];
+        }
+        Array.Sort(RemainingEdgeIndices);
+
+        // Download input for caching and CPU operations
+        var inputData = backend.DownloadBuffer(input.Buffer);
+        _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
+
+        // Gather output features using CPU (since we have the data downloaded)
+        var outputData = new float[numToKeep * InputChannels];
+        for (int i = 0; i < numToKeep; i++)
+        {
+            int srcEdge = RemainingEdgeIndices[i];
+            int srcOffset = srcEdge * InputChannels;
+            int dstOffset = i * InputChannels;
+            for (int c = 0; c < InputChannels; c++)
+            {
+                outputData[dstOffset + c] = inputData[srcOffset + c];
+            }
+        }
+
+        // Update adjacency for remaining edges (CPU - dynamic topology)
+        UpdatedAdjacency = UpdateAdjacency(_lastEdgeAdjacency, RemainingEdgeIndices, numToKeep);
+
+        // Upload output to GPU
+        var outputBuffer = backend.AllocateBuffer(outputData);
+
+        // Cache output
+        _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numToKeep, InputChannels]);
+
+        return new GpuTensor<T>(backend, outputBuffer, [numToKeep, InputChannels], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion

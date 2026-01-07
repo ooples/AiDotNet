@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -101,6 +102,11 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Hyperbolic operations use TensorOperations for JIT compilation.
     /// </summary>
     public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the HyperbolicLinearLayer.
@@ -279,6 +285,56 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         }
         outputShape[_originalInputShape.Length - 1] = OutputFeatures;
         return activated.Reshape(outputShape);
+    }
+
+    /// <summary>
+    /// Performs the GPU-accelerated forward pass for hyperbolic linear transformation.
+    /// </summary>
+    /// <param name="inputs">The GPU tensor inputs. First element is the input activation.</param>
+    /// <returns>A GPU tensor containing the hyperbolic transformation output.</returns>
+    /// <remarks>
+    /// The hyperbolic layer operates in Poincare ball space using Mobius operations.
+    /// This method downloads input, processes through hyperbolic operations on CPU, and uploads output to GPU.
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        // Validate GPU engine availability
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend is not available.");
+
+        // Download input from GPU for processing
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
+        // Convert to Tensor<T>
+        var inputTensor = new Tensor<T>(input.Shape);
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            inputTensor[i] = _numOps.FromDouble(inputData[i]);
+        }
+
+        // Process using existing Forward logic (handles Poincare ball hyperbolic operations)
+        var output = Forward(inputTensor);
+
+        // Upload output to GPU
+        var outputData = new float[output.Length];
+        for (int i = 0; i < output.Length; i++)
+        {
+            outputData[i] = _numOps.ToFloat(output[i]);
+        }
+
+        var outputBuffer = backend.AllocateBuffer(outputData);
+        var outputShape = output.Shape;
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

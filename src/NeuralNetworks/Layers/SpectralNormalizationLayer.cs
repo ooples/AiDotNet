@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -89,6 +92,17 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// used in the exported computation graph for inference.
     /// </remarks>
     public override bool SupportsJitCompilation => _innerLayer.SupportsJitCompilation;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// GPU-resident power iteration vectors.
+    /// </summary>
+    private IGpuTensor<T>? _uGpu;
+    private IGpuTensor<T>? _vGpu;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SpectralNormalizationLayer{T}"/> class.
@@ -284,6 +298,142 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
             // Restore original weights on exception
             RestoreOriginalWeights();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors with GPU-accelerated spectral normalization.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs spectral normalization using GPU-accelerated power iteration,
+    /// keeping all computations on GPU for maximum performance.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // Get weights from inner layer
+        var parameters = _innerLayer.GetParameters();
+        int paramCount = parameters.Length;
+
+        if (paramCount == 0)
+        {
+            // No parameters to normalize, just forward through inner layer
+            if (_innerLayer is LayerBase<T> innerBase)
+            {
+                return innerBase.ForwardGpu(input);
+            }
+            throw new InvalidOperationException("Inner layer does not support ForwardGpu.");
+        }
+
+        // Store original parameters to restore after forward
+        _originalParameters = parameters.Clone();
+
+        int biasCount = GetBiasCount(paramCount);
+        int weightCount = paramCount - biasCount;
+
+        // Reshape weight parameters into 2D matrix for spectral norm computation
+        int rows = (int)Math.Ceiling(Math.Sqrt(weightCount));
+        int cols = (weightCount + rows - 1) / rows;
+
+        // Create weight tensor [rows, cols] with zero-padding if needed
+        var weightsData = new float[rows * cols];
+        for (int i = 0; i < weightCount; i++)
+        {
+            weightsData[i] = Convert.ToSingle(parameters[i]);
+        }
+
+        // Upload weights to GPU
+        var weightsGpu = gpuEngine.UploadToGpu(new Tensor<T>(
+            DirectGpuEngine.FromFloatArray<T>(weightsData), [rows, cols]), GpuTensorRole.Weight);
+
+        // Initialize GPU power iteration vectors if needed
+        EnsureGpuPowerIterationVectors(gpuEngine, rows, cols);
+
+        // Run power iteration on GPU
+        float spectralNorm = gpuEngine.PowerIterationGpu(
+            weightsGpu, ref _uGpu!, ref _vGpu!, _powerIterations, Convert.ToSingle(_epsilon));
+
+        // Normalize weight parameters by spectral norm
+        var normalizedParams = new Vector<T>(paramCount);
+        T normDivisor = NumOps.FromDouble(spectralNorm);
+        for (int i = 0; i < weightCount; i++)
+        {
+            normalizedParams[i] = NumOps.Divide(parameters[i], normDivisor);
+        }
+
+        // Copy bias parameters unchanged
+        for (int i = weightCount; i < paramCount; i++)
+        {
+            normalizedParams[i] = parameters[i];
+        }
+
+        _innerLayer.SetParameters(normalizedParams);
+        _normalizedWeightsApplied = true;
+
+        try
+        {
+            // Forward through inner layer with normalized weights
+            if (_innerLayer is LayerBase<T> innerBase)
+            {
+                return innerBase.ForwardGpu(input);
+            }
+            throw new InvalidOperationException("Inner layer does not support ForwardGpu.");
+        }
+        catch
+        {
+            // Restore original weights on exception
+            RestoreOriginalWeights();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Initializes or reinitializes the GPU power iteration vectors when dimensions change.
+    /// </summary>
+    private void EnsureGpuPowerIterationVectors(DirectGpuTensorEngine gpuEngine, int rows, int cols)
+    {
+        if (_uGpu is null || _vGpu is null || _uGpu.Shape[0] != rows || _vGpu.Shape[0] != cols)
+        {
+            // Create random normalized vectors on CPU, then upload to GPU
+            var uData = new float[rows];
+            var vData = new float[cols];
+            var random = new Random();
+
+            // Initialize with random values
+            float uNorm = 0, vNorm = 0;
+            for (int i = 0; i < rows; i++)
+            {
+                uData[i] = (float)(random.NextDouble() * 2 - 1);
+                uNorm += uData[i] * uData[i];
+            }
+            for (int i = 0; i < cols; i++)
+            {
+                vData[i] = (float)(random.NextDouble() * 2 - 1);
+                vNorm += vData[i] * vData[i];
+            }
+
+            // Normalize
+            uNorm = (float)Math.Sqrt(uNorm);
+            vNorm = (float)Math.Sqrt(vNorm);
+            for (int i = 0; i < rows; i++) uData[i] /= uNorm;
+            for (int i = 0; i < cols; i++) vData[i] /= vNorm;
+
+            // Upload to GPU
+            _uGpu = gpuEngine.UploadToGpu(new Tensor<T>(
+                DirectGpuEngine.FromFloatArray<T>(uData), [rows]), GpuTensorRole.Activation);
+            _vGpu = gpuEngine.UploadToGpu(new Tensor<T>(
+                DirectGpuEngine.FromFloatArray<T>(vData), [cols]), GpuTensorRole.Activation);
         }
     }
 

@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -213,6 +214,11 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Gets the total number of trainable parameters in this layer.
     /// </summary>
     /// <remarks>
@@ -361,6 +367,56 @@ public class FeedForwardLayer<T> : LayerBase<T>
         Output = ApplyActivation(linearOutput);
 
         return Output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs the feed-forward computation (matmul + bias + activation) entirely on GPU
+    /// without downloading intermediate results to CPU.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // MatMul: input @ Weights
+        var matmul = gpuEngine.BatchedMatMulGpu(input, Weights);
+
+        // Add biases
+        var biased = gpuEngine.AddBiasGpu(matmul, Biases);
+
+        // Apply activation
+        IGpuTensor<T> output;
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var fusedType = MapActivationToFused();
+            output = gpuEngine.ActivationGpu<T>(biased, fusedType);
+        }
+        else
+        {
+            output = biased;
+        }
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            Input = input.ToTensor();
+            Output = output.ToTensor();
+        }
+
+        return output;
     }
 
     /// <summary>

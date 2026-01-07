@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -128,6 +132,14 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// CapsuleLayer requires per-capsule weighted sum and agreement computations with complex
+    /// indexing patterns. Without specialized GPU kernels for these operations, true GPU-resident
+    /// execution isn't possible - CPU fallback is used.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CapsuleLayer{T}"/> class with specified dimensions and routing iterations.
@@ -578,6 +590,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         return _lastOutput;
     }
+
 
     /// <summary>
     /// Performs the backward pass of the capsule layer.

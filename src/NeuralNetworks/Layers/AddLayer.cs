@@ -1,4 +1,6 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -71,6 +73,50 @@ public class AddLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length < 2)
+        {
+            throw new ArgumentException("AddLayer requires at least two input tensors.", nameof(inputs));
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        // Add all inputs element-wise: result = inputs[0] + inputs[1] + ...
+        var result = inputs[0];
+        for (int i = 1; i < inputs.Length; i++)
+        {
+            result = gpuEngine.AddGpu(result, inputs[i]);
+        }
+
+        // Apply activation if needed
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None)
+        {
+            result = gpuEngine.ActivationGpu(result, fusedOp);
+        }
+
+        // Cache state for backward pass only during training
+        if (IsTrainingMode)
+        {
+            _lastInputs = new Tensor<T>[inputs.Length];
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                _lastInputs[i] = inputs[i].ToTensor();
+            }
+            _lastOutput = result.ToTensor();
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Creates a new addition layer with the specified input shapes and an optional scalar activation function.

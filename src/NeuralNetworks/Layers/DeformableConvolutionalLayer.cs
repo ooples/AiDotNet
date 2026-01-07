@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -212,6 +213,129 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
         // Remove batch dimension if input didn't have one
         return input.Rank == 3 ? RemoveBatchDimension(output) : output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors, keeping all data on GPU.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensor [batch, inChannels, inHeight, inWidth] in NCHW format.</param>
+    /// <returns>GPU-resident output tensor [batch, outChannels, outHeight, outWidth] in NCHW format.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// The main convolution operation stays on GPU, though offset and mask prediction
+    /// requires a brief CPU round-trip due to the current DeformableConv2D GPU implementation.</para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (_engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var input = inputs[0];
+
+        // Validate input shape - GPU uses NCHW format [batch, channels, height, width]
+        if (input.Shape.Length < 3)
+        {
+            throw new ArgumentException(
+                $"Deformable Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
+        }
+
+        int rank = input.Shape.Length;
+
+        // Reshape input to 4D NCHW [B, C, H, W] for convolution
+        IGpuTensor<T> input4D;
+        bool addedBatchDimension = false;
+        if (rank == 3)
+        {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
+            addedBatchDimension = true;
+            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        }
+        else if (rank == 4)
+        {
+            // 4D [B, C, H, W] - no reshaping needed
+            input4D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+            {
+                flatBatch *= input.Shape[d];
+            }
+            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+
+        // Validate input channels
+        int actualInputChannels = input4D.Shape[1];
+        if (actualInputChannels != _inputChannels)
+        {
+            throw new ArgumentException(
+                $"Expected input channels {_inputChannels}, but got {actualInputChannels}.");
+        }
+
+        // Predict offsets using GPU-accelerated Conv2D
+        // Note: We need to download offsets to CPU as DeformableConv2DGpu expects CPU tensors for offsets/mask
+        var offsetsGpu = gpuEngine.FusedConv2DGpu(
+            input4D,
+            _offsetWeights,
+            _offsetBias,
+            _stride, _stride,      // strideH, strideW
+            _padding, _padding,    // padH, padW
+            1, 1,                  // dilationH, dilationW
+            FusedActivationType.None);
+        var offsets = offsetsGpu.ToTensor();
+        offsetsGpu.Dispose();
+
+        // Predict modulation mask if using DCNv2
+        Tensor<T>? mask = null;
+        if (_useModulation && _maskWeights != null && _maskBias != null)
+        {
+            // Use FusedConv2DGpu with Sigmoid activation for mask prediction
+            var maskGpu = gpuEngine.FusedConv2DGpu(
+                input4D,
+                _maskWeights,
+                _maskBias,
+                _stride, _stride,      // strideH, strideW
+                _padding, _padding,    // padH, padW
+                1, 1,                  // dilationH, dilationW
+                FusedActivationType.Sigmoid);
+            mask = maskGpu.ToTensor();
+            maskGpu.Dispose();
+        }
+
+        // Store for potential backward pass
+        _lastOffsets = offsets;
+        _lastMask = mask;
+
+        // Execute GPU-accelerated deformable convolution
+        // DeformableConv2DGpu handles bias internally
+        var result = gpuEngine.DeformableConv2DGpu(
+            input4D,
+            _weights,
+            offsets,
+            mask,
+            _bias,
+            _stride, _stride,      // strideH, strideW
+            _padding, _padding,    // padH, padW
+            1, 1,                  // dilationH, dilationW
+            _groups, _deformGroups,
+            FusedActivationType.None);
+
+        // Restore original shape if needed
+        if (addedBatchDimension)
+        {
+            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
+            return result.CreateView(0, [_outputChannels, result.Shape[2], result.Shape[3]]);
+        }
+
+        return result;
     }
 
     private Tensor<T> PredictOffsetsViaEngine(Tensor<T> input)

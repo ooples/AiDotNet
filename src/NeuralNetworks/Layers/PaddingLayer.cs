@@ -1,5 +1,8 @@
 using AiDotNet.Autodiff;
 
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -73,6 +76,117 @@ public class PaddingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0) throw new ArgumentException("PaddingLayer requires an input tensor.");
+        var input = inputs[0];
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+        
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (_padding.Length != input.Shape.Length)
+            throw new ArgumentException("Padding array length must match input dimensions.");
+
+        IGpuTensor<T> currentTensor = input;
+        bool tensorModified = false; // Track if we created new tensors to dispose them
+
+        // Apply padding dimension by dimension
+        for (int d = 0; d < _padding.Length; d++)
+        {
+            if (_padding[d] == 0) continue;
+
+            int pad = _padding[d];
+            int rank = currentTensor.Shape.Length;
+
+            // 1. Permute dimension 'd' to last if needed
+            bool needsPermute = d != rank - 1;
+            int[]? permutation = null;
+            int[]? invPermutation = null;
+            IGpuTensor<T> permutedInput = currentTensor;
+
+            if (needsPermute)
+            {
+                permutation = new int[rank];
+                invPermutation = new int[rank];
+                int j = 0;
+                for (int i = 0; i < rank; i++)
+                {
+                    if (i != d) permutation[j++] = i;
+                }
+                permutation[rank - 1] = d;
+                for (int i = 0; i < rank; i++) invPermutation[permutation[i]] = i;
+
+                permutedInput = gpuEngine.PermuteGpu(currentTensor, permutation);
+            }
+
+            // 2. Pad last dimension
+            // Shape is [Outer, Dim]
+            long outerSize = 1;
+            for (int i = 0; i < rank - 1; i++) outerSize *= permutedInput.Shape[i];
+            int dimSize = permutedInput.Shape[rank - 1];
+            int newDimSize = dimSize + 2 * pad;
+
+            // Allocate Zeros [Outer * NewDim]
+            int totalSize = (int)(outerSize * newDimSize);
+            var outputBuffer = backend.AllocateBuffer(totalSize);
+            backend.Fill(outputBuffer, 0f, totalSize); // Initialize with zeros
+
+            // Copy input into center: dest offset = pad
+            // Copy2DStrided(source, dest, numRows, srcCols, destTotalCols, destColOffset)
+            backend.Copy2DStrided(permutedInput.Buffer, outputBuffer, (int)outerSize, dimSize, newDimSize, pad);
+
+            // Create padded tensor
+            int[] newShape = permutedInput.Shape.ToArray();
+            newShape[rank - 1] = newDimSize;
+            var paddedPermuted = new GpuTensor<T>(backend, outputBuffer, newShape, GpuTensorRole.Activation, ownsBuffer: true);
+
+            // Clean up permuted input if it was a temporary
+            if (needsPermute)
+            {
+                permutedInput.Dispose();
+            }
+            if (tensorModified) // If currentTensor was an intermediate result
+            {
+                currentTensor.Dispose();
+            }
+
+            // 3. Inverse Permute
+            if (needsPermute)
+            {
+                currentTensor = gpuEngine.PermuteGpu(paddedPermuted, invPermutation!);
+                paddedPermuted.Dispose();
+            }
+            else
+            {
+                currentTensor = paddedPermuted;
+            }
+
+            tensorModified = true;
+        }
+
+        // Apply Activation
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None)
+        {
+            var activated = gpuEngine.ActivationGpu(currentTensor, fusedOp);
+            if (tensorModified) currentTensor.Dispose();
+            currentTensor = activated;
+        }
+
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+        }
+
+        return currentTensor;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PaddingLayer{T}"/> class with the specified input shape,
