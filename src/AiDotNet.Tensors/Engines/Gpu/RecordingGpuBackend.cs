@@ -635,6 +635,31 @@ public class RecordingGpuBackend : DelegatingGpuBackend
         return Inner.DownloadBuffer(buffer);
     }
 
+    /// <summary>
+    /// Records a deferred download operation that will execute during graph execution.
+    /// </summary>
+    /// <param name="buffer">The GPU buffer to download.</param>
+    /// <param name="size">The number of elements to download.</param>
+    /// <returns>A deferred download handle to retrieve the data after execution.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when not in recording mode.</exception>
+    /// <remarks>
+    /// Unlike <see cref="DownloadBuffer"/>, this method does not execute immediately.
+    /// The download is deferred until the execution graph is executed.
+    /// Use <see cref="DeferredDownload.GetResult"/> after graph execution to retrieve the data.
+    /// </remarks>
+    public DeferredDownload DownloadBufferDeferred(IGpuBuffer buffer, int size)
+    {
+        if (!_isRecording || _graphBuilder == null)
+        {
+            throw new InvalidOperationException(
+                "DownloadBufferDeferred can only be called during recording. " +
+                "Use DownloadBuffer for immediate downloads outside of recording mode.");
+        }
+
+        var transferNode = _graphBuilder.AddDownloadWithHandle(buffer, size);
+        return new DeferredDownload(transferNode);
+    }
+
     /// <inheritdoc/>
     public override void Copy(IGpuBuffer source, IGpuBuffer destination, int size)
     {

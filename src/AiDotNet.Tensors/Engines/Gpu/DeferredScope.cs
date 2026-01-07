@@ -15,6 +15,7 @@ public sealed class DeferredScope : IDeferredScope
     private readonly RecordingGpuBackend _recordingBackend;
     private readonly GpuStreamPool? _streamPool;
     private readonly Stopwatch _totalTimer;
+    private readonly List<DeferredDownload> _deferredDownloads = new();
     private ExecutionGraph? _compiledGraph;
     private OptimizationStatistics? _compiledStatistics;
     private DeferredScopeStatistics? _statistics;
@@ -57,6 +58,37 @@ public sealed class DeferredScope : IDeferredScope
         _recordingBackend.BeginRecording(GraphBuilder);
     }
 
+    /// <summary>
+    /// Creates a deferred download that will execute during graph execution.
+    /// </summary>
+    /// <param name="buffer">The GPU buffer to download.</param>
+    /// <param name="size">The number of elements to download.</param>
+    /// <returns>A deferred download handle to retrieve the data after execution.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when called after execution.</exception>
+    public DeferredDownload DownloadDeferred(IGpuBuffer buffer, int size)
+    {
+        ThrowIfDisposed();
+        ThrowIfExecuted();
+
+        var download = _recordingBackend.DownloadBufferDeferred(buffer, size);
+        _deferredDownloads.Add(download);
+        return download;
+    }
+
+    /// <summary>
+    /// Creates a typed deferred download that will execute during graph execution.
+    /// </summary>
+    /// <typeparam name="T">The target element type for the downloaded data.</typeparam>
+    /// <param name="buffer">The GPU buffer to download.</param>
+    /// <param name="size">The number of elements to download.</param>
+    /// <returns>A typed deferred download handle to retrieve the data after execution.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when called after execution.</exception>
+    public DeferredDownload<T> DownloadDeferred<T>(IGpuBuffer buffer, int size)
+    {
+        var download = DownloadDeferred(buffer, size);
+        return new DeferredDownload<T>(download);
+    }
+
     /// <inheritdoc/>
     public void Execute()
     {
@@ -87,6 +119,12 @@ public sealed class DeferredScope : IDeferredScope
 
         executionTimer.Stop();
         _totalTimer.Stop();
+
+        // Mark all deferred downloads as executed
+        foreach (var download in _deferredDownloads)
+        {
+            download.MarkExecuted();
+        }
 
         RecordStatistics(graph, compilationTimer.Elapsed, executionTimer.Elapsed);
         IsExecuted = true;
@@ -126,6 +164,12 @@ public sealed class DeferredScope : IDeferredScope
 
         executionTimer.Stop();
         _totalTimer.Stop();
+
+        // Mark all deferred downloads as executed
+        foreach (var download in _deferredDownloads)
+        {
+            download.MarkExecuted();
+        }
 
         RecordStatistics(graph, compilationTimer.Elapsed, executionTimer.Elapsed);
         IsExecuted = true;
