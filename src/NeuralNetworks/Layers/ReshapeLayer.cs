@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -369,6 +372,102 @@ public class ReshapeLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
+        _gpuInputShape = null;
+    }
+
+    /// <summary>
+    /// The GPU-resident input shape from the forward pass.
+    /// </summary>
+    private int[]? _gpuInputShape;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU-resident training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because reshape operations can be done efficiently on GPU.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Reshape layers support GPU training because reshaping a tensor on GPU is just
+    /// a metadata change - no data movement is required.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Performs the forward pass of the reshape layer on GPU.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensor(s).</param>
+    /// <returns>The GPU-resident reshaped output tensor.</returns>
+    /// <exception cref="ArgumentException">Thrown when no inputs are provided.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs reshape entirely on GPU:
+    /// - Creates a view with the new shape
+    /// - No data movement required
+    /// - Stores the original shape for backward pass
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+        _gpuInputShape = input.Shape.ToArray();
+
+        // Get the GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
+        }
+
+        // Calculate target shape with batch dimension
+        int batchSize = input.Shape[0];
+        int[] targetShape = new int[_outputShape.Length + 1];
+        targetShape[0] = batchSize;
+        Array.Copy(_outputShape, 0, targetShape, 1, _outputShape.Length);
+
+        // Reshape on GPU (just changes metadata, no data movement)
+        return gpuEngine.ReshapeGpu(input, targetShape);
+    }
+
+    /// <summary>
+    /// Performs the backward pass of the reshape layer on GPU.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient from the next layer.</param>
+    /// <returns>The GPU-resident gradient reshaped to the original input shape.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when BackwardGpu is called before ForwardGpu.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// This method reshapes the gradient back to the original input shape:
+    /// - Uses the stored input shape from ForwardGpu
+    /// - No data movement required, just metadata change
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInputShape == null)
+        {
+            if (_lastInput != null)
+            {
+                throw new InvalidOperationException(
+                    "BackwardGpu requires ForwardGpu to be called first. " +
+                    "The forward pass was performed on CPU. Use Backward() instead.");
+            }
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+        }
+
+        // Get the GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
+        }
+
+        // Reshape gradient back to original input shape
+        return gpuEngine.ReshapeGpu(outputGradient, _gpuInputShape);
     }
 
     /// <summary>
