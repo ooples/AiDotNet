@@ -2,10 +2,37 @@
 
 This document tracks the implementation status of GPU-resident training for all neural network layers.
 
-**Related Issues:**
+**Related Documents:**
+- [GPU_KERNEL_STATUS.md](GPU_KERNEL_STATUS.md) - Detailed kernel implementation status
 - [#701 - Full GPU-Resident Training Infrastructure](https://github.com/ooples/AiDotNet/issues/701)
 - [#700 - ConvLSTMLayer and DiffusionConvLayer GPU Backward](https://github.com/ooples/AiDotNet/issues/700)
 - [#698 - GPU-Resident Tensors (ForwardGpu)](https://github.com/ooples/AiDotNet/pull/698)
+
+## Executive Summary
+
+### What's Already Available (Good News!)
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Activation backward kernels | ✅ | relu, sigmoid, tanh, gelu, softmax, etc. |
+| Conv2D backward kernels | ✅ | conv2d_backward_input, conv2d_backward_weights |
+| BatchNorm backward kernel | ✅ | batchnorm_backward |
+| LayerNorm backward kernel | ✅ | layernorm_backward, layernorm_grad_params |
+| Pooling backward kernels | ✅ | maxpool2d_backward, avgpool2d_backward |
+| Attention backward kernel | ✅ | flash_attention_backward |
+| Loss backward kernels | ✅ | mse_backward, cross_entropy_backward, bce_backward |
+| Optimizer kernels | ✅ | sgd_step, adam_step, adamw_step |
+| Embedding backward kernel | ✅ | embedding_backward |
+| Dropout backward kernel | ✅ | dropout_backward |
+
+### What's Blocking Full GPU Training
+| Blocker | Impact | Solution |
+|---------|--------|----------|
+| No `BackwardGpu()` in LayerBase | All layers | Add virtual method to base class |
+| No `UpdateParametersGpu()` | All trainable layers | Add virtual method to base class |
+| Missing LSTM/GRU kernels | Recurrent layers | Implement lstm_cell_backward, gru_cell_backward |
+| Missing sparse ops for GNN | Graph layers | Implement scatter_add, sparse_mm_backward |
+| No GPU weight storage | All trainable layers | Add persistent GPU buffers |
+| No training loop integration | NeuralNetworkBase | Add BackwardGpu(), TrainBatchGpu() |
 
 ## Architecture Overview
 
@@ -72,7 +99,31 @@ CPU Tensor → Upload → ForwardGpu Layer 1 → ForwardGpu Layer 2 → ... → 
 
 ## Implementation Phases
 
-### Phase 0: Infrastructure Foundation
+### Phase 0: Missing Kernel Implementation
+**Priority: HIGH** - These kernels block entire categories of layers
+
+| Kernel | Status | Unblocks | Complexity |
+|--------|--------|----------|------------|
+| **Recurrent Kernels (CRITICAL)** |
+| lstm_cell_forward | ❌ | LSTMLayer, ConvLSTMLayer, BidirectionalLayer | High |
+| lstm_cell_backward | ❌ | LSTMLayer training | High |
+| gru_cell_forward | ❌ | GRULayer | High |
+| gru_cell_backward | ❌ | GRULayer training | High |
+| **Graph Neural Network Kernels** |
+| scatter_add (CUDA/HIP) | ❌ | All GNN layers | Medium |
+| sparse_mm_backward | ❌ | GCN, GAT, GraphSAGE training | High |
+| message_passing_backward | ❌ | MessagePassingLayer | High |
+| **3D/Conv Kernels** |
+| conv3d_backward_input | ❌ | Conv3DLayer | Medium |
+| conv3d_backward_weights | ❌ | Conv3DLayer training | Medium |
+| **Normalization Gaps** |
+| groupnorm_backward | ❌ | GroupNormalizationLayer | Medium |
+| instancenorm_backward | ❌ | InstanceNormalizationLayer | Medium |
+| **Pooling Gaps** |
+| global_avgpool_backward | ❌ | GlobalPoolingLayer | Low |
+| adaptive_avgpool_backward | ❌ | AdaptiveAveragePoolingLayer | Low |
+
+### Phase 1: Infrastructure Foundation
 Before any layer can support GPU training, we need:
 
 | Component | Status | Description |
