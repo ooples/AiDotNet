@@ -20,7 +20,7 @@ This document tracks the implementation status of GPU-resident training for all 
 | Pooling backward kernels | ✅ | maxpool2d_backward, avgpool2d_backward |
 | Attention backward kernel | ✅ | flash_attention_backward |
 | Loss backward kernels | ✅ | mse_backward, cross_entropy_backward, bce_backward |
-| Optimizer kernels | ✅ | sgd_step, adam_step, adamw_step |
+| Optimizer kernels | ✅ | sgd_step, adam_step, adamw_step, rmsprop_step, adagrad_step, nag_step, lars_step, lamb_step |
 | Embedding backward kernel | ✅ | embedding_backward |
 | Dropout backward kernel | ✅ | dropout_backward |
 
@@ -158,19 +158,30 @@ The following methods have been added to LayerBase:
 | Gradient checkpointing on GPU | ❌ | Memory-efficient backward with GPU recompute |
 | Mixed precision training | ❌ | FP16 forward/backward with FP32 accumulation |
 
-### Phase 3: Optimizer GPU Integration
-Kernels exist, need wiring:
+### Phase 3: Optimizer GPU Integration ✅ KERNELS COMPLETE
+All optimizer kernels now exist. Wiring to optimizer classes is the next step.
+
 | Optimizer | Kernel Status | Integration Status |
 |-----------|---------------|-------------------|
 | SGD | ✅ `sgd_step` | ❌ Not wired |
 | Adam | ✅ `adam_step` | ❌ Not wired |
 | AdamW | ✅ `adamw_step` | ❌ Not wired |
-| Momentum | ⚠️ In sgd_step | ❌ Not wired |
-| RMSprop | ❌ Missing | ❌ |
-| Adagrad | ❌ Missing | ❌ |
-| NAG | ❌ Missing | ❌ |
-| LARS | ❌ Missing | ❌ |
-| LAMB | ❌ Missing | ❌ |
+| Momentum | ✅ In sgd_step | ❌ Not wired |
+| RMSprop | ✅ `rmsprop_step` | ❌ Not wired |
+| Adagrad | ✅ `adagrad_step` | ❌ Not wired |
+| NAG | ✅ `nag_step` | ❌ Not wired |
+| LARS | ✅ `lars_step` | ❌ Not wired |
+| LAMB | ✅ `lamb_step` | ❌ Not wired |
+
+**Backend Implementation Status:**
+- CUDA: ✅ All 9 optimizer update methods
+- HIP: ✅ All 9 optimizer update methods  
+- OpenCL: ✅ All 9 optimizer update methods
+
+**Remaining Work:**
+- Wire optimizer classes to use GPU update methods
+- Add optimizer state buffers to layers (m, v for Adam, velocity for SGD, etc.)
+- Integrate with LayerBase.UpdateParametersGpu()
 
 ### Phase 3: Loss Function GPU Integration
 | Loss Function | Status | Description |
@@ -400,15 +411,19 @@ Kernels exist, need wiring:
 | Softmax Backward | ❌ | Attention, Classification | Low - Jacobian computation |
 | Embedding Backward | ❌ | Embedding, NLP | Medium - atomic scatter add |
 
-### Optimizer Kernels
+### Optimizer Kernels ✅ COMPLETE
 | Kernel | Status | Used By | Complexity |
 |--------|--------|---------|------------|
-| SGD Update | ❌ | SGDOptimizer | Low - w = w - lr * g |
-| SGD Momentum Update | ❌ | MomentumOptimizer | Low - v update + w update |
-| Adam Update | ❌ | AdamOptimizer | Medium - m,v,bias correct |
-| AdamW Update | ❌ | AdamWOptimizer | Medium - Adam + weight decay |
-| RMSprop Update | ❌ | RMSpropOptimizer | Low - running avg + update |
-| Gradient Clipping | ❌ | All optimizers | Low - norm + scale |
+| SGD Update | ✅ `sgd_step` | SGDOptimizer | Low - w = w - lr * g |
+| SGD Momentum Update | ✅ In `sgd_step` | MomentumOptimizer | Low - v update + w update |
+| Adam Update | ✅ `adam_step` | AdamOptimizer | Medium - m,v,bias correct |
+| AdamW Update | ✅ `adamw_step` | AdamWOptimizer | Medium - Adam + weight decay |
+| RMSprop Update | ✅ `rmsprop_step` | RMSpropOptimizer | Low - running avg + update |
+| Adagrad Update | ✅ `adagrad_step` | AdagradOptimizer | Low - accumulated grad |
+| NAG Update | ✅ `nag_step` | NesterovOptimizer | Low - Nesterov lookahead |
+| LARS Update | ✅ `lars_step` | LARSOptimizer | Medium - layer-wise scaling |
+| LAMB Update | ✅ `lamb_step` | LAMBOptimizer | Medium - Adam + trust ratio |
+| Gradient Clipping | ✅ Exists | All optimizers | Low - norm + scale |
 
 ### Activation Backward Kernels
 | Kernel | Status | Complexity |
