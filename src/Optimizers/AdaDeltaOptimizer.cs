@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -333,6 +334,55 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         return updatedParams;
     }
 
+    #region GPU Optimizer Support
+
+    private IGpuBuffer? _gpuAccumulatedGrad;
+    private IGpuBuffer? _gpuAccumulatedUpdate;
+
+    public override bool SupportsGpuUpdate => true;
+
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuAccumulatedGrad != null && _gpuAccumulatedUpdate != null)
+            return;
+
+        var zeros = new float[parameterCount];
+        _gpuAccumulatedGrad = backend.AllocateBuffer(zeros);
+        _gpuAccumulatedUpdate = backend.AllocateBuffer(zeros);
+
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Updates parameters on GPU using the AdaDelta optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter tensor on GPU.</param>
+    /// <param name="gradients">The gradient tensor on GPU.</param>
+    /// <param name="accGrad">Accumulated squared gradients tensor on GPU.</param>
+    /// <param name="accDelta">Accumulated squared updates tensor on GPU.</param>
+    /// <remarks>
+    /// This method performs GPU-resident AdaDelta updates without CPU synchronization.
+    /// All tensors remain on GPU throughout the update process.
+    /// </remarks>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuAccumulatedGrad == null || _gpuAccumulatedUpdate == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        backend.AdadeltaUpdate(
+            parameters,
+            gradients,
+            _gpuAccumulatedGrad!,
+            _gpuAccumulatedUpdate!,
+            (float)_options.Rho,
+            (float)_options.Epsilon,
+            0.0f, // AdaDelta doesn't have weight decay in these options
+            parameterCount
+        );
+    }
+
     /// <summary>
     /// Reverses an AdaDelta gradient update to recover original parameters.
     /// </summary>
@@ -595,4 +645,15 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_AdaDelta_{_options.Rho}_{_options.Epsilon}";
     }
+
+    public override void DisposeGpuState()
+    {
+        _gpuAccumulatedGrad?.Dispose();
+        _gpuAccumulatedUpdate?.Dispose();
+        _gpuAccumulatedGrad = null;
+        _gpuAccumulatedUpdate = null;
+        base.DisposeGpuState();
+    }
+
+    #endregion
 }

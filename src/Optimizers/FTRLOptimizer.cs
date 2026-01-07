@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -402,6 +403,16 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             _t = reader.ReadInt32();
         }
+    }
+
+    /// <summary>
+    /// Updates parameters on GPU using FTRL optimization.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        // FTRL requires z, n state - should be managed by the layer
+        // For now, fall back to base implementation
+        base.UpdateParametersGpu(parameters, gradients, parameterCount, backend);
     }
 
     /// <summary>

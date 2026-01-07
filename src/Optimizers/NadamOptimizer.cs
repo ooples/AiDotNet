@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -535,6 +536,16 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             _t = reader.ReadInt32();
         }
+    }
+
+    /// <summary>
+    /// Updates parameters on GPU using Nadam optimization.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        // Nadam requires m, v, and t state - these should be managed by the layer
+        // For now, fall back to base implementation
+        base.UpdateParametersGpu(parameters, gradients, parameterCount, backend);
     }
 
     /// <summary>

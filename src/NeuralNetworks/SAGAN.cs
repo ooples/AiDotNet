@@ -676,6 +676,21 @@ public class SAGAN<T> : NeuralNetworkBase<T>
 
             return gradient;
         }
+
+        public TLoss CalculateLossGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
+        {
+            // Fall back to CPU for now
+            return CalculateLoss(predicted.ToVector(), actual.ToVector());
+        }
+
+        public Tensor<TLoss> CalculateDerivativeGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
+        {
+            // Fall back to CPU for now
+            var derivative = CalculateDerivative(predicted.ToVector(), actual.ToVector());
+            var result = new Tensor<TLoss>(predicted.Shape);
+            Array.Copy(derivative.ToArray(), result.Data, derivative.Length);
+            return result;
+        }
     }
 
     /// <summary>

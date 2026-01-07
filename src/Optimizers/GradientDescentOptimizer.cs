@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -360,5 +361,18 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_GD_{CurrentLearningRate}_{_gdOptions.MaxIterations}";
+    }
+
+    /// <summary>
+    /// Updates parameters on the GPU using vanilla SGD.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        backend.SgdUpdate(
+            parameters,
+            gradients,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            0.0f, // No weight decay for basic GD
+            parameterCount);
     }
 }

@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -592,6 +593,16 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 _m[i] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
+    }
+
+    /// <summary>
+    /// Updates parameters on GPU using Lion optimization.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        // Lion requires m state - should be managed by the layer
+        // For now, fall back to base implementation
+        base.UpdateParametersGpu(parameters, gradients, parameterCount, backend);
     }
 
     /// <summary>

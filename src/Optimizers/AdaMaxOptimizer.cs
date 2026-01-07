@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -614,4 +615,56 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_AdaMax_{_options.Beta1}_{_options.Beta2}_{_t}";
     }
+
+    #region GPU Training Support
+
+    private IGpuBuffer? _gpuM;
+    private IGpuBuffer? _gpuU;
+
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        _gpuM?.Dispose();
+        _gpuU?.Dispose();
+
+        var zeros = new float[parameterCount];
+        _gpuM = backend.AllocateBuffer(zeros);
+        _gpuU = backend.AllocateBuffer(zeros);
+
+        base.InitializeGpuState(parameterCount, backend);
+    }
+
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuM == null || _gpuU == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        _t++;
+
+        backend.AdamaxUpdate(
+            parameters,
+            gradients,
+            _gpuM!,
+            _gpuU!,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            (float)_options.Beta1,
+            (float)_options.Beta2,
+            1e-8f,
+            0.0f, // AdaMax doesn't have weight decay in these options
+            _t,
+            parameterCount
+        );
+    }
+
+    public override void DisposeGpuState()
+    {
+        _gpuM?.Dispose();
+        _gpuU?.Dispose();
+        _gpuM = null;
+        _gpuU = null;
+        base.DisposeGpuState();
+    }
+
+    #endregion
 }

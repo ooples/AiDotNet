@@ -37,4 +37,20 @@ public interface ILossFunction<T>
     /// <param name="actual">The actual (target) values.</param>
     /// <returns>A vector containing the derivatives of the loss with respect to each prediction.</returns>
     Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual);
+
+    /// <summary>
+    /// Calculates the loss between predicted and actual tensors on GPU.
+    /// </summary>
+    /// <param name="predicted">The predicted tensor from the model (on GPU).</param>
+    /// <param name="actual">The actual (target) tensor (on GPU).</param>
+    /// <returns>The loss value.</returns>
+    T CalculateLossGpu(Tensor<T> predicted, Tensor<T> actual);
+
+    /// <summary>
+    /// Calculates the derivative (gradient) of the loss function on GPU.
+    /// </summary>
+    /// <param name="predicted">The predicted tensor from the model (on GPU).</param>
+    /// <param name="actual">The actual (target) tensor (on GPU).</param>
+    /// <returns>A tensor containing the derivatives of the loss with respect to each prediction (on GPU).</returns>
+    Tensor<T> CalculateDerivativeGpu(Tensor<T> predicted, Tensor<T> actual);
 }

@@ -41,6 +41,35 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     public abstract Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual);
 
     /// <summary>
+    /// Calculates the loss between predicted and actual tensors on GPU.
+    /// Default implementation falls back to CPU.
+    /// </summary>
+    /// <param name="predicted">The predicted tensor from the model (on GPU).</param>
+    /// <param name="actual">The actual (target) tensor (on GPU).</param>
+    /// <returns>The loss value.</returns>
+    public virtual T CalculateLossGpu(Tensor<T> predicted, Tensor<T> actual)
+    {
+        // Default: fall back to CPU
+        return CalculateLoss(predicted.ToVector(), actual.ToVector());
+    }
+
+    /// <summary>
+    /// Calculates the derivative (gradient) of the loss function on GPU.
+    /// Default implementation falls back to CPU.
+    /// </summary>
+    /// <param name="predicted">The predicted tensor from the model (on GPU).</param>
+    /// <param name="actual">The actual (target) tensor (on GPU).</param>
+    /// <returns>A tensor containing the derivatives of the loss with respect to each prediction (on GPU).</returns>
+    public virtual Tensor<T> CalculateDerivativeGpu(Tensor<T> predicted, Tensor<T> actual)
+    {
+        // Default: fall back to CPU
+        var derivative = CalculateDerivative(predicted.ToVector(), actual.ToVector());
+        var result = new Tensor<T>(predicted.Shape);
+        Array.Copy(derivative.ToArray(), result.Data, derivative.Length);
+        return result;
+    }
+
+    /// <summary>
     /// Validates that the predicted and actual vectors have the same length.
     /// </summary>
     /// <param name="predicted">The predicted values vector.</param>
