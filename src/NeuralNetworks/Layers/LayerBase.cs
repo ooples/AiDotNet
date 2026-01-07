@@ -3,6 +3,8 @@ using AiDotNet.Autodiff;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -867,6 +869,239 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public abstract Tensor<T> Backward(Tensor<T> outputGradient);
+
+    #region GPU Training Infrastructure
+
+    /// <summary>
+    /// Gets whether this layer has a GPU execution implementation for inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Override this to return true when the layer implements <see cref="ForwardGpu"/>.
+    /// The actual <see cref="CanExecuteOnGpu"/> property combines this with engine availability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This flag indicates if the layer has GPU code for the forward pass.
+    /// Set this to true in derived classes that implement ForwardGpu.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsGpuExecution => false;
+
+    /// <summary>
+    /// Gets whether this layer has full GPU training support (forward, backward, and parameter updates).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can perform its entire training cycle on GPU
+    /// without downloading data to CPU. A layer has full GPU training support when:
+    /// <list type="bullet">
+    /// <item><description>ForwardGpu is implemented</description></item>
+    /// <item><description>BackwardGpu is implemented</description></item>
+    /// <item><description>UpdateParametersGpu is implemented (for layers with trainable parameters)</description></item>
+    /// <item><description>GPU weight/bias/gradient buffers are properly managed</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if training can happen entirely on GPU.
+    /// 
+    /// GPU-resident training is much faster because:
+    /// - Data stays on GPU between forward and backward passes
+    /// - No expensive CPU-GPU transfers during each training step
+    /// - GPU kernels handle all gradient computation
+    /// 
+    /// Only layers that return true here can participate in fully GPU-resident training.
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsGpuTraining => false;
+
+    /// <summary>
+    /// Gets whether this layer can execute its forward pass on GPU.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns true when both the layer supports GPU execution AND a GPU engine is currently active.
+    /// Use this to check at runtime whether GPU forward pass is available.
+    /// </para>
+    /// <para><b>For Beginners:</b> Check this before calling ForwardGpu.
+    /// It combines "does the layer have GPU code?" with "is the GPU engine active?"
+    /// </para>
+    /// </remarks>
+    public virtual bool CanExecuteOnGpu => SupportsGpuExecution && Engine is DirectGpuTensorEngine;
+
+    /// <summary>
+    /// Gets whether this layer can execute GPU training (forward, backward, parameter update).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns true when both the layer supports GPU training AND a GPU engine is currently active.
+    /// </para>
+    /// <para><b>For Beginners:</b> Check this before attempting GPU-resident training.
+    /// If false, training will fall back to CPU operations.
+    /// </para>
+    /// </remarks>
+    public virtual bool CanTrainOnGpu => SupportsGpuTraining && Engine is DirectGpuTensorEngine;
+
+    /// <summary>
+    /// Performs the forward pass of the layer on GPU.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensor(s).</param>
+    /// <returns>The GPU-resident output tensor.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU execution.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs the layer's forward computation entirely on GPU. The input and output
+    /// tensors remain in GPU memory, avoiding expensive CPU-GPU transfers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like Forward() but runs on the graphics card.
+    /// 
+    /// The key difference:
+    /// - Forward() uses CPU tensors that may be copied to/from GPU
+    /// - ForwardGpu() keeps everything on GPU the whole time
+    /// 
+    /// Override this in derived classes that support GPU acceleration.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        throw new NotSupportedException(
+            $"GPU execution is not supported by {GetType().Name}. Use Forward() instead or check CanExecuteOnGpu first.");
+    }
+
+    /// <summary>
+    /// Performs the backward pass of the layer on GPU.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The GPU-resident gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs the layer's backward computation entirely on GPU, including:
+    /// <list type="bullet">
+    /// <item><description>Computing input gradients to pass to previous layers</description></item>
+    /// <item><description>Computing and storing weight gradients on GPU (for layers with trainable parameters)</description></item>
+    /// <item><description>Computing and storing bias gradients on GPU</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like Backward() but runs entirely on GPU.
+    /// 
+    /// During GPU training:
+    /// 1. Output gradients come in (on GPU)
+    /// 2. Input gradients are computed (stay on GPU)
+    /// 3. Weight/bias gradients are computed and stored (on GPU)
+    /// 4. Input gradients are returned for the previous layer
+    /// 
+    /// All data stays on GPU - no CPU round-trips needed!
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        throw new NotSupportedException(
+            $"GPU backward pass is not supported by {GetType().Name}. Use Backward() instead or check CanTrainOnGpu first.");
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters on GPU using the gradients computed during BackwardGpu.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    /// <param name="momentum">Optional momentum factor (default 0).</param>
+    /// <param name="weightDecay">Optional weight decay / L2 regularization factor (default 0).</param>
+    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates weights and biases directly on GPU using the gradients computed by BackwardGpu.
+    /// The update rule is: w = w - lr * (grad + weightDecay * w) + momentum * velocity
+    /// </para>
+    /// <para><b>For Beginners:</b> This updates the layer's learned values entirely on GPU.
+    /// 
+    /// During GPU training:
+    /// - Weight gradients are already on GPU from BackwardGpu
+    /// - New weights are computed on GPU
+    /// - Weights stay on GPU for the next forward pass
+    /// 
+    /// This avoids downloading weights to CPU and re-uploading them.
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParametersGpu(T learningRate, T? momentum = default, T? weightDecay = default)
+    {
+        throw new NotSupportedException(
+            $"GPU parameter updates are not supported by {GetType().Name}. Use UpdateParameters() instead or check CanTrainOnGpu first.");
+    }
+
+    /// <summary>
+    /// Uploads the layer's weights and biases to GPU memory for GPU-resident training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this before starting GPU training to initialize GPU weight buffers.
+    /// The CPU weights are copied to GPU and remain there until DownloadWeightsFromGpu is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This copies the layer's learned values to the GPU.
+    /// 
+    /// Call this once at the start of training to:
+    /// - Create GPU buffers for weights and biases
+    /// - Copy current values from CPU to GPU
+    /// - Create GPU buffers for gradients and optimizer states (momentum, etc.)
+    /// 
+    /// After this, all training can happen on GPU without CPU involvement.
+    /// </para>
+    /// </remarks>
+    public virtual void UploadWeightsToGpu()
+    {
+        // Default implementation does nothing - layers without trainable parameters don't need this.
+        // Layers with parameters should override to upload their specific weight tensors.
+    }
+
+    /// <summary>
+    /// Downloads the layer's weights and biases from GPU memory back to CPU.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this after GPU training to sync weights back to CPU for:
+    /// <list type="bullet">
+    /// <item><description>Model checkpointing / saving</description></item>
+    /// <item><description>CPU inference</description></item>
+    /// <item><description>Inspection of trained weights</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This copies learned values back from GPU to CPU.
+    /// 
+    /// During GPU training, weights are modified on GPU and the CPU copy is stale.
+    /// Call this to:
+    /// - Save the model to disk
+    /// - Switch to CPU inference
+    /// - Examine what the layer learned
+    /// 
+    /// This is relatively expensive, so only do it when necessary (not every batch).
+    /// </para>
+    /// </remarks>
+    public virtual void DownloadWeightsFromGpu()
+    {
+        // Default implementation does nothing - layers without trainable parameters don't need this.
+        // Layers with parameters should override to download their specific weight tensors.
+    }
+
+    /// <summary>
+    /// Resets the GPU gradient accumulators to zero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this at the start of each training batch to clear accumulated gradients from the previous batch.
+    /// </para>
+    /// <para><b>For Beginners:</b> This clears the "how to improve" information from the last batch.
+    /// 
+    /// Each batch computes new gradients. Before processing a new batch, you need to:
+    /// - Clear the old gradients
+    /// - Compute fresh gradients for the current batch
+    /// - Update weights based on the new gradients
+    /// 
+    /// If you forget to zero gradients, they accumulate and training goes wrong!
+    /// </para>
+    /// </remarks>
+    public virtual void ZeroGradientsGpu()
+    {
+        // Default implementation does nothing.
+        // Layers with GPU training should override to zero their gradient buffers.
+    }
+
+    #endregion
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
