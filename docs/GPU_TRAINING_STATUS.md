@@ -199,19 +199,19 @@ Kernels exist, need wiring:
 ### Activation & Utility Layers (No Trainable Parameters)
 | Layer | ForwardGpu | BackwardGpu | Notes |
 |-------|------------|-------------|-------|
-| ActivationLayer | ✅ | ❌ | Just activation derivative |
+| ActivationLayer | ✅ | ✅ | CPU fallback for now, native GPU TODO |
 | AddLayer | ✅ | ❌ | Sum gradients to both inputs |
 | ConcatenateLayer | ✅ | ❌ | Split gradients |
 | CroppingLayer | ✅ | ❌ | Pad gradients with zeros |
-| DropoutLayer | ✅ | ❌ | Mask gradient same as forward |
-| FlattenLayer | ✅ | ❌ | Reshape gradient |
+| DropoutLayer | ✅ | ✅ | GPU mask generation and application |
+| FlattenLayer | ✅ | ✅ | GPU reshape (metadata only) |
 | GaussianNoiseLayer | ✅ | ❌ | Pass through gradient |
 | InputLayer | ✅ | ➖ | No backward needed |
 | MaskingLayer | ✅ | ❌ | Mask gradient |
 | MeanLayer | ✅ | ❌ | Broadcast gradient |
 | MultiplyLayer | ✅ | ❌ | Element-wise gradient |
 | PaddingLayer | ✅ | ❌ | Crop gradient |
-| ReshapeLayer | ✅ | ❌ | Reshape gradient |
+| ReshapeLayer | ✅ | ✅ | GPU reshape (metadata only) |
 | SequenceLastLayer | ✅ | ❌ | Scatter gradient to last position |
 | SplitLayer | ✅ | ❌ | Concatenate gradients |
 
@@ -382,7 +382,7 @@ Kernels exist, need wiring:
 
 - **Total Layers**: 118
 - **ForwardGpu Implemented**: 104 (88%)
-- **BackwardGpu Implemented**: 4 (3%)
+- **BackwardGpu Implemented**: 8 (7%) - ActivationLayer, DropoutLayer, FlattenLayer, ReshapeLayer + 4 pooling layers
 - **UpdateParametersGpu Implemented**: 0 (0%)
 - **GPU Weight Storage**: 0 (0%)
 
