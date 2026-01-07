@@ -82,6 +82,18 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU-accelerated forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DiffusionConvLayer supports GPU execution for spectral diffusion operations.
+    /// During training, falls back to CPU to ensure backward pass compatibility.
+    /// See GitHub issue #700 for plans to implement full GPU backward support.
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
     public override bool SupportsJitCompilation => _weights != null && _biases != null && CanActivationBeJitted();
@@ -641,6 +653,15 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
 
+        // During training, fall back to CPU forward to ensure backward pass has required state
+        // GPU backward is not yet implemented - see GitHub issue #700
+        if (IsTrainingMode)
+        {
+            var cpuInput = inputs[0].ToTensor();
+            var cpuOutput = Forward(cpuInput);
+            return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+        }
+
         // Spectral method requires eigenbasis; direct method falls back to CPU
         if (_eigenvalues == null || _eigenvectors == null)
         {
@@ -816,15 +837,12 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             }
 
             // Re-upload diffused buffer with accumulated data
-            backend.DownloadBuffer(diffusedBuffer, new float[batchSize * numVertices * diffusedSize]); // clear
             using var updatedDiffusedBuffer = backend.AllocateBuffer(diffusedData);
             backend.Copy(updatedDiffusedBuffer, diffusedBuffer, batchSize * numVertices * diffusedSize);
         }
 
-        // Cache diffused features for backward pass (on CPU)
-        var diffusedFinal = backend.DownloadBuffer(diffusedBuffer);
-        _diffusedFeatures = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(diffusedFinal),
-            [batchSize * numVertices, diffusedSize]);
+        // Note: In inference mode (training falls back to CPU), we skip caching diffused features
+        // since backward pass won't be called
 
         // Upload weights and biases
         using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data));
@@ -843,11 +861,6 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         // Add bias: broadcast [outputChannels] across rows
         backend.BiasAdd(preActivationBuffer, biasBuffer, preActivationBuffer, batchSize * numVertices, OutputChannels);
 
-        // Cache pre-activation for backward pass
-        var preActData = backend.DownloadBuffer(preActivationBuffer);
-        _lastPreActivation = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(preActData),
-            batchSize == 1 ? [numVertices, OutputChannels] : [batchSize, numVertices, OutputChannels]);
-
         // Apply activation on GPU using base class helper
         var outputBuffer = backend.AllocateBuffer(batchSize * numVertices * OutputChannels);
         var fusedActivation = GetFusedActivationType();
@@ -858,9 +871,8 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             ? [numVertices, OutputChannels]
             : [batchSize, numVertices, OutputChannels];
 
-        // Cache output for backward pass
-        var outputData = backend.DownloadBuffer(outputBuffer);
-        _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
+        // Note: During inference (not training), we skip caching pre-activation and output
+        // since backward pass won't be called. Training mode falls back to CPU forward.
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }

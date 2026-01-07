@@ -36,8 +36,8 @@ public static class RandomKernels
 
             // Convert ulong to float [0, 1)
             float to_float_unorm(ulong x) {
-                // Keep 23 bits of mantissa
-                return (x & 0x7FFFFF) * (1.0f / 8388607.0f);
+                // Keep 23 bits of mantissa, divide by 2^23 to get [0, 1) exclusive
+                return (x & 0x7FFFFF) * (1.0f / 8388608.0f);
             }
         ");
 

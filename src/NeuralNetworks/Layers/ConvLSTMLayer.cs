@@ -510,6 +510,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.
     /// The ConvLSTM gates are computed using GPU convolutions and element-wise operations.
     /// </para>
+    /// <para>
+    /// Note: During training (IsTrainingMode == true), this method falls back to the CPU Forward path
+    /// because the backward pass requires CPU-side state that ForwardGpu doesn't populate.
+    /// See GitHub issue #700 for plans to implement full GPU backward support.
+    /// </para>
     /// </remarks>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
@@ -520,6 +525,15 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         {
             throw new InvalidOperationException(
                 "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        // During training, fall back to CPU forward to ensure backward pass has required state
+        // GPU backward is not yet implemented - see GitHub issue #700
+        if (IsTrainingMode)
+        {
+            var cpuInput = inputs[0].ToTensor();
+            var cpuOutput = Forward(cpuInput);
+            return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
         }
 
         var backend = gpuEngine.GetBackend();

@@ -43,9 +43,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.CUDA.Kernels
 
 // Bilinear sampling helper function
 // Samples from input at fractional position (y, x) using bilinear interpolation
+// NCHW layout: input[batch, channel, height, width]
 __device__ float bilinear_sample(
     const float* input,
-    int batch, int channel, int height, int width,
+    int batch, int totalChannels, int channel, int height, int width,
     float y, float x)
 {
     // Clamp to valid range
@@ -65,14 +66,15 @@ __device__ float bilinear_sample(
     float hx = 1.0f - lx;
 
     // Sample four corners with bounds checking
+    // NCHW index: ((batch * totalChannels + channel) * height + y) * width + x
     float v00 = (y0 >= 0 && y0 < height && x0 >= 0 && x0 < width) ?
-        input[((batch * channel) * height + y0) * width + x0] : 0.0f;
+        input[((batch * totalChannels + channel) * height + y0) * width + x0] : 0.0f;
     float v01 = (y0 >= 0 && y0 < height && x1 >= 0 && x1 < width) ?
-        input[((batch * channel) * height + y0) * width + x1] : 0.0f;
+        input[((batch * totalChannels + channel) * height + y0) * width + x1] : 0.0f;
     float v10 = (y1 >= 0 && y1 < height && x0 >= 0 && x0 < width) ?
-        input[((batch * channel) * height + y1) * width + x0] : 0.0f;
+        input[((batch * totalChannels + channel) * height + y1) * width + x0] : 0.0f;
     float v11 = (y1 >= 0 && y1 < height && x1 >= 0 && x1 < width) ?
-        input[((batch * channel) * height + y1) * width + x1] : 0.0f;
+        input[((batch * totalChannels + channel) * height + y1) * width + x1] : 0.0f;
 
     // Bilinear interpolation
     return hy * hx * v00 + hy * lx * v01 + ly * hx * v10 + ly * lx * v11;
@@ -145,8 +147,8 @@ extern ""C"" __global__ void deformable_conv2d(
                 float sample_y = base_y + offset_y;
                 float sample_x = base_x + offset_x;
 
-                // Bilinear sample
-                float sampled = bilinear_sample(input, b, ic, inHeight, inWidth, sample_y, sample_x);
+                // Bilinear sample (pass inChannels as totalChannels for NCHW indexing)
+                float sampled = bilinear_sample(input, b, inChannels, ic, inHeight, inWidth, sample_y, sample_x);
 
                 // Apply mask if using DCNv2
                 if (hasMask != 0) {
@@ -332,7 +334,7 @@ extern ""C"" __global__ void deformable_conv2d_backward_weights(
                 float sample_y = base_y + offset_y;
                 float sample_x = base_x + offset_x;
 
-                float sampled = bilinear_sample(input, b, ic, inHeight, inWidth, sample_y, sample_x);
+                float sampled = bilinear_sample(input, b, inChannels, ic, inHeight, inWidth, sample_y, sample_x);
 
                 if (hasMask != 0) {
                     int maskIdx = ((b * deformGroups * kernelH * kernelW + deformGroup * kernelH * kernelW + kh * kernelW + kw) * outHeight + oh) * outWidth + ow;
@@ -529,7 +531,7 @@ extern ""C"" __global__ void deformable_conv2d_backward_mask(
         int ic = deformGroup * inChannelsPerDeformGroup + icLocal;
         int g = ic / inChannelsPerGroup;
 
-        float sampled = bilinear_sample(input, b, ic, inHeight, inWidth, sample_y, sample_x);
+        float sampled = bilinear_sample(input, b, inChannels, ic, inHeight, inWidth, sample_y, sample_x);
 
         for (int ocLocal = 0; ocLocal < outChannelsPerGroup; ocLocal++) {
             int oc = g * outChannelsPerGroup + ocLocal;

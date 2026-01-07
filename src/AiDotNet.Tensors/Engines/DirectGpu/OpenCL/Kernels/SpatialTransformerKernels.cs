@@ -231,6 +231,20 @@ __kernel void grid_sample(
 }
 
 // ===========================================================================
+// ATOMIC FLOAT ADD HELPER (for OpenCL without native float atomics)
+// ===========================================================================
+
+// Emulate atomic float add using CAS loop
+// This is necessary because OpenCL 1.x doesn't have atomic_add for floats
+inline void atomicAddFloat(__global float* addr, float val) {
+    union { float f; unsigned int i; } old_val, new_val;
+    do {
+        old_val.f = *addr;
+        new_val.f = old_val.f + val;
+    } while (atomic_cmpxchg((__global unsigned int*)addr, old_val.i, new_val.i) != old_val.i);
+}
+
+// ===========================================================================
 // GRID SAMPLE BACKWARD KERNEL
 // ===========================================================================
 
@@ -308,24 +322,22 @@ __kernel void grid_sample_backward(
         gradGridX += go * (wy0 * (v01 - v00) + wy1 * (v11 - v10)) * gradMultX;
         gradGridY += go * (wx0 * (v10 - v00) + wx1 * (v11 - v01)) * gradMultY;
 
-        // Gradient with respect to input (atomic add)
+        // Gradient with respect to input (thread-safe atomic add for overlapping writes)
         if (ix0 >= 0 && ix0 < inWidth && iy0 >= 0 && iy0 < inHeight) {
             int idx = ((b * channels + c) * inHeight + iy0) * inWidth + ix0;
-            // Note: OpenCL 1.x doesn't have atomic_add for float, need extension or emulation
-            // For now, we'll use a simple add (not thread-safe for overlapping writes)
-            gradInput[idx] += go * wy0 * wx0;
+            atomicAddFloat(&gradInput[idx], go * wy0 * wx0);
         }
         if (ix1 >= 0 && ix1 < inWidth && iy0 >= 0 && iy0 < inHeight) {
             int idx = ((b * channels + c) * inHeight + iy0) * inWidth + ix1;
-            gradInput[idx] += go * wy0 * wx1;
+            atomicAddFloat(&gradInput[idx], go * wy0 * wx1);
         }
         if (ix0 >= 0 && ix0 < inWidth && iy1 >= 0 && iy1 < inHeight) {
             int idx = ((b * channels + c) * inHeight + iy1) * inWidth + ix0;
-            gradInput[idx] += go * wy1 * wx0;
+            atomicAddFloat(&gradInput[idx], go * wy1 * wx0);
         }
         if (ix1 >= 0 && ix1 < inWidth && iy1 >= 0 && iy1 < inHeight) {
             int idx = ((b * channels + c) * inHeight + iy1) * inWidth + ix1;
-            gradInput[idx] += go * wy1 * wx1;
+            atomicAddFloat(&gradInput[idx], go * wy1 * wx1);
         }
     }
 
