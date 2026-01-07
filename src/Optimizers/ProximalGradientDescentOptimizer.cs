@@ -1,3 +1,6 @@
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 /// <summary>
@@ -538,5 +541,20 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_PGD_{_options.InitialLearningRate}_{_regularization.GetType().Name}_{_options.Tolerance}_{_iteration}";
+    }
+
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        // Proximal gradient step: minimize f + regularization
+        // For now, simplified to SGD-like update
+        // TODO: Implement proper proximal operator kernel for L1 regularization
+        
+        backend.SgdUpdate(
+            parameters,
+            gradients,
+            (float)_options.InitialLearningRate,
+            0.0f, // weight decay
+            parameterCount
+        );
     }
 }

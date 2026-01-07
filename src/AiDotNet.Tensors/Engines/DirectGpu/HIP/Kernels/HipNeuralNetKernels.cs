@@ -760,6 +760,152 @@ extern ""C"" __global__ void ftrl_update(
 }
 
 // ===========================================================================
+// ADDITIONAL OPTIMIZER KERNELS
+// ===========================================================================
+
+// Proximal Gradient Descent with L1 regularization
+extern ""C"" __global__ void proximal_gradient_step(
+    float* param, const float* gradient, 
+    float learningRate, float l1Lambda, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    float p = param[idx] - learningRate * gradient[idx];
+    // Soft thresholding for L1 regularization
+    float threshold = l1Lambda * learningRate;
+    if (p > threshold) {
+        param[idx] = p - threshold;
+    } else if (p < -threshold) {
+        param[idx] = p + threshold;
+    } else {
+        param[idx] = 0.0f;
+    }
+}
+
+// Conjugate Gradient update
+extern ""C"" __global__ void conjugate_gradient_step(
+    float* param, float* direction, const float* gradient, 
+    float* prevGradient, float beta, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    direction[idx] = -gradient[idx] + beta * direction[idx];
+    param[idx] += alpha * direction[idx];
+    prevGradient[idx] = gradient[idx];
+}
+
+// L-BFGS two-loop recursion helper
+extern ""C"" __global__ void lbfgs_two_loop(
+    const float* gradient, const float* sHistory, const float* yHistory,
+    const float* rhoHistory, float* q, int size, int historySize, int m)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    q[idx] = gradient[idx];
+    // Full L-BFGS two-loop requires sequential computation on host
+}
+
+// BFGS update (simplified - full version requires matrix operations)
+extern ""C"" __global__ void bfgs_step(
+    float* param, const float* gradient, const float* invHessianDiag,
+    float learningRate, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    // Diagonal approximation: x = x - lr * H^-1 * g
+    param[idx] -= learningRate * invHessianDiag[idx] * gradient[idx];
+}
+
+// Levenberg-Marquardt with damping
+extern ""C"" __global__ void levenberg_marquardt_step(
+    float* param, const float* gradient, const float* hessianDiag,
+    float lambda, float learningRate, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    // Damped update: (H + λI)^-1 * g
+    float dampedHess = hessianDiag[idx] + lambda;
+    param[idx] -= learningRate * gradient[idx] / (dampedHess + 1e-8f);
+}
+
+// Trust Region update
+extern ""C"" __global__ void trust_region_step(
+    float* param, const float* gradient, const float* hessianDiag,
+    float trustRadius, float learningRate, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    // Simplified trust region with diagonal Hessian
+    float grad = gradient[idx];
+    float hess = hessianDiag[idx];
+    float step = -grad / (hess + 1e-8f);
+    
+    // Limit step by trust radius
+    float stepNorm = fabsf(step);
+    if (stepNorm > trustRadius) {
+        step = (step / stepNorm) * trustRadius;
+    }
+    
+    param[idx] += learningRate * step;
+}
+
+// ADMM (Alternating Direction Method of Multipliers)
+extern ""C"" __global__ void admm_step(
+    float* param, const float* gradient, float* dual, 
+    const float* consensus, float rho, float learningRate, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    // ADMM primal update: minimize f(x) + (rho/2)||x - z + u||^2
+    float augmentedGrad = gradient[idx] + rho * (param[idx] - consensus[idx] + dual[idx]);
+    param[idx] -= learningRate * augmentedGrad;
+    
+    // Dual update: u = u + (x - z)
+    dual[idx] += param[idx] - consensus[idx];
+}
+
+// Newton's Method (simplified with diagonal Hessian)
+extern ""C"" __global__ void newton_method_step(
+    float* param, const float* gradient, const float* hessianDiag,
+    float learningRate, float damping, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    // Newton step: x = x - lr * H^-1 * g
+    float hess = hessianDiag[idx];
+    param[idx] -= learningRate * gradient[idx] / (hess + damping);
+}
+
+// DFP (Davidon-Fletcher-Powell) - diagonal approximation
+extern ""C"" __global__ void dfp_step(
+    float* param, const float* gradient, const float* invHessianDiag,
+    float learningRate, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    
+    // DFP update with diagonal approximation
+    param[idx] -= learningRate * invHessianDiag[idx] * gradient[idx];
+}
+
+// Coordinate Descent (per-coordinate update)
+extern ""C"" __global__ void coordinate_descent_step(
+    float* param, const float* gradient, 
+    int coordinate, float learningRate, int size)
+{
+    if (coordinate >= size) return;
+    param[coordinate] -= learningRate * gradient[coordinate];
+}
+
+// ===========================================================================
 // DROPOUT AND EMBEDDING KERNELS
 // ===========================================================================
 
@@ -1432,6 +1578,8 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
             "compute_mean_var", "argmax_axis", "argmin_axis",
             "sgd_step", "adam_step", "adamw_step", "rmsprop_step", "adagrad_step", "nag_step", "lars_step", "lamb_step",
             "sgd_update", "adadelta_update", "amsgrad_update", "adamax_update", "lion_update", "nadam_update", "ftrl_update",
+            "proximal_gradient_step", "conjugate_gradient_step", "lbfgs_two_loop", "bfgs_step",
+            "levenberg_marquardt_step", "trust_region_step", "admm_step", "newton_method_step", "dfp_step", "coordinate_descent_step",
             "dropout_forward", "dropout_backward", "embedding_forward", "embedding_backward",
             "transpose_2d", "batched_transpose", "permute_general",
             // LSTM kernels

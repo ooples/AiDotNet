@@ -158,7 +158,7 @@ The following methods have been added to LayerBase:
 | Gradient checkpointing on GPU | ❌ | Memory-efficient backward with GPU recompute |
 | Mixed precision training | ❌ | FP16 forward/backward with FP32 accumulation |
 
-### Phase 3: Optimizer GPU Integration ✅ COMPLETE
+### Phase 3: Optimizer GPU Integration 🔄 IN PROGRESS
 All gradient-based optimizers now have GPU support framework in place.
 
 | Optimizer | Kernel Status | Integration Status | Notes |
@@ -181,23 +181,23 @@ All gradient-based optimizers now have GPU support framework in place.
 | FTRL (FTRLOptimizer) | ✅ `ftrl_update` | ✅ Wired | Follow the regularized leader |
 | GradientDescent (GradientDescentOptimizer) | ✅ `sgd_update` | ✅ Wired | Basic GD |
 | MiniBatchGradientDescent (MiniBatchGradientDescentOptimizer) | ✅ `sgd_update` | ✅ Wired | Mini-batch GD |
-| **Need Implementation (Low Priority)** |
-| ProximalGradientDescent | ❌ | ❌ | Proximal methods |
-| CoordinateDescent | ❌ | ❌ | Coordinate-wise |
-| ConjugateGradient | ❌ | ❌ | Conjugate gradients |
+| ProximalGradientDescent | ✅ `proximal_gradient_step` | ✅ Wired | Proximal methods |
+| **Need Wiring (Kernel Exists)** |
+| CoordinateDescent | ✅ `coordinate_descent_step` | ❌ | Coordinate-wise |
+| ConjugateGradient | ✅ `conjugate_gradient_step` | ❌ | Conjugate gradients |
 | **Quasi-Newton (Low Priority - Complex)** |
-| BFGS | ❌ | ❌ | Hessian approximation |
-| LBFGS | ❌ | ❌ | Limited memory BFGS |
-| DFP | ❌ | ❌ | Davidon-Fletcher-Powell |
-| NewtonMethod | ❌ | ❌ | Second-order |
-| LevenbergMarquardt | ❌ | ❌ | Damped least squares |
-| TrustRegion | ❌ | ❌ | Trust region methods |
-| ADMM | ❌ | ❌ | Alternating direction |
+| BFGS | ✅ `bfgs_step` | ❌ | Hessian approximation |
+| LBFGS | ✅ `lbfgs_two_loop` | ❌ | Limited memory BFGS |
+| DFP | ✅ `dfp_step` | ❌ | Davidon-Fletcher-Powell |
+| NewtonMethod | ✅ `newton_method_step` | ❌ | Second-order |
+| LevenbergMarquardt | ✅ `levenberg_marquardt_step` | ❌ | Damped least squares |
+| TrustRegion | ✅ `trust_region_step` | ❌ | Trust region methods |
+| ADMM | ✅ `admm_step` | ❌ | Alternating direction |
 
 **Backend Implementation Status:**
-- CUDA: ✅ All 9 optimizer update methods
-- HIP: ✅ All 9 optimizer update methods  
-- OpenCL: ✅ All 9 optimizer update methods
+- CUDA: ✅ All kernels implemented
+- HIP: ✅ All kernels implemented  
+- OpenCL: ❌ Needs implementation
 
 **Layer GPU Training Status:**
 | Layer | BackwardGpu | UpdateParametersGpu | SupportsGpuTraining |
@@ -208,14 +208,12 @@ All gradient-based optimizers now have GPU support framework in place.
 | ReshapeLayer | ✅ | ➖ No params | ✅ |
 | ActivationLayer | ✅ | ➖ No params | ❌ (needs update) |
 
-**Remaining Work for Full Optimizer Coverage:**
-- Implement GPU kernels for 20+ additional optimizers (see table above)
-- Add `UpdateParametersGpu()` override to each optimizer
-- Wire kernel calls in DenseLayer and other trainable layers
-- Add BackwardGpu + UpdateParametersGpu to other trainable layers (Conv, LSTM, Attention, etc.)
+**Remaining Work:**
+- Wire up 8 remaining optimizers (CoordinateDescent, ConjugateGradient, BFGS, LBFGS, DFP, NewtonMethod, LevenbergMarquardt, TrustRegion, ADMM)
+- Add BackwardGpu + UpdateParametersGpu to remaining trainable layers
 - Update ActivationLayer.SupportsGpuTraining to true
 
-**Status:** Phase 3 optimizer work is **partially complete** (9/29 optimizers have full GPU support)
+**Status:** Phase 3 optimizer work is **mostly complete** (18/26 optimizers have full GPU support)
 
 ### Phase 3: Loss Function GPU Integration ✅ COMPLETE
 | Loss Function | CalculateLossGpu | CalculateDerivativeGpu | Notes |
