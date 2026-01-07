@@ -3730,6 +3730,183 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     #endregion
 
+    #region GPU Tensor Linear Algebra Operations
+
+    /// <summary>
+    /// Performs matrix multiplication on GPU tensors: C = A @ B.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="a">The first GPU tensor (M x K).</param>
+    /// <param name="b">The second GPU tensor (K x N).</param>
+    /// <returns>A new GPU tensor containing the result (M x N).</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU is not available.</exception>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes are incompatible for matrix multiplication.</exception>
+    public IGpuTensor<T> MatMulGpu<T>(IGpuTensor<T> a, IGpuTensor<T> b)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for MatMulGpu.");
+
+        // Validate shapes for matrix multiplication
+        if (a.Shape.Length != 2 || b.Shape.Length != 2)
+            throw new ArgumentException("MatMulGpu requires 2D tensors.");
+
+        int M = a.Shape[0];
+        int K = a.Shape[1];
+        int K2 = b.Shape[0];
+        int N = b.Shape[1];
+
+        if (K != K2)
+            throw new ArgumentException($"Matrix dimensions incompatible for multiplication: {M}x{K} @ {K2}x{N}");
+
+        // Perform GPU matrix multiplication
+        var outputBuffer = backend.MatMul(a.Buffer, b.Buffer, M, N, K);
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { M, N }, GpuTensorRole.Intermediate);
+    }
+
+    /// <summary>
+    /// Transposes a 2D GPU tensor.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="tensor">The GPU tensor to transpose.</param>
+    /// <returns>A new GPU tensor containing the transposed result.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU is not available.</exception>
+    /// <exception cref="ArgumentException">Thrown when tensor is not 2D.</exception>
+    public IGpuTensor<T> TransposeGpu<T>(IGpuTensor<T> tensor)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for TransposeGpu.");
+
+        if (tensor.Shape.Length != 2)
+            throw new ArgumentException("TransposeGpu requires a 2D tensor.");
+
+        int rows = tensor.Shape[0];
+        int cols = tensor.Shape[1];
+
+        var outputBuffer = backend.AllocateBuffer(rows * cols);
+        backend.Transpose(tensor.Buffer, outputBuffer, rows, cols);
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { cols, rows }, tensor.Role);
+    }
+
+    /// <summary>
+    /// Adds a bias vector to each row of a 2D GPU tensor: output = input + bias (broadcast).
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">The GPU tensor (M x N).</param>
+    /// <param name="bias">The bias GPU tensor (N).</param>
+    /// <returns>A new GPU tensor with bias added.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU is not available.</exception>
+    /// <exception cref="ArgumentException">Thrown when shapes are incompatible.</exception>
+    public IGpuTensor<T> AddBiasGpu<T>(IGpuTensor<T> input, IGpuTensor<T> bias)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for AddBiasGpu.");
+
+        if (input.Shape.Length != 2 || bias.Shape.Length != 1)
+            throw new ArgumentException("AddBiasGpu requires 2D input and 1D bias.");
+
+        int M = input.Shape[0];
+        int N = input.Shape[1];
+
+        if (bias.Shape[0] != N)
+            throw new ArgumentException($"Bias size {bias.Shape[0]} doesn't match input columns {N}.");
+
+        var outputBuffer = backend.AllocateBuffer(M * N);
+        backend.BiasAdd(input.Buffer, bias.Buffer, outputBuffer, M, N);
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { M, N }, GpuTensorRole.Intermediate);
+    }
+
+    /// <summary>
+    /// Sums a 2D GPU tensor along axis 0 (batch dimension), producing a 1D result.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="tensor">The GPU tensor (M x N).</param>
+    /// <returns>A new GPU tensor (N) with sum of each column.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU is not available.</exception>
+    public IGpuTensor<T> SumAxis0Gpu<T>(IGpuTensor<T> tensor)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for SumAxis0Gpu.");
+
+        if (tensor.Shape.Length != 2)
+            throw new ArgumentException("SumAxis0Gpu requires a 2D tensor.");
+
+        int M = tensor.Shape[0]; // outer size (batch)
+        int N = tensor.Shape[1]; // reduce size
+
+        var outputBuffer = backend.AllocateBuffer(N);
+        // SumAxis sums along the outer dimension, reducing M down to 1
+        // Result is N elements (one per column)
+        backend.SumAxis(tensor.Buffer, outputBuffer, M, N);
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { N }, GpuTensorRole.Gradient);
+    }
+
+    /// <summary>
+    /// Adds two GPU tensors element-wise.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="a">The first GPU tensor.</param>
+    /// <param name="b">The second GPU tensor.</param>
+    /// <returns>A new GPU tensor containing the element-wise sum.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU is not available.</exception>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    public IGpuTensor<T> AddGpu<T>(IGpuTensor<T> a, IGpuTensor<T> b)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for AddGpu.");
+
+        if (!a.Shape.SequenceEqual(b.Shape))
+            throw new ArgumentException($"Tensor shapes must match: {string.Join("x", a.Shape)} vs {string.Join("x", b.Shape)}");
+
+        int size = a.ElementCount;
+        var outputBuffer = backend.AllocateBuffer(size);
+        backend.Add(a.Buffer, b.Buffer, outputBuffer, size);
+
+        return new GpuTensor<T>(backend, outputBuffer, a.Shape.ToArray(), GpuTensorRole.Intermediate);
+    }
+
+    /// <summary>
+    /// Scales a GPU tensor by a scalar value.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="tensor">The GPU tensor to scale.</param>
+    /// <param name="scalar">The scalar value.</param>
+    /// <returns>A new GPU tensor with scaled values.</returns>
+    public IGpuTensor<T> ScaleGpu<T>(IGpuTensor<T> tensor, float scalar)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for ScaleGpu.");
+
+        int size = tensor.ElementCount;
+        var outputBuffer = backend.AllocateBuffer(size);
+        backend.Scale(tensor.Buffer, outputBuffer, scalar, size);
+
+        return new GpuTensor<T>(backend, outputBuffer, tensor.Shape.ToArray(), tensor.Role);
+    }
+
+    /// <summary>
+    /// Subtracts GPU tensor b from a element-wise: result = a - b.
+    /// </summary>
+    public IGpuTensor<T> SubtractGpu<T>(IGpuTensor<T> a, IGpuTensor<T> b)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for SubtractGpu.");
+
+        if (!a.Shape.SequenceEqual(b.Shape))
+            throw new ArgumentException($"Tensor shapes must match: {string.Join("x", a.Shape)} vs {string.Join("x", b.Shape)}");
+
+        int size = a.ElementCount;
+        var outputBuffer = backend.AllocateBuffer(size);
+        backend.Subtract(a.Buffer, b.Buffer, outputBuffer, size);
+
+        return new GpuTensor<T>(backend, outputBuffer, a.Shape.ToArray(), GpuTensorRole.Intermediate);
+    }
+
+    #endregion
+
     public void Dispose()
     {
         // Dispose all cached GPU buffers

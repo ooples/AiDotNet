@@ -1,8 +1,11 @@
+using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -1417,6 +1420,223 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weightsGradient = null;
         _biasesGradient = null;
     }
+
+    #region GPU Training Support
+
+    // GPU-resident tensors for training
+    private IGpuTensor<T>? _gpuLastInput;
+    private IGpuTensor<T>? _gpuLastOutput;
+    private IGpuTensor<T>? _gpuWeights;
+    private IGpuTensor<T>? _gpuBiases;
+    private IGpuTensor<T>? _gpuWeightsGradient;
+    private IGpuTensor<T>? _gpuBiasesGradient;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets whether this layer supports full GPU training (forward, backward, update).
+    /// </summary>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Performs the forward pass of the dense layer on GPU.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensor(s).</param>
+    /// <returns>The GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs the dense layer computation entirely on GPU:
+    /// output = activation(input @ weights + biases)
+    /// </para>
+    /// <para>
+    /// All tensors remain GPU-resident for efficient training.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Ensure weights are initialized
+        EnsureInitialized();
+
+        var input = inputs[0];
+
+        // Get the GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
+
+        var backend = gpuEngine.Backend;
+
+        // Cache input for backward pass
+        _gpuLastInput = input;
+
+        // Upload weights and biases to GPU if not already there
+        if (_gpuWeights == null)
+            _gpuWeights = new GpuTensor<T>(backend, _weights, GpuTensorRole.Weight);
+        if (_gpuBiases == null)
+            _gpuBiases = new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
+
+        // Handle any-rank input: flatten to 2D for computation
+        int inputSize = input.Shape[^1];
+        int batchDim = 1;
+        for (int i = 0; i < input.Shape.Length - 1; i++)
+            batchDim *= input.Shape[i];
+
+        // Reshape to 2D if needed: [batchDim, inputSize]
+        var flattenedInput = input.Shape.Length == 2 && input.Shape[0] == batchDim
+            ? input
+            : gpuEngine.ReshapeGpu(input, new[] { batchDim, inputSize });
+
+        // Compute: output = input @ weights + biases
+        // input: [batchDim, inputSize], weights: [inputSize, outputSize]
+        // result: [batchDim, outputSize]
+        var matmulResult = gpuEngine.MatMulGpu(flattenedInput, _gpuWeights);
+        var withBias = gpuEngine.AddBiasGpu(matmulResult, _gpuBiases);
+
+        // Cache pre-activation output for backward
+        _gpuLastOutput = withBias;
+
+        // TODO: Apply activation on GPU when activation backward kernels are integrated
+        // For now, download, apply activation, upload
+        var cpuOutput = withBias.ToTensor();
+        var activatedCpu = ApplyActivation(cpuOutput);
+        var result = new GpuTensor<T>(backend, activatedCpu, GpuTensorRole.Activation);
+
+        // Reshape back to original shape with outputSize as last dimension
+        if (input.Shape.Length > 2)
+        {
+            var outputShape = new int[input.Shape.Length];
+            for (int i = 0; i < input.Shape.Length - 1; i++)
+                outputShape[i] = input.Shape[i];
+            outputShape[^1] = OutputShape[0];
+            return gpuEngine.ReshapeGpu(result, outputShape);
+        }
+        else if (input.Shape.Length == 1)
+        {
+            return gpuEngine.ReshapeGpu(result, new[] { OutputShape[0] });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs the backward pass of the dense layer on GPU.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient from the next layer.</param>
+    /// <returns>The GPU-resident gradient to pass to the previous layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes gradients entirely on GPU:
+    /// - Weight gradients: dW = input.T @ dL/dz
+    /// - Bias gradients: dB = sum(dL/dz, axis=0)
+    /// - Input gradients: dX = dL/dz @ weights.T
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuLastInput == null || _gpuLastOutput == null || _gpuWeights == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
+
+        // 1. Calculate activation gradient (for now, download/upload)
+        // TODO: Integrate GPU activation backward kernels
+        var lastOutputCpu = _gpuLastOutput.ToTensor();
+        var gradOutputCpu = outputGradient.ToTensor();
+
+        Tensor<T> activationGradientCpu;
+        if (UsingVectorActivation && VectorActivation != null)
+            activationGradientCpu = VectorActivation.Backward(lastOutputCpu, gradOutputCpu);
+        else if (ScalarActivation != null)
+            activationGradientCpu = ScalarActivation.Backward(lastOutputCpu, gradOutputCpu);
+        else
+            activationGradientCpu = gradOutputCpu;
+
+        var activationGradient = new GpuTensor<T>(gpuEngine.Backend, activationGradientCpu, GpuTensorRole.Gradient);
+
+        // Flatten to 2D for gradient computation
+        int inputSize = _gpuLastInput.Shape[^1];
+        int batchDim = 1;
+        for (int i = 0; i < _gpuLastInput.Shape.Length - 1; i++)
+            batchDim *= _gpuLastInput.Shape[i];
+
+        var flattenedInput = _gpuLastInput.Shape.Length == 2 && _gpuLastInput.Shape[0] == batchDim
+            ? _gpuLastInput
+            : gpuEngine.ReshapeGpu(_gpuLastInput, new[] { batchDim, inputSize });
+
+        var flattenedGradient = activationGradient.Shape.Length == 2 && activationGradient.Shape[0] == batchDim
+            ? activationGradient
+            : gpuEngine.ReshapeGpu(activationGradient, new[] { batchDim, OutputShape[0] });
+
+        // 2. Compute weight gradients: dW = input.T @ dL/dz
+        var inputTransposed = gpuEngine.TransposeGpu(flattenedInput);
+        _gpuWeightsGradient = gpuEngine.MatMulGpu(inputTransposed, flattenedGradient);
+
+        // 3. Compute bias gradients: dB = sum(dL/dz, axis=0)
+        _gpuBiasesGradient = gpuEngine.SumAxis0Gpu(flattenedGradient);
+
+        // 4. Compute input gradient: dX = dL/dz @ W.T
+        var weightsTransposed = gpuEngine.TransposeGpu(_gpuWeights);
+        var inputGradient = gpuEngine.MatMulGpu(flattenedGradient, weightsTransposed);
+
+        // Reshape back to original input shape
+        if (_gpuLastInput.Shape.Length > 2)
+        {
+            return gpuEngine.ReshapeGpu(inputGradient, _gpuLastInput.Shape.ToArray());
+        }
+        else if (_gpuLastInput.Shape.Length == 1)
+        {
+            return gpuEngine.ReshapeGpu(inputGradient, new[] { inputSize });
+        }
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters on GPU using the gradients computed during BackwardGpu.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    /// <param name="momentum">Optional momentum factor (default 0).</param>
+    /// <param name="weightDecay">Optional weight decay / L2 regularization factor (default 0).</param>
+    /// <remarks>
+    /// <para>
+    /// Updates weights and biases directly on GPU:
+    /// w = w - learningRate * gradient
+    /// </para>
+    /// </remarks>
+    public override void UpdateParametersGpu(T learningRate, T? momentum = default, T? weightDecay = default)
+    {
+        if (_gpuWeightsGradient == null || _gpuBiasesGradient == null || _gpuWeights == null || _gpuBiases == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires a GPU engine to be active.");
+
+        // Convert learning rate to float for GPU operations
+        float lr = NumOps.ToFloat(learningRate);
+
+        // Simple SGD update: w = w - lr * grad
+        var scaledWeightGrad = gpuEngine.ScaleGpu(_gpuWeightsGradient, lr);
+        _gpuWeights = gpuEngine.SubtractGpu(_gpuWeights, scaledWeightGrad);
+
+        var scaledBiasGrad = gpuEngine.ScaleGpu(_gpuBiasesGradient, lr);
+        _gpuBiases = gpuEngine.SubtractGpu(_gpuBiases, scaledBiasGrad);
+
+        // Sync weights back to CPU for interoperability
+        _weights = _gpuWeights.ToTensor();
+        _biases = _gpuBiases.ToTensor();
+
+        // Notify engine that CPU tensors have changed
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    #endregion
 
     /// <summary>
     /// Creates a deep copy of the layer with the same configuration and parameters.
