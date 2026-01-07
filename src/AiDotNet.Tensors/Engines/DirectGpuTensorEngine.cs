@@ -904,7 +904,12 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// <param name="weights">Weight tensor (cached if registered).</param>
     /// <param name="bias">Optional bias tensor (cached if registered).</param>
     /// <param name="activation">Activation function to fuse.</param>
-    /// <returns>GPU-resident tensor with the result.</returns>
+    /// <returns>GPU-resident tensor with the result. Caller must dispose this tensor to free GPU memory.</returns>
+    /// <remarks>
+    /// The returned tensor owns its GPU buffer. In GPU-resident workflows, these tensors should be
+    /// disposed when no longer needed to prevent GPU memory leaks. Use 'using' statements or explicit
+    /// Dispose() calls to ensure proper cleanup.
+    /// </remarks>
     public IGpuTensor<T> FusedLinearGpu<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, FusedActivationType activation)
     {
         if (!TryGetBackend(out var backend))
@@ -927,6 +932,7 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             biasBuffer.Buffer, batchSize, outputFeatures, inputFeatures, activation);
 
         // Return GPU-resident tensor - NO DOWNLOAD
+        // IMPORTANT: Caller is responsible for disposing the returned tensor to free GPU memory
         return new GpuTensor<T>(backend, resultBuffer, new[] { batchSize, outputFeatures },
             GpuTensorRole.Activation, ownsBuffer: true);
     }
@@ -940,7 +946,12 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// <param name="weights">Weight tensor (cached if registered).</param>
     /// <param name="bias">Optional bias tensor (cached if registered).</param>
     /// <param name="activation">Activation function to fuse.</param>
-    /// <returns>GPU-resident tensor with the result.</returns>
+    /// <returns>GPU-resident tensor with the result. Caller must dispose this tensor to free GPU memory.</returns>
+    /// <remarks>
+    /// The returned tensor owns its GPU buffer. In GPU-resident workflows, these tensors should be
+    /// disposed when no longer needed to prevent GPU memory leaks. Use 'using' statements or explicit
+    /// Dispose() calls to ensure proper cleanup.
+    /// </remarks>
     public IGpuTensor<T> FusedLinearGpu<T>(IGpuTensor<T> input, Tensor<T> weights, Tensor<T>? bias, FusedActivationType activation)
     {
         if (!TryGetBackend(out var backend))
@@ -1125,6 +1136,24 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         // Return GPU tensor that owns the buffer
         return new GpuTensor<T>(backend, buffer, tensor.Shape.ToArray(), role, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Uploads raw float data to GPU memory, returning a GPU-resident tensor handle.
+    /// </summary>
+    /// <typeparam name="T">The element type of the tensor.</typeparam>
+    /// <param name="data">The float data to upload.</param>
+    /// <param name="shape">The shape of the resulting tensor.</param>
+    /// <param name="role">The role of this tensor for memory management.</param>
+    /// <returns>A GPU-resident tensor that can be used in subsequent GPU operations.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    public IGpuTensor<T> UploadToGpu<T>(float[] data, int[] shape, GpuTensorRole role)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for UploadToGpu");
+
+        var buffer = backend.AllocateBuffer(data);
+        return new GpuTensor<T>(backend, buffer, shape, role, ownsBuffer: true);
     }
 
     /// <summary>

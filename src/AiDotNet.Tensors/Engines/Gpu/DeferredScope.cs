@@ -135,6 +135,11 @@ public sealed class DeferredScope : IDeferredScope
     public ExecutionGraph Compile()
     {
         ThrowIfDisposed();
+        // Stop recording before compiling to ensure all operations are captured
+        if (_recordingBackend.IsRecording)
+        {
+            _recordingBackend.EndRecording();
+        }
         return CompileInternal();
     }
 

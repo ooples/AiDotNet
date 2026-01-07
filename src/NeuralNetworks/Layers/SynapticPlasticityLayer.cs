@@ -386,16 +386,16 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
             }
 
             // Update traces and detect spikes directly on GPU
-            gpuEngine.UpdateTracesGpu(_presynapticTracesGpu, _presynapticSpikesGpu, _lastInputGpu, decay, threshold);
-            gpuEngine.UpdateTracesGpu(_postsynapticTracesGpu, _postsynapticSpikesGpu, _lastOutputGpu!, decay, threshold);
+            gpuEngine.UpdateTracesGpu(_presynapticTracesGpu!, _presynapticSpikesGpu!, _lastInputGpu, decay, threshold);
+            gpuEngine.UpdateTracesGpu(_postsynapticTracesGpu!, _postsynapticSpikesGpu!, _lastOutputGpu!, decay, threshold);
             
             // Execute STDP update kernel
             gpuEngine.StdpUpdateGpu(
                 _weights,
-                _presynapticTracesGpu,
-                _postsynapticTracesGpu,
-                _presynapticSpikesGpu,
-                _postsynapticSpikesGpu,
+                _presynapticTracesGpu!,
+                _postsynapticTracesGpu!,
+                _presynapticSpikesGpu!,
+                _postsynapticSpikesGpu!,
                 _stdpLtpRate, _stdpLtdRate, _homeostasisRate,
                 _minWeight, _maxWeight);
         }

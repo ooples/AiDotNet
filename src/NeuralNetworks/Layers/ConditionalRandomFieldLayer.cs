@@ -277,7 +277,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             _lastOutput = new Tensor<T>(new Vector<T>(outputData.Select(x => NumOps.FromFloat(x)).ToArray()), [batchSize, seqLen, numClasses]);
         }
 
-        return gpuEngine.UploadToGpu(outputData, [batchSize, seqLen, numClasses], GpuTensorRole.Activation);
+        return gpuEngine.UploadToGpu<T>(outputData, [batchSize, seqLen, numClasses], GpuTensorRole.Activation);
     }
 
     private IGpuBuffer CreateIndices(int batch, int seqLen, int numClasses, int t, IDirectGpuBackend backend)

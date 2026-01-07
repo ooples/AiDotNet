@@ -619,11 +619,16 @@ public class RecordingGpuBackend : DelegatingGpuBackend
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Note: Download operations execute immediately even during recording, as the caller
+    /// needs the data synchronously. The download is also recorded for graph tracking purposes.
+    /// For fully deferred downloads, use the execution graph's deferred download functionality.
+    /// </remarks>
     public override float[] DownloadBuffer(IGpuBuffer buffer)
     {
         if (_isRecording && _graphBuilder != null)
         {
-            // Record the download operation
+            // Record the download operation for tracking (but execute immediately since caller needs data)
             _graphBuilder.AddDownload(buffer, buffer.Size);
         }
 

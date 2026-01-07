@@ -127,7 +127,13 @@ public sealed class HipBackend : IAsyncGpuBackend
         {
             if (_defaultStream == null && IsAvailable)
             {
-                _defaultStream = new HipStream(this, _stream, GpuStreamType.Default, true);
+                var newStream = new HipStream(this, _stream, GpuStreamType.Default, true);
+                System.Threading.Interlocked.CompareExchange(ref _defaultStream, newStream, null);
+                // If another thread won the race, dispose our unused stream
+                if (_defaultStream != newStream)
+                {
+                    newStream.Dispose();
+                }
             }
             return _defaultStream ?? throw new InvalidOperationException("Backend not available");
         }
@@ -2264,7 +2270,7 @@ public sealed class HipBackend : IAsyncGpuBackend
                 }
                 else if (currentInput == tempBuffer1)
                 {
-                    if (tempBuffer2 is null || ((HipGpuBuffer)tempBuffer2).Size < gridSize * sizeof(float))
+                    if (tempBuffer2 is null || ((HipGpuBuffer)tempBuffer2).Size < gridSize)
                     {
                         tempBuffer2?.Dispose();
                         tempBuffer2 = AllocateBuffer(gridSize);
@@ -6372,6 +6378,9 @@ public sealed class HipBackend : IAsyncGpuBackend
                 HipMemcpyKind.HostToDevice,
                 stream.Handle);
             HipNativeBindings.CheckError(result, "hipMemcpyAsync H2D");
+            // Synchronize stream to ensure transfer completes before freeing the pinned handle
+            var syncResult = HipNativeBindings.hipStreamSynchronize(stream.Handle);
+            HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize");
         }
         finally
         {
@@ -6401,6 +6410,9 @@ public sealed class HipBackend : IAsyncGpuBackend
                 HipMemcpyKind.DeviceToHost,
                 stream.Handle);
             HipNativeBindings.CheckError(result, "hipMemcpyAsync D2H");
+            // Synchronize stream to ensure transfer completes before freeing the pinned handle
+            var syncResult = HipNativeBindings.hipStreamSynchronize(stream.Handle);
+            HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize");
         }
         finally
         {

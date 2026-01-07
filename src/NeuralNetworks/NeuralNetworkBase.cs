@@ -890,9 +890,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // Fall back to non-deferred GPU execution if deferred fails
+                System.Diagnostics.Debug.WriteLine($"Deferred execution failed, falling back: {ex.Message}");
             }
         }
 
@@ -1004,9 +1005,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 throw;
             }
-            catch
+            catch (Exception ex)
             {
                 // Fall back to non-deferred execution
+                System.Diagnostics.Debug.WriteLine($"Async deferred execution failed, falling back: {ex.Message}");
             }
         }
 

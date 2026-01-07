@@ -55,6 +55,11 @@ public enum PersistentTensorRole
     OptimizerState,
 
     /// <summary>
+    /// Constant tensors that never change (e.g., precomputed frequencies, positional encodings).
+    /// </summary>
+    Constant,
+
+    /// <summary>
     /// Other persistent tensors not fitting above categories.
     /// </summary>
     Other

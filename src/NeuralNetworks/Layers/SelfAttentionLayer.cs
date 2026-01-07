@@ -1032,16 +1032,47 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null || _outputBiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _queryWeights = _queryWeights.Subtract(_queryWeightsGradient.Multiply(learningRate));
-        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
-        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
-        _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
+            if (_queryWeightsVelocity == null)
+            {
+                _queryWeightsVelocity = new Tensor<T>(_queryWeights.Shape);
+                _queryWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_queryWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _keyWeightsVelocity = new Tensor<T>(_keyWeights.Shape);
+                _keyWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_keyWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _valueWeightsVelocity = new Tensor<T>(_valueWeights.Shape);
+                _valueWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_valueWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _outputBiasVelocity = new Tensor<T>(_outputBias.Shape);
+                _outputBiasVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_outputBiasVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            gpuEngine.SgdMomentumUpdateGpu(_queryWeights, _queryWeightsGradient, _queryWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_keyWeights, _keyWeightsGradient, _keyWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_valueWeights, _valueWeightsGradient, _valueWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_outputBias, _outputBiasGradient, _outputBiasVelocity!, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            _queryWeights = _queryWeights.Subtract(_queryWeightsGradient.Multiply(learningRate));
+            _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
+            _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
+            _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+
+            // Notify GPU that tensor data has changed
+            Engine.InvalidatePersistentTensor(_queryWeights);
+            Engine.InvalidatePersistentTensor(_keyWeights);
+            Engine.InvalidatePersistentTensor(_valueWeights);
+            Engine.InvalidatePersistentTensor(_outputBias);
+        }
     }
 
     /// <summary>

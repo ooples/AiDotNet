@@ -1339,6 +1339,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
                 (ulong)(data.Length * sizeof(float)),
                 stream.Handle);
             CuBlasNative.CheckCudaResult(result, "cuMemcpyHtoDAsync");
+            // Synchronize stream to ensure transfer completes before the fixed block exits
+            var syncResult = CudaNativeBindings.cuStreamSynchronize(stream.Handle);
+            CuBlasNative.CheckCudaResult(syncResult, "cuStreamSynchronize");
         }
     }
 
@@ -1358,6 +1361,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
                 (ulong)(destination.Length * sizeof(float)),
                 stream.Handle);
             CuBlasNative.CheckCudaResult(result, "cuMemcpyDtoHAsync");
+            // Synchronize stream to ensure transfer completes before the fixed block exits
+            var syncResult = CudaNativeBindings.cuStreamSynchronize(stream.Handle);
+            CuBlasNative.CheckCudaResult(syncResult, "cuStreamSynchronize");
         }
     }
 

@@ -712,13 +712,8 @@ public class GRULayer<T> : LayerBase<T>
         var input = inputs[0];
         var shape = input.Shape;
         int rank = shape.Length;
-        int hiddenSize = _inputWeights.Shape[0]; // Note: _inputWeights isn't in GRU, it's _Wz. But wait, base class doesn't have _inputWeights. 
-        // GRU has _Wz (hidden x input). So hiddenSize = _Wz.Shape[0], inputSize = _Wz.Shape[1].
-        // Checking existing code: "int hiddenSize = _inputWeights.Shape[0];" was in RECURRENT layer.
-        // GRU uses _Wz. Let's fix this in new string.
-        
-        int hiddenSize = _hiddenSize; // _hiddenSize is a field in GRULayer
-        int inputSize = _inputSize;   // _inputSize is a field in GRULayer
+        int hiddenSize = _hiddenSize;
+        int inputSize = _inputSize;
 
         // Determine sequence length, batch size from shape
         int sequenceLength;
@@ -873,9 +868,9 @@ public class GRULayer<T> : LayerBase<T>
                 if (IsTrainingMode && cachedZ != null)
                 {
                     cachedZ.Add(backend.DownloadBuffer(zGateBuffer));
-                    cachedR.Add(backend.DownloadBuffer(rGateBuffer));
-                    cachedHCan.Add(backend.DownloadBuffer(hCandidateBuffer));
-                    cachedH.Add(backend.DownloadBuffer(newHBuffer));
+                    cachedR!.Add(backend.DownloadBuffer(rGateBuffer));
+                    cachedHCan!.Add(backend.DownloadBuffer(hCandidateBuffer));
+                    cachedH!.Add(backend.DownloadBuffer(newHBuffer));
                 }
 
                 // Swap hidden state buffers
@@ -895,9 +890,9 @@ public class GRULayer<T> : LayerBase<T>
             {
                 // Store last timestep activations for single-step backward compatibility
                 _lastZ = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedZ[sequenceLength - 1]), [batchSize, _hiddenSize]);
-                _lastR = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedR[sequenceLength - 1]), [batchSize, _hiddenSize]);
-                _lastH = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedHCan[sequenceLength - 1]), [batchSize, _hiddenSize]);
-                _lastHiddenState = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedH[sequenceLength - 1]), [batchSize, _hiddenSize]);
+                _lastR = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedR![sequenceLength - 1]), [batchSize, _hiddenSize]);
+                _lastH = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedHCan![sequenceLength - 1]), [batchSize, _hiddenSize]);
+                _lastHiddenState = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedH![sequenceLength - 1]), [batchSize, _hiddenSize]);
 
                 // Store full sequence of hidden states if needed
                 if (_returnSequences || _allHiddenStates != null)
@@ -1311,15 +1306,15 @@ public class GRULayer<T> : LayerBase<T>
                 _bhVelocity = new Tensor<T>(_bh.Shape); _bhVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_bhVelocity, PersistentTensorRole.OptimizerState);
             }
 
-            gpuEngine.SgdMomentumUpdateGpu(_Wz, _dWz, _WzVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Wr, _dWr, _WrVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Wh, _dWh, _WhVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Uz, _dUz, _UzVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Ur, _dUr, _UrVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Uh, _dUh, _UhVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_bz, _dbz, _bzVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_br, _dbr, _brVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_bh, _dbh, _bhVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Wz, _dWz, _WzVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Wr, _dWr, _WrVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Wh, _dWh, _WhVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Uz, _dUz, _UzVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Ur, _dUr, _UrVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Uh, _dUh, _UhVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_bz, _dbz, _bzVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_br, _dbr, _brVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_bh, _dbh, _bhVelocity!, lr, 0.0f, 0.0f);
         }
         else
         {
