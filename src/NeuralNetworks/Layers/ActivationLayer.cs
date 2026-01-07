@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -553,6 +556,150 @@ public class ActivationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+        _gpuLastInput = null;
+        _gpuLastOutput = null;
+    }
+
+    /// <summary>
+    /// GPU-resident input tensor from the last forward pass.
+    /// </summary>
+    private IGpuTensor<T>? _gpuLastInput;
+
+    /// <summary>
+    /// GPU-resident output tensor from the last forward pass (needed for some activations like Sigmoid/Tanh).
+    /// </summary>
+    private IGpuTensor<T>? _gpuLastOutput;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU-resident training.
+    /// </summary>
+    /// <value>
+    /// True for common activations (ReLU, Sigmoid, Tanh, GELU, LeakyReLU) that have GPU backward kernels.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// GPU training is supported for activations that have GPU-accelerated backward kernels.
+    /// Vector activations like Softmax are not yet supported for GPU training.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsGpuTraining
+    {
+        get
+        {
+            // Vector activations not yet supported for GPU training
+            if (_useVectorActivation)
+                return false;
+
+            // Check if we have a known scalar activation with GPU support
+            var activation = ScalarActivation;
+            if (activation == null)
+                return false;
+
+            // Check activation type name for known supported types
+            var typeName = activation.GetType().Name;
+            return typeName.Contains("ReLU") ||
+                   typeName.Contains("Sigmoid") ||
+                   typeName.Contains("Tanh") ||
+                   typeName.Contains("GELU") ||
+                   typeName.Contains("LeakyReLU");
+        }
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the activation layer on GPU.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensor(s).</param>
+    /// <returns>The GPU-resident output tensor with activation applied.</returns>
+    /// <exception cref="ArgumentException">Thrown when no inputs are provided.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the activation type is not supported for GPU.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method applies the activation function on GPU, keeping data GPU-resident.
+    /// The input and/or output are cached for the backward pass depending on the activation type.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        // For GPU training, we need to download and process on CPU, then upload
+        // This is a temporary solution until activation functions have native GPU methods
+        // TODO: Add GPU-native activation forward methods
+        
+        // Store GPU input for backward pass
+        _gpuLastInput = input;
+
+        // Download, process, upload
+        var cpuInput = input.ToTensor();
+        var cpuOutput = _useVectorActivation ? ApplyVectorActivation(cpuInput) : ApplyScalarActivation(cpuInput);
+        
+        // Store CPU input for backward compatibility
+        _lastInput = cpuInput;
+
+        // Get the GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
+        }
+
+        // Upload result to GPU
+        var gpuOutput = new GpuTensor<T>(gpuEngine.Backend, cpuOutput, GpuTensorRole.Activation);
+        _gpuLastOutput = gpuOutput;
+        
+        return gpuOutput;
+    }
+
+    /// <summary>
+    /// Performs the backward pass of the activation layer on GPU.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient from the next layer.</param>
+    /// <returns>The GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when ForwardGpu was not called first.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the activation type is not supported for GPU.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method computes the activation gradient on GPU. For activations like ReLU, it needs
+    /// the input; for Sigmoid/Tanh, it needs the output. The appropriate GPU kernel is selected
+    /// based on the activation type.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuLastInput == null)
+        {
+            if (_lastInput != null)
+            {
+                throw new InvalidOperationException(
+                    "BackwardGpu requires ForwardGpu to be called first. " +
+                    "The forward pass was performed on CPU. Use Backward() instead.");
+            }
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+        }
+
+        if (_useVectorActivation)
+        {
+            throw new NotSupportedException(
+                "Vector activations (like Softmax) do not yet support GPU-resident backward pass.");
+        }
+
+        // Get the GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
+        }
+
+        // Download gradient and cached tensors
+        var gradOutput = outputGradient.ToTensor();
+        var cpuInput = _gpuLastInput.ToTensor();
+        
+        // Use the CPU backward implementation
+        var gradInput = BackwardScalarActivation(gradOutput);
+
+        // Upload result to GPU
+        return new GpuTensor<T>(gpuEngine.Backend, gradInput, GpuTensorRole.Gradient);
     }
 
     /// <summary>

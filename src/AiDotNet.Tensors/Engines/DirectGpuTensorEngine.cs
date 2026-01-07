@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -3596,6 +3597,135 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             return base.AdaptiveAvgPool2D(input, outputHeight, outputWidth);
         }
+    }
+
+    #endregion
+
+    #region GPU Tensor Operations (GPU-Resident)
+
+    /// <summary>
+    /// Gets the GPU backend for direct operations on GPU tensors.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when GPU is not available.</exception>
+    public IDirectGpuBackend Backend
+    {
+        get
+        {
+            if (!TryGetBackend(out var backend))
+                throw new InvalidOperationException("GPU backend is not available.");
+            return backend;
+        }
+    }
+
+    /// <summary>
+    /// Performs element-wise multiplication of two GPU tensors.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="a">The first GPU tensor.</param>
+    /// <param name="b">The second GPU tensor.</param>
+    /// <returns>A new GPU tensor containing the element-wise product.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU is not available.</exception>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    public IGpuTensor<T> ElementwiseMultiply<T>(IGpuTensor<T> a, IGpuTensor<T> b)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for ElementwiseMultiply.");
+
+        if (!a.Shape.SequenceEqual(b.Shape))
+            throw new ArgumentException($"Tensor shapes must match: {string.Join("x", a.Shape)} vs {string.Join("x", b.Shape)}");
+
+        int size = a.ElementCount;
+
+        // Allocate output buffer
+        var outputBuffer = backend.AllocateBuffer(size);
+        
+        // Perform element-wise multiplication on GPU
+        backend.Multiply(a.Buffer, b.Buffer, outputBuffer, size);
+
+        // Create and return GPU tensor (keeps data on GPU)
+        return new GpuTensor<T>(backend, outputBuffer, a.Shape.ToArray(), GpuTensorRole.Intermediate);
+    }
+
+    /// <summary>
+    /// Generates a dropout mask on GPU with scaling applied.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="shape">The shape of the mask to generate.</param>
+    /// <param name="dropoutRate">The probability of dropping each element (0-1).</param>
+    /// <param name="scale">The scale factor to apply to kept elements.</param>
+    /// <returns>A GPU tensor containing the dropout mask (0 for dropped, scale for kept).</returns>
+    /// <exception cref="InvalidOperationException">Thrown when GPU is not available.</exception>
+    public IGpuTensor<T> GenerateDropoutMask<T>(int[] shape, double dropoutRate, double scale)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for GenerateDropoutMask.");
+
+        int size = 1;
+        foreach (var dim in shape)
+            size *= dim;
+
+        // Allocate buffers for mask and output
+        var maskBuffer = backend.AllocateBuffer(size);
+        var outputBuffer = backend.AllocateBuffer(size);
+
+        // Generate random seed from current time
+        ulong seed = (ulong)DateTime.UtcNow.Ticks;
+
+        // Use dropout forward with training=true to generate the mask
+        // The mask will contain 0 for dropped neurons and scale for kept neurons
+        // We use outputBuffer as a dummy input (will be ignored when generating mask)
+        backend.Dropout(outputBuffer, maskBuffer, maskBuffer, size, (float)dropoutRate, seed, training: true);
+
+        // Scale the mask: where mask > 0, multiply by scale
+        // This is done by the dropout kernel itself when training=true
+        // The kernel outputs 0 for dropped and 1/(1-rate) for kept
+
+        return new GpuTensor<T>(backend, maskBuffer, shape.ToArray(), GpuTensorRole.Intermediate);
+    }
+
+    /// <summary>
+    /// Applies dropout backward pass on GPU.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="mask">The dropout mask from the forward pass.</param>
+    /// <param name="dropoutRate">The dropout rate used in forward pass.</param>
+    /// <returns>The gradient to pass to the previous layer.</returns>
+    public IGpuTensor<T> DropoutBackwardGpu<T>(IGpuTensor<T> gradOutput, IGpuTensor<T> mask, double dropoutRate)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for DropoutBackwardGpu.");
+
+        int size = gradOutput.ElementCount;
+        var gradInputBuffer = backend.AllocateBuffer(size);
+
+        backend.DropoutBackward(gradOutput.Buffer, mask.Buffer, gradInputBuffer, size, (float)dropoutRate);
+
+        return new GpuTensor<T>(backend, gradInputBuffer, gradOutput.Shape.ToArray(), GpuTensorRole.Gradient);
+    }
+
+    /// <summary>
+    /// Reshapes a GPU tensor without copying data (if possible).
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="tensor">The GPU tensor to reshape.</param>
+    /// <param name="newShape">The new shape.</param>
+    /// <returns>A GPU tensor with the new shape.</returns>
+    /// <exception cref="ArgumentException">Thrown when the new shape has a different total element count.</exception>
+    public IGpuTensor<T> ReshapeGpu<T>(IGpuTensor<T> tensor, int[] newShape)
+    {
+        int newSize = 1;
+        foreach (var dim in newShape)
+            newSize *= dim;
+
+        if (newSize != tensor.ElementCount)
+            throw new ArgumentException($"Cannot reshape tensor with {tensor.ElementCount} elements to shape with {newSize} elements.");
+
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend is not available for ReshapeGpu.");
+
+        // Create a view with the new shape (shares the same buffer)
+        return new GpuTensor<T>(backend, tensor.Buffer, newShape.ToArray(), tensor.Role, ownsBuffer: false);
     }
 
     #endregion

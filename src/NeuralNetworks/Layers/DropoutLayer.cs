@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -31,6 +34,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
 public class DropoutLayer<T> : LayerBase<T>
 {
+    /// <summary>
+    /// The GPU-resident dropout mask from the forward pass, used for GPU backward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the dropout mask on GPU when ForwardGpu is used, enabling the backward pass
+    /// to remain entirely on GPU without any CPU-GPU transfers.
+    /// </para>
+    /// </remarks>
+    private IGpuTensor<T>? _gpuMask;
+
     /// <summary>
     /// The probability of dropping out (deactivating) a neuron during training.
     /// </summary>
@@ -153,6 +167,22 @@ public class DropoutLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU-resident training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because dropout backward operations have GPU kernel support.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Dropout layers fully support GPU training because:
+    /// - The dropout mask can be generated and stored on GPU during forward pass
+    /// - The backward pass simply applies the same mask to the gradient
+    /// - All operations use GPU kernels with no CPU-GPU transfers needed
+    /// </para>
+    /// </remarks>
+    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DropoutLayer{T}"/> class.
@@ -387,6 +417,109 @@ public class DropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Performs the backward pass of the dropout layer on GPU.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient from the next layer.</param>
+    /// <returns>The GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when BackwardGpu is called before ForwardGpu, or when not in training mode without a cached mask.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// This method implements the GPU-resident backward pass for the dropout layer. During training,
+    /// it applies the same dropout mask (stored from ForwardGpu) to the output gradient, ensuring
+    /// gradients only flow through neurons that were active during the forward pass.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like Backward() but runs entirely on GPU.
+    /// 
+    /// During GPU training:
+    /// - The gradient comes in (already on GPU)
+    /// - The dropout mask is applied (on GPU)
+    /// - The result goes to the previous layer (stays on GPU)
+    /// 
+    /// No data is transferred between CPU and GPU, making training much faster.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        // During inference mode, gradients pass through unchanged
+        if (!IsTrainingMode)
+            return outputGradient;
+
+        // Verify we have the mask from forward pass
+        if (_gpuMask == null)
+        {
+            // If we have a CPU mask but no GPU mask, we might have used Forward() instead of ForwardGpu()
+            if (_dropoutMask != null)
+            {
+                throw new InvalidOperationException(
+                    "BackwardGpu requires ForwardGpu to be called first. " +
+                    "The forward pass was performed on CPU. Use Backward() instead or call ForwardGpu() in the training loop.");
+            }
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+        }
+
+        // Get the GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
+        }
+
+        // Apply the mask to the gradient: inputGrad = outputGrad * mask
+        // The mask already contains the scale factor from the forward pass
+        return gpuEngine.ElementwiseMultiply(outputGradient, _gpuMask);
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the dropout layer on GPU.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensor(s).</param>
+    /// <returns>The GPU-resident output tensor with dropout applied.</returns>
+    /// <exception cref="ArgumentException">Thrown when no inputs are provided.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs dropout entirely on GPU:
+    /// - Generates a random mask on GPU
+    /// - Applies the mask with scaling
+    /// - Stores the mask for the backward pass
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like Forward() but runs entirely on GPU.
+    /// 
+    /// During GPU training:
+    /// - Input comes in (already on GPU)
+    /// - Random mask is generated (on GPU)
+    /// - Mask is applied with scaling (on GPU)
+    /// - Output goes to the next layer (stays on GPU)
+    /// 
+    /// No data is transferred between CPU and GPU.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        // During inference, just return the input unchanged
+        if (!IsTrainingMode)
+            return input;
+
+        // Get the GPU engine
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
+        }
+
+        // Generate dropout mask on GPU with scaling already applied
+        // The mask contains: 0 for dropped neurons, scale for kept neurons
+        _gpuMask = gpuEngine.GenerateDropoutMask<T>(input.Shape, NumOps.ToDouble(_dropoutRate), NumOps.ToDouble(_scale));
+
+        // Apply mask: output = input * mask
+        return gpuEngine.ElementwiseMultiply(input, _gpuMask);
+    }
+
+    /// <summary>
     /// Updates the parameters of the layer based on the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for parameter updates.</param>
@@ -497,6 +630,10 @@ public class DropoutLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _dropoutMask = null;
+        
+        // Dispose and clear GPU mask if present
+        _gpuMask?.Dispose();
+        _gpuMask = null;
     }
 
     /// <summary>
