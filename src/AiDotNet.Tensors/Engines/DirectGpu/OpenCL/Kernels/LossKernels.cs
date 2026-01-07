@@ -327,6 +327,486 @@ __kernel void reduce_mean(
         output[get_group_id(0)] = scratch[0] / (float)size;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Mean Absolute Error (MAE) Loss  
+// ---------------------------------------------------------------------------
+__kernel void mae_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    output[idx] = fabs(predicted[idx] - actual[idx]);
+}
+
+__kernel void mae_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float diff = predicted[idx] - actual[idx];
+    gradient[idx] = (diff > 0.0f) ? 1.0f : ((diff < 0.0f) ? -1.0f : 0.0f);
+}
+
+// ---------------------------------------------------------------------------
+// Log-Cosh Loss
+// ---------------------------------------------------------------------------
+__kernel void log_cosh_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float diff = predicted[idx] - actual[idx];
+    output[idx] = log(cosh(diff));
+}
+
+__kernel void log_cosh_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float diff = predicted[idx] - actual[idx];
+    gradient[idx] = tanh(diff);
+}
+
+// ---------------------------------------------------------------------------
+// Quantile Loss
+// ---------------------------------------------------------------------------
+__kernel void quantile_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const float quantile,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float diff = actual[idx] - predicted[idx];
+    if (diff > 0.0f) {
+        output[idx] = quantile * diff;
+    } else {
+        output[idx] = -(1.0f - quantile) * diff;
+    }
+}
+
+__kernel void quantile_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const float quantile,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    gradient[idx] = (actual[idx] > predicted[idx]) ? quantile : -(1.0f - quantile);
+}
+
+// ---------------------------------------------------------------------------
+// Hinge Loss
+// ---------------------------------------------------------------------------
+__kernel void hinge_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float margin = 1.0f - actual[idx] * predicted[idx];
+    output[idx] = fmax(0.0f, margin);
+}
+
+__kernel void hinge_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float margin = actual[idx] * predicted[idx];
+    gradient[idx] = (margin < 1.0f) ? -actual[idx] : 0.0f;
+}
+
+// ---------------------------------------------------------------------------
+// Squared Hinge Loss
+// ---------------------------------------------------------------------------
+__kernel void squared_hinge_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float margin = fmax(0.0f, 1.0f - actual[idx] * predicted[idx]);
+    output[idx] = margin * margin;
+}
+
+__kernel void squared_hinge_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float margin = fmax(0.0f, 1.0f - actual[idx] * predicted[idx]);
+    gradient[idx] = -2.0f * actual[idx] * margin;
+}
+
+// ---------------------------------------------------------------------------
+// Cosine Similarity Loss
+// ---------------------------------------------------------------------------
+__kernel void cosine_similarity_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const float dot_product,
+    const float pred_norm,
+    const float actual_norm,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float norm_prod = pred_norm * actual_norm;
+    gradient[idx] = -(actual[idx] / norm_prod - dot_product * predicted[idx] / (pred_norm * pred_norm * actual_norm));
+}
+
+// ---------------------------------------------------------------------------
+// Dice Loss
+// ---------------------------------------------------------------------------
+__kernel void dice_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const float intersection,
+    const float pred_sum,
+    const float actual_sum,
+    const float smooth,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float denom = pred_sum + actual_sum + smooth;
+    float numer = 2.0f * intersection + smooth;
+    gradient[idx] = -2.0f * (actual[idx] * denom - numer) / (denom * denom);
+}
+
+// ---------------------------------------------------------------------------
+// Jaccard Loss
+// ---------------------------------------------------------------------------
+__kernel void jaccard_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const float intersection,
+    const float union_sum,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float denom = union_sum * union_sum;
+    gradient[idx] = -(actual[idx] * union_sum - intersection * (1.0f - actual[idx])) / denom;
+}
+
+// ---------------------------------------------------------------------------
+// Poisson Loss
+// ---------------------------------------------------------------------------
+__kernel void poisson_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const float epsilon,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float pred = fmax(predicted[idx], epsilon);
+    output[idx] = pred - actual[idx] * log(pred);
+}
+
+__kernel void poisson_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const float epsilon,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float pred = fmax(predicted[idx], epsilon);
+    gradient[idx] = 1.0f - actual[idx] / pred;
+}
+
+// ---------------------------------------------------------------------------
+// Exponential Loss
+// ---------------------------------------------------------------------------
+__kernel void exponential_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    output[idx] = exp(-actual[idx] * predicted[idx]);
+}
+
+__kernel void exponential_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    gradient[idx] = -actual[idx] * exp(-actual[idx] * predicted[idx]);
+}
+
+// ---------------------------------------------------------------------------
+// Modified Huber Loss
+// ---------------------------------------------------------------------------
+__kernel void modified_huber_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float z = actual[idx] * predicted[idx];
+    if (z >= 1.0f) {
+        output[idx] = 0.0f;
+    } else if (z >= -1.0f) {
+        float temp = 1.0f - z;
+        output[idx] = temp * temp;
+    } else {
+        output[idx] = -4.0f * z;
+    }
+}
+
+__kernel void modified_huber_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float z = actual[idx] * predicted[idx];
+    if (z >= 1.0f) {
+        gradient[idx] = 0.0f;
+    } else if (z >= -1.0f) {
+        gradient[idx] = -2.0f * actual[idx] * (1.0f - z);
+    } else {
+        gradient[idx] = -4.0f * actual[idx];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Categorical Cross-Entropy Loss
+// ---------------------------------------------------------------------------
+__kernel void categorical_cross_entropy_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const float epsilon,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float pred = fmax(predicted[idx], epsilon);
+    output[idx] = -actual[idx] * log(pred);
+}
+
+__kernel void categorical_cross_entropy_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const float epsilon,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float pred = fmax(predicted[idx], epsilon);
+    gradient[idx] = -actual[idx] / pred;
+}
+
+// ---------------------------------------------------------------------------
+// Weighted Cross-Entropy Loss
+// ---------------------------------------------------------------------------
+__kernel void weighted_cross_entropy_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global const float* weights,
+    __global float* output,
+    const float epsilon,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float pred = fmax(predicted[idx], epsilon);
+    output[idx] = -weights[idx] * actual[idx] * log(pred);
+}
+
+__kernel void weighted_cross_entropy_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global const float* weights,
+    __global float* gradient,
+    const float epsilon,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float pred = fmax(predicted[idx], epsilon);
+    gradient[idx] = -weights[idx] * actual[idx] / pred;
+}
+
+// ---------------------------------------------------------------------------
+// Sparse Categorical Cross-Entropy Loss
+// ---------------------------------------------------------------------------
+__kernel void sparse_categorical_cross_entropy_loss(
+    __global const float* predicted,
+    __global const int* actual_indices,
+    __global float* output,
+    const float epsilon,
+    const int batch_size,
+    const int num_classes)
+{
+    const int idx = get_global_id(0);
+    if (idx >= batch_size) return;
+    
+    int class_idx = actual_indices[idx];
+    float pred = fmax(predicted[idx * num_classes + class_idx], epsilon);
+    output[idx] = -log(pred);
+}
+
+__kernel void sparse_categorical_cross_entropy_gradient(
+    __global const float* predicted,
+    __global const int* actual_indices,
+    __global float* gradient,
+    const float epsilon,
+    const int batch_size,
+    const int num_classes)
+{
+    const int idx = get_global_id(0);
+    if (idx >= batch_size * num_classes) return;
+    
+    int batch_idx = idx / num_classes;
+    int class_idx = idx % num_classes;
+    int actual_class = actual_indices[batch_idx];
+    
+    if (class_idx == actual_class) {
+        float pred = fmax(predicted[idx], epsilon);
+        gradient[idx] = -1.0f / pred;
+    } else {
+        gradient[idx] = 0.0f;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Charbonnier Loss
+// ---------------------------------------------------------------------------
+__kernel void charbonnier_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const float epsilon,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float diff = predicted[idx] - actual[idx];
+    output[idx] = sqrt(diff * diff + epsilon * epsilon) - epsilon;
+}
+
+__kernel void charbonnier_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const float epsilon,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float diff = predicted[idx] - actual[idx];
+    gradient[idx] = diff / sqrt(diff * diff + epsilon * epsilon);
+}
+
+// ---------------------------------------------------------------------------
+// Elastic Net Loss
+// ---------------------------------------------------------------------------
+__kernel void elastic_net_loss(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* output,
+    const float l1_weight,
+    const float l2_weight,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float diff = predicted[idx] - actual[idx];
+    float pred = predicted[idx];
+    output[idx] = diff * diff + l1_weight * fabs(pred) + l2_weight * pred * pred;
+}
+
+__kernel void elastic_net_gradient(
+    __global const float* predicted,
+    __global const float* actual,
+    __global float* gradient,
+    const float l1_weight,
+    const float l2_weight,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+    
+    float diff = predicted[idx] - actual[idx];
+    float pred = predicted[idx];
+    float sign_pred = (pred > 0.0f) ? 1.0f : ((pred < 0.0f) ? -1.0f : 0.0f);
+    gradient[idx] = 2.0f * diff + l1_weight * sign_pred + 2.0f * l2_weight * pred;
+}
 ";
     }
 }

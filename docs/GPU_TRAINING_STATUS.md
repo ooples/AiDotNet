@@ -213,19 +213,65 @@ All gradient-based optimizers now have GPU support framework in place.
 - Add BackwardGpu + UpdateParametersGpu to remaining trainable layers
 - Update ActivationLayer.SupportsGpuTraining to true
 
-**Status:** Phase 3 optimizer work is **mostly complete** (18/26 optimizers have full GPU support)
+**Status:** Phase 3 optimizer work is **mostly complete** (18/26 optimizers have full GPU support). 8 remain to be wired.
 
-### Phase 3: Loss Function GPU Integration ✅ COMPLETE
-| Loss Function | CalculateLossGpu | CalculateDerivativeGpu | Notes |
-|---------------|------------------|------------------------|-------|
-| MeanSquaredErrorLoss | ✅ | ✅ | Via DirectGpuTensorEngine |
-| CrossEntropyLoss | ✅ | ✅ | Via DirectGpuTensorEngine |
-| BinaryCrossEntropyLoss | ✅ | ✅ | Via DirectGpuTensorEngine |
-| HuberLoss | ✅ | ✅ | Kernel exists, needs wiring |
-| FocalLoss | ✅ | ✅ | Kernel exists, needs wiring |
-| TripletLoss | ✅ | ❌ | Kernel exists, needs gradient |
-| ContrastiveLoss | ✅ | ❌ | Kernel exists, needs gradient |
-| Other losses | ❌ | ❌ | Need kernel + implementation |
+**Remaining Optimizer Wiring:**
+- CoordinateDescent  
+- ConjugateGradient
+- BFGS
+- LBFGS
+- DFP
+- NewtonMethod
+- LevenbergMarquardt
+- TrustRegion
+- ADMM
+
+### Phase 3b: Loss Function GPU Integration 🔄 IN PROGRESS
+All major loss functions now have GPU kernel support. Need to wire up implementations.
+
+| Loss Function | Kernel Loss | Kernel Gradient | CalculateLossGpu | CalculateDerivativeGpu | Notes |
+|---------------|-------------|-----------------|------------------|------------------------|-------|
+| **Fully Implemented** |
+| MeanSquaredErrorLoss | ✅ mse_loss | ✅ mse_gradient | ✅ | ✅ | Complete |
+| CrossEntropyLoss | ✅ cross_entropy_loss | ✅ cross_entropy_gradient | ✅ | ✅ | Complete |
+| BinaryCrossEntropyLoss | ✅ bce_loss | ✅ bce_gradient | ✅ | ✅ | Complete |
+| **Kernels Ready - Need Wiring** |
+| MeanAbsoluteErrorLoss | ✅ mae_loss | ✅ mae_gradient | ❌ | ❌ | Need implementation |
+| RootMeanSquaredErrorLoss | ✅ rmse_loss | ✅ rmse_gradient | ❌ | ❌ | Need implementation |
+| HuberLoss | ✅ huber_loss | ✅ huber_gradient | ❌ | ❌ | Need implementation |
+| LogCoshLoss | ✅ log_cosh_loss | ✅ log_cosh_gradient | ❌ | ❌ | Need implementation |
+| QuantileLoss | ✅ quantile_loss | ✅ quantile_gradient | ❌ | ❌ | Need implementation |
+| HingeLoss | ✅ hinge_loss | ✅ hinge_gradient | ❌ | ❌ | Need implementation |
+| SquaredHingeLoss | ✅ squared_hinge_loss | ✅ squared_hinge_gradient | ❌ | ❌ | Need implementation |
+| FocalLoss | ✅ focal_loss | ✅ focal_gradient | ❌ | ❌ | Need implementation |
+| TripletLoss | ✅ triplet_loss | ⚠️ | ❌ | ❌ | Need gradient kernel |
+| ContrastiveLoss | ✅ contrastive_loss | ⚠️ | ❌ | ❌ | Need gradient kernel |
+| CosineSimilarityLoss | ⚠️ Partial | ✅ cosine_similarity_gradient | ❌ | ❌ | Need implementation |
+| DiceLoss | ✅ dice_loss | ✅ dice_gradient | ❌ | ❌ | Need implementation |
+| JaccardLoss | ✅ jaccard_loss | ✅ jaccard_gradient | ❌ | ❌ | Need implementation |
+| PoissonLoss | ✅ poisson_loss | ✅ poisson_gradient | ❌ | ❌ | Need implementation |
+| ExponentialLoss | ✅ exponential_loss | ✅ exponential_gradient | ❌ | ❌ | Need implementation |
+| ModifiedHuberLoss | ✅ modified_huber_loss | ✅ modified_huber_gradient | ❌ | ❌ | Need implementation |
+| CategoricalCrossEntropyLoss | ✅ categorical_cross_entropy_loss | ✅ categorical_cross_entropy_gradient | ❌ | ❌ | Need implementation |
+| WeightedCrossEntropyLoss | ✅ weighted_cross_entropy_loss | ✅ weighted_cross_entropy_gradient | ❌ | ❌ | Need implementation |
+| SparseCategoricalCrossEntropyLoss | ✅ sparse_categorical_cross_entropy_loss | ✅ sparse_categorical_cross_entropy_gradient | ❌ | ❌ | Need implementation |
+| CharbonnierLoss | ✅ charbonnier_loss | ✅ charbonnier_gradient | ❌ | ❌ | Need implementation |
+| ElasticNetLoss | ✅ elastic_net_loss | ✅ elastic_net_gradient | ❌ | ❌ | Need implementation |
+| **Complex / Special** |
+| CTCLoss | ❌ | ❌ | ❌ | ❌ | Complex temporal alignment |
+| MarginLoss | ❌ | ❌ | ❌ | ❌ | Capsule networks |
+| NoiseContrastiveEstimationLoss | ❌ | ❌ | ❌ | ❌ | Sampling-based |
+| PerceptualLoss | ❌ | ❌ | ❌ | ❌ | Requires pre-trained model |
+| WassersteinLoss | ❌ | ❌ | ❌ | ❌ | GANs |
+| DistillationLoss | ❌ | ❌ | ❌ | ❌ | Knowledge distillation |
+| PhysicsInformedLoss | ❌ | ❌ | ❌ | ❌ | PDE constraints |
+
+**Status:** 3/30 losses fully implemented. 19 have kernels ready and need wiring. 8 are complex and low priority.
+
+**Next Steps:**
+1. Wire up the 19 losses that have kernels (implement CalculateLossGpu/CalculateDerivativeGpu)
+2. Add gradient kernels for TripletLoss and ContrastiveLoss  
+3. Complex losses can wait for later phases
 
 ### Phase 4: Deferred Execution for Training
 | Component | Status | Description |
