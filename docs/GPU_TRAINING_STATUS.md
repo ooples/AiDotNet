@@ -99,66 +99,78 @@ CPU Tensor → Upload → ForwardGpu Layer 1 → ForwardGpu Layer 2 → ... → 
 
 ## Implementation Phases
 
-### Phase 0: Missing Kernel Implementation
+### Phase 0: Missing Kernel Implementation ✅ COMPLETE
 **Priority: HIGH** - These kernels block entire categories of layers
 
 | Kernel | Status | Unblocks | Complexity |
 |--------|--------|----------|------------|
-| **Recurrent Kernels (CRITICAL)** |
-| lstm_cell_forward | ❌ | LSTMLayer, ConvLSTMLayer, BidirectionalLayer | High |
-| lstm_cell_backward | ❌ | LSTMLayer training | High |
-| gru_cell_forward | ❌ | GRULayer | High |
-| gru_cell_backward | ❌ | GRULayer training | High |
+| **Recurrent Kernels** |
+| lstm_cell_forward | ✅ | LSTMLayer, ConvLSTMLayer, BidirectionalLayer | High |
+| lstm_cell_backward | ✅ | LSTMLayer training | High |
+| lstm_gates_precompute | ✅ | Fused gate computation | High |
+| gru_cell_forward | ✅ | GRULayer | High |
+| gru_cell_backward | ✅ | GRULayer training | High |
 | **Graph Neural Network Kernels** |
-| scatter_add (CUDA/HIP) | ❌ | All GNN layers | Medium |
+| scatter_add (CUDA/HIP) | ✅ | All GNN layers | Medium |
+| scatter_add_batched | ✅ | Multi-dim scatter | Medium |
+| scatter_max | ✅ | Graph pooling | Medium |
+| scatter_mean | ✅ | Message passing | Medium |
 | sparse_mm_backward | ❌ | GCN, GAT, GraphSAGE training | High |
 | message_passing_backward | ❌ | MessagePassingLayer | High |
 | **3D/Conv Kernels** |
-| conv3d_backward_input | ❌ | Conv3DLayer | Medium |
-| conv3d_backward_weights | ❌ | Conv3DLayer training | Medium |
+| conv3d_backward_input | ✅ | Conv3DLayer | Medium |
+| conv3d_backward_weights | ✅ | Conv3DLayer training | Medium |
 | **Normalization Gaps** |
-| groupnorm_backward | ❌ | GroupNormalizationLayer | Medium |
-| instancenorm_backward | ❌ | InstanceNormalizationLayer | Medium |
+| groupnorm_backward | ✅ | GroupNormalizationLayer | Medium |
+| instancenorm_backward | ✅ | InstanceNormalizationLayer | Medium |
 | **Pooling Gaps** |
-| global_avgpool_backward | ❌ | GlobalPoolingLayer | Low |
-| adaptive_avgpool_backward | ❌ | AdaptiveAveragePoolingLayer | Low |
+| global_avgpool_backward | ✅ | GlobalPoolingLayer | Low |
+| global_maxpool_backward | ✅ | GlobalPoolingLayer | Low |
+| adaptive_avgpool_backward | ✅ | AdaptiveAveragePoolingLayer | Low |
 
-### Phase 1: Infrastructure Foundation
-Before any layer can support GPU training, we need:
+### Phase 1: Infrastructure Foundation ✅ COMPLETE
+The following methods have been added to LayerBase:
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| `BackwardGpu()` in LayerBase | ❌ | Virtual method signature |
-| `UpdateParametersGpu()` in LayerBase | ❌ | Virtual method for GPU weight updates |
-| `SupportsGpuTraining` property | ❌ | Indicates layer has full GPU training support |
-| `GpuWeights` / `GpuBiases` storage | ❌ | Persistent GPU buffers for weights |
-| `GpuWeightGradients` / `GpuBiasGradients` | ❌ | GPU buffers for gradient accumulation |
-| `UploadWeightsToGpu()` | ❌ | Initialize GPU weight buffers |
-| `DownloadWeightsFromGpu()` | ❌ | Sync weights back to CPU (for checkpointing) |
+| `ForwardGpu()` in LayerBase | ✅ | Virtual GPU forward pass |
+| `BackwardGpu()` in LayerBase | ✅ | Virtual GPU backward pass |
+| `UpdateParametersGpu()` in LayerBase | ✅ | Virtual GPU weight updates |
+| `SupportsGpuExecution` property | ✅ | Indicates ForwardGpu implemented |
+| `SupportsGpuTraining` property | ✅ | Indicates full GPU training support |
+| `CanExecuteOnGpu` property | ✅ | Runtime check for GPU forward |
+| `CanTrainOnGpu` property | ✅ | Runtime check for GPU training |
+| `UploadWeightsToGpu()` | ✅ | Initialize GPU weight buffers |
+| `DownloadWeightsFromGpu()` | ✅ | Sync weights back to CPU |
+| `ZeroGradientsGpu()` | ✅ | Reset GPU gradient accumulators |
 
-### Phase 1: NeuralNetworkBase Integration
+### Phase 2: NeuralNetworkBase Integration ✅ COMPLETE
 | Component | Status | Description |
 |-----------|--------|-------------|
-| `BackwardGpu(IGpuTensor<T>)` | ❌ | GPU-resident backward pass through all layers |
-| `TrainBatchGpu()` | ❌ | Single batch training entirely on GPU |
-| `TrainEpochGpu()` | ❌ | Full epoch training with GPU batches |
-| GPU training mode detection | ❌ | Auto-detect when all layers support GPU training |
+| `ForwardGpu(IGpuTensor<T>)` | ✅ | GPU-resident forward pass through all layers |
+| `BackpropagateGpu(IGpuTensor<T>)` | ✅ | GPU-resident backward pass through all layers |
+| `UpdateParametersGpu()` | ✅ | Update all layer parameters on GPU |
+| `UploadWeightsToGpu()` | ✅ | Prepare network for GPU training |
+| `DownloadWeightsFromGpu()` | ✅ | Sync weights back to CPU |
+| `ZeroGradientsGpu()` | ✅ | Clear GPU gradient accumulators |
+| `SupportsGpuTraining` property | ✅ | Check if all layers support GPU training |
+| `CanTrainOnGpu` property | ✅ | Runtime check for GPU training capability |
 | Gradient checkpointing on GPU | ❌ | Memory-efficient backward with GPU recompute |
 | Mixed precision training | ❌ | FP16 forward/backward with FP32 accumulation |
 
-### Phase 2: Optimizer GPU Integration
-| Optimizer | Status | Description |
-|-----------|--------|-------------|
-| `IOptimizer.UpdateParametersGpu()` | ❌ | Base interface for GPU updates |
-| `SGDOptimizer` GPU | ❌ | Simple: w = w - lr * grad |
-| `MomentumOptimizer` GPU | ❌ | w = w - lr * (momentum * v + grad) |
-| `AdamOptimizer` GPU | ❌ | m, v moment updates + bias correction |
-| `AdamWOptimizer` GPU | ❌ | Adam with decoupled weight decay |
-| `RMSpropOptimizer` GPU | ❌ | Running average of squared gradients |
-| `AdagradOptimizer` GPU | ❌ | Per-parameter learning rates |
-| `NAGOptimizer` GPU | ❌ | Nesterov accelerated gradient |
-| `LARSOptimizer` GPU | ❌ | Layer-wise adaptive rate scaling |
-| `LAMBOptimizer` GPU | ❌ | Layer-wise adaptive moments |
+### Phase 3: Optimizer GPU Integration
+Kernels exist, need wiring:
+| Optimizer | Kernel Status | Integration Status |
+|-----------|---------------|-------------------|
+| SGD | ✅ `sgd_step` | ❌ Not wired |
+| Adam | ✅ `adam_step` | ❌ Not wired |
+| AdamW | ✅ `adamw_step` | ❌ Not wired |
+| Momentum | ⚠️ In sgd_step | ❌ Not wired |
+| RMSprop | ❌ Missing | ❌ |
+| Adagrad | ❌ Missing | ❌ |
+| NAG | ❌ Missing | ❌ |
+| LARS | ❌ Missing | ❌ |
+| LAMB | ❌ Missing | ❌ |
 
 ### Phase 3: Loss Function GPU Integration
 | Loss Function | Status | Description |
