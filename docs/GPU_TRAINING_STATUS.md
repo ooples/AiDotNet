@@ -7,6 +7,59 @@ This document tracks the implementation status of GPU-resident training for all 
 - [#700 - ConvLSTMLayer and DiffusionConvLayer GPU Backward](https://github.com/ooples/AiDotNet/issues/700)
 - [#698 - GPU-Resident Tensors (ForwardGpu)](https://github.com/ooples/AiDotNet/pull/698)
 
+## Architecture Overview
+
+### Current State (ForwardGpu Only)
+```
+CPU Tensor → Upload → ForwardGpu Layer 1 → ForwardGpu Layer 2 → ... → Download → CPU Tensor
+                           ↓                      ↓
+                    (Training mode falls back to CPU)
+```
+
+### Target State (Full GPU Training)
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           GPU-RESIDENT TRAINING LOOP                             │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                        FORWARD PASS (on GPU)                              │   │
+│  │  GPU Input → Layer1.ForwardGpu → Layer2.ForwardGpu → ... → GPU Output    │   │
+│  │                 ↓ cache              ↓ cache              ↓ cache        │   │
+│  │           [GPU activations]    [GPU activations]    [GPU activations]    │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                        │                                         │
+│                                        ▼                                         │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                          LOSS COMPUTATION (on GPU)                        │   │
+│  │              LossFunction.ComputeGpu(output, target) → GPU loss           │   │
+│  │              LossFunction.GradientGpu(output, target) → GPU gradient      │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                        │                                         │
+│                                        ▼                                         │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                       BACKWARD PASS (on GPU)                              │   │
+│  │  GPU Gradient ← LayerN.BackwardGpu ← ... ← Layer1.BackwardGpu            │   │
+│  │                      ↓                           ↓                        │   │
+│  │              [GPU weight grads]          [GPU weight grads]               │   │
+│  │              [GPU bias grads]            [GPU bias grads]                 │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                        │                                         │
+│                                        ▼                                         │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                     PARAMETER UPDATE (on GPU)                             │   │
+│  │  Optimizer.UpdateGpu(weights, gradients) → updated GPU weights           │   │
+│  │  - SGD: w = w - lr * grad                                                │   │
+│  │  - Adam: m,v update + bias correction + update                           │   │
+│  │  - All momentum/velocity buffers stay on GPU                             │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                        │                                         │
+│                            (repeat for next batch)                               │
+│                                                                                  │
+│  Only download for: checkpointing, logging metrics, early stopping checks       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Legend
 
 | Symbol | Meaning |
@@ -17,129 +70,250 @@ This document tracks the implementation status of GPU-resident training for all 
 | ➖ | Not applicable (no trainable parameters or inherits from parent) |
 | ⚠️ | Partially implemented or has known issues |
 
-## Layer Status Summary
+## Implementation Phases
 
-| Layer | ForwardGpu | BackwardGpu | UpdateParamsGpu | GPU Weights | Notes |
-|-------|------------|-------------|-----------------|-------------|-------|
-| **Core Layers** |
-| DenseLayer | ✅ | ❌ | ❌ | ❌ | High priority |
-| FullyConnectedLayer | ✅ | ❌ | ❌ | ❌ | High priority |
-| ConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | High priority |
-| BatchNormalizationLayer | ✅ | ❌ | ❌ | ❌ | High priority |
-| LayerNormalizationLayer | ✅ | ❌ | ❌ | ❌ | High priority |
-| EmbeddingLayer | ✅ | ❌ | ❌ | ❌ | High priority |
-| **Attention Layers** |
-| AttentionLayer | ✅ | ❌ | ❌ | ❌ | |
-| MultiHeadAttentionLayer | ✅ | ❌ | ❌ | ❌ | High priority |
-| SelfAttentionLayer | ✅ | ❌ | ❌ | ❌ | |
-| CrossAttentionLayer | ✅ | ❌ | ❌ | ❌ | |
-| **Recurrent Layers** |
-| LSTMLayer | ✅ | ❌ | ❌ | ❌ | Complex BPTT |
-| GRULayer | ✅ | ❌ | ❌ | ❌ | Complex BPTT |
-| ConvLSTMLayer | ✅ | ❌ | ❌ | ❌ | Issue #700 |
-| RecurrentLayer | ✅ | ❌ | ❌ | ❌ | |
-| BidirectionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| **Pooling Layers** |
-| AveragePoolingLayer | ✅ | ✅ | ➖ | ➖ | No trainable params |
-| MaxPoolingLayer | ✅ | ✅ | ➖ | ➖ | No trainable params |
-| MaxPool3DLayer | ✅ | ✅ | ➖ | ➖ | No trainable params |
-| GlobalPoolingLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| AdaptiveAveragePoolingLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| **Normalization Layers** |
-| InstanceNormalizationLayer | ✅ | ❌ | ❌ | ❌ | |
-| GroupNormalizationLayer | ✅ | ❌ | ❌ | ❌ | |
-| SpectralNormalizationLayer | ✅ | ❌ | ❌ | ❌ | |
-| **Transformer Layers** |
-| TransformerEncoderLayer | ✅ | ❌ | ❌ | ❌ | |
-| TransformerDecoderLayer | ✅ | ❌ | ❌ | ❌ | |
-| DecoderLayer | ✅ | ❌ | ❌ | ❌ | |
-| FeedForwardLayer | ✅ | ❌ | ❌ | ❌ | |
-| PositionalEncodingLayer | ✅ | ❌ | ➖ | ➖ | |
-| PatchEmbeddingLayer | ✅ | ❌ | ❌ | ❌ | |
-| **Convolutional Layers** |
-| Conv3DLayer | ✅ | ❌ | ❌ | ❌ | |
-| DeconvolutionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| DeformableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| DepthwiseSeparableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| DilatedConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| LocallyConnectedLayer | ✅ | ❌ | ❌ | ❌ | |
-| SeparableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| **Graph Neural Network Layers** |
-| GraphConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| GraphAttentionLayer | ✅ | ❌ | ❌ | ❌ | |
-| GraphSAGELayer | ✅ | ❌ | ❌ | ❌ | |
-| GraphIsomorphismLayer | ✅ | ❌ | ❌ | ❌ | |
-| GraphTransformerLayer | ✅ | ❌ | ❌ | ❌ | |
-| MessagePassingLayer | ✅ | ❌ | ❌ | ❌ | |
-| HeterogeneousGraphLayer | ✅ | ❌ | ❌ | ❌ | |
+### Phase 0: Infrastructure Foundation
+Before any layer can support GPU training, we need:
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| `BackwardGpu()` in LayerBase | ❌ | Virtual method signature |
+| `UpdateParametersGpu()` in LayerBase | ❌ | Virtual method for GPU weight updates |
+| `SupportsGpuTraining` property | ❌ | Indicates layer has full GPU training support |
+| `GpuWeights` / `GpuBiases` storage | ❌ | Persistent GPU buffers for weights |
+| `GpuWeightGradients` / `GpuBiasGradients` | ❌ | GPU buffers for gradient accumulation |
+| `UploadWeightsToGpu()` | ❌ | Initialize GPU weight buffers |
+| `DownloadWeightsFromGpu()` | ❌ | Sync weights back to CPU (for checkpointing) |
+
+### Phase 1: NeuralNetworkBase Integration
+| Component | Status | Description |
+|-----------|--------|-------------|
+| `BackwardGpu(IGpuTensor<T>)` | ❌ | GPU-resident backward pass through all layers |
+| `TrainBatchGpu()` | ❌ | Single batch training entirely on GPU |
+| `TrainEpochGpu()` | ❌ | Full epoch training with GPU batches |
+| GPU training mode detection | ❌ | Auto-detect when all layers support GPU training |
+| Gradient checkpointing on GPU | ❌ | Memory-efficient backward with GPU recompute |
+| Mixed precision training | ❌ | FP16 forward/backward with FP32 accumulation |
+
+### Phase 2: Optimizer GPU Integration
+| Optimizer | Status | Description |
+|-----------|--------|-------------|
+| `IOptimizer.UpdateParametersGpu()` | ❌ | Base interface for GPU updates |
+| `SGDOptimizer` GPU | ❌ | Simple: w = w - lr * grad |
+| `MomentumOptimizer` GPU | ❌ | w = w - lr * (momentum * v + grad) |
+| `AdamOptimizer` GPU | ❌ | m, v moment updates + bias correction |
+| `AdamWOptimizer` GPU | ❌ | Adam with decoupled weight decay |
+| `RMSpropOptimizer` GPU | ❌ | Running average of squared gradients |
+| `AdagradOptimizer` GPU | ❌ | Per-parameter learning rates |
+| `NAGOptimizer` GPU | ❌ | Nesterov accelerated gradient |
+| `LARSOptimizer` GPU | ❌ | Layer-wise adaptive rate scaling |
+| `LAMBOptimizer` GPU | ❌ | Layer-wise adaptive moments |
+
+### Phase 3: Loss Function GPU Integration
+| Loss Function | Status | Description |
+|---------------|--------|-------------|
+| `ILossFunction.CalculateLossGpu()` | ❌ | Compute loss on GPU |
+| `ILossFunction.CalculateDerivativeGpu()` | ❌ | Compute gradient on GPU |
+| `MeanSquaredErrorLoss` GPU | ❌ | (y - ŷ)² |
+| `CrossEntropyLoss` GPU | ❌ | -Σ y log(ŷ) |
+| `BinaryCrossEntropyLoss` GPU | ❌ | Binary classification |
+| `HuberLoss` GPU | ❌ | Robust regression |
+| `FocalLoss` GPU | ❌ | Class imbalance |
+| `TripletLoss` GPU | ❌ | Metric learning |
+| `ContrastiveLoss` GPU | ❌ | Siamese networks |
+
+### Phase 4: Deferred Execution for Training
+| Component | Status | Description |
+|-----------|--------|-------------|
+| `RecordingGpuBackend` backward support | ❌ | Record backward ops |
+| `ExecutionGraphBuilder` backward nodes | ❌ | Graph nodes for gradients |
+| Fused backward kernels | ❌ | Combine backward ops |
+| Automatic gradient fusion | ❌ | Fuse compatible gradient ops |
+| Memory planning for gradients | ❌ | Optimize gradient buffer allocation |
+
+## Layer Status - Complete List (All 118 Layers)
+
+### Activation & Utility Layers (No Trainable Parameters)
+| Layer | ForwardGpu | BackwardGpu | Notes |
+|-------|------------|-------------|-------|
+| ActivationLayer | ✅ | ❌ | Just activation derivative |
+| AddLayer | ✅ | ❌ | Sum gradients to both inputs |
+| ConcatenateLayer | ✅ | ❌ | Split gradients |
+| CroppingLayer | ✅ | ❌ | Pad gradients with zeros |
+| DropoutLayer | ✅ | ❌ | Mask gradient same as forward |
+| FlattenLayer | ✅ | ❌ | Reshape gradient |
+| GaussianNoiseLayer | ✅ | ❌ | Pass through gradient |
+| InputLayer | ✅ | ➖ | No backward needed |
+| MaskingLayer | ✅ | ❌ | Mask gradient |
+| MeanLayer | ✅ | ❌ | Broadcast gradient |
+| MultiplyLayer | ✅ | ❌ | Element-wise gradient |
+| PaddingLayer | ✅ | ❌ | Crop gradient |
+| ReshapeLayer | ✅ | ❌ | Reshape gradient |
+| SequenceLastLayer | ✅ | ❌ | Scatter gradient to last position |
+| SplitLayer | ✅ | ❌ | Concatenate gradients |
+
+### Pooling Layers (No Trainable Parameters)
+| Layer | ForwardGpu | BackwardGpu | Notes |
+|-------|------------|-------------|-------|
+| AdaptiveAveragePoolingLayer | ✅ | ❌ | Distribute gradient evenly |
+| AveragePoolingLayer | ✅ | ✅ | Already implemented |
+| GlobalPoolingLayer | ✅ | ❌ | Broadcast gradient |
+| MaxPool3DLayer | ✅ | ✅ | Already implemented |
+| MaxPoolingLayer | ✅ | ✅ | Already implemented |
+| MeshPoolLayer | ✅ | ❌ | Graph pooling backward |
+
+### Upsampling Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | Notes |
+|-------|------------|-------------|-----------|-------|
+| PixelShuffleLayer | ✅ | ❌ | ➖ | Inverse shuffle |
+| SubpixelConvolutionalLayer | ✅ | ❌ | ❌ | Has weights |
+| Upsample3DLayer | ✅ | ✅ | ➖ | Already implemented |
+| UpsamplingLayer | ✅ | ❌ | ➖ | Nearest/bilinear |
+
+### Dense/Linear Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| DenseLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** |
+| FullyConnectedLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** |
+| LocallyConnectedLayer | ✅ | ❌ | ❌ | ❌ | Per-position weights |
+| HyperbolicLinearLayer | ✅ | ❌ | ❌ | ❌ | Hyperbolic geometry |
+| OctonionLinearLayer | ✅ | ❌ | ❌ | ❌ | Octonion algebra |
+
+### Convolutional Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| ConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** |
+| Conv3DLayer | ✅ | ❌ | ❌ | ❌ | 3D convolution |
+| DeconvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Transposed conv |
+| DeformableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Learned offsets |
+| DepthwiseSeparableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | MobileNet style |
+| DilatedConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Atrous convolution |
+| SeparableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Xception style |
+
+### Normalization Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| BatchNormalizationLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** gamma/beta + running stats |
+| GroupNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Group-wise normalization |
+| InstanceNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Per-instance normalization |
+| LayerNormalizationLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** Transformer standard |
+| SpectralNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Weight normalization |
+
+### Recurrent Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| BidirectionalLayer | ✅ | ❌ | ❌ | ❌ | Wraps recurrent layers |
+| ConvLSTMLayer | ✅ | ❌ | ❌ | ❌ | Issue #700 - Spatiotemporal |
+| GRULayer | ✅ | ❌ | ❌ | ❌ | BPTT through gates |
+| LSTMLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** BPTT through gates |
+| RecurrentLayer | ✅ | ❌ | ❌ | ❌ | Simple RNN |
+
+### Attention Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| AttentionLayer | ✅ | ❌ | ❌ | ❌ | Basic attention |
+| CrossAttentionLayer | ✅ | ❌ | ❌ | ❌ | Encoder-decoder attention |
+| MultiHeadAttentionLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** QKV projections |
+| SelfAttentionLayer | ✅ | ❌ | ❌ | ❌ | Self-attention |
+
+### Transformer Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| DecoderLayer | ✅ | ❌ | ❌ | ❌ | Decoder block |
+| FeedForwardLayer | ✅ | ❌ | ❌ | ❌ | FFN in transformer |
+| PatchEmbeddingLayer | ✅ | ❌ | ❌ | ❌ | ViT patches |
+| PositionalEncodingLayer | ✅ | ❌ | ➖ | ➖ | Fixed encodings |
+| TransformerDecoderLayer | ✅ | ❌ | ❌ | ❌ | Full decoder |
+| TransformerEncoderLayer | ✅ | ❌ | ❌ | ❌ | Full encoder |
+
+### Embedding Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| EmbeddingLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** Sparse gradient scatter |
+| TimeEmbeddingLayer | ✅ | ❌ | ❌ | ❌ | Temporal embeddings |
+
+### Graph Neural Network Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
 | DiffusionConvLayer | ✅ | ❌ | ❌ | ❌ | Issue #700 |
-| DirectionalGraphLayer | ✅ | ❌ | ❌ | ❌ | |
-| EdgeConditionalConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| PrincipalNeighbourhoodAggregationLayer | ✅ | ❌ | ❌ | ❌ | |
-| ReadoutLayer | ✅ | ❌ | ❌ | ❌ | |
-| **Mesh Layers** |
-| MeshEdgeConvLayer | ✅ | ❌ | ❌ | ❌ | |
-| MeshPoolLayer | ✅ | ❌ | ❌ | ❌ | |
-| SpiralConvLayer | ✅ | ❌ | ❌ | ❌ | |
-| **Upsampling Layers** |
-| Upsample3DLayer | ✅ | ✅ | ➖ | ➖ | No trainable params |
-| UpsamplingLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| SubpixelConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | |
-| PixelShuffleLayer | ✅ | ❌ | ➖ | ➖ | |
-| **Utility Layers** |
-| ActivationLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| AddLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| ConcatenateLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| CroppingLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| DropoutLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| FlattenLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| GaussianNoiseLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| InputLayer | ✅ | ➖ | ➖ | ➖ | No backward |
-| MaskingLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| MultiplyLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| PaddingLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| ReshapeLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| SequenceLastLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| SplitLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
+| DirectionalGraphLayer | ✅ | ❌ | ❌ | ❌ | Directed edges |
+| EdgeConditionalConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Edge features |
+| GraphAttentionLayer | ✅ | ❌ | ❌ | ❌ | GAT |
+| GraphConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | GCN |
+| GraphIsomorphismLayer | ✅ | ❌ | ❌ | ❌ | GIN |
+| GraphSAGELayer | ✅ | ❌ | ❌ | ❌ | GraphSAGE |
+| GraphTransformerLayer | ✅ | ❌ | ❌ | ❌ | Graph + attention |
+| HeterogeneousGraphLayer | ✅ | ❌ | ❌ | ❌ | Multi-type nodes/edges |
+| MessagePassingLayer | ✅ | ❌ | ❌ | ❌ | Generic MPNN |
+| PrincipalNeighbourhoodAggregationLayer | ✅ | ❌ | ❌ | ❌ | PNA |
+| ReadoutLayer | ✅ | ❌ | ❌ | ❌ | Graph-level output |
+
+### Mesh/3D Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| MeshEdgeConvLayer | ✅ | ❌ | ❌ | ❌ | Mesh processing |
+| SpiralConvLayer | ✅ | ❌ | ❌ | ❌ | Spiral convolution |
+
+### Residual/Highway Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| BasicBlock | ❌ | ❌ | ❌ | ❌ | ResNet basic |
+| BottleneckBlock | ❌ | ❌ | ❌ | ❌ | ResNet bottleneck |
+| DenseBlockLayer | ✅ | ❌ | ❌ | ❌ | DenseNet block |
+| HighwayLayer | ✅ | ❌ | ❌ | ❌ | Highway networks |
+| ResidualDenseBlock | ✅ | ❌ | ❌ | ❌ | ESRGAN |
+| ResidualLayer | ✅ | ❌ | ❌ | ❌ | Skip connections |
+| RRDBLayer | ✅ | ❌ | ❌ | ❌ | Residual-in-residual |
+| TransitionLayer | ✅ | ❌ | ❌ | ❌ | DenseNet transition |
+
+### Gating Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| GatedLinearUnitLayer | ✅ | ❌ | ❌ | ❌ | GLU |
+| SqueezeAndExcitationLayer | ✅ | ❌ | ❌ | ❌ | Channel attention |
+
+### Expert/MoE Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| ExpertLayer | ✅ | ❌ | ❌ | ❌ | Single expert |
+| MixtureOfExpertsLayer | ✅ | ❌ | ❌ | ❌ | Routing + experts |
+
+### Memory Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| ContinuumMemorySystemLayer | ✅ | ❌ | ❌ | ❌ | External memory |
+| MemoryReadLayer | ✅ | ❌ | ❌ | ❌ | Memory attention read |
+| MemoryWriteLayer | ✅ | ❌ | ❌ | ❌ | Memory write |
+
+### Specialized Neural Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| AnomalyDetectorLayer | ✅ | ❌ | ❌ | ❌ | Anomaly detection |
+| CapsuleLayer | ❌ | ❌ | ❌ | ❌ | Dynamic routing - complex |
+| ConditionalRandomFieldLayer | ✅ | ❌ | ❌ | ❌ | CRF |
+| QuantumLayer | ✅ | ❌ | ❌ | ❌ | Quantum-inspired |
+| RBFLayer | ✅ | ❌ | ❌ | ❌ | Radial basis function |
+| RBMLayer | ✅ | ❌ | ❌ | ❌ | Restricted Boltzmann |
+| ReservoirLayer | ✅ | ❌ | ❌ | ❌ | Echo state networks |
+
+### Spiking/HTM Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| SpikingLayer | ✅ | ❌ | ❌ | ❌ | Spiking neural networks |
+| SpatialPoolerLayer | ✅ | ❌ | ❌ | ❌ | HTM spatial pooling |
+| SynapticPlasticityLayer | ✅ | ❌ | ❌ | ❌ | STDP learning |
+| TemporalMemoryLayer | ✅ | ❌ | ❌ | ❌ | HTM temporal memory |
+
+### Other Specialized Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| LogVarianceLayer | ✅ | ❌ | ❌ | ❌ | VAE variance |
+| MeasurementLayer | ✅ | ❌ | ❌ | ❌ | Quantum measurement |
+| ReconstructionLayer | ✅ | ❌ | ❌ | ❌ | Autoencoder |
+| RepParameterizationLayer | ✅ | ❌ | ❌ | ❌ | RepVGG style |
+| SpatialTransformerLayer | ✅ | ❌ | ❌ | ❌ | Spatial transform |
+| SpyNetLayer | ✅ | ❌ | ❌ | ❌ | Optical flow |
 | TimeDistributedLayer | ✅ | ❌ | ❌ | ❌ | Wraps other layers |
-| **Residual/Highway Layers** |
-| ResidualLayer | ✅ | ❌ | ❌ | ❌ | |
-| HighwayLayer | ✅ | ❌ | ❌ | ❌ | |
-| DenseBlockLayer | ✅ | ❌ | ❌ | ❌ | |
-| ResidualDenseBlock | ✅ | ❌ | ❌ | ❌ | |
-| RRDBLayer | ✅ | ❌ | ❌ | ❌ | |
-| TransitionLayer | ✅ | ❌ | ❌ | ❌ | |
-| BasicBlock | ❌ | ❌ | ❌ | ❌ | |
-| BottleneckBlock | ❌ | ❌ | ❌ | ❌ | |
-| **Specialized Layers** |
-| AnomalyDetectorLayer | ✅ | ❌ | ❌ | ❌ | |
-| CapsuleLayer | ❌ | ❌ | ❌ | ❌ | Complex routing |
-| ConditionalRandomFieldLayer | ✅ | ❌ | ❌ | ❌ | |
-| ContinuumMemorySystemLayer | ✅ | ❌ | ❌ | ❌ | |
-| ExpertLayer | ✅ | ❌ | ❌ | ❌ | |
-| GatedLinearUnitLayer | ✅ | ❌ | ❌ | ❌ | |
-| HyperbolicLinearLayer | ✅ | ❌ | ❌ | ❌ | |
-| LogVarianceLayer | ✅ | ❌ | ❌ | ❌ | |
-| MeanLayer | ✅ | ❌ | ➖ | ➖ | No trainable params |
-| MeasurementLayer | ✅ | ❌ | ❌ | ❌ | |
-| MemoryReadLayer | ✅ | ❌ | ❌ | ❌ | |
-| MemoryWriteLayer | ✅ | ❌ | ❌ | ❌ | |
-| MixtureOfExpertsLayer | ✅ | ❌ | ❌ | ❌ | |
-| OctonionLinearLayer | ✅ | ❌ | ❌ | ❌ | |
-| QuantumLayer | ✅ | ❌ | ❌ | ❌ | |
-| RBFLayer | ✅ | ❌ | ❌ | ❌ | |
-| RBMLayer | ✅ | ❌ | ❌ | ❌ | |
-| ReconstructionLayer | ✅ | ❌ | ❌ | ❌ | |
-| RepParameterizationLayer | ✅ | ❌ | ❌ | ❌ | |
-| ReservoirLayer | ✅ | ❌ | ❌ | ❌ | |
-| SpatialPoolerLayer | ✅ | ❌ | ❌ | ❌ | HTM |
-| SpatialTransformerLayer | ✅ | ❌ | ❌ | ❌ | |
-| SpikingLayer | ✅ | ❌ | ❌ | ❌ | SNN |
-| SpyNetLayer | ✅ | ❌ | ❌ | ❌ | |
-| SqueezeAndExcitationLayer | ✅ | ❌ | ❌ | ❌ | |
-| SynapticPlasticityLayer | ✅ | ❌ | ❌ | ❌ | |
-| TemporalMemoryLayer | ✅ | ❌ | ❌ | ❌ | HTM |
-| TimeEmbeddingLayer | ✅ | ❌ | ❌ | ❌ | |
 
 ## Statistics
 
@@ -149,67 +323,124 @@ This document tracks the implementation status of GPU-resident training for all 
 - **UpdateParametersGpu Implemented**: 0 (0%)
 - **GPU Weight Storage**: 0 (0%)
 
-## Priority Order for Implementation
-
-### Tier 1 - Core (Most Impact)
-1. DenseLayer / FullyConnectedLayer
-2. ConvolutionalLayer
-3. BatchNormalizationLayer
-4. LayerNormalizationLayer
-5. EmbeddingLayer
-6. MultiHeadAttentionLayer
-
-### Tier 2 - Recurrent (Complex)
-7. LSTMLayer
-8. GRULayer
-9. ConvLSTMLayer
-10. BidirectionalLayer
-
-### Tier 3 - Normalization & Pooling
-11. Remaining pooling layers (BackwardGpu)
-12. InstanceNormalizationLayer
-13. GroupNormalizationLayer
-
-### Tier 4 - Transformers
-14. TransformerEncoderLayer
-15. TransformerDecoderLayer
-16. FeedForwardLayer
-
-### Tier 5 - Graph Neural Networks
-17. GraphConvolutionalLayer
-18. GraphAttentionLayer
-19. MessagePassingLayer
-20. DiffusionConvLayer
-
 ## Required GPU Kernels
 
-| Kernel | Status | Used By |
-|--------|--------|---------|
-| GEMM Backward | ❌ | Dense, FC, Attention |
-| Conv2D Backward (Input) | ❌ | Conv layers |
-| Conv2D Backward (Weight) | ❌ | Conv layers |
-| BatchNorm Backward | ❌ | BatchNorm |
-| LayerNorm Backward | ❌ | LayerNorm, Transformers |
-| Embedding Backward | ❌ | Embedding (sparse scatter) |
-| Softmax Backward | ❌ | Attention |
-| LSTM Gates Backward | ❌ | LSTM, ConvLSTM |
-| GRU Gates Backward | ❌ | GRU |
-| SGD Update | ❌ | All trainable layers |
-| Adam Update | ❌ | All trainable layers |
-| Gradient Clipping | ❌ | Training infrastructure |
+### High Priority Kernels
+| Kernel | Status | Used By | Complexity |
+|--------|--------|---------|------------|
+| GEMM Backward (dW) | ❌ | Dense, FC, Attention | Medium - transpose + GEMM |
+| GEMM Backward (dX) | ❌ | Dense, FC, Attention | Medium - transpose + GEMM |
+| Conv2D Backward (dW) | ❌ | All conv layers | High - im2col + GEMM |
+| Conv2D Backward (dX) | ❌ | All conv layers | High - col2im + GEMM |
+| BatchNorm Backward | ❌ | BatchNorm, ResNet | Medium - mean/var grads |
+| LayerNorm Backward | ❌ | LayerNorm, Transformers | Medium - similar to BN |
+| Softmax Backward | ❌ | Attention, Classification | Low - Jacobian computation |
+| Embedding Backward | ❌ | Embedding, NLP | Medium - atomic scatter add |
+
+### Optimizer Kernels
+| Kernel | Status | Used By | Complexity |
+|--------|--------|---------|------------|
+| SGD Update | ❌ | SGDOptimizer | Low - w = w - lr * g |
+| SGD Momentum Update | ❌ | MomentumOptimizer | Low - v update + w update |
+| Adam Update | ❌ | AdamOptimizer | Medium - m,v,bias correct |
+| AdamW Update | ❌ | AdamWOptimizer | Medium - Adam + weight decay |
+| RMSprop Update | ❌ | RMSpropOptimizer | Low - running avg + update |
+| Gradient Clipping | ❌ | All optimizers | Low - norm + scale |
+
+### Activation Backward Kernels
+| Kernel | Status | Complexity |
+|--------|--------|------------|
+| ReLU Backward | ❌ | Very Low - mask |
+| LeakyReLU Backward | ❌ | Very Low - slope mask |
+| GELU Backward | ❌ | Low - derivative |
+| Swish/SiLU Backward | ❌ | Low - derivative |
+| Tanh Backward | ❌ | Low - 1 - tanh² |
+| Sigmoid Backward | ❌ | Low - σ(1-σ) |
+| Softmax Backward | ❌ | Medium - Jacobian |
+
+### Recurrent Kernels (Complex)
+| Kernel | Status | Complexity |
+|--------|--------|------------|
+| LSTM Gates Backward | ❌ | High - 4 gates, cell state |
+| GRU Gates Backward | ❌ | High - 3 gates |
+| Attention Backward | ❌ | High - QKV gradients |
+
+### Utility Kernels
+| Kernel | Status | Complexity |
+|--------|--------|------------|
+| Transpose | ✅ | Exists |
+| Sum Reduction | ✅ | Exists |
+| Mean Reduction | ✅ | Exists |
+| Broadcast | ✅ | Exists |
+| Atomic Float Add | ✅ | Recently added for OpenCL |
+
+## Priority Implementation Order
+
+### Tier 1 - Foundation (Must Have)
+1. Infrastructure (Phase 0)
+2. NeuralNetworkBase.BackwardGpu integration
+3. DenseLayer / FullyConnectedLayer backward
+4. SGD Optimizer GPU
+5. MSE Loss GPU
+
+### Tier 2 - Core Training (High Impact)
+6. ConvolutionalLayer backward
+7. BatchNormalizationLayer backward
+8. Adam Optimizer GPU
+9. CrossEntropy Loss GPU
+10. ReLU/activation backward kernels
+
+### Tier 3 - Transformers (Modern Architectures)
+11. MultiHeadAttentionLayer backward
+12. LayerNormalizationLayer backward
+13. EmbeddingLayer backward
+14. FeedForwardLayer backward
+15. TransformerEncoderLayer backward
+
+### Tier 4 - Recurrent (Sequential Data)
+16. LSTMLayer backward (BPTT)
+17. GRULayer backward (BPTT)
+18. BidirectionalLayer backward
+19. ConvLSTMLayer backward (Issue #700)
+
+### Tier 5 - Graph Neural Networks
+20. GraphConvolutionalLayer backward
+21. GraphAttentionLayer backward
+22. MessagePassingLayer backward
+23. DiffusionConvLayer backward (Issue #700)
+
+### Tier 6 - Remaining Layers
+24-118. All other layers in order of usage frequency
 
 ## Testing Requirements
 
-Each layer's GPU training implementation should be tested for:
+Each GPU training implementation must pass:
 
-1. **Gradient Correctness**: Compare GPU gradients to CPU gradients (numerical tolerance)
-2. **Parameter Update Correctness**: Verify weights update identically on GPU vs CPU
-3. **Memory Stability**: No memory leaks during training loops
-4. **Convergence**: Training a small network should converge similarly on GPU vs CPU
-5. **Mixed Precision**: Test with float32 and (eventually) float16
+1. **Gradient Correctness Test**
+   - Compare GPU gradients to CPU gradients
+   - Numerical tolerance: 1e-5 for float32
+   - Use finite difference verification
+
+2. **Weight Update Test**
+   - Verify weights update identically GPU vs CPU
+   - Test with multiple optimizer types
+
+3. **Convergence Test**
+   - Train small network to convergence
+   - Compare final loss/accuracy GPU vs CPU
+
+4. **Memory Stability Test**
+   - No memory growth over 1000 iterations
+   - Proper cleanup of intermediate buffers
+
+5. **Deferred Execution Test**
+   - Works with RecordingGpuBackend
+   - Graph fusion produces correct results
 
 ## Notes
 
-- Layers marked with ➖ for UpdateParametersGpu have no trainable parameters
-- Some layers (CapsuleLayer) have complex forward passes that make backward challenging
-- HTM layers (SpatialPooler, TemporalMemory) have non-standard learning rules
+- Layers with ➖ for UpdateParametersGpu have no trainable parameters
+- HTM layers (SpatialPooler, TemporalMemory) use non-standard learning rules
+- CapsuleLayer has complex dynamic routing - may need special handling
+- Some layers (MixtureOfExperts) have sparse gradients requiring special kernels
+
