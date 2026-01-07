@@ -874,6 +874,532 @@ __kernel void scatter_add_kernel(
         destination[destIdx * featureSize + f] += source[idx * featureSize + f];
     }
 }
+
+// ===========================================================================
+// LSTM KERNELS
+// ===========================================================================
+
+__kernel void lstm_cell_forward(
+    __global const float* gates,
+    __global const float* cellPrev,
+    __global float* cellNext,
+    __global float* hiddenNext,
+    __global float* gateActivations,
+    const int batchSize,
+    const int hiddenSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batchSize * hiddenSize;
+    if (idx >= totalSize) return;
+
+    const int b = idx / hiddenSize;
+    const int h = idx % hiddenSize;
+    const int gateOffset = b * 4 * hiddenSize;
+
+    float gi = gates[gateOffset + h];
+    float gf = gates[gateOffset + hiddenSize + h];
+    float gg = gates[gateOffset + 2 * hiddenSize + h];
+    float go = gates[gateOffset + 3 * hiddenSize + h];
+
+    float i = 1.0f / (1.0f + exp(-gi));
+    float f = 1.0f / (1.0f + exp(-gf));
+    float g = tanh(gg);
+    float o = 1.0f / (1.0f + exp(-go));
+
+    float cPrev = cellPrev[idx];
+    float c = f * cPrev + i * g;
+    float tanhC = tanh(c);
+    float hNew = o * tanhC;
+
+    cellNext[idx] = c;
+    hiddenNext[idx] = hNew;
+
+    gateActivations[gateOffset + h] = i;
+    gateActivations[gateOffset + hiddenSize + h] = f;
+    gateActivations[gateOffset + 2 * hiddenSize + h] = g;
+    gateActivations[gateOffset + 3 * hiddenSize + h] = o;
+}
+
+__kernel void lstm_cell_backward(
+    __global const float* gradHidden,
+    __global const float* gradCellNext,
+    __global const float* gateActivations,
+    __global const float* cellPrev,
+    __global const float* cellNext,
+    __global float* gradGates,
+    __global float* gradCellPrev,
+    const int batchSize,
+    const int hiddenSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batchSize * hiddenSize;
+    if (idx >= totalSize) return;
+
+    const int b = idx / hiddenSize;
+    const int h = idx % hiddenSize;
+    const int gateOffset = b * 4 * hiddenSize;
+
+    float i = gateActivations[gateOffset + h];
+    float f = gateActivations[gateOffset + hiddenSize + h];
+    float g = gateActivations[gateOffset + 2 * hiddenSize + h];
+    float o = gateActivations[gateOffset + 3 * hiddenSize + h];
+
+    float cPrev = cellPrev[idx];
+    float c = cellNext[idx];
+    float tanhC = tanh(c);
+
+    float dH = gradHidden[idx];
+    float dO = dH * tanhC;
+    float dTanhC = dH * o;
+    float dC = dTanhC * (1.0f - tanhC * tanhC);
+    dC += gradCellNext[idx];
+
+    float dF = dC * cPrev;
+    float dI = dC * g;
+    float dG = dC * i;
+    float dCPrev = dC * f;
+
+    float gradGi = dI * i * (1.0f - i);
+    float gradGf = dF * f * (1.0f - f);
+    float gradGg = dG * (1.0f - g * g);
+    float gradGo = dO * o * (1.0f - o);
+
+    gradGates[gateOffset + h] = gradGi;
+    gradGates[gateOffset + hiddenSize + h] = gradGf;
+    gradGates[gateOffset + 2 * hiddenSize + h] = gradGg;
+    gradGates[gateOffset + 3 * hiddenSize + h] = gradGo;
+    gradCellPrev[idx] = dCPrev;
+}
+
+__kernel void lstm_gates_precompute(
+    __global const float* input,
+    __global const float* hiddenPrev,
+    __global const float* weightsIH,
+    __global const float* weightsHH,
+    __global const float* bias,
+    __global float* gates,
+    const int batchSize,
+    const int inputSize,
+    const int hiddenSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batchSize * 4 * hiddenSize;
+    if (idx >= totalSize) return;
+
+    const int b = idx / (4 * hiddenSize);
+    const int g = idx % (4 * hiddenSize);
+
+    float sum = bias[g];
+
+    for (int i = 0; i < inputSize; i++) {
+        sum += weightsIH[g * inputSize + i] * input[b * inputSize + i];
+    }
+
+    for (int h = 0; h < hiddenSize; h++) {
+        sum += weightsHH[g * hiddenSize + h] * hiddenPrev[b * hiddenSize + h];
+    }
+
+    gates[idx] = sum;
+}
+
+// ===========================================================================
+// GRU KERNELS
+// ===========================================================================
+
+__kernel void gru_cell_forward(
+    __global const float* gatesRZ,
+    __global const float* gateN_input,
+    __global const float* gateN_hidden,
+    __global const float* hiddenPrev,
+    __global float* hiddenNext,
+    __global float* gateActivations,
+    const int batchSize,
+    const int hiddenSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batchSize * hiddenSize;
+    if (idx >= totalSize) return;
+
+    const int b = idx / hiddenSize;
+    const int h = idx % hiddenSize;
+
+    float gr = gatesRZ[b * 2 * hiddenSize + h];
+    float gz = gatesRZ[b * 2 * hiddenSize + hiddenSize + h];
+
+    float r = 1.0f / (1.0f + exp(-gr));
+    float z = 1.0f / (1.0f + exp(-gz));
+
+    float nInput = gateN_input[idx];
+    float nHidden = gateN_hidden[idx];
+    float nPre = nInput + r * nHidden;
+    float n = tanh(nPre);
+
+    float hPrev = hiddenPrev[idx];
+    float hNew = (1.0f - z) * n + z * hPrev;
+
+    hiddenNext[idx] = hNew;
+
+    const int actOffset = b * 3 * hiddenSize;
+    gateActivations[actOffset + h] = r;
+    gateActivations[actOffset + hiddenSize + h] = z;
+    gateActivations[actOffset + 2 * hiddenSize + h] = n;
+}
+
+__kernel void gru_cell_backward(
+    __global const float* gradHidden,
+    __global const float* gateActivations,
+    __global const float* hiddenPrev,
+    __global const float* gateN_hidden,
+    __global float* gradGatesRZ,
+    __global float* gradGateN,
+    __global float* gradHiddenPrev,
+    const int batchSize,
+    const int hiddenSize)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batchSize * hiddenSize;
+    if (idx >= totalSize) return;
+
+    const int b = idx / hiddenSize;
+    const int h = idx % hiddenSize;
+
+    const int actOffset = b * 3 * hiddenSize;
+    float r = gateActivations[actOffset + h];
+    float z = gateActivations[actOffset + hiddenSize + h];
+    float n = gateActivations[actOffset + 2 * hiddenSize + h];
+
+    float hPrev = hiddenPrev[idx];
+    float dH = gradHidden[idx];
+
+    float dZ = dH * (hPrev - n);
+    float dN = dH * (1.0f - z);
+    float dHPrev = dH * z;
+
+    float dNPre = dN * (1.0f - n * n);
+
+    float nHidden = gateN_hidden[idx];
+    float dR = dNPre * nHidden;
+    dHPrev += dNPre * r;
+
+    float gradGr = dR * r * (1.0f - r);
+    float gradGz = dZ * z * (1.0f - z);
+
+    gradGatesRZ[b * 2 * hiddenSize + h] = gradGr;
+    gradGatesRZ[b * 2 * hiddenSize + hiddenSize + h] = gradGz;
+    gradGateN[idx] = dNPre;
+    gradHiddenPrev[idx] = dHPrev;
+}
+
+// ===========================================================================
+// ADDITIONAL SCATTER OPERATIONS FOR GNNs
+// ===========================================================================
+
+__kernel void scatter_add_batched(
+    __global const float* src,
+    __global const int* indices,
+    __global float* dst,
+    const int numElements,
+    const int featureSize)
+{
+    const int idx = get_global_id(0);
+    if (idx >= numElements * featureSize) return;
+
+    const int elemIdx = idx / featureSize;
+    const int featIdx = idx % featureSize;
+    const int dstIdx = indices[elemIdx];
+
+    // Note: Needs atomic add for correctness
+    dst[dstIdx * featureSize + featIdx] += src[idx];
+}
+
+__kernel void scatter_mean_accumulate(
+    __global const float* src,
+    __global const int* indices,
+    __global float* dst,
+    __global int* counts,
+    const int numElements,
+    const int featureSize)
+{
+    const int idx = get_global_id(0);
+    if (idx >= numElements * featureSize) return;
+
+    const int elemIdx = idx / featureSize;
+    const int featIdx = idx % featureSize;
+    const int dstIdx = indices[elemIdx];
+
+    dst[dstIdx * featureSize + featIdx] += src[idx];
+    
+    if (featIdx == 0) {
+        // Note: Needs atomic add
+        counts[dstIdx] += 1;
+    }
+}
+
+__kernel void scatter_mean_normalize(
+    __global float* dst,
+    __global const int* counts,
+    const int numNodes,
+    const int featureSize)
+{
+    const int idx = get_global_id(0);
+    if (idx >= numNodes * featureSize) return;
+
+    const int nodeIdx = idx / featureSize;
+    const int count = counts[nodeIdx];
+    if (count > 0) {
+        dst[idx] /= (float)count;
+    }
+}
+
+// ===========================================================================
+// ADDITIONAL NORMALIZATION BACKWARD KERNELS
+// ===========================================================================
+
+__kernel void groupnorm_backward(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global const float* mean,
+    __global const float* invStd,
+    __global const float* gamma,
+    __global float* gradInput,
+    __global float* gradGamma,
+    __global float* gradBeta,
+    const int N, const int C, const int H, const int W, const int G)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    const int w = idx % W;
+    const int h = (idx / W) % H;
+    const int c = (idx / (W * H)) % C;
+    const int n = idx / (W * H * C);
+
+    const int channelsPerGroup = C / G;
+    const int g = c / channelsPerGroup;
+
+    float dy = gradOutput[idx];
+    float x = input[idx];
+    float m = mean[n * G + g];
+    float s = invStd[n * G + g];
+    float gam = gamma[c];
+
+    float xHat = (x - m) * s;
+
+    // Note: Needs atomic add for gamma/beta gradients
+    gradGamma[c] += dy * xHat;
+    gradBeta[c] += dy;
+
+    gradInput[idx] = dy * gam * s;
+}
+
+__kernel void instancenorm_backward(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global const float* mean,
+    __global const float* invStd,
+    __global const float* gamma,
+    __global float* gradInput,
+    __global float* gradGamma,
+    __global float* gradBeta,
+    const int N, const int C, const int H, const int W)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    const int w = idx % W;
+    const int h = (idx / W) % H;
+    const int c = (idx / (W * H)) % C;
+    const int n = idx / (W * H * C);
+
+    float dy = gradOutput[idx];
+    float x = input[idx];
+    float m = mean[n * C + c];
+    float s = invStd[n * C + c];
+    float gam = gamma[c];
+
+    float xHat = (x - m) * s;
+
+    // Note: Needs atomic add
+    gradGamma[c] += dy * xHat;
+    gradBeta[c] += dy;
+
+    gradInput[idx] = dy * gam * s;
+}
+
+// ===========================================================================
+// CONV3D BACKWARD KERNELS
+// ===========================================================================
+
+__kernel void conv3d_backward_input(
+    __global const float* gradOutput,
+    __global const float* kernel,
+    __global float* gradInput,
+    const int N, const int inC, const int D, const int H, const int W,
+    const int outC, const int outD, const int outH, const int outW,
+    const int kD, const int kH, const int kW,
+    const int strideD, const int strideH, const int strideW,
+    const int padD, const int padH, const int padW)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = N * inC * D * H * W;
+    if (idx >= totalSize) return;
+
+    const int w = idx % W;
+    const int h = (idx / W) % H;
+    const int d = (idx / (W * H)) % D;
+    const int ic = (idx / (W * H * D)) % inC;
+    const int n = idx / (W * H * D * inC);
+
+    float sum = 0.0f;
+
+    for (int oc = 0; oc < outC; oc++) {
+        for (int kd = 0; kd < kD; kd++) {
+            for (int kh = 0; kh < kH; kh++) {
+                for (int kw = 0; kw < kW; kw++) {
+                    int od = (d + padD - kd);
+                    int oh = (h + padH - kh);
+                    int ow = (w + padW - kw);
+
+                    if (od % strideD == 0 && oh % strideH == 0 && ow % strideW == 0) {
+                        od /= strideD;
+                        oh /= strideH;
+                        ow /= strideW;
+
+                        if (od >= 0 && od < outD && oh >= 0 && oh < outH && ow >= 0 && ow < outW) {
+                            int gradOutIdx = ((n * outC + oc) * outD + od) * outH * outW + oh * outW + ow;
+                            int kernelIdx = ((oc * inC + ic) * kD + kd) * kH * kW + kh * kW + kw;
+                            sum += gradOutput[gradOutIdx] * kernel[kernelIdx];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    gradInput[idx] = sum;
+}
+
+__kernel void conv3d_backward_weights(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global float* gradKernel,
+    const int N, const int inC, const int D, const int H, const int W,
+    const int outC, const int outD, const int outH, const int outW,
+    const int kD, const int kH, const int kW,
+    const int strideD, const int strideH, const int strideW,
+    const int padD, const int padH, const int padW)
+{
+    const int idx = get_global_id(0);
+    const int totalKernelSize = outC * inC * kD * kH * kW;
+    if (idx >= totalKernelSize) return;
+
+    const int kw = idx % kW;
+    const int kh = (idx / kW) % kH;
+    const int kd = (idx / (kW * kH)) % kD;
+    const int ic = (idx / (kW * kH * kD)) % inC;
+    const int oc = idx / (kW * kH * kD * inC);
+
+    float sum = 0.0f;
+
+    for (int n = 0; n < N; n++) {
+        for (int od = 0; od < outD; od++) {
+            for (int oh = 0; oh < outH; oh++) {
+                for (int ow = 0; ow < outW; ow++) {
+                    int d = od * strideD + kd - padD;
+                    int h = oh * strideH + kh - padH;
+                    int w = ow * strideW + kw - padW;
+
+                    if (d >= 0 && d < D && h >= 0 && h < H && w >= 0 && w < W) {
+                        int gradOutIdx = ((n * outC + oc) * outD + od) * outH * outW + oh * outW + ow;
+                        int inputIdx = ((n * inC + ic) * D + d) * H * W + h * W + w;
+                        sum += gradOutput[gradOutIdx] * input[inputIdx];
+                    }
+                }
+            }
+        }
+    }
+
+    gradKernel[idx] = sum;
+}
+
+// ===========================================================================
+// GLOBAL POOLING BACKWARD KERNELS
+// ===========================================================================
+
+__kernel void global_avgpool_backward(
+    __global const float* gradOutput,
+    __global float* gradInput,
+    const int N, const int C, const int H, const int W)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    const int c = (idx / (W * H)) % C;
+    const int n = idx / (W * H * C);
+
+    float scale = 1.0f / (float)(H * W);
+    gradInput[idx] = gradOutput[n * C + c] * scale;
+}
+
+__kernel void global_maxpool_backward(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global const int* maxIndices,
+    __global float* gradInput,
+    const int N, const int C, const int H, const int W)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    const int w = idx % W;
+    const int h = (idx / W) % H;
+    const int c = (idx / (W * H)) % C;
+    const int n = idx / (W * H * C);
+
+    int spatialIdx = h * W + w;
+    int maxIdx = maxIndices[n * C + c];
+
+    gradInput[idx] = (spatialIdx == maxIdx) ? gradOutput[n * C + c] : 0.0f;
+}
+
+__kernel void adaptive_avgpool_backward(
+    __global const float* gradOutput,
+    __global float* gradInput,
+    const int N, const int C, const int H, const int W, const int outH, const int outW)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    const int w = idx % W;
+    const int h = (idx / W) % H;
+    const int c = (idx / (W * H)) % C;
+    const int n = idx / (W * H * C);
+
+    float sum = 0.0f;
+
+    for (int oh = 0; oh < outH; oh++) {
+        int hStart = (oh * H) / outH;
+        int hEnd = ((oh + 1) * H) / outH;
+        if (h < hStart || h >= hEnd) continue;
+
+        for (int ow = 0; ow < outW; ow++) {
+            int wStart = (ow * W) / outW;
+            int wEnd = ((ow + 1) * W) / outW;
+            if (w < wStart || w >= wEnd) continue;
+
+            int poolSize = (hEnd - hStart) * (wEnd - wStart);
+            int gradOutIdx = ((n * C + c) * outH + oh) * outW + ow;
+            sum += gradOutput[gradOutIdx] / (float)poolSize;
+        }
+    }
+
+    gradInput[idx] = sum;
+}
 ";
         }
 
@@ -906,7 +1432,19 @@ __kernel void scatter_add_kernel(
                 "mean_axis", "var_axis", "argmax_axis", "argmin_axis",
                 "dropout_forward", "dropout_backward",
                 "embedding_lookup", "embedding_backward",
-                "fma_kernel", "gather_kernel", "scatter_add_kernel"
+                "fma_kernel", "gather_kernel", "scatter_add_kernel",
+                // LSTM kernels
+                "lstm_cell_forward", "lstm_cell_backward", "lstm_gates_precompute",
+                // GRU kernels
+                "gru_cell_forward", "gru_cell_backward",
+                // Additional scatter operations
+                "scatter_add_batched", "scatter_mean_accumulate", "scatter_mean_normalize",
+                // Additional normalization backward
+                "groupnorm_backward", "instancenorm_backward",
+                // Conv3D backward
+                "conv3d_backward_input", "conv3d_backward_weights",
+                // Global pooling backward
+                "global_avgpool_backward", "global_maxpool_backward", "adaptive_avgpool_backward"
             };
         }
     }

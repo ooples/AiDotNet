@@ -563,6 +563,561 @@ extern ""C"" __global__ void permute_general(
 
     output[outIdx] = input[inputIdx];
 }
+
+// ===========================================================================
+// LSTM KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void lstm_cell_forward(
+    const float* gates,
+    const float* cellPrev,
+    float* cellNext,
+    float* hiddenNext,
+    float* gateActivations,
+    int batchSize, int hiddenSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batchSize * hiddenSize;
+    if (idx >= totalSize) return;
+
+    int b = idx / hiddenSize;
+    int h = idx % hiddenSize;
+    int gateOffset = b * 4 * hiddenSize;
+
+    float gi = gates[gateOffset + h];
+    float gf = gates[gateOffset + hiddenSize + h];
+    float gg = gates[gateOffset + 2 * hiddenSize + h];
+    float go = gates[gateOffset + 3 * hiddenSize + h];
+
+    float i = 1.0f / (1.0f + expf(-gi));
+    float f = 1.0f / (1.0f + expf(-gf));
+    float g = tanhf(gg);
+    float o = 1.0f / (1.0f + expf(-go));
+
+    float cPrev = cellPrev[idx];
+    float c = f * cPrev + i * g;
+    float tanhC = tanhf(c);
+    float hNew = o * tanhC;
+
+    cellNext[idx] = c;
+    hiddenNext[idx] = hNew;
+
+    gateActivations[gateOffset + h] = i;
+    gateActivations[gateOffset + hiddenSize + h] = f;
+    gateActivations[gateOffset + 2 * hiddenSize + h] = g;
+    gateActivations[gateOffset + 3 * hiddenSize + h] = o;
+}
+
+extern ""C"" __global__ void lstm_cell_backward(
+    const float* gradHidden,
+    const float* gradCellNext,
+    const float* gateActivations,
+    const float* cellPrev,
+    const float* cellNext,
+    float* gradGates,
+    float* gradCellPrev,
+    int batchSize, int hiddenSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batchSize * hiddenSize;
+    if (idx >= totalSize) return;
+
+    int b = idx / hiddenSize;
+    int h = idx % hiddenSize;
+    int gateOffset = b * 4 * hiddenSize;
+
+    float i = gateActivations[gateOffset + h];
+    float f = gateActivations[gateOffset + hiddenSize + h];
+    float g = gateActivations[gateOffset + 2 * hiddenSize + h];
+    float o = gateActivations[gateOffset + 3 * hiddenSize + h];
+
+    float cPrev = cellPrev[idx];
+    float c = cellNext[idx];
+    float tanhC = tanhf(c);
+
+    float dH = gradHidden[idx];
+    float dO = dH * tanhC;
+    float dTanhC = dH * o;
+    float dC = dTanhC * (1.0f - tanhC * tanhC);
+    dC += gradCellNext[idx];
+
+    float dF = dC * cPrev;
+    float dI = dC * g;
+    float dG = dC * i;
+    float dCPrev = dC * f;
+
+    float gradGi = dI * i * (1.0f - i);
+    float gradGf = dF * f * (1.0f - f);
+    float gradGg = dG * (1.0f - g * g);
+    float gradGo = dO * o * (1.0f - o);
+
+    gradGates[gateOffset + h] = gradGi;
+    gradGates[gateOffset + hiddenSize + h] = gradGf;
+    gradGates[gateOffset + 2 * hiddenSize + h] = gradGg;
+    gradGates[gateOffset + 3 * hiddenSize + h] = gradGo;
+    gradCellPrev[idx] = dCPrev;
+}
+
+extern ""C"" __global__ void lstm_gates_precompute(
+    const float* input,
+    const float* hiddenPrev,
+    const float* weightsIH,
+    const float* weightsHH,
+    const float* bias,
+    float* gates,
+    int batchSize, int inputSize, int hiddenSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batchSize * 4 * hiddenSize;
+    if (idx >= totalSize) return;
+
+    int b = idx / (4 * hiddenSize);
+    int g = idx % (4 * hiddenSize);
+
+    float sum = bias[g];
+
+    for (int i = 0; i < inputSize; i++) {
+        sum += weightsIH[g * inputSize + i] * input[b * inputSize + i];
+    }
+
+    for (int h = 0; h < hiddenSize; h++) {
+        sum += weightsHH[g * hiddenSize + h] * hiddenPrev[b * hiddenSize + h];
+    }
+
+    gates[idx] = sum;
+}
+
+// ===========================================================================
+// GRU KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void gru_cell_forward(
+    const float* gatesRZ,
+    const float* gateN_input,
+    const float* gateN_hidden,
+    const float* hiddenPrev,
+    float* hiddenNext,
+    float* gateActivations,
+    int batchSize, int hiddenSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batchSize * hiddenSize;
+    if (idx >= totalSize) return;
+
+    int b = idx / hiddenSize;
+    int h = idx % hiddenSize;
+
+    float gr = gatesRZ[b * 2 * hiddenSize + h];
+    float gz = gatesRZ[b * 2 * hiddenSize + hiddenSize + h];
+
+    float r = 1.0f / (1.0f + expf(-gr));
+    float z = 1.0f / (1.0f + expf(-gz));
+
+    float nInput = gateN_input[idx];
+    float nHidden = gateN_hidden[idx];
+    float nPre = nInput + r * nHidden;
+    float n = tanhf(nPre);
+
+    float hPrev = hiddenPrev[idx];
+    float hNew = (1.0f - z) * n + z * hPrev;
+
+    hiddenNext[idx] = hNew;
+
+    int actOffset = b * 3 * hiddenSize;
+    gateActivations[actOffset + h] = r;
+    gateActivations[actOffset + hiddenSize + h] = z;
+    gateActivations[actOffset + 2 * hiddenSize + h] = n;
+}
+
+extern ""C"" __global__ void gru_cell_backward(
+    const float* gradHidden,
+    const float* gateActivations,
+    const float* hiddenPrev,
+    const float* gateN_hidden,
+    float* gradGatesRZ,
+    float* gradGateN,
+    float* gradHiddenPrev,
+    int batchSize, int hiddenSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batchSize * hiddenSize;
+    if (idx >= totalSize) return;
+
+    int b = idx / hiddenSize;
+    int h = idx % hiddenSize;
+
+    int actOffset = b * 3 * hiddenSize;
+    float r = gateActivations[actOffset + h];
+    float z = gateActivations[actOffset + hiddenSize + h];
+    float n = gateActivations[actOffset + 2 * hiddenSize + h];
+
+    float hPrev = hiddenPrev[idx];
+    float dH = gradHidden[idx];
+
+    float dZ = dH * (hPrev - n);
+    float dN = dH * (1.0f - z);
+    float dHPrev = dH * z;
+
+    float dNPre = dN * (1.0f - n * n);
+
+    float nHidden = gateN_hidden[idx];
+    float dR = dNPre * nHidden;
+    dHPrev += dNPre * r;
+
+    float gradGr = dR * r * (1.0f - r);
+    float gradGz = dZ * z * (1.0f - z);
+
+    gradGatesRZ[b * 2 * hiddenSize + h] = gradGr;
+    gradGatesRZ[b * 2 * hiddenSize + hiddenSize + h] = gradGz;
+    gradGateN[idx] = dNPre;
+    gradHiddenPrev[idx] = dHPrev;
+}
+
+// ===========================================================================
+// SCATTER/GATHER OPERATIONS FOR GNNs
+// ===========================================================================
+
+extern ""C"" __global__ void scatter_add(
+    const float* src,
+    const int* indices,
+    float* dst,
+    int numElements)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= numElements) return;
+
+    int dstIdx = indices[idx];
+    atomicAdd(&dst[dstIdx], src[idx]);
+}
+
+extern ""C"" __global__ void scatter_add_batched(
+    const float* src,
+    const int* indices,
+    float* dst,
+    int numElements, int featureSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= numElements * featureSize) return;
+
+    int elemIdx = idx / featureSize;
+    int featIdx = idx % featureSize;
+    int dstIdx = indices[elemIdx];
+
+    atomicAdd(&dst[dstIdx * featureSize + featIdx], src[idx]);
+}
+
+extern ""C"" __global__ void scatter_max(
+    const float* src,
+    const int* indices,
+    float* dst,
+    int* argmax,
+    int numElements, int featureSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= numElements * featureSize) return;
+
+    int elemIdx = idx / featureSize;
+    int featIdx = idx % featureSize;
+    int dstIdx = indices[elemIdx];
+    int dstOffset = dstIdx * featureSize + featIdx;
+
+    float val = src[idx];
+    float old = dst[dstOffset];
+    while (val > old) {
+        float assumed = old;
+        old = __uint_as_float(atomicCAS((unsigned int*)&dst[dstOffset], 
+                        __float_as_uint(assumed),
+                        __float_as_uint(val)));
+        if (old == assumed) {
+            if (argmax != 0) argmax[dstOffset] = elemIdx;
+            break;
+        }
+    }
+}
+
+extern ""C"" __global__ void scatter_mean_accumulate(
+    const float* src,
+    const int* indices,
+    float* dst,
+    int* counts,
+    int numElements, int featureSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= numElements * featureSize) return;
+
+    int elemIdx = idx / featureSize;
+    int featIdx = idx % featureSize;
+    int dstIdx = indices[elemIdx];
+
+    atomicAdd(&dst[dstIdx * featureSize + featIdx], src[idx]);
+    
+    if (featIdx == 0) {
+        atomicAdd(&counts[dstIdx], 1);
+    }
+}
+
+extern ""C"" __global__ void scatter_mean_normalize(
+    float* dst,
+    const int* counts,
+    int numNodes, int featureSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= numNodes * featureSize) return;
+
+    int nodeIdx = idx / featureSize;
+    int count = counts[nodeIdx];
+    if (count > 0) {
+        dst[idx] /= (float)count;
+    }
+}
+
+// ===========================================================================
+// ADDITIONAL NORMALIZATION BACKWARD KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void groupnorm_backward(
+    const float* gradOutput,
+    const float* input,
+    const float* mean,
+    const float* invStd,
+    const float* gamma,
+    float* gradInput,
+    float* gradGamma,
+    float* gradBeta,
+    int N, int C, int H, int W, int G)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    int w = idx % W;
+    int h = (idx / W) % H;
+    int c = (idx / (W * H)) % C;
+    int n = idx / (W * H * C);
+
+    int channelsPerGroup = C / G;
+    int g = c / channelsPerGroup;
+
+    float dy = gradOutput[idx];
+    float x = input[idx];
+    float m = mean[n * G + g];
+    float s = invStd[n * G + g];
+    float gam = gamma[c];
+
+    float xHat = (x - m) * s;
+
+    atomicAdd(&gradGamma[c], dy * xHat);
+    atomicAdd(&gradBeta[c], dy);
+
+    gradInput[idx] = dy * gam * s;
+}
+
+extern ""C"" __global__ void instancenorm_backward(
+    const float* gradOutput,
+    const float* input,
+    const float* mean,
+    const float* invStd,
+    const float* gamma,
+    float* gradInput,
+    float* gradGamma,
+    float* gradBeta,
+    int N, int C, int H, int W)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    int w = idx % W;
+    int h = (idx / W) % H;
+    int c = (idx / (W * H)) % C;
+    int n = idx / (W * H * C);
+
+    float dy = gradOutput[idx];
+    float x = input[idx];
+    float m = mean[n * C + c];
+    float s = invStd[n * C + c];
+    float gam = gamma[c];
+
+    float xHat = (x - m) * s;
+
+    atomicAdd(&gradGamma[c], dy * xHat);
+    atomicAdd(&gradBeta[c], dy);
+
+    gradInput[idx] = dy * gam * s;
+}
+
+// ===========================================================================
+// CONV3D BACKWARD KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void conv3d_backward_input(
+    const float* gradOutput,
+    const float* kernel,
+    float* gradInput,
+    int N, int inC, int D, int H, int W,
+    int outC, int outD, int outH, int outW,
+    int kD, int kH, int kW,
+    int strideD, int strideH, int strideW,
+    int padD, int padH, int padW)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = N * inC * D * H * W;
+    if (idx >= totalSize) return;
+
+    int w = idx % W;
+    int h = (idx / W) % H;
+    int d = (idx / (W * H)) % D;
+    int ic = (idx / (W * H * D)) % inC;
+    int n = idx / (W * H * D * inC);
+
+    float sum = 0.0f;
+
+    for (int oc = 0; oc < outC; oc++) {
+        for (int kd = 0; kd < kD; kd++) {
+            for (int kh = 0; kh < kH; kh++) {
+                for (int kw = 0; kw < kW; kw++) {
+                    int od = (d + padD - kd);
+                    int oh = (h + padH - kh);
+                    int ow = (w + padW - kw);
+
+                    if (od % strideD == 0 && oh % strideH == 0 && ow % strideW == 0) {
+                        od /= strideD;
+                        oh /= strideH;
+                        ow /= strideW;
+
+                        if (od >= 0 && od < outD && oh >= 0 && oh < outH && ow >= 0 && ow < outW) {
+                            int gradOutIdx = ((n * outC + oc) * outD + od) * outH * outW + oh * outW + ow;
+                            int kernelIdx = ((oc * inC + ic) * kD + kd) * kH * kW + kh * kW + kw;
+                            sum += gradOutput[gradOutIdx] * kernel[kernelIdx];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    gradInput[idx] = sum;
+}
+
+extern ""C"" __global__ void conv3d_backward_weights(
+    const float* gradOutput,
+    const float* input,
+    float* gradKernel,
+    int N, int inC, int D, int H, int W,
+    int outC, int outD, int outH, int outW,
+    int kD, int kH, int kW,
+    int strideD, int strideH, int strideW,
+    int padD, int padH, int padW)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalKernelSize = outC * inC * kD * kH * kW;
+    if (idx >= totalKernelSize) return;
+
+    int kw = idx % kW;
+    int kh = (idx / kW) % kH;
+    int kd = (idx / (kW * kH)) % kD;
+    int ic = (idx / (kW * kH * kD)) % inC;
+    int oc = idx / (kW * kH * kD * inC);
+
+    float sum = 0.0f;
+
+    for (int n = 0; n < N; n++) {
+        for (int od = 0; od < outD; od++) {
+            for (int oh = 0; oh < outH; oh++) {
+                for (int ow = 0; ow < outW; ow++) {
+                    int d = od * strideD + kd - padD;
+                    int h = oh * strideH + kh - padH;
+                    int w = ow * strideW + kw - padW;
+
+                    if (d >= 0 && d < D && h >= 0 && h < H && w >= 0 && w < W) {
+                        int gradOutIdx = ((n * outC + oc) * outD + od) * outH * outW + oh * outW + ow;
+                        int inputIdx = ((n * inC + ic) * D + d) * H * W + h * W + w;
+                        sum += gradOutput[gradOutIdx] * input[inputIdx];
+                    }
+                }
+            }
+        }
+    }
+
+    gradKernel[idx] = sum;
+}
+
+// ===========================================================================
+// GLOBAL POOLING BACKWARD KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void global_avgpool_backward(
+    const float* gradOutput,
+    float* gradInput,
+    int N, int C, int H, int W)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    int c = (idx / (W * H)) % C;
+    int n = idx / (W * H * C);
+
+    float scale = 1.0f / (float)(H * W);
+    gradInput[idx] = gradOutput[n * C + c] * scale;
+}
+
+extern ""C"" __global__ void global_maxpool_backward(
+    const float* gradOutput,
+    const float* input,
+    const int* maxIndices,
+    float* gradInput,
+    int N, int C, int H, int W)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    int w = idx % W;
+    int h = (idx / W) % H;
+    int c = (idx / (W * H)) % C;
+    int n = idx / (W * H * C);
+
+    int spatialIdx = h * W + w;
+    int maxIdx = maxIndices[n * C + c];
+
+    gradInput[idx] = (spatialIdx == maxIdx) ? gradOutput[n * C + c] : 0.0f;
+}
+
+extern ""C"" __global__ void adaptive_avgpool_backward(
+    const float* gradOutput,
+    float* gradInput,
+    int N, int C, int H, int W, int outH, int outW)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    int w = idx % W;
+    int h = (idx / W) % H;
+    int c = (idx / (W * H)) % C;
+    int n = idx / (W * H * C);
+
+    float sum = 0.0f;
+
+    for (int oh = 0; oh < outH; oh++) {
+        int hStart = (oh * H) / outH;
+        int hEnd = ((oh + 1) * H) / outH;
+        if (h < hStart || h >= hEnd) continue;
+
+        for (int ow = 0; ow < outW; ow++) {
+            int wStart = (ow * W) / outW;
+            int wEnd = ((ow + 1) * W) / outW;
+            if (w < wStart || w >= wEnd) continue;
+
+            int poolSize = (hEnd - hStart) * (wEnd - wStart);
+            int gradOutIdx = ((n * C + c) * outH + oh) * outW + ow;
+            sum += gradOutput[gradOutIdx] / (float)poolSize;
+        }
+    }
+
+    gradInput[idx] = sum;
+}
 ";
     }
 
@@ -580,7 +1135,20 @@ extern ""C"" __global__ void permute_general(
             "compute_mean_var", "argmax_axis", "argmin_axis",
             "sgd_step", "adam_step", "adamw_step",
             "dropout_forward", "dropout_backward", "embedding_forward", "embedding_backward",
-            "transpose_2d", "batched_transpose", "permute_general"
+            "transpose_2d", "batched_transpose", "permute_general",
+            // LSTM kernels
+            "lstm_cell_forward", "lstm_cell_backward", "lstm_gates_precompute",
+            // GRU kernels
+            "gru_cell_forward", "gru_cell_backward",
+            // Scatter/Gather for GNNs
+            "scatter_add", "scatter_add_batched", "scatter_max",
+            "scatter_mean_accumulate", "scatter_mean_normalize",
+            // Additional normalization backward
+            "groupnorm_backward", "instancenorm_backward",
+            // Conv3D backward
+            "conv3d_backward_input", "conv3d_backward_weights",
+            // Global pooling backward
+            "global_avgpool_backward", "global_maxpool_backward", "adaptive_avgpool_backward"
         };
     }
 }
