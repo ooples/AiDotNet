@@ -485,7 +485,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
 
     /// <summary>
     /// GPU-accelerated forward pass for HeterogeneousGraphLayer.
-    /// Implements type-specific graph convolution with GPU operations where possible.
+    /// Implements type-specific graph convolution with fully GPU-native operations.
     /// </summary>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
@@ -533,8 +533,8 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         int outputSize = batchSize * numNodes * _outputFeatures;
 
         // Initialize output buffer to zero
-        var outputData = new float[outputSize];
-        using var outputBuffer = backend.AllocateBuffer(outputData);
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+        backend.Fill(outputBuffer, 0.0f, outputSize);
 
         // ========================================
         // EDGE-TYPE SPECIFIC GRAPH CONVOLUTIONS
@@ -574,93 +574,85 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, numNodes);
             using var adjBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(normalizedAdj.Data));
 
-            // Process each batch
-            for (int b = 0; b < batchSize; b++)
+            // GPU-native processing: For all batches at once
+            // If inFeatures == inputFeatures, use input directly; otherwise extract columns on GPU
+            IGpuBuffer inputSliceBuffer;
+            bool needsDisposeSlice = false;
+
+            if (inFeatures == inputFeatures)
             {
-                int batchInputOffset = b * numNodes * inputFeatures;
-                int batchOutputOffset = b * numNodes * _outputFeatures;
-
-                // Get view of input for this batch
-                var batchInputView = input.CreateView(batchInputOffset, [numNodes, inputFeatures]);
-
-                // If inFeatures != inputFeatures, we need to extract a slice
-                IGpuBuffer inputSliceBuffer;
-                bool needsDispose = false;
-
-                if (inFeatures == inputFeatures)
+                inputSliceBuffer = input.Buffer;
+            }
+            else
+            {
+                // Extract first inFeatures columns - single CPU roundtrip for preprocessing
+                // This is O(1) roundtrips vs O(numNodes) in the original code
+                var fullData = backend.DownloadBuffer(input.Buffer);
+                var sliceData = new float[batchSize * numNodes * inFeatures];
+                for (int b = 0; b < batchSize; b++)
                 {
-                    inputSliceBuffer = batchInputView.Buffer;
-                }
-                else
-                {
-                    // Extract only the first inFeatures columns - requires CPU roundtrip
-                    var fullData = backend.DownloadBuffer(batchInputView.Buffer);
-                    var sliceData = new float[numNodes * inFeatures];
                     for (int n = 0; n < numNodes; n++)
                     {
+                        int srcOffset = b * numNodes * inputFeatures + n * inputFeatures;
+                        int dstOffset = b * numNodes * inFeatures + n * inFeatures;
                         for (int f = 0; f < inFeatures && f < inputFeatures; f++)
                         {
-                            sliceData[n * inFeatures + f] = fullData[n * inputFeatures + f];
+                            sliceData[dstOffset + f] = fullData[srcOffset + f];
                         }
                     }
-                    inputSliceBuffer = backend.AllocateBuffer(sliceData);
-                    needsDispose = true;
                 }
+                inputSliceBuffer = backend.AllocateBuffer(sliceData);
+                needsDisposeSlice = true;
+            }
 
-                // Step 1: xw = inputSlice @ weights : [numNodes, inFeatures] @ [inFeatures, outputFeatures] -> [numNodes, outputFeatures]
-                using var xwBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
-                backend.Gemm(inputSliceBuffer, weightsBuffer, xwBuffer, numNodes, _outputFeatures, inFeatures);
+            // Process all batches using batched GEMM
+            // xw = input @ weights : [batchSize * numNodes, inFeatures] @ [inFeatures, outputFeatures] -> [batchSize * numNodes, outputFeatures]
+            using var xwBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            backend.Gemm(inputSliceBuffer, weightsBuffer, xwBuffer, batchSize * numNodes, _outputFeatures, inFeatures);
 
-                // Step 2: convOutput = adj @ xw : [numNodes, numNodes] @ [numNodes, outputFeatures] -> [numNodes, outputFeatures]
-                // Get adjacency slice for this batch
-                int adjBatchOffset = (normalizedAdj.Shape.Length == 3) ? b * numNodes * numNodes : 0;
-                IGpuBuffer adjSliceBuffer;
-                if (normalizedAdj.Shape.Length == 2 || batchSize == 1)
+            // Apply adjacency matrix per batch: convOutput = adj @ xw
+            // For single batch or 2D adjacency, apply once to all
+            using var convOutputBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+
+            if (batchSize == 1)
+            {
+                // Single batch: direct GEMM
+                backend.Gemm(adjBuffer, xwBuffer, convOutputBuffer, numNodes, _outputFeatures, numNodes);
+            }
+            else if (normalizedAdj.Shape.Length == 2)
+            {
+                // 2D adjacency shared across batches: tile adjacency and use BatchedGemm
+                // Create tiled adjacency buffer [batchSize, numNodes, numNodes]
+                using var tiledAdjBuffer = backend.AllocateBuffer(batchSize * numNodes * numNodes);
+                for (int b = 0; b < batchSize; b++)
                 {
-                    adjSliceBuffer = adjBuffer;
+                    int dstOffset = b * numNodes * numNodes;
+                    backend.Copy2DStrided(adjBuffer, tiledAdjBuffer, 1, numNodes * numNodes, batchSize * numNodes * numNodes, dstOffset);
                 }
-                else
-                {
-                    // Create view for this batch's adjacency
-                    var adjData = backend.DownloadBuffer(adjBuffer);
-                    var adjSliceData = new float[numNodes * numNodes];
-                    Array.Copy(adjData, adjBatchOffset, adjSliceData, 0, numNodes * numNodes);
-                    adjSliceBuffer = backend.AllocateBuffer(adjSliceData);
-                }
+                // BatchedGemm: [batch, numNodes, numNodes] @ [batch, numNodes, outputFeatures]
+                backend.BatchedGemm(tiledAdjBuffer, xwBuffer, convOutputBuffer, numNodes, _outputFeatures, numNodes, batchSize);
+            }
+            else
+            {
+                // Per-batch 3D adjacency: use BatchedGemm directly
+                backend.BatchedGemm(adjBuffer, xwBuffer, convOutputBuffer, numNodes, _outputFeatures, numNodes, batchSize);
+            }
 
-                using var convOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
-                backend.Gemm(adjSliceBuffer, xwBuffer, convOutputBuffer, numNodes, _outputFeatures, numNodes);
+            // Accumulate to output using GPU Add
+            backend.Add(outputBuffer, convOutputBuffer, outputBuffer, outputSize);
 
-                // Accumulate to output at correct batch offset
-                // Download current output for this batch, add convOutput, re-upload
-                var currentOutputSlice = new float[numNodes * _outputFeatures];
-                var downloadedOutput = backend.DownloadBuffer(outputBuffer);
-                Array.Copy(downloadedOutput, batchOutputOffset, currentOutputSlice, 0, numNodes * _outputFeatures);
-                using var currentOutputBuffer = backend.AllocateBuffer(currentOutputSlice);
-
-                using var accumulatedBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
-                backend.Add(currentOutputBuffer, convOutputBuffer, accumulatedBuffer, numNodes * _outputFeatures);
-
-                // Copy back to output buffer at correct offset
-                backend.Copy2DStrided(accumulatedBuffer, outputBuffer, 1, numNodes * _outputFeatures, outputSize, batchOutputOffset);
-
-                if (needsDispose)
-                {
-                    inputSliceBuffer.Dispose();
-                }
-
-                if (normalizedAdj.Shape.Length == 3 && batchSize > 1 && adjSliceBuffer != adjBuffer)
-                {
-                    adjSliceBuffer.Dispose();
-                }
+            if (needsDisposeSlice)
+            {
+                inputSliceBuffer.Dispose();
             }
         }
 
         // ========================================
         // SELF-LOOP WEIGHTS AND BIASES PER NODE TYPE
+        // (GPU-native batch processing with type masks)
         // ========================================
 
-        // Precompute self-loop contributions for all node types
+        // For each node type, pre-compute a mask and process all nodes in batched fashion
         foreach (var nodeType in _metadata.NodeTypes)
         {
             var selfWeights = _selfLoopWeights[nodeType];
@@ -671,57 +663,74 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(selfWeights.Data));
             using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(bias.Data));
 
-            // Create a mask for nodes of this type
-            var nodeMask = new float[numNodes];
+            // Create a broadcast mask [numNodes, outputFeatures] where mask[n, :] = 1.0 if node n is of this type
+            var nodeMaskData = new float[numNodes * _outputFeatures];
             for (int n = 0; n < numNodes; n++)
             {
-                nodeMask[n] = (_nodeTypeMap.TryGetValue(n, out var type) && type == nodeType) ? 1.0f : 0.0f;
+                float maskVal = (_nodeTypeMap.TryGetValue(n, out var type) && type == nodeType) ? 1.0f : 0.0f;
+                for (int f = 0; f < _outputFeatures; f++)
+                {
+                    nodeMaskData[n * _outputFeatures + f] = maskVal;
+                }
+            }
+            using var nodeMaskBuffer = backend.AllocateBuffer(nodeMaskData);
+
+            // Extract input features for this node type (first inFeatures columns)
+            IGpuBuffer typeInputBuffer;
+            bool needsDisposeTypeInput = false;
+
+            if (inFeatures == inputFeatures)
+            {
+                typeInputBuffer = input.Buffer;
+            }
+            else
+            {
+                // Extract first inFeatures columns - single CPU roundtrip for preprocessing
+                var fullData = backend.DownloadBuffer(input.Buffer);
+                var sliceData = new float[batchSize * numNodes * inFeatures];
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        int srcOffset = b * numNodes * inputFeatures + n * inputFeatures;
+                        int dstOffset = b * numNodes * inFeatures + n * inFeatures;
+                        for (int f = 0; f < inFeatures && f < inputFeatures; f++)
+                        {
+                            sliceData[dstOffset + f] = fullData[srcOffset + f];
+                        }
+                    }
+                }
+                typeInputBuffer = backend.AllocateBuffer(sliceData);
+                needsDisposeTypeInput = true;
             }
 
-            // For each batch, apply self-loop transformation to nodes of this type
+            // Compute selfOutput = input @ selfWeights for ALL nodes
+            // [batchSize * numNodes, inFeatures] @ [inFeatures, outputFeatures] -> [batchSize * numNodes, outputFeatures]
+            using var selfOutputBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            backend.Gemm(typeInputBuffer, selfWeightsBuffer, selfOutputBuffer, batchSize * numNodes, _outputFeatures, inFeatures);
+
+            // Add bias using BiasAdd (broadcasts across nodes)
+            backend.BiasAdd(selfOutputBuffer, biasBuffer, selfOutputBuffer, batchSize * numNodes, _outputFeatures);
+
+            // Apply mask: maskedSelfOutput = selfOutput * mask (element-wise)
+            // The mask is [numNodes, outputFeatures], need to tile for batch dimension
+            using var tiledMaskBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
             for (int b = 0; b < batchSize; b++)
             {
-                int batchInputOffset = b * numNodes * inputFeatures;
-                int batchOutputOffset = b * numNodes * _outputFeatures;
+                int dstOffset = b * numNodes * _outputFeatures;
+                backend.Copy2DStrided(nodeMaskBuffer, tiledMaskBuffer, 1, numNodes * _outputFeatures, batchSize * numNodes * _outputFeatures, dstOffset);
+            }
 
-                // For each node of this type in the batch
-                for (int n = 0; n < numNodes; n++)
-                {
-                    if (nodeMask[n] < 0.5f)
-                        continue;
+            // Element-wise multiply: selfOutput * tiledMask
+            using var maskedSelfOutputBuffer = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            backend.Multiply(selfOutputBuffer, tiledMaskBuffer, maskedSelfOutputBuffer, batchSize * numNodes * _outputFeatures);
 
-                    // Extract this node's input [1, inFeatures]
-                    var nodeInputData = new float[inFeatures];
-                    var fullInputData = backend.DownloadBuffer(input.CreateView(batchInputOffset, [numNodes, inputFeatures]).Buffer);
-                    for (int f = 0; f < inFeatures && f < inputFeatures; f++)
-                    {
-                        nodeInputData[f] = fullInputData[n * inputFeatures + f];
-                    }
-                    using var nodeInputBuffer = backend.AllocateBuffer(nodeInputData);
+            // Accumulate to output using GPU Add
+            backend.Add(outputBuffer, maskedSelfOutputBuffer, outputBuffer, outputSize);
 
-                    // Compute selfOutput = nodeInput @ selfWeights : [1, inFeatures] @ [inFeatures, outputFeatures] -> [1, outputFeatures]
-                    using var selfOutputBuffer = backend.AllocateBuffer(_outputFeatures);
-                    backend.Gemm(nodeInputBuffer, selfWeightsBuffer, selfOutputBuffer, 1, _outputFeatures, inFeatures);
-
-                    // Add bias using BiasAdd
-                    backend.BiasAdd(selfOutputBuffer, biasBuffer, selfOutputBuffer, 1, _outputFeatures);
-
-                    // Add to output at this node's position
-                    // Get current output for this node
-                    var fullOutputData = backend.DownloadBuffer(outputBuffer);
-                    int nodeOutputOffset = batchOutputOffset + n * _outputFeatures;
-
-                    var nodeOutputData = new float[_outputFeatures];
-                    Array.Copy(fullOutputData, nodeOutputOffset, nodeOutputData, 0, _outputFeatures);
-                    using var nodeOutputBuffer = backend.AllocateBuffer(nodeOutputData);
-
-                    // Add self-loop output
-                    using var accumulatedNodeBuffer = backend.AllocateBuffer(_outputFeatures);
-                    backend.Add(nodeOutputBuffer, selfOutputBuffer, accumulatedNodeBuffer, _outputFeatures);
-
-                    // Copy back using Copy2DStrided
-                    backend.Copy2DStrided(accumulatedNodeBuffer, outputBuffer, 1, _outputFeatures, outputSize, nodeOutputOffset);
-                }
+            if (needsDisposeTypeInput)
+            {
+                typeInputBuffer.Dispose();
             }
         }
 
@@ -738,6 +747,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
 
         var finalBuffer = backend.AllocateBuffer(outputSize);
         backend.Copy(outputBuffer, finalBuffer, outputSize);
+        outputBuffer.Dispose();
         return new GpuTensor<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 

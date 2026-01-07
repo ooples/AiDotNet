@@ -1085,6 +1085,124 @@ __kernel void scatter_add_kernel(
         destination[destIdx * featureSize + f] += source[idx * featureSize + f];
     }
 }
+
+// ===========================================================================
+// SPECIALIZED LAYER KERNELS
+// ===========================================================================
+
+// Radial Basis Function (Gaussian): exp(-epsilon * ||x - c||^2)
+__kernel void rbf_forward(
+    __global const float* input,
+    __global const float* centers,
+    __global const float* epsilons,
+    __global float* output,
+    const int batchSize,
+    const int numCenters,
+    const int inputDim)
+{
+    const int b = get_global_id(0);
+    const int c = get_global_id(1);
+
+    if (b >= batchSize || c >= numCenters) return;
+
+    float distSq = 0.0f;
+    for (int i = 0; i < inputDim; i++) {
+        float diff = input[b * inputDim + i] - centers[c * inputDim + i];
+        distSq += diff * diff;
+    }
+
+    output[b * numCenters + c] = exp(-epsilons[c] * distSq);
+}
+
+// Spike-Timing-Dependent Plasticity (STDP) Weight Update
+__kernel void stdp_update(
+    __global float* weights,
+    __global const float* preTrace,
+    __global const float* postTrace,
+    __global const float* preSpike,
+    __global const float* postSpike,
+    const float ltpRate,
+    const float ltdRate,
+    const float homeostasisRate,
+    const float minWeight,
+    const float maxWeight,
+    const int numPre,
+    const int numPost)
+{
+    const int i = get_global_id(0); // pre-synaptic index
+    const int j = get_global_id(1); // post-synaptic index
+
+    if (i >= numPre || j >= numPost) return;
+
+    int weightIdx = i * numPost + j;
+    if (i == j) return; // Skip self-connections if mapped that way, though usually separate layers
+
+    float w = weights[weightIdx];
+    float dw = 0.0f;
+
+    // LTP: Pre-synaptic spike BEFORE Post-synaptic spike
+    // If pre-neuron spiked just now (preSpike[i] == 1.0) and post-neuron has a trace (recent activity)
+    // Actually standard STDP rule:
+    // 1. On Pre-spike: LTD based on Post-trace (Post fired before Pre)? No.
+    //    Textbook STDP: 
+    //    - On Post-spike: LTP (Pre fired before Post). Strength proportional to Pre-trace.
+    //    - On Pre-spike: LTD (Post fired before Pre). Strength proportional to Post-trace.
+    
+    // Check if Post neuron spiked
+    if (postSpike[j] > 0.5f) {
+        // LTP event: Pre trace indicates recent pre activity
+        if (preTrace[i] > 0.0f) {
+            dw += ltpRate * preTrace[i] * (maxWeight - w);
+        }
+    }
+
+    // Check if Pre neuron spiked
+    if (preSpike[i] > 0.5f) {
+        // LTD event: Post trace indicates recent post activity
+        if (postTrace[j] > 0.0f) {
+            dw -= ltdRate * postTrace[j] * (w - minWeight);
+        }
+    }
+
+    // Homeostasis
+    float homeostasis = homeostasisRate * (w - 0.5f * (maxWeight + minWeight));
+    dw -= homeostasis;
+
+    // Apply update
+    w += dw;
+    
+    // Clamp
+    w = fmax(fmin(w, maxWeight), minWeight);
+    
+    weights[weightIdx] = w;
+}
+
+// Update traces and detect spikes
+__kernel void update_traces(
+    __global float* traces,
+    __global float* spikes,
+    __global const float* input,
+    const float decay,
+    const float threshold,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    // Decay existing trace
+    float tr = traces[idx] * decay;
+    
+    // Check for spike
+    float val = input[idx];
+    if (val > threshold) {
+        spikes[idx] = 1.0f;
+        tr = 1.0f; // Reset trace on spike
+    } else {
+        spikes[idx] = 0.0f;
+    }
+    
+    traces[idx] = tr;
+}
 ";
         }
 
@@ -1121,7 +1239,9 @@ __kernel void scatter_add_kernel(
                 "tile_batch", "tile_axis",
                 "dropout_forward", "dropout_backward",
                 "embedding_lookup", "embedding_backward",
-                "fma_kernel", "gather_kernel", "scatter_add_kernel"
+                "fma_kernel", "gather_kernel", "scatter_add_kernel",
+                // Specialized
+                "rbf_forward", "stdp_update", "update_traces"
             };
         }
     }

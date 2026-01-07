@@ -1353,6 +1353,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
     }
 
+    private Tensor<T>? _weightsVelocity;
+    private Tensor<T>? _biasesVelocity;
+
     /// <summary>
     /// Updates the layer's parameters (weights and biases) using the calculated gradients.
     /// </summary>
@@ -1379,12 +1382,37 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_weightsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
-        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        // Notify engine that weights/biases have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
+            // Initialize velocity tensors if needed (lazily)
+            if (_weightsVelocity == null)
+            {
+                _weightsVelocity = new Tensor<T>(_weights.Shape);
+                _weightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_biasesVelocity == null)
+            {
+                _biasesVelocity = new Tensor<T>(_biases.Shape);
+                _biasesVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            // Perform GPU-resident SGD update
+            gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
+            _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+
+            // Notify engine that weights/biases have changed (for GPU cache invalidation)
+            Engine.InvalidatePersistentTensor(_weights);
+            Engine.InvalidatePersistentTensor(_biases);
+        }
     }
 
     /// <summary>

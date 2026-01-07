@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -66,6 +69,11 @@ public class QuantumLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="QuantumLayer{T}"/> class with specified dimensions.
@@ -211,6 +219,56 @@ public class QuantumLayer<T> : LayerBase<T>
         // Convert amplitudes to probabilities and transpose back to [batch, dimension]
         var probabilitiesT = Engine.ComplexMagnitudeSquared(resultRealT, resultImagT);
         return Engine.TensorTranspose(probabilitiesT);
+    }
+
+    /// <summary>
+    /// Performs the GPU-accelerated forward pass for the quantum layer.
+    /// </summary>
+    /// <param name="inputs">The GPU tensor inputs. First element is the input activation.</param>
+    /// <returns>A GPU tensor containing the quantum probability distribution output.</returns>
+    /// <remarks>
+    /// The quantum layer processes data through a simulated quantum circuit with complex-valued operations.
+    /// This method downloads input, processes through the quantum circuit on CPU, and uploads probabilities to GPU.
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        // Validate GPU engine availability
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend is not available.");
+
+        // Download input from GPU for processing
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
+        // Convert to Tensor<T>
+        var inputTensor = new Tensor<T>(input.Shape);
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            inputTensor[i] = NumOps.FromDouble(inputData[i]);
+        }
+
+        // Process using existing Forward logic (handles complex quantum circuit operations)
+        var output = Forward(inputTensor);
+
+        // Upload output to GPU
+        var outputData = new float[output.Length];
+        for (int i = 0; i < output.Length; i++)
+        {
+            outputData[i] = NumOps.ToFloat(output[i]);
+        }
+
+        var outputBuffer = backend.AllocateBuffer(outputData);
+        var outputShape = output.Shape;
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

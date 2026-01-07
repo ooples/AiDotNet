@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -64,6 +68,11 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// The input tensor from the last forward pass.
@@ -215,6 +224,99 @@ public class LogVarianceLayer<T> : LayerBase<T>
         _lastOutput = Engine.ReduceLogVariance(input, [Axis], keepDims: false, epsilon: 1e-8);
 
         return _lastOutput;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass for log-variance reduction.
+    /// </summary>
+    /// <param name="inputs">Input GPU tensors (uses first input).</param>
+    /// <returns>GPU-resident output tensor with log-variance values.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        int[] shape = input.Shape;
+
+        // Calculate output shape by removing the axis dimension
+        int[] outputShape = CalculateOutputShape(shape, Axis);
+        int axisSize = shape[Axis];
+
+        // Calculate strides for the reduction
+        int outerSize = 1;
+        for (int i = 0; i < Axis; i++)
+            outerSize *= shape[i];
+
+        int innerSize = 1;
+        for (int i = Axis + 1; i < shape.Length; i++)
+            innerSize *= shape[i];
+
+        int outputSize = outerSize * innerSize;
+        const float epsilon = 1e-8f;
+
+        // Download input for reduction
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
+        // Cache input for backward pass
+        _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
+
+        // Compute mean values for caching (keepDims=true)
+        int[] meanShape = (int[])shape.Clone();
+        meanShape[Axis] = 1;
+        var meanData = new float[outputSize];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
+            {
+                float sum = 0;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int idx = outer * axisSize * innerSize + a * innerSize + inner;
+                    sum += inputData[idx];
+                }
+                int outIdx = outer * innerSize + inner;
+                meanData[outIdx] = sum / axisSize;
+            }
+        }
+        _meanValues = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), meanShape);
+
+        // Compute variance and log-variance
+        var outputData = new float[outputSize];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
+            {
+                int outIdx = outer * innerSize + inner;
+                float mean = meanData[outIdx];
+                float variance = 0;
+
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int idx = outer * axisSize * innerSize + a * innerSize + inner;
+                    float diff = inputData[idx] - mean;
+                    variance += diff * diff;
+                }
+                variance /= axisSize;
+                outputData[outIdx] = (float)Math.Log(variance + epsilon);
+            }
+        }
+
+        // Cache output for backward pass
+        _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
+
+        // Upload result to GPU
+        var outputBuffer = backend.AllocateBuffer(outputData);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -70,6 +73,11 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MeasurementLayer{T}"/> class with the specified size.
@@ -197,6 +205,57 @@ public class MeasurementLayer<T> : LayerBase<T>
 
         return probabilities;
     }
+
+    /// <summary>
+    /// Performs the GPU-accelerated forward pass for quantum measurement.
+    /// </summary>
+    /// <param name="inputs">The GPU tensor inputs. First element is the complex-valued quantum state.</param>
+    /// <returns>A GPU tensor containing the classical probability distribution.</returns>
+    /// <remarks>
+    /// The measurement layer converts quantum amplitudes to probabilities via the Born rule.
+    /// This method downloads complex input, processes measurement on CPU, and uploads probabilities to GPU.
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        // Validate GPU engine availability
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend is not available.");
+
+        // Download input from GPU for processing
+        var inputData = backend.DownloadBuffer(input.Buffer);
+
+        // Convert to Tensor<T>
+        var inputTensor = new Tensor<T>(input.Shape);
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            inputTensor[i] = NumOps.FromDouble(inputData[i]);
+        }
+
+        // Process using existing Forward logic (handles complex-valued quantum measurement)
+        var output = Forward(inputTensor);
+
+        // Upload output to GPU
+        var outputData = new float[output.Length];
+        for (int i = 0; i < output.Length; i++)
+        {
+            outputData[i] = NumOps.ToFloat(output[i]);
+        }
+
+        var outputBuffer = backend.AllocateBuffer(outputData);
+        var outputShape = output.Shape;
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
     /// <summary>
     /// Performs the backward pass of the measurement layer.
     /// </summary>

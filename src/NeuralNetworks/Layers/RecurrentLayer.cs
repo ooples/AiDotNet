@@ -345,7 +345,12 @@ public class RecurrentLayer<T> : LayerBase<T>
             input3D = input.Reshape([sequenceLength, flatBatch, inputSize]);
         }
 
-        _lastInput = input3D;
+        // Cache input only if training
+        if (IsTrainingMode)
+        {
+            _lastInput = input3D;
+        }
+
         int hiddenSize = _inputWeights.Shape[0];
         int actualInputSize = input3D.Shape[2]; // [seqLen, batch, inputSize]
         int expectedInputSize = _inputWeights.Shape[1];
@@ -896,6 +901,10 @@ public class RecurrentLayer<T> : LayerBase<T>
     }
 
 
+    private Tensor<T>? _inputWeightsVelocity;
+    private Tensor<T>? _hiddenWeightsVelocity;
+    private Tensor<T>? _biasesVelocity;
+
     /// <summary>
     /// Updates the parameters of the recurrent layer using the calculated gradients.
     /// </summary>
@@ -929,19 +938,47 @@ public class RecurrentLayer<T> : LayerBase<T>
         if (_inputWeightsGradient == null || _hiddenWeightsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Use Engine operations for parameter updates
-        var scaledInputGrad = Engine.TensorMultiplyScalar(_inputWeightsGradient, learningRate);
-        var scaledHiddenGrad = Engine.TensorMultiplyScalar(_hiddenWeightsGradient, learningRate);
-        var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        _inputWeights = Engine.TensorSubtract(_inputWeights, scaledInputGrad);
-        _hiddenWeights = Engine.TensorSubtract(_hiddenWeights, scaledHiddenGrad);
-        _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+            if (_inputWeightsVelocity == null)
+            {
+                _inputWeightsVelocity = new Tensor<T>(_inputWeights.Shape);
+                _inputWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_inputWeightsVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_hiddenWeightsVelocity == null)
+            {
+                _hiddenWeightsVelocity = new Tensor<T>(_hiddenWeights.Shape);
+                _hiddenWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_hiddenWeightsVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_biasesVelocity == null)
+            {
+                _biasesVelocity = new Tensor<T>(_biases.Shape);
+                _biasesVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
+            }
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_inputWeights);
-        Engine.InvalidatePersistentTensor(_hiddenWeights);
-        Engine.InvalidatePersistentTensor(_biases);
+            gpuEngine.SgdMomentumUpdateGpu(_inputWeights, _inputWeightsGradient, _inputWeightsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_hiddenWeights, _hiddenWeightsGradient, _hiddenWeightsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            var scaledInputGrad = Engine.TensorMultiplyScalar(_inputWeightsGradient, learningRate);
+            var scaledHiddenGrad = Engine.TensorMultiplyScalar(_hiddenWeightsGradient, learningRate);
+            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+
+            _inputWeights = Engine.TensorSubtract(_inputWeights, scaledInputGrad);
+            _hiddenWeights = Engine.TensorSubtract(_hiddenWeights, scaledHiddenGrad);
+            _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+
+            Engine.InvalidatePersistentTensor(_inputWeights);
+            Engine.InvalidatePersistentTensor(_hiddenWeights);
+            Engine.InvalidatePersistentTensor(_biases);
+        }
     }
 
     /// <summary>

@@ -50,6 +50,11 @@ public enum PersistentTensorRole
     AttentionCache,
 
     /// <summary>
+    /// Optimizer state tensors (velocity, momentum, etc.).
+    /// </summary>
+    OptimizerState,
+
+    /// <summary>
     /// Other persistent tensors not fitting above categories.
     /// </summary>
     Other

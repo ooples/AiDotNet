@@ -1784,6 +1784,8 @@ public class LSTMLayer<T> : LayerBase<T>
         }
     }
 
+    private Dictionary<string, Tensor<T>> _velocities = new Dictionary<string, Tensor<T>>();
+
     /// <summary>
     /// Updates the parameters of the LSTM layer based on the calculated gradients.
     /// </summary>
@@ -1808,67 +1810,108 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        // Use Engine operations for GPU/CPU acceleration
+        bool useGpu = Engine is DirectGpuTensorEngine;
+        DirectGpuTensorEngine? gpuEngine = useGpu ? (DirectGpuTensorEngine)Engine : null;
+        float lr = useGpu ? (float)NumOps.ToDouble(learningRate) : 0.0f;
+
         foreach (var kvp in Gradients)
         {
             var paramName = kvp.Key;
             var gradient = kvp.Value;
-            var scaledGradient = Engine.TensorMultiplyScalar(gradient, learningRate);
 
-            switch (paramName)
+            if (useGpu)
             {
-                case "weightsFi":
-                    _weightsFi = Engine.TensorSubtract(_weightsFi, scaledGradient);
-                    break;
-                case "weightsIi":
-                    _weightsIi = Engine.TensorSubtract(_weightsIi, scaledGradient);
-                    break;
-                case "weightsCi":
-                    _weightsCi = Engine.TensorSubtract(_weightsCi, scaledGradient);
-                    break;
-                case "weightsOi":
-                    _weightsOi = Engine.TensorSubtract(_weightsOi, scaledGradient);
-                    break;
-                case "weightsFh":
-                    _weightsFh = Engine.TensorSubtract(_weightsFh, scaledGradient);
-                    break;
-                case "weightsIh":
-                    _weightsIh = Engine.TensorSubtract(_weightsIh, scaledGradient);
-                    break;
-                case "weightsCh":
-                    _weightsCh = Engine.TensorSubtract(_weightsCh, scaledGradient);
-                    break;
-                case "weightsOh":
-                    _weightsOh = Engine.TensorSubtract(_weightsOh, scaledGradient);
-                    break;
-                case "biasF":
-                    _biasF = Engine.TensorSubtract(_biasF, scaledGradient);
-                    break;
-                case "biasI":
-                    _biasI = Engine.TensorSubtract(_biasI, scaledGradient);
-                    break;
-                case "biasC":
-                    _biasC = Engine.TensorSubtract(_biasC, scaledGradient);
-                    break;
-                case "biasO":
-                    _biasO = Engine.TensorSubtract(_biasO, scaledGradient);
-                    break;
+                // GPU Update
+                Tensor<T> param = paramName switch
+                {
+                    "weightsFi" => _weightsFi,
+                    "weightsIi" => _weightsIi,
+                    "weightsCi" => _weightsCi,
+                    "weightsOi" => _weightsOi,
+                    "weightsFh" => _weightsFh,
+                    "weightsIh" => _weightsIh,
+                    "weightsCh" => _weightsCh,
+                    "weightsOh" => _weightsOh,
+                    "biasF" => _biasF,
+                    "biasI" => _biasI,
+                    "biasC" => _biasC,
+                    "biasO" => _biasO,
+                    _ => throw new InvalidOperationException($"Unknown parameter: {paramName}")
+                };
+
+                if (!_velocities.TryGetValue(paramName, out var velocity))
+                {
+                    velocity = new Tensor<T>(param.Shape);
+                    velocity.Fill(NumOps.Zero);
+                    gpuEngine!.RegisterPersistentTensor(velocity, PersistentTensorRole.OptimizerState);
+                    _velocities[paramName] = velocity;
+                }
+
+                gpuEngine!.SgdMomentumUpdateGpu(param, gradient, velocity, lr, 0.0f, 0.0f);
+            }
+            else
+            {
+                // CPU Update
+                var scaledGradient = Engine.TensorMultiplyScalar(gradient, learningRate);
+
+                switch (paramName)
+                {
+                    case "weightsFi":
+                        _weightsFi = Engine.TensorSubtract(_weightsFi, scaledGradient);
+                        break;
+                    case "weightsIi":
+                        _weightsIi = Engine.TensorSubtract(_weightsIi, scaledGradient);
+                        break;
+                    case "weightsCi":
+                        _weightsCi = Engine.TensorSubtract(_weightsCi, scaledGradient);
+                        break;
+                    case "weightsOi":
+                        _weightsOi = Engine.TensorSubtract(_weightsOi, scaledGradient);
+                        break;
+                    case "weightsFh":
+                        _weightsFh = Engine.TensorSubtract(_weightsFh, scaledGradient);
+                        break;
+                    case "weightsIh":
+                        _weightsIh = Engine.TensorSubtract(_weightsIh, scaledGradient);
+                        break;
+                    case "weightsCh":
+                        _weightsCh = Engine.TensorSubtract(_weightsCh, scaledGradient);
+                        break;
+                    case "weightsOh":
+                        _weightsOh = Engine.TensorSubtract(_weightsOh, scaledGradient);
+                        break;
+                    case "biasF":
+                        _biasF = Engine.TensorSubtract(_biasF, scaledGradient);
+                        break;
+                    case "biasI":
+                        _biasI = Engine.TensorSubtract(_biasI, scaledGradient);
+                        break;
+                    case "biasC":
+                        _biasC = Engine.TensorSubtract(_biasC, scaledGradient);
+                        break;
+                    case "biasO":
+                        _biasO = Engine.TensorSubtract(_biasO, scaledGradient);
+                        break;
+                }
             }
         }
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_weightsFi);
-        Engine.InvalidatePersistentTensor(_weightsIi);
-        Engine.InvalidatePersistentTensor(_weightsCi);
-        Engine.InvalidatePersistentTensor(_weightsOi);
-        Engine.InvalidatePersistentTensor(_weightsFh);
-        Engine.InvalidatePersistentTensor(_weightsIh);
-        Engine.InvalidatePersistentTensor(_weightsCh);
-        Engine.InvalidatePersistentTensor(_weightsOh);
-        Engine.InvalidatePersistentTensor(_biasF);
-        Engine.InvalidatePersistentTensor(_biasI);
-        Engine.InvalidatePersistentTensor(_biasC);
-        Engine.InvalidatePersistentTensor(_biasO);
+        if (!useGpu)
+        {
+            // Notify GPU that tensor data has changed
+            Engine.InvalidatePersistentTensor(_weightsFi);
+            Engine.InvalidatePersistentTensor(_weightsIi);
+            Engine.InvalidatePersistentTensor(_weightsCi);
+            Engine.InvalidatePersistentTensor(_weightsOi);
+            Engine.InvalidatePersistentTensor(_weightsFh);
+            Engine.InvalidatePersistentTensor(_weightsIh);
+            Engine.InvalidatePersistentTensor(_weightsCh);
+            Engine.InvalidatePersistentTensor(_weightsOh);
+            Engine.InvalidatePersistentTensor(_biasF);
+            Engine.InvalidatePersistentTensor(_biasI);
+            Engine.InvalidatePersistentTensor(_biasC);
+            Engine.InvalidatePersistentTensor(_biasO);
+        }
     }
 
     /// <summary>

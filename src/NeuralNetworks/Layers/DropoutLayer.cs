@@ -583,28 +583,37 @@ public class DropoutLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
-        // During inference (non-training), dropout is identity - just pass through
         if (!IsTrainingMode)
         {
-            // Clean up any previous GPU mask
             _gpuDropoutMask?.Dispose();
             _gpuDropoutMask = null;
             return input.CreateView(0, input.Shape);
         }
 
-        // Training mode: Use GPU-accelerated dropout with random mask generation
         float rate = (float)NumOps.ToDouble(_dropoutRate);
-
-        // Generate unique seed for this forward pass (combines counter with timestamp for variety)
-        // Use TickCount (int) for .NET Framework 4.7.1 compatibility, cast to uint to avoid sign issues
+        float scale = (float)NumOps.ToDouble(_scale);
         ulong seed = _seedCounter++ ^ (uint)Environment.TickCount;
 
-        // Execute GPU dropout kernel
-        var (output, mask) = gpuEngine.DropoutGpu<T>(input, rate, isTraining: true, seed);
+        // Generate uniform random mask [0, 1) on GPU
+        var randoms = gpuEngine.RandomUniformGpu<T>(input.Shape, 0f, 1f, seed);
 
-        // Store mask for backward pass (dispose previous mask if any)
+        // Keep neurons where random > rate
+        var mask = gpuEngine.GreaterThanScalarGpu<T>(randoms, rate);
+        randoms.Dispose();
+
+        // Apply inverted dropout scaling: output = input * mask * scale
+        var masked = gpuEngine.MultiplyGpu(input, mask);
+        var output = gpuEngine.ScaleGpu(masked, scale);
+        masked.Dispose();
+
         _gpuDropoutMask?.Dispose();
         _gpuDropoutMask = mask;
+
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _dropoutMask = mask.ToTensor();
+        }
 
         return output;
     }

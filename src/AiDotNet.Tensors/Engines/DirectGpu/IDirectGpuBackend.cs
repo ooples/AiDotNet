@@ -85,6 +85,16 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="destination">Destination CPU array.</param>
     void DownloadBuffer(IGpuBuffer buffer, float[] destination);
 
+    /// <summary>
+    /// Copies data between GPU buffers.
+    /// </summary>
+    /// <param name="source">Source buffer.</param>
+    /// <param name="srcOffset">Source offset in elements.</param>
+    /// <param name="destination">Destination buffer.</param>
+    /// <param name="destOffset">Destination offset in elements.</param>
+    /// <param name="size">Number of elements to copy.</param>
+    void Copy(IGpuBuffer source, int srcOffset, IGpuBuffer destination, int destOffset, int size);
+
     #endregion
 
     #region GEMM Operations
@@ -728,6 +738,131 @@ public interface IDirectGpuBackend : IDisposable
         int strideH, int strideW, int padH, int padW,
         int outputPadH, int outputPadW);
 
+    /// <summary>
+    /// Performs locally connected 2D convolution where each spatial position has unique weights.
+    /// </summary>
+    /// <param name="input">Input tensor [batch, inChannels, inHeight, inWidth].</param>
+    /// <param name="weights">Weights tensor [outH, outW, outChannels, inChannels, kernelH, kernelW].</param>
+    /// <param name="bias">Optional bias tensor [outChannels].</param>
+    /// <param name="output">Output tensor [batch, outChannels, outHeight, outWidth].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="inChannels">Number of input channels.</param>
+    /// <param name="inHeight">Input height.</param>
+    /// <param name="inWidth">Input width.</param>
+    /// <param name="outChannels">Number of output channels.</param>
+    /// <param name="outHeight">Output height.</param>
+    /// <param name="outWidth">Output width.</param>
+    /// <param name="kernelH">Kernel height.</param>
+    /// <param name="kernelW">Kernel width.</param>
+    /// <param name="strideH">Stride in height dimension.</param>
+    /// <param name="strideW">Stride in width dimension.</param>
+    void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW);
+
+    /// <summary>
+    /// Backward pass for locally connected conv2d - computes input gradients.
+    /// </summary>
+    void LocallyConnectedConv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW);
+
+    /// <summary>
+    /// Backward pass for locally connected conv2d - computes weight gradients.
+    /// </summary>
+    void LocallyConnectedConv2DBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW);
+
+    /// <summary>
+    /// Backward pass for locally connected conv2d - computes bias gradients.
+    /// </summary>
+    void LocallyConnectedConv2DBackwardBias(IGpuBuffer gradOutput, IGpuBuffer gradBias,
+        int batch, int outChannels, int outHeight, int outWidth);
+
+    /// <summary>
+    /// Performs deformable 2D convolution with learnable offsets (DCNv1/v2).
+    /// </summary>
+    /// <param name="input">Input tensor [batch, inChannels, inHeight, inWidth].</param>
+    /// <param name="weights">Weights tensor [outChannels, inChannels/groups, kernelH, kernelW].</param>
+    /// <param name="offsets">Offsets tensor [batch, 2*kernelH*kernelW*deformGroups, outH, outW].</param>
+    /// <param name="mask">Optional modulation mask [batch, kernelH*kernelW*deformGroups, outH, outW] (for DCNv2).</param>
+    /// <param name="output">Output tensor [batch, outChannels, outHeight, outWidth].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="inChannels">Number of input channels.</param>
+    /// <param name="inHeight">Input height.</param>
+    /// <param name="inWidth">Input width.</param>
+    /// <param name="outChannels">Number of output channels.</param>
+    /// <param name="outHeight">Output height.</param>
+    /// <param name="outWidth">Output width.</param>
+    /// <param name="kernelH">Kernel height.</param>
+    /// <param name="kernelW">Kernel width.</param>
+    /// <param name="strideH">Stride in height dimension.</param>
+    /// <param name="strideW">Stride in width dimension.</param>
+    /// <param name="padH">Padding in height dimension.</param>
+    /// <param name="padW">Padding in width dimension.</param>
+    /// <param name="dilationH">Dilation in height dimension.</param>
+    /// <param name="dilationW">Dilation in width dimension.</param>
+    /// <param name="groups">Number of convolution groups.</param>
+    /// <param name="deformGroups">Number of deformable groups.</param>
+    void DeformableConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups);
+
+    /// <summary>
+    /// Backward pass for deformable conv2d - computes input gradients.
+    /// </summary>
+    void DeformableConv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups);
+
+    /// <summary>
+    /// Backward pass for deformable conv2d - computes weight gradients.
+    /// </summary>
+    void DeformableConv2DBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradWeights,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups);
+
+    /// <summary>
+    /// Backward pass for deformable conv2d - computes offset gradients.
+    /// </summary>
+    void DeformableConv2DBackwardOffset(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradOffsets,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups);
+
+    /// <summary>
+    /// Backward pass for deformable conv2d - computes mask gradients (for DCNv2).
+    /// </summary>
+    void DeformableConv2DBackwardMask(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer gradMask,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups);
+
     #endregion
 
     #region Pooling Operations
@@ -761,6 +896,111 @@ public interface IDirectGpuBackend : IDisposable
     void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
     void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
     void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth);
+
+    /// <summary>
+    /// Performs 3D max pooling on volumetric input data.
+    /// Input/output are in NCDHW format (batch, channels, depth, height, width).
+    /// </summary>
+    /// <param name="input">Input buffer [batch * channels * inDepth * inHeight * inWidth].</param>
+    /// <param name="output">Output buffer [batch * channels * outDepth * outHeight * outWidth].</param>
+    /// <param name="indices">Optional output buffer for max indices [batch * channels * outDepth * outHeight * outWidth * 3] for backprop.</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="inDepth">Input depth.</param>
+    /// <param name="inHeight">Input height.</param>
+    /// <param name="inWidth">Input width.</param>
+    /// <param name="outDepth">Output depth.</param>
+    /// <param name="outHeight">Output height.</param>
+    /// <param name="outWidth">Output width.</param>
+    /// <param name="kernelD">Pooling kernel depth.</param>
+    /// <param name="kernelH">Pooling kernel height.</param>
+    /// <param name="kernelW">Pooling kernel width.</param>
+    /// <param name="strideD">Stride in depth dimension.</param>
+    /// <param name="strideH">Stride in height dimension.</param>
+    /// <param name="strideW">Stride in width dimension.</param>
+    void MaxPool3D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int outDepth, int outHeight, int outWidth,
+        int kernelD, int kernelH, int kernelW,
+        int strideD, int strideH, int strideW);
+
+    /// <summary>
+    /// Backward pass for 3D max pooling (NCDHW format).
+    /// Routes gradients back to the positions that had max values in the forward pass.
+    /// </summary>
+    /// <param name="gradOutput">Gradient of loss w.r.t. output [batch * channels * outDepth * outHeight * outWidth].</param>
+    /// <param name="indices">Flat indices from forward pass [batch * channels * outDepth * outHeight * outWidth].</param>
+    /// <param name="gradInput">Gradient w.r.t. input (output) [batch * channels * inDepth * inHeight * inWidth].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="inDepth">Input depth.</param>
+    /// <param name="inHeight">Input height.</param>
+    /// <param name="inWidth">Input width.</param>
+    /// <param name="outDepth">Output depth.</param>
+    /// <param name="outHeight">Output height.</param>
+    /// <param name="outWidth">Output width.</param>
+    void MaxPool3DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int outDepth, int outHeight, int outWidth);
+
+    #endregion
+
+    #region Spatial Transformer Operations
+
+    /// <summary>
+    /// Generates an affine sampling grid for spatial transformation.
+    /// Given a batch of 2x3 affine transformation matrices (theta), generates a grid of
+    /// normalized coordinates [-1, 1] that can be used with GridSample.
+    /// </summary>
+    /// <param name="theta">Affine transformation matrices [batch, 2, 3] = [batch * 6] in row-major.</param>
+    /// <param name="grid">Output sampling grid [batch, outputHeight, outputWidth, 2] = [batch * outputHeight * outputWidth * 2].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="outputHeight">Height of the output grid.</param>
+    /// <param name="outputWidth">Width of the output grid.</param>
+    void AffineGrid(IGpuBuffer theta, IGpuBuffer grid, int batch, int outputHeight, int outputWidth);
+
+    /// <summary>
+    /// Samples from input using a sampling grid with bilinear interpolation.
+    /// Given an input tensor and a grid of sampling locations, produces an output by
+    /// sampling the input at the specified grid locations using bilinear interpolation.
+    /// </summary>
+    /// <param name="input">Input tensor [batch, channels, inHeight, inWidth] in NCHW format.</param>
+    /// <param name="grid">Sampling grid [batch, outHeight, outWidth, 2] with (x, y) coordinates in [-1, 1].</param>
+    /// <param name="output">Output tensor [batch, channels, outHeight, outWidth].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="inHeight">Input height.</param>
+    /// <param name="inWidth">Input width.</param>
+    /// <param name="outHeight">Output height.</param>
+    /// <param name="outWidth">Output width.</param>
+    /// <param name="paddingMode">Padding mode: 0=zeros, 1=border, 2=reflection.</param>
+    /// <param name="alignCorners">If true, [-1, 1] maps to corner pixels; otherwise to edge pixels.</param>
+    void GridSample(IGpuBuffer input, IGpuBuffer grid, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
+        int paddingMode = 0, bool alignCorners = false);
+
+    /// <summary>
+    /// Backward pass for GridSample - computes gradients for input and grid.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from upstream [batch, channels, outHeight, outWidth].</param>
+    /// <param name="input">Original input from forward pass [batch, channels, inHeight, inWidth].</param>
+    /// <param name="grid">Sampling grid from forward pass [batch, outHeight, outWidth, 2].</param>
+    /// <param name="gradInput">Gradient with respect to input [batch, channels, inHeight, inWidth].</param>
+    /// <param name="gradGrid">Gradient with respect to grid [batch, outHeight, outWidth, 2].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="inHeight">Input height.</param>
+    /// <param name="inWidth">Input width.</param>
+    /// <param name="outHeight">Output height.</param>
+    /// <param name="outWidth">Output width.</param>
+    /// <param name="paddingMode">Padding mode: 0=zeros, 1=border, 2=reflection.</param>
+    /// <param name="alignCorners">If true, [-1, 1] maps to corner pixels.</param>
+    void GridSampleBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer grid,
+        IGpuBuffer gradInput, IGpuBuffer gradGrid,
+        int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
+        int paddingMode = 0, bool alignCorners = false);
 
     #endregion
 
@@ -925,6 +1165,44 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="scaleFactor">Upsampling scale factor (applied to both height and width).</param>
     void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor);
 
+    /// <summary>
+    /// Performs 3D nearest-neighbor upsampling on volumetric data.
+    /// Each voxel is replicated to fill a [scaleD x scaleH x scaleW] block.
+    /// </summary>
+    /// <param name="input">Input buffer in NCDHW format [batch * channels * inDepth * inHeight * inWidth].</param>
+    /// <param name="output">Output buffer in NCDHW format [batch * channels * outDepth * outHeight * outWidth].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="inDepth">Input depth.</param>
+    /// <param name="inHeight">Input height.</param>
+    /// <param name="inWidth">Input width.</param>
+    /// <param name="scaleD">Upsampling factor for depth dimension.</param>
+    /// <param name="scaleH">Upsampling factor for height dimension.</param>
+    /// <param name="scaleW">Upsampling factor for width dimension.</param>
+    void NearestNeighborUpsample3D(IGpuBuffer input, IGpuBuffer output,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int scaleD, int scaleH, int scaleW);
+
+    /// <summary>
+    /// Backward pass for 3D nearest neighbor upsampling.
+    /// Accumulates gradients from each output voxel in a scale block back to the corresponding input voxel.
+    /// </summary>
+    /// <param name="gradOutput">Gradient w.r.t. output [batch * channels * outDepth * outHeight * outWidth].</param>
+    /// <param name="gradInput">Gradient w.r.t. input (output) [batch * channels * inDepth * inHeight * inWidth].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="inDepth">Input depth.</param>
+    /// <param name="inHeight">Input height.</param>
+    /// <param name="inWidth">Input width.</param>
+    /// <param name="scaleD">Upsampling factor for depth dimension.</param>
+    /// <param name="scaleH">Upsampling factor for height dimension.</param>
+    /// <param name="scaleW">Upsampling factor for width dimension.</param>
+    void NearestNeighborUpsample3DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int scaleD, int scaleH, int scaleW);
+
     #endregion
 
     #region Activation Gradients
@@ -1015,6 +1293,18 @@ public interface IDirectGpuBackend : IDisposable
     void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize);
 
     /// <summary>
+    /// Selects the top K largest values and their indices along the last axis.
+    /// </summary>
+    /// <param name="A">Input buffer with shape [outerSize, reduceSize] in row-major order.</param>
+    /// <param name="values">Output buffer for top K values [outerSize, K].</param>
+    /// <param name="indices">Output buffer for top K indices [outerSize, K] (int buffer).</param>
+    /// <param name="outerSize">Number of rows (batch dimension).</param>
+    /// <param name="reduceSize">Size of the axis to select from (columns).</param>
+    /// <param name="k">Number of top elements to select.</param>
+    /// <param name="sorted">If true, output is sorted in descending order.</param>
+    void TopK(IGpuBuffer A, IGpuBuffer values, IGpuBuffer indices, int outerSize, int reduceSize, int k, bool sorted = true);
+
+    /// <summary>
     /// Maximum reduction along axis: B[i] = max(A[i, :]).
     /// </summary>
     /// <param name="A">Input buffer with shape [outerSize, reduceSize] in row-major order.</param>
@@ -1022,6 +1312,16 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="outerSize">Number of output elements (rows).</param>
     /// <param name="reduceSize">Size of the axis to reduce (columns).</param>
     void MaxAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize);
+
+    /// <summary>
+    /// ArgMax reduction along axis: B[i] = argmax(A[i, :]).
+    /// Returns indices as floats.
+    /// </summary>
+    /// <param name="A">Input buffer with shape [outerSize, reduceSize].</param>
+    /// <param name="indices">Output buffer with shape [outerSize].</param>
+    /// <param name="outerSize">Number of rows.</param>
+    /// <param name="reduceSize">Number of columns.</param>
+    void ArgMaxAxis(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize);
 
     #endregion
 
@@ -1162,6 +1462,80 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="n">Number of elements.</param>
     /// <param name="refValue">Reference value that was used for 0 dB.</param>
     void DbToPower(IGpuBuffer db, IGpuBuffer power, int n, float refValue);
+
+    #endregion
+
+    #region Random Number Generation
+
+    /// <summary>
+    /// Generates uniformly distributed random numbers on GPU.
+    /// </summary>
+    /// <param name="output">Output buffer [size].</param>
+    /// <param name="size">Number of elements.</param>
+    /// <param name="min">Minimum value (inclusive).</param>
+    /// <param name="max">Maximum value (exclusive).</param>
+    /// <param name="seed">Random seed.</param>
+    void GenerateRandomUniform(IGpuBuffer output, int size, float min, float max, ulong seed);
+
+    /// <summary>
+    /// Generates normally distributed (Gaussian) random numbers on GPU using Box-Muller transform.
+    /// </summary>
+    /// <param name="output">Output buffer [size].</param>
+    /// <param name="size">Number of elements.</param>
+    /// <param name="mean">Mean of the distribution.</param>
+    /// <param name="stdDev">Standard deviation of the distribution.</param>
+    /// <param name="seed">Random seed.</param>
+    void GenerateRandomNormal(IGpuBuffer output, int size, float mean, float stdDev, ulong seed);
+
+    #endregion
+
+    #region Specialized Layer Operations
+
+    /// <summary>
+    /// Computes RBF kernel: exp(-epsilon * ||x - c||^2)
+    /// </summary>
+    /// <param name="input">Input buffer [batch * inputDim].</param>
+    /// <param name="centers">Centers buffer [numCenters * inputDim].</param>
+    /// <param name="epsilons">Epsilons buffer [numCenters].</param>
+    /// <param name="output">Output buffer [batch * numCenters].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="numCenters">Number of centers.</param>
+    /// <param name="inputDim">Input dimension.</param>
+    void RbfForward(IGpuBuffer input, IGpuBuffer centers, IGpuBuffer epsilons, IGpuBuffer output,
+        int batchSize, int numCenters, int inputDim);
+
+    /// <summary>
+    /// Updates weights using STDP learning rule.
+    /// </summary>
+    /// <param name="weights">Weights buffer [numPre * numPost].</param>
+    /// <param name="preTrace">Presynaptic trace buffer [numPre].</param>
+    /// <param name="postTrace">Postsynaptic trace buffer [numPost].</param>
+    /// <param name="preSpike">Presynaptic spike buffer [numPre].</param>
+    /// <param name="postSpike">Postsynaptic spike buffer [numPost].</param>
+    /// <param name="ltpRate">LTP learning rate.</param>
+    /// <param name="ltdRate">LTD learning rate.</param>
+    /// <param name="homeostasisRate">Homeostasis rate.</param>
+    /// <param name="minWeight">Minimum weight.</param>
+    /// <param name="maxWeight">Maximum weight.</param>
+    /// <param name="numPre">Number of presynaptic neurons.</param>
+    /// <param name="numPost">Number of postsynaptic neurons.</param>
+    void StdpUpdate(IGpuBuffer weights, IGpuBuffer preTrace, IGpuBuffer postTrace,
+        IGpuBuffer preSpike, IGpuBuffer postSpike,
+        float ltpRate, float ltdRate, float homeostasisRate,
+        float minWeight, float maxWeight,
+        int numPre, int numPost);
+
+    /// <summary>
+    /// Updates traces and detects spikes on GPU.
+    /// </summary>
+    /// <param name="traces">Traces buffer (in/out) [size].</param>
+    /// <param name="spikes">Spikes buffer (out) [size].</param>
+    /// <param name="input">Input buffer [size].</param>
+    /// <param name="decay">Trace decay factor.</param>
+    /// <param name="threshold">Spike threshold.</param>
+    /// <param name="size">Number of neurons.</param>
+    void UpdateTraces(IGpuBuffer traces, IGpuBuffer spikes, IGpuBuffer input,
+        float decay, float threshold, int size);
 
     #endregion
 }

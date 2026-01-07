@@ -59,5 +59,10 @@ public enum GpuTensorRole
     /// Attention cache for transformer models (KV cache).
     /// These can be large and benefit from persistent GPU residency.
     /// </summary>
-    AttentionCache = 9
+    AttentionCache = 9,
+
+    /// <summary>
+    /// Constant tensor that doesn't change (e.g., lookup tables, fixed masks).
+    /// </summary>
+    Constant = 10
 }

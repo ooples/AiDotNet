@@ -741,6 +741,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_beta);
     }
 
+    private Tensor<T>? _gammaVelocity;
+    private Tensor<T>? _betaVelocity;
+
     /// <summary>
     /// Updates the layer's parameters using the computed gradients.
     /// </summary>
@@ -783,13 +786,36 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         if (_gammaGradient == null || _betaGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Production-grade: Use Engine operations instead of manual loops
-        _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
+            if (_gammaVelocity == null)
+            {
+                _gammaVelocity = new Tensor<T>(_gamma.Shape);
+                _gammaVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_gammaVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_betaVelocity == null)
+            {
+                _betaVelocity = new Tensor<T>(_beta.Shape);
+                _betaVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_betaVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            gpuEngine.SgdMomentumUpdateGpu(_gamma, _gammaGradient, _gammaVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_beta, _betaGradient, _betaVelocity, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            // Production-grade: Use Engine operations instead of manual loops
+            _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+            _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+
+            // Notify GPU that tensor data has changed
+            Engine.InvalidatePersistentTensor(_gamma);
+            Engine.InvalidatePersistentTensor(_beta);
+        }
     }
 
     /// <summary>

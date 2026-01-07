@@ -53,6 +53,8 @@ public sealed class HipBackend : IAsyncGpuBackend
     private IntPtr _attentionModule;
     private IntPtr _fftModule;
     private IntPtr _sparseModule;
+    private IntPtr _locallyConnectedModule;
+    private IntPtr _deformableConvModule;
 
     private const int DefaultBlockSize = 256;
 
@@ -308,6 +310,14 @@ public sealed class HipBackend : IAsyncGpuBackend
             // Compile Sparse kernels (CSR SpMM, GNN message passing)
             CompileKernelModule(HipSparseKernels.GetSource(), "sparse", ref _sparseModule,
                 HipSparseKernels.GetKernelNames());
+
+            // Compile Locally Connected kernels (unique weights per spatial position)
+            CompileKernelModule(HipLocallyConnectedKernels.GetSource(), "locally_connected", ref _locallyConnectedModule,
+                HipLocallyConnectedKernels.GetKernelNames());
+
+            // Compile Deformable Convolution kernels (DCNv2 with learnable offsets and masks)
+            CompileKernelModule(HipDeformableConvolutionKernels.GetSource(), "deformable_conv", ref _deformableConvModule,
+                HipDeformableConvolutionKernels.GetKernelNames());
 
             Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Total: {_kernelCache.Count}");
@@ -2939,6 +2949,176 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    public unsafe void MaxPool3D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int outDepth, int outHeight, int outWidth,
+        int kernelD, int kernelH, int kernelW,
+        int strideD, int strideH, int strideW)
+    {
+        if (!_kernelCache.TryGetValue("maxpool3d", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: maxpool3d");
+
+        int saveIndices = indices is not null ? 1 : 0;
+        IntPtr indicesPtr = indices?.Handle ?? IntPtr.Zero;
+
+        var handles = new GCHandle[18];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(indicesPtr, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inDepth, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outDepth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(kernelD, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideD, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(saveIndices, GCHandleType.Pinned);
+
+            var args = new IntPtr[18];
+            for (int i = 0; i < 18; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((outWidth + 7) / 8);
+            uint gridY = (uint)((outHeight + 7) / 8);
+            uint gridZ = (uint)(batch * channels * outDepth);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 8, 8, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void MaxPool3DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int outDepth, int outHeight, int outWidth)
+    {
+        if (!_kernelCache.TryGetValue("maxpool3d_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: maxpool3d_backward");
+
+        var handles = new GCHandle[11];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(indices.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inDepth, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outDepth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+
+            var args = new IntPtr[11];
+            for (int i = 0; i < 11; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((outWidth + 7) / 8);
+            uint gridY = (uint)((outHeight + 7) / 8);
+            uint gridZ = (uint)(batch * channels * outDepth);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 8, 8, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void NearestNeighborUpsample3D(IGpuBuffer input, IGpuBuffer output,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int scaleD, int scaleH, int scaleW)
+    {
+        if (!_kernelCache.TryGetValue("nearest_upsample3d", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: nearest_upsample3d");
+
+        int outDepth = inDepth * scaleD;
+        int outHeight = inHeight * scaleH;
+        int outWidth = inWidth * scaleW;
+
+        var handles = new GCHandle[10];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inDepth, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(scaleD, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(scaleH, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(scaleW, GCHandleType.Pinned);
+
+            var args = new IntPtr[10];
+            for (int i = 0; i < 10; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((outWidth + 7) / 8);
+            uint gridY = (uint)((outHeight + 7) / 8);
+            uint gridZ = (uint)(batch * channels * outDepth);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 8, 8, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void NearestNeighborUpsample3DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int scaleD, int scaleH, int scaleW)
+    {
+        if (!_kernelCache.TryGetValue("nearest_upsample3d_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: nearest_upsample3d_backward");
+
+        int outDepth = inDepth * scaleD;
+        int outHeight = inHeight * scaleH;
+        int outWidth = inWidth * scaleW;
+
+        var handles = new GCHandle[10];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inDepth, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(scaleD, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(scaleH, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(scaleW, GCHandleType.Pinned);
+
+            var args = new IntPtr[10];
+            for (int i = 0; i < 10; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((outWidth + 7) / 8);
+            uint gridY = (uint)((outHeight + 7) / 8);
+            uint gridZ = (uint)(batch * channels * outDepth);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 8, 8, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
     #endregion
 
     #region Normalization Operations
@@ -3450,6 +3630,498 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         return new HipGpuBuffer(devicePtr, size);
     }
+
+    #region Locally Connected Convolution Operations
+
+    public unsafe void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+    {
+        if (!_kernelCache.TryGetValue("locally_connected_conv2d", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: locally_connected_conv2d");
+
+        var handles = new GCHandle[14];
+        try
+        {
+            var pInput = input.Handle;
+            var pWeights = weights.Handle;
+            var pBias = bias?.Handle ?? IntPtr.Zero;
+            var pOutput = output.Handle;
+            int hasBias = bias != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pBias, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pOutput, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+
+            var extraHandles = new GCHandle[2];
+            extraHandles[0] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            extraHandles[1] = GCHandle.Alloc(hasBias, GCHandleType.Pinned);
+
+            var args = new IntPtr[16];
+            for (int i = 0; i < 14; i++) args[i] = handles[i].AddrOfPinnedObject();
+            args[14] = extraHandles[0].AddrOfPinnedObject();
+            args[15] = extraHandles[1].AddrOfPinnedObject();
+
+            // Grid dimensions: outWidth x outHeight x (batch * outChannels)
+            uint gridX = (uint)((outWidth + 15) / 16);
+            uint gridY = (uint)((outHeight + 15) / 16);
+            uint gridZ = (uint)(batch * outChannels);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+
+            foreach (var h in extraHandles) if (h.IsAllocated) h.Free();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void LocallyConnectedConv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+    {
+        if (!_kernelCache.TryGetValue("locally_connected_conv2d_backward_input", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: locally_connected_conv2d_backward_input");
+
+        var handles = new GCHandle[15];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(weights.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+
+            var args = new IntPtr[14];
+            for (int i = 0; i < 14; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalSize = batch * inChannels * inHeight * inWidth;
+            uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void LocallyConnectedConv2DBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+    {
+        if (!_kernelCache.TryGetValue("locally_connected_conv2d_backward_weights", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: locally_connected_conv2d_backward_weights");
+
+        var handles = new GCHandle[15];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradWeights.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+
+            var args = new IntPtr[14];
+            for (int i = 0; i < 14; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalWeights = outHeight * outWidth * outChannels * inChannels * kernelH * kernelW;
+            uint grid = (uint)((totalWeights + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void LocallyConnectedConv2DBackwardBias(IGpuBuffer gradOutput, IGpuBuffer gradBias,
+        int batch, int outChannels, int outHeight, int outWidth)
+    {
+        if (!_kernelCache.TryGetValue("locally_connected_conv2d_backward_bias", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: locally_connected_conv2d_backward_bias");
+
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradBias.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((outChannels + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    #endregion
+
+    #region Deformable Convolution Operations
+
+    public unsafe void DeformableConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d");
+
+        var handles = new GCHandle[22];
+        try
+        {
+            var pInput = input.Handle;
+            var pWeights = weights.Handle;
+            var pOffsets = offsets.Handle;
+            var pMask = mask?.Handle ?? IntPtr.Zero;
+            var pOutput = output.Handle;
+            int hasMask = mask != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pMask, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pOutput, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+
+            var extraHandle = GCHandle.Alloc(hasMask, GCHandleType.Pinned);
+
+            var args = new IntPtr[23];
+            for (int i = 0; i < 22; i++) args[i] = handles[i].AddrOfPinnedObject();
+            args[22] = extraHandle.AddrOfPinnedObject();
+
+            // Grid dimensions: outWidth x outHeight x (batch * outChannels)
+            uint gridX = (uint)((outWidth + 15) / 16);
+            uint gridY = (uint)((outHeight + 15) / 16);
+            uint gridZ = (uint)(batch * outChannels);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+
+            extraHandle.Free();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void DeformableConv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d_backward_input", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d_backward_input");
+
+        var handles = new GCHandle[22];
+        try
+        {
+            var pGradOutput = gradOutput.Handle;
+            var pWeights = weights.Handle;
+            var pOffsets = offsets.Handle;
+            var pMask = mask?.Handle ?? IntPtr.Zero;
+            var pGradInput = gradInput.Handle;
+            int hasMask = mask != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pGradOutput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pMask, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pGradInput, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+
+            var extraHandle = GCHandle.Alloc(hasMask, GCHandleType.Pinned);
+
+            var args = new IntPtr[23];
+            for (int i = 0; i < 22; i++) args[i] = handles[i].AddrOfPinnedObject();
+            args[22] = extraHandle.AddrOfPinnedObject();
+
+            int totalInputSize = batch * inChannels * inHeight * inWidth;
+            uint grid = (uint)((totalInputSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+
+            extraHandle.Free();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void DeformableConv2DBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradWeights,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d_backward_weights", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d_backward_weights");
+
+        var handles = new GCHandle[22];
+        try
+        {
+            var pGradOutput = gradOutput.Handle;
+            var pInput = input.Handle;
+            var pOffsets = offsets.Handle;
+            var pMask = mask?.Handle ?? IntPtr.Zero;
+            var pGradWeights = gradWeights.Handle;
+            int hasMask = mask != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pGradOutput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pMask, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pGradWeights, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+
+            var extraHandle = GCHandle.Alloc(hasMask, GCHandleType.Pinned);
+
+            var args = new IntPtr[23];
+            for (int i = 0; i < 22; i++) args[i] = handles[i].AddrOfPinnedObject();
+            args[22] = extraHandle.AddrOfPinnedObject();
+
+            int inChannelsPerGroup = inChannels / groups;
+            int totalWeights = outChannels * inChannelsPerGroup * kernelH * kernelW;
+            uint grid = (uint)((totalWeights + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+
+            extraHandle.Free();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void DeformableConv2DBackwardOffset(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradOffsets,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d_backward_offset", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d_backward_offset");
+
+        var handles = new GCHandle[24];
+        try
+        {
+            var pGradOutput = gradOutput.Handle;
+            var pInput = input.Handle;
+            var pWeights = weights.Handle;
+            var pOffsets = offsets.Handle;
+            var pMask = mask?.Handle ?? IntPtr.Zero;
+            var pGradOffsets = gradOffsets.Handle;
+            int hasMask = mask != null ? 1 : 0;
+
+            handles[0] = GCHandle.Alloc(pGradOutput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pMask, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(pGradOffsets, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[22] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+            handles[23] = GCHandle.Alloc(hasMask, GCHandleType.Pinned);
+
+            var args = new IntPtr[24];
+            for (int i = 0; i < 24; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            // Grid for offset gradients: outWidth x outHeight x (batch * 2*kH*kW*deformGroups)
+            int offsetChannels = 2 * kernelH * kernelW * deformGroups;
+            uint gridX = (uint)((outWidth + 15) / 16);
+            uint gridY = (uint)((outHeight + 15) / 16);
+            uint gridZ = (uint)(batch * offsetChannels);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void DeformableConv2DBackwardMask(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer gradMask,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+    {
+        if (!_kernelCache.TryGetValue("deformable_conv2d_backward_mask", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: deformable_conv2d_backward_mask");
+
+        var handles = new GCHandle[23];
+        try
+        {
+            var pGradOutput = gradOutput.Handle;
+            var pInput = input.Handle;
+            var pWeights = weights.Handle;
+            var pOffsets = offsets.Handle;
+            var pGradMask = gradMask.Handle;
+
+            handles[0] = GCHandle.Alloc(pGradOutput, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(pInput, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(pWeights, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(pOffsets, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(pGradMask, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inChannels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outChannels, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(kernelH, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(kernelW, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(strideH, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(strideW, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(padH, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(padW, GCHandleType.Pinned);
+            handles[18] = GCHandle.Alloc(dilationH, GCHandleType.Pinned);
+            handles[19] = GCHandle.Alloc(dilationW, GCHandleType.Pinned);
+            handles[20] = GCHandle.Alloc(groups, GCHandleType.Pinned);
+            handles[21] = GCHandle.Alloc(deformGroups, GCHandleType.Pinned);
+
+            var args = new IntPtr[22];
+            for (int i = 0; i < 22; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            // Grid for mask gradients: outWidth x outHeight x (batch * kH*kW*deformGroups)
+            int maskChannels = kernelH * kernelW * deformGroups;
+            uint gridX = (uint)((outWidth + 15) / 16);
+            uint gridY = (uint)((outHeight + 15) / 16);
+            uint gridZ = (uint)(batch * maskChannels);
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    #endregion
 
     #endregion
 
@@ -4666,6 +5338,35 @@ public sealed class HipBackend : IAsyncGpuBackend
         {
             foreach (var h in handles) if (h.IsAllocated) h.Free();
         }
+    }
+
+    public void TopK(IGpuBuffer A, IGpuBuffer values, IGpuBuffer indices, int outerSize, int reduceSize, int k, bool sorted = true)
+    {
+        // TODO: Implement HIP TopK kernel
+        throw new NotImplementedException("TopK kernel not yet implemented for HIP backend.");
+    }
+
+    public void AffineGrid(IGpuBuffer theta, IGpuBuffer grid, int batch, int outputHeight, int outputWidth)
+    {
+        // TODO: Implement HIP AffineGrid kernel
+        throw new NotImplementedException("AffineGrid kernel not yet implemented for HIP backend.");
+    }
+
+    public void GridSample(IGpuBuffer input, IGpuBuffer grid, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
+        int paddingMode = 0, bool alignCorners = false)
+    {
+        // TODO: Implement HIP GridSample kernel
+        throw new NotImplementedException("GridSample kernel not yet implemented for HIP backend.");
+    }
+
+    public void GridSampleBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer grid,
+        IGpuBuffer gradInput, IGpuBuffer gradGrid,
+        int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
+        int paddingMode = 0, bool alignCorners = false)
+    {
+        // TODO: Implement HIP GridSampleBackward kernel
+        throw new NotImplementedException("GridSampleBackward kernel not yet implemented for HIP backend.");
     }
 
     public unsafe void BroadcastMultiplyLastAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)
@@ -5911,6 +6612,42 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    public void Copy(IGpuBuffer source, int sourceOffset, IGpuBuffer destination, int destinationOffset, int length)
+    {
+        throw new NotImplementedException("Strided copy not implemented for HIP backend yet.");
+    }
+
+    public void ArgMaxAxis(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("ArgMaxAxis not implemented for HIP backend yet.");
+    }
+
+    public void GenerateRandomUniform(IGpuBuffer output, int size, float min, float max, ulong seed)
+    {
+        throw new NotImplementedException("GenerateRandomUniform not implemented for HIP backend yet.");
+    }
+
+    public void GenerateRandomNormal(IGpuBuffer output, int size, float mean, float stdDev, ulong seed)
+    {
+        throw new NotImplementedException("GenerateRandomNormal not implemented for HIP backend yet.");
+    }
+
+    public void RbfForward(IGpuBuffer input, IGpuBuffer centers, IGpuBuffer epsilons, IGpuBuffer output, int batchSize, int numCenters, int inputDim)
+    {
+        throw new NotImplementedException("RbfForward not implemented for HIP backend yet.");
+    }
+
+    public void StdpUpdate(IGpuBuffer weights, IGpuBuffer preTrace, IGpuBuffer postTrace, IGpuBuffer preSpike, IGpuBuffer postSpike,
+        float ltpRate, float ltdRate, float homeostasisRate, float minWeight, float maxWeight, int numPre, int numPost)
+    {
+        throw new NotImplementedException("StdpUpdate not implemented for HIP backend yet.");
+    }
+
+    public void UpdateTraces(IGpuBuffer traces, IGpuBuffer spikes, IGpuBuffer input, float decay, float threshold, int size)
+    {
+        throw new NotImplementedException("UpdateTraces not implemented for HIP backend yet.");
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -5964,6 +6701,16 @@ public sealed class HipBackend : IAsyncGpuBackend
         {
             HipNativeBindings.hipModuleUnload(_fftModule);
             _fftModule = IntPtr.Zero;
+        }
+        if (_locallyConnectedModule != IntPtr.Zero)
+        {
+            HipNativeBindings.hipModuleUnload(_locallyConnectedModule);
+            _locallyConnectedModule = IntPtr.Zero;
+        }
+        if (_deformableConvModule != IntPtr.Zero)
+        {
+            HipNativeBindings.hipModuleUnload(_deformableConvModule);
+            _deformableConvModule = IntPtr.Zero;
         }
 
         if (_stream != IntPtr.Zero)

@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 public enum SpatialTransformerDataFormat
@@ -1452,6 +1455,188 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         return diagnostics;
     }
+
+    #region GPU Execution
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors by applying spatial transformation.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs (uses first input).</param>
+    /// <returns>GPU tensor output after spatial transformation.</returns>
+    /// <remarks>
+    /// <para>
+    /// The GPU forward pass:
+    /// 1. Downloads input for localization network processing (uses GPU-accelerated engine operations)
+    /// 2. Computes transformation parameters via localization network
+    /// 3. Generates sampling grid using AffineGrid (GPU)
+    /// 4. Samples from input using GridSample (GPU)
+    /// 5. Uploads result back to GPU
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var inputGpu = inputs[0];
+
+        // Step 1: Preprocess input to NHWC format (CPU for shape handling, then upload)
+        // Input shape handling requires dynamic shape analysis - do on CPU, upload result
+        var inputTensor = inputGpu.ToTensor();
+        _originalInputShape = inputTensor.Shape;
+        int rank = inputTensor.Shape.Length;
+
+        if (rank < 2)
+            throw new ArgumentException("SpatialTransformerLayer expects at least 2D input [height, width].", nameof(inputs));
+
+        _inputHadChannel = false;
+        int channelCount = 1;
+        int heightIndex = rank - 2;
+        int widthIndex = rank - 1;
+        bool channelFirst = false;
+
+        if (rank >= 3)
+        {
+            switch (_dataFormat)
+            {
+                case SpatialTransformerDataFormat.ChannelsFirst:
+                    channelFirst = true;
+                    _inputHadChannel = true;
+                    channelCount = inputTensor.Shape[rank - 3];
+                    break;
+                case SpatialTransformerDataFormat.ChannelsLast:
+                    _inputHadChannel = true;
+                    channelCount = inputTensor.Shape[rank - 1];
+                    break;
+                default:
+                    bool matchesChannelsLast = inputTensor.Shape[rank - 2] == _inputWidth && inputTensor.Shape[rank - 3] == _inputHeight;
+                    bool matchesChannelsFirst = inputTensor.Shape[rank - 1] == _inputWidth && inputTensor.Shape[rank - 2] == _inputHeight;
+                    if (matchesChannelsLast || (!matchesChannelsLast && !matchesChannelsFirst))
+                    {
+                        _inputHadChannel = true;
+                        channelCount = inputTensor.Shape[rank - 1];
+                    }
+                    else if (matchesChannelsFirst)
+                    {
+                        channelFirst = true;
+                        _inputHadChannel = true;
+                        channelCount = inputTensor.Shape[rank - 3];
+                    }
+                    break;
+            }
+        }
+        _inputChannelFirst = channelFirst;
+
+        int batchDims = rank - (_inputHadChannel ? 3 : 2);
+        int flatBatch = 1;
+        for (int d = 0; d < batchDims; d++)
+            flatBatch *= inputTensor.Shape[d];
+
+        // Convert to NHWC format
+        Tensor<T> inputNHWC;
+        if (_inputHadChannel)
+        {
+            if (channelFirst)
+            {
+                var inputNCHW = inputTensor.Reshape([flatBatch, channelCount, _inputHeight, _inputWidth]);
+                inputNHWC = inputNCHW.Transpose([0, 2, 3, 1]);
+            }
+            else
+            {
+                inputNHWC = inputTensor.Reshape([flatBatch, _inputHeight, _inputWidth, channelCount]);
+            }
+        }
+        else
+        {
+            inputNHWC = inputTensor.Reshape([flatBatch, _inputHeight, _inputWidth, 1]);
+        }
+
+        // Upload NHWC input to GPU for grid sampling
+        var inputNHWCGpu = gpuEngine.UploadToGpu(inputNHWC, GpuTensorRole.Activation);
+
+        // Step 2: Prepare flattened input for localization network (GPU-resident)
+        // Reduce channel dimension and flatten for FC layers
+        var channelSum = Engine.ReduceSum(inputNHWC, new[] { 3 }, keepDims: false);
+        var channelMean = Engine.TensorDivideScalar(channelSum, NumOps.FromDouble(channelCount));
+        var flattenedInput = channelMean.Reshape([flatBatch, _inputHeight * _inputWidth]);
+
+        // Upload flattened input for localization network
+        var flattenedGpu = gpuEngine.UploadToGpu(flattenedInput, GpuTensorRole.Activation);
+
+        // Step 3: Localization network on GPU (GPU-resident compute)
+        // FC1: matmul + bias + activation (using FusedLinearGpu)
+        var activationType = MapActivationToFused();
+        var localization1Gpu = gpuEngine.FusedLinearGpu(flattenedGpu, _localizationWeights1, _localizationBias1, activationType);
+
+        // FC2: matmul + bias (no activation, outputs transformation params)
+        var transformParamsGpu = gpuEngine.FusedLinearGpu(localization1Gpu, _localizationWeights2, _localizationBias2, FusedActivationType.None);
+
+        // Step 4: Reshape to theta [batch, 2, 3] for affine transformation
+        var thetaGpu = gpuEngine.ReshapeGpu(transformParamsGpu, [flatBatch, 2, 3]);
+
+        // Step 5: Generate affine sampling grid on GPU (GPU-resident)
+        var gridGpu = gpuEngine.AffineGridGpu(thetaGpu, flatBatch, _outputHeight, _outputWidth);
+
+        // Step 6: Sample from input using grid (GPU-resident)
+        var outputNHWCGpu = gpuEngine.GridSampleGpu(inputNHWCGpu, gridGpu, paddingMode: 0, alignCorners: false);
+
+        // Step 7: Convert output back to original format
+        // Download for shape handling (output format conversion)
+        var outputNHWC = outputNHWCGpu.ToTensor();
+
+        Tensor<T> outputTensor;
+        if (_inputHadChannel)
+        {
+            Tensor<T> outputForReshape = _inputChannelFirst
+                ? outputNHWC.Transpose([0, 3, 1, 2])
+                : outputNHWC;
+
+            var outShape = new int[batchDims + 3];
+            for (int d = 0; d < batchDims; d++)
+                outShape[d] = _originalInputShape[d];
+            if (_inputChannelFirst)
+            {
+                outShape[batchDims] = channelCount;
+                outShape[batchDims + 1] = _outputHeight;
+                outShape[batchDims + 2] = _outputWidth;
+            }
+            else
+            {
+                outShape[batchDims] = _outputHeight;
+                outShape[batchDims + 1] = _outputWidth;
+                outShape[batchDims + 2] = channelCount;
+            }
+            outputTensor = outputForReshape.Reshape(outShape);
+        }
+        else
+        {
+            var outShape = new int[batchDims + 2];
+            for (int d = 0; d < batchDims; d++)
+                outShape[d] = _originalInputShape[d];
+            outShape[batchDims] = _outputHeight;
+            outShape[batchDims + 1] = _outputWidth;
+            outputTensor = outputNHWC.Reshape([flatBatch, _outputHeight, _outputWidth])
+                                     .Reshape(outShape);
+        }
+
+        // Cache for backward pass (training mode only)
+        if (IsTrainingMode)
+        {
+            _lastInput = inputNHWC;
+            _lastFlattenedInput = flattenedInput;
+            _lastLocalization1 = localization1Gpu.ToTensor();
+            _lastTransformationMatrix = thetaGpu.ToTensor();
+            _lastOutput = outputNHWC;
+        }
+
+        // Upload final output to GPU
+        return gpuEngine.UploadToGpu(outputTensor, GpuTensorRole.Activation);
+    }
+
+    #endregion
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {

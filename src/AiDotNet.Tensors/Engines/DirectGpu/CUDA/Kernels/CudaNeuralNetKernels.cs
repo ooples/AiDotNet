@@ -790,6 +790,161 @@ extern ""C"" __global__ void permute_general(
 
     output[outIdx] = input[inputIdx];
 }
+
+// ===========================================================================
+// SPECIALIZED LAYER KERNELS (RBF, Spiking NN)
+// ===========================================================================
+
+extern ""C"" __global__ void rbf_forward(
+    const float* input, const float* centers, const float* epsilons, float* output,
+    int batchSize, int numCenters, int inputDim)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = batchSize * numCenters;
+    if (idx >= total) return;
+
+    int centerIdx = idx % numCenters;
+    int batchIdx = idx / numCenters;
+
+    float distSq = 0.0f;
+    for (int d = 0; d < inputDim; d++) {
+        float diff = input[batchIdx * inputDim + d] - centers[centerIdx * inputDim + d];
+        distSq += diff * diff;
+    }
+
+    output[idx] = expf(-epsilons[centerIdx] * distSq);
+}
+
+extern ""C"" __global__ void stdp_update(
+    float* weights, const float* preTrace, const float* postTrace,
+    const float* preSpike, const float* postSpike,
+    float ltpRate, float ltdRate, float homeostasisRate,
+    float minWeight, float maxWeight, int numPre, int numPost)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = numPre * numPost;
+    if (idx >= total) return;
+
+    int postIdx = idx % numPost;
+    int preIdx = idx / numPost;
+
+    float w = weights[idx];
+    float deltaW = 0.0f;
+
+    // LTP: Pre-synaptic trace * Post-synaptic spike
+    if (postSpike[postIdx] > 0.0f) {
+        deltaW += ltpRate * preTrace[preIdx];
+    }
+
+    // LTD: Post-synaptic trace * Pre-synaptic spike
+    if (preSpike[preIdx] > 0.0f) {
+        deltaW -= ltdRate * postTrace[postIdx];
+    }
+
+    // Homeostasis
+    deltaW -= homeostasisRate * w * (postSpike[postIdx] > 0.0f ? 1.0f : 0.0f);
+
+    w += deltaW;
+    w = fmaxf(minWeight, fminf(maxWeight, w));
+    weights[idx] = w;
+}
+
+extern ""C"" __global__ void update_traces(
+    float* traces, const float* spikes, const float* input,
+    float decay, float threshold, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float spike = spikes[idx] > threshold ? 1.0f : 0.0f;
+    // Simple trace update: trace = trace * decay + spike
+    traces[idx] = traces[idx] * decay + spike;
+}
+
+extern ""C"" __global__ void sgd_momentum_update(
+    float* param, const float* gradient, float* velocity,
+    float learningRate, float momentum, float weightDecay, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float v = momentum * velocity[idx] + grad;
+    velocity[idx] = v;
+    param[idx] -= learningRate * v;
+}
+
+// ===========================================================================
+// RANDOM NUMBER GENERATION (Simple LCG)
+// ===========================================================================
+
+// PCG32 implementation for better quality than LCG
+__device__ uint pcg32_random(ulong* state, ulong* inc)
+{
+    ulong oldstate = *state;
+    // Advance internal state
+    *state = oldstate * 6364136223846793005ULL + (*inc | 1);
+    // Calculate output function (XSH-RR), uses old state for max ILP
+    uint xorshifted = (uint)(((oldstate >> 18) ^ oldstate) >> 27);
+    uint rot = (uint)(oldstate >> 59);
+    return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+}
+
+extern ""C"" __global__ void generate_random_uniform(
+    float* output, int size, float min, float max, ulong seed)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    // Seeding: use global seed + index to ensure different stream per thread
+    ulong state = seed + (ulong)idx;
+    ulong inc = (ulong)idx; 
+    
+    // Warm up
+    pcg32_random(&state, &inc);
+    
+    uint rnd = pcg32_random(&state, &inc);
+    
+    // Convert to [0, 1) float
+    float r = (float)rnd / 4294967296.0f;
+    
+    output[idx] = min + r * (max - min);
+}
+
+extern ""C"" __global__ void generate_random_normal(
+    float* output, int size, float mean, float stdDev, ulong seed)
+{
+    // Box-Muller transform generates 2 numbers
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int pairIdx = idx * 2;
+    if (pairIdx >= size) return;
+
+    ulong state = seed + (ulong)idx;
+    ulong inc = (ulong)idx; 
+    pcg32_random(&state, &inc);
+
+    uint u1_int = pcg32_random(&state, &inc);
+    uint u2_int = pcg32_random(&state, &inc);
+
+    float u1 = (float)u1_int / 4294967296.0f;
+    float u2 = (float)u2_int / 4294967296.0f;
+    
+    // Avoid log(0)
+    if (u1 < 1e-7f) u1 = 1e-7f;
+
+    float mag = stdDev * sqrtf(-2.0f * logf(u1));
+    float z0 = mag * cosf(2.0f * 3.14159265f * u2) + mean;
+    float z1 = mag * sinf(2.0f * 3.14159265f * u2) + mean;
+
+    output[pairIdx] = z0;
+    if (pairIdx + 1 < size) {
+        output[pairIdx + 1] = z1;
+    }
+}
 ";
         }
 
@@ -850,6 +1005,7 @@ extern ""C"" __global__ void permute_general(
                 "tile_axis",
                 // Optimizers
                 "sgd_step",
+                "sgd_momentum_update",
                 "adam_step",
                 "adamw_step",
                 // Dropout and embedding
@@ -860,7 +1016,13 @@ extern ""C"" __global__ void permute_general(
                 // Transpose
                 "transpose_2d",
                 "batched_transpose",
-                "permute_general"
+                "permute_general",
+                // Specialized
+                "rbf_forward",
+                "stdp_update",
+                "update_traces",
+                "generate_random_uniform",
+                "generate_random_normal"
             };
         }
     }

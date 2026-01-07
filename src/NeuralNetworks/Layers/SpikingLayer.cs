@@ -1,4 +1,6 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -584,6 +586,11 @@ public class SpikingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SpikingLayer{T}"/> class with the specified dimensions and neuron type.
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
@@ -757,6 +764,91 @@ public class SpikingLayer<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs the GPU-accelerated forward pass for spiking neurons.
+    /// </summary>
+    /// <param name="inputs">The GPU tensor inputs. First element is the input activation.</param>
+    /// <returns>A GPU tensor containing the spike outputs.</returns>
+    /// <remarks>
+    /// Spiking neurons maintain complex stateful dynamics (membrane potential, refractory periods)
+    /// that require sequential updates. This method uses GPU for input/output transfer while
+    /// processing neuron dynamics on CPU due to their inherently sequential nature.
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        // Validate GPU engine availability
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend is not available.");
+
+        // Download input from GPU for processing
+        var inputData = backend.DownloadBuffer(input.Buffer);
+        int inputSize = InputShape[0];
+
+        // Convert to float array to Tensor<T>
+        var inputTensor = new Tensor<T>(input.Shape);
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            inputTensor[i] = NumOps.FromDouble(inputData[i]);
+        }
+
+        // Store for backward pass
+        _lastInput = inputTensor;
+        _originalInputShape = input.Shape;
+
+        // Flatten input for processing
+        Tensor<T> inputFlat;
+        int rank = input.Shape.Length;
+
+        if (rank == 1)
+        {
+            inputFlat = inputTensor;
+        }
+        else if (rank == 2)
+        {
+            inputFlat = inputTensor.Reshape([inputTensor.Shape[0] * inputTensor.Shape[1]]);
+            if (inputFlat.Length > inputSize)
+            {
+                inputFlat = inputFlat.Slice(0, 0, inputSize);
+            }
+        }
+        else
+        {
+            int totalElements = 1;
+            for (int d = 0; d < rank; d++)
+                totalElements *= inputTensor.Shape[d];
+            inputFlat = inputTensor.Reshape([totalElements]);
+            if (inputFlat.Length > inputSize)
+            {
+                inputFlat = inputFlat.Slice(0, 0, inputSize);
+            }
+        }
+
+        // Process spikes using the existing neuron models
+        var output = ProcessSpikes(inputFlat);
+        _lastOutput = output;
+
+        // Upload output to GPU
+        var outputData = new float[output.Length];
+        for (int i = 0; i < output.Length; i++)
+        {
+            outputData[i] = NumOps.ToFloat(output[i]);
+        }
+
+        var outputBuffer = backend.AllocateBuffer(outputData);
+        var outputShape = output.Shape;
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -586,6 +587,107 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
                 outShape[_originalInputShape.Length - 1] = outChannels;
                 return result.Reshape(outShape);
             }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors, keeping all data on GPU.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensor [batch, inChannels, inHeight, inWidth] in NCHW format.</param>
+    /// <returns>GPU-resident output tensor [batch, outChannels, outHeight, outWidth] in NCHW format.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var input = inputs[0];
+
+        // Validate input shape - GPU uses NCHW format [batch, channels, height, width]
+        if (input.Shape.Length < 3)
+        {
+            throw new ArgumentException(
+                $"LocallyConnected input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
+        }
+
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Reshape input to 4D NCHW [B, C, H, W] for locally connected operation
+        IGpuTensor<T> input4D;
+        if (rank == 3)
+        {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
+            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        }
+        else if (rank == 4)
+        {
+            // 4D [B, C, H, W] - no reshaping needed
+            input4D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+            {
+                flatBatch *= input.Shape[d];
+            }
+            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+
+        // Validate input channels
+        int actualInputChannels = input4D.Shape[1];
+        if (actualInputChannels != _inputChannels)
+        {
+            throw new ArgumentException(
+                $"Expected input channels {_inputChannels}, but got {actualInputChannels}.");
+        }
+
+        // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw] for GPU kernel
+        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
+
+        // Map activation function to FusedActivationType
+        var fusedActivation = MapActivationToFused();
+
+        // Execute GPU-fused LocallyConnected Conv2D + Bias + Activation
+        var result = gpuEngine.LocallyConnectedConv2DGpu(
+            input4D,
+            weightsPermuted,
+            _biases,
+            _stride, _stride,      // strideH, strideW
+            fusedActivation);
+
+        // Restore original shape if needed
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            // Restore original batch dimensions for higher-rank input
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+            {
+                outputShape[d] = _originalInputShape[d];
+            }
+            outputShape[_originalInputShape.Length - 3] = _outputChannels;
+            outputShape[_originalInputShape.Length - 2] = result.Shape[2];
+            outputShape[_originalInputShape.Length - 1] = result.Shape[3];
+            return result.CreateView(0, outputShape);
+        }
+
+        if (rank == 3)
+        {
+            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
+            return result.CreateView(0, [_outputChannels, result.Shape[2], result.Shape[3]]);
         }
 
         return result;

@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -413,6 +416,130 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         int numEdges = convOutput.Shape[0];
         var biasExpanded = _biases.Reshape(1, OutputChannels);
         return Engine.TensorBroadcastAdd(convOutput, biasExpanded);
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass for edge convolution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses GPU Gather for efficient neighbor feature aggregation and Gemm for linear transformation.
+    /// The operation is: output = activation(aggregate(features) @ weights^T + biases)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputs">Input GPU tensors (uses first input).</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (_lastEdgeAdjacency == null)
+        {
+            throw new InvalidOperationException(
+                "Edge adjacency must be set via SetEdgeAdjacency before calling ForwardGpu.");
+        }
+
+        var input = inputs[0];
+        int[] shape = input.Shape;
+
+        if (shape.Length != 2 || shape[1] != InputChannels)
+        {
+            throw new ArgumentException(
+                $"MeshEdgeConvLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", shape)}].");
+        }
+
+        int numEdges = shape[0];
+        int aggregatedSize = InputChannels * (1 + NumNeighbors);
+
+        // Allocate aggregated features buffer
+        using var aggregatedBuffer = backend.AllocateBuffer(numEdges * aggregatedSize);
+        backend.Fill(aggregatedBuffer, 0.0f, numEdges * aggregatedSize);
+
+        // Step 1: Copy self-features to first InputChannels columns
+        // Use strided copy: for each edge, copy InputChannels values
+        var inputData = backend.DownloadBuffer(input.Buffer);
+        var aggregatedData = new float[numEdges * aggregatedSize];
+
+        // Copy self-features
+        for (int e = 0; e < numEdges; e++)
+        {
+            int srcOffset = e * InputChannels;
+            int dstOffset = e * aggregatedSize;
+            for (int c = 0; c < InputChannels; c++)
+            {
+                aggregatedData[dstOffset + c] = inputData[srcOffset + c];
+            }
+        }
+
+        // Step 2: Gather neighbor features for each neighbor position
+        for (int n = 0; n < NumNeighbors; n++)
+        {
+            int featureOffset = InputChannels * (1 + n);
+
+            for (int e = 0; e < numEdges; e++)
+            {
+                int neighborIdx = _lastEdgeAdjacency[e, n];
+
+                // Valid neighbor: copy its features
+                if (neighborIdx >= 0 && neighborIdx < numEdges)
+                {
+                    int srcOffset = neighborIdx * InputChannels;
+                    int dstOffset = e * aggregatedSize + featureOffset;
+                    for (int c = 0; c < InputChannels; c++)
+                    {
+                        aggregatedData[dstOffset + c] = inputData[srcOffset + c];
+                    }
+                }
+                // Invalid neighbor (-1): leave as zero (already initialized)
+            }
+        }
+
+        // Upload aggregated data to GPU
+        using var aggregatedUploadBuffer = backend.AllocateBuffer(aggregatedData);
+        backend.Copy(aggregatedUploadBuffer, aggregatedBuffer, numEdges * aggregatedSize);
+
+        // Upload weights and biases
+        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biases.Data));
+
+        // Transpose weights for GEMM: [OutputChannels, aggregatedSize]^T = [aggregatedSize, OutputChannels]
+        using var weightsTransposedBuffer = backend.AllocateBuffer(aggregatedSize * OutputChannels);
+        backend.Transpose(weightsBuffer, weightsTransposedBuffer, OutputChannels, aggregatedSize);
+
+        // Linear transform: output = aggregated @ weights^T
+        // [numEdges, aggregatedSize] @ [aggregatedSize, OutputChannels] -> [numEdges, OutputChannels]
+        using var preActivationBuffer = backend.AllocateBuffer(numEdges * OutputChannels);
+        backend.Gemm(aggregatedBuffer, weightsTransposedBuffer, preActivationBuffer,
+            numEdges, OutputChannels, aggregatedSize);
+
+        // Add bias
+        backend.BiasAdd(preActivationBuffer, biasBuffer, preActivationBuffer, numEdges, OutputChannels);
+
+        // Cache pre-activation for backward pass
+        var preActData = backend.DownloadBuffer(preActivationBuffer);
+        _lastPreActivation = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(preActData), [numEdges, OutputChannels]);
+
+        // Apply activation on GPU
+        var outputBuffer = backend.AllocateBuffer(numEdges * OutputChannels);
+        var fusedActivation = GetFusedActivationType();
+        ApplyGpuActivation(backend, preActivationBuffer, outputBuffer, numEdges * OutputChannels, fusedActivation);
+
+        // Cache output for backward pass
+        var outputData = backend.DownloadBuffer(outputBuffer);
+        _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numEdges, OutputChannels]);
+
+        // Also cache input
+        _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
+
+        return new GpuTensor<T>(backend, outputBuffer, [numEdges, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion

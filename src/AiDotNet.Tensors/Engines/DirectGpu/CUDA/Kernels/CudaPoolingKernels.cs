@@ -231,6 +231,175 @@ extern ""C"" __global__ void adaptive_avgpool2d(
 
     output[((b * channels + c) * outHeight + oh) * outWidth + ow] = sum / (float)max(count, 1);
 }
+
+// ===========================================================================
+// 3D POOLING KERNELS
+// ===========================================================================
+
+// Max Pooling 3D with optional indices for backward pass
+// Input layout: NCDHW (batch, channels, depth, height, width)
+extern ""C"" __global__ void maxpool3d(
+    const float* input, float* output, int* indices,
+    int batch, int channels,
+    int inDepth, int inHeight, int inWidth,
+    int outDepth, int outHeight, int outWidth,
+    int kernelD, int kernelH, int kernelW,
+    int strideD, int strideH, int strideW,
+    int saveIndices)
+{
+    // Thread maps to (ow, oh) with grid z for (batch * channels * outDepth)
+    int ow = blockIdx.x * blockDim.x + threadIdx.x;
+    int oh = blockIdx.y * blockDim.y + threadIdx.y;
+    int linear_z = blockIdx.z;
+
+    int od = linear_z % outDepth;
+    int c = (linear_z / outDepth) % channels;
+    int b = linear_z / (outDepth * channels);
+
+    if (ow >= outWidth || oh >= outHeight || od >= outDepth || b >= batch) return;
+
+    float maxVal = -INFINITY;
+    int maxIdx = 0;
+
+    // Iterate over 3D kernel window
+    for (int kd = 0; kd < kernelD; kd++) {
+        int id = od * strideD + kd;
+        if (id >= inDepth) continue;
+
+        for (int kh = 0; kh < kernelH; kh++) {
+            int ih = oh * strideH + kh;
+            if (ih >= inHeight) continue;
+
+            for (int kw = 0; kw < kernelW; kw++) {
+                int iw = ow * strideW + kw;
+                if (iw >= inWidth) continue;
+
+                // NCDHW layout: ((b * C + c) * D + d) * H * W + h * W + w
+                int inputIdx = ((b * channels + c) * inDepth + id) * inHeight * inWidth
+                             + ih * inWidth + iw;
+                float val = input[inputIdx];
+
+                if (val > maxVal) {
+                    maxVal = val;
+                    // Store linear index within the spatial volume for this (b,c)
+                    maxIdx = id * inHeight * inWidth + ih * inWidth + iw;
+                }
+            }
+        }
+    }
+
+    // Output index: NCDHW layout
+    int outIdx = ((b * channels + c) * outDepth + od) * outHeight * outWidth
+               + oh * outWidth + ow;
+    output[outIdx] = maxVal;
+
+    if (saveIndices) {
+        indices[outIdx] = maxIdx;
+    }
+}
+
+// Max Pooling 3D backward pass
+extern ""C"" __global__ void maxpool3d_backward(
+    const float* gradOutput, const int* indices, float* gradInput,
+    int batch, int channels,
+    int inDepth, int inHeight, int inWidth,
+    int outDepth, int outHeight, int outWidth)
+{
+    int ow = blockIdx.x * blockDim.x + threadIdx.x;
+    int oh = blockIdx.y * blockDim.y + threadIdx.y;
+    int linear_z = blockIdx.z;
+
+    int od = linear_z % outDepth;
+    int c = (linear_z / outDepth) % channels;
+    int b = linear_z / (outDepth * channels);
+
+    if (ow >= outWidth || oh >= outHeight || od >= outDepth || b >= batch) return;
+
+    int outIdx = ((b * channels + c) * outDepth + od) * outHeight * outWidth
+               + oh * outWidth + ow;
+    float grad = gradOutput[outIdx];
+    int maxIdx = indices[outIdx];
+
+    // Decode maxIdx back to (id, ih, iw)
+    int spatialHW = inHeight * inWidth;
+    int id = maxIdx / spatialHW;
+    int rem = maxIdx % spatialHW;
+    int ih = rem / inWidth;
+    int iw = rem % inWidth;
+
+    int inputIdx = ((b * channels + c) * inDepth + id) * inHeight * inWidth
+                 + ih * inWidth + iw;
+    atomicAdd(&gradInput[inputIdx], grad);
+}
+
+// Nearest Neighbor Upsample 3D
+// Upsamples each spatial dimension by integer scale factors
+extern ""C"" __global__ void nearest_upsample3d(
+    const float* input, float* output,
+    int batch, int channels,
+    int inDepth, int inHeight, int inWidth,
+    int scaleD, int scaleH, int scaleW)
+{
+    int outDepth = inDepth * scaleD;
+    int outHeight = inHeight * scaleH;
+    int outWidth = inWidth * scaleW;
+
+    int ow = blockIdx.x * blockDim.x + threadIdx.x;
+    int oh = blockIdx.y * blockDim.y + threadIdx.y;
+    int linear_z = blockIdx.z;
+
+    int od = linear_z % outDepth;
+    int c = (linear_z / outDepth) % channels;
+    int b = linear_z / (outDepth * channels);
+
+    if (ow >= outWidth || oh >= outHeight || od >= outDepth || b >= batch) return;
+
+    // Map output coord to input coord (nearest neighbor)
+    int id = od / scaleD;
+    int ih = oh / scaleH;
+    int iw = ow / scaleW;
+
+    int inputIdx = ((b * channels + c) * inDepth + id) * inHeight * inWidth
+                 + ih * inWidth + iw;
+    int outIdx = ((b * channels + c) * outDepth + od) * outHeight * outWidth
+               + oh * outWidth + ow;
+
+    output[outIdx] = input[inputIdx];
+}
+
+// Nearest Neighbor Upsample 3D backward pass
+extern ""C"" __global__ void nearest_upsample3d_backward(
+    const float* gradOutput, float* gradInput,
+    int batch, int channels,
+    int inDepth, int inHeight, int inWidth,
+    int scaleD, int scaleH, int scaleW)
+{
+    int outDepth = inDepth * scaleD;
+    int outHeight = inHeight * scaleH;
+    int outWidth = inWidth * scaleW;
+
+    int ow = blockIdx.x * blockDim.x + threadIdx.x;
+    int oh = blockIdx.y * blockDim.y + threadIdx.y;
+    int linear_z = blockIdx.z;
+
+    int od = linear_z % outDepth;
+    int c = (linear_z / outDepth) % channels;
+    int b = linear_z / (outDepth * channels);
+
+    if (ow >= outWidth || oh >= outHeight || od >= outDepth || b >= batch) return;
+
+    // Map output coord to input coord
+    int id = od / scaleD;
+    int ih = oh / scaleH;
+    int iw = ow / scaleW;
+
+    int outIdx = ((b * channels + c) * outDepth + od) * outHeight * outWidth
+               + oh * outWidth + ow;
+    int inputIdx = ((b * channels + c) * inDepth + id) * inHeight * inWidth
+                 + ih * inWidth + iw;
+
+    atomicAdd(&gradInput[inputIdx], gradOutput[outIdx]);
+}
 ";
         }
 
@@ -244,7 +413,11 @@ extern ""C"" __global__ void adaptive_avgpool2d(
                 "avgpool2d_backward",
                 "global_avgpool2d",
                 "global_maxpool2d",
-                "adaptive_avgpool2d"
+                "adaptive_avgpool2d",
+                "maxpool3d",
+                "maxpool3d_backward",
+                "nearest_upsample3d",
+                "nearest_upsample3d_backward"
             };
         }
     }

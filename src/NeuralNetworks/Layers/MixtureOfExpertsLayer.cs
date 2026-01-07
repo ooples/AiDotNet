@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -1789,6 +1792,306 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
     }
 
+    #endregion
+
+    #region GPU Execution
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors by routing through experts.
+    /// All computations stay GPU-resident for maximum performance.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs (uses first input).</param>
+    /// <returns>GPU tensor output after routing through experts and combining outputs.</returns>
+    /// <remarks>
+    /// <para>
+    /// The GPU forward pass (all operations GPU-resident):
+    /// 1. Routes input through the router network (GPU)
+    /// 2. Applies softmax to get routing probabilities (GPU)
+    /// 3. Optionally applies Top-K selection (GPU)
+    /// 4. Passes input through each expert (GPU)
+    /// 5. Combines expert outputs using routing weights (GPU)
+    /// 6. Applies activation function (GPU)
+    /// Only downloads to CPU in training mode for gradient caching.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        int batchSize = input.Shape[0];
+        int numExperts = _experts.Count;
+
+        // Step 1: Route input through router to get logits (GPU-resident)
+        IGpuTensor<T> routingLogitsGpu;
+        if (_router is LayerBase<T> routerBase && routerBase.CanExecuteOnGpu)
+        {
+            routingLogitsGpu = routerBase.ForwardGpu(input);
+        }
+        else
+        {
+            // CPU fallback for router (uncommon path)
+            var cpuInput = input.ToTensor();
+            var cpuLogits = _router.Forward(cpuInput);
+            routingLogitsGpu = gpuEngine.UploadToGpu(cpuLogits, GpuTensorRole.Activation);
+        }
+
+        // Step 2: Apply softmax on GPU to get routing probabilities (GPU-resident)
+        var routingWeightsGpu = gpuEngine.SoftmaxGpu(routingLogitsGpu);
+
+        // Step 3: Apply Top-K selection on GPU if enabled
+        IGpuTensor<int>? topKIndicesGpu = null;
+        IGpuTensor<T>? topKValuesGpu = null;
+        int[]? topKIndicesFlat = null;
+
+        if (_topK > 0)
+        {
+            // GPU-resident Top-K selection
+            topKValuesGpu = gpuEngine.TopKGpu(routingWeightsGpu, _topK, out topKIndicesGpu, sorted: true);
+
+            // Renormalize top-K weights on GPU
+            var topKSumGpu = gpuEngine.SumAxisGpu(topKValuesGpu, 1); // [batchSize, 1]
+            topKValuesGpu = gpuEngine.DivideByBroadcastGpu(topKValuesGpu, topKSumGpu);
+
+            // Download indices ONCE - tiny data (~256 bytes for batch=32, topK=2)
+            // This is essential for MoE efficiency: run only selected experts, not all N
+            topKIndicesFlat = topKIndicesGpu.ToTensor().Data;
+
+            // Cache 2D array for backward pass in training mode
+            if (IsTrainingMode)
+            {
+                var topKIndicesCpu = new int[batchSize, _topK];
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int k = 0; k < _topK; k++)
+                    {
+                        topKIndicesCpu[b, k] = topKIndicesFlat[b * _topK + k];
+                    }
+                }
+                _lastTopKIndices = topKIndicesCpu;
+            }
+        }
+        else
+        {
+            _lastTopKIndices = null;
+        }
+
+        // Step 4: Process through each expert on GPU (GPU-resident)
+        var expertOutputsGpu = new List<IGpuTensor<T>>();
+
+        // Determine which experts are active using downloaded indices
+        HashSet<int> activeExperts = new HashSet<int>();
+        if (_topK > 0 && topKIndicesFlat != null)
+        {
+            // Only experts in top-K are active (sparse execution)
+            for (int i = 0; i < topKIndicesFlat.Length; i++)
+            {
+                activeExperts.Add(topKIndicesFlat[i]);
+            }
+        }
+        else
+        {
+            // All experts active (no Top-K)
+            for (int i = 0; i < numExperts; i++)
+                activeExperts.Add(i);
+        }
+
+        // Process each expert on GPU
+        for (int i = 0; i < numExperts; i++)
+        {
+            if (activeExperts.Contains(i))
+            {
+                IGpuTensor<T> expertOutput;
+                if (_experts[i] is LayerBase<T> expertBase && expertBase.CanExecuteOnGpu)
+                {
+                    expertOutput = expertBase.ForwardGpu(input);
+                }
+                else
+                {
+                    // CPU fallback for this expert
+                    var cpuInput = input.ToTensor();
+                    var cpuOutput = _experts[i].Forward(cpuInput);
+                    expertOutput = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+                }
+                expertOutputsGpu.Add(expertOutput);
+            }
+            else
+            {
+                // Create zero GPU tensor for inactive experts
+                int[] outputShape = new int[] { batchSize }.Concat(OutputShape).ToArray();
+                expertOutputsGpu.Add(gpuEngine.ZerosGpu<T>(outputShape));
+            }
+        }
+
+        // Step 5: Combine expert outputs using routing weights on GPU
+        // For Top-K: Use sparse weights from topKValuesGpu and pre-downloaded indices
+        // For dense routing: Use full routingWeightsGpu
+        IGpuTensor<T> combinedGpu;
+        if (_topK > 0 && topKValuesGpu != null && topKIndicesFlat != null)
+        {
+            combinedGpu = CombineExpertOutputsGpuSparse(
+                gpuEngine, expertOutputsGpu, topKValuesGpu, topKIndicesFlat, batchSize, numExperts);
+        }
+        else
+        {
+            combinedGpu = CombineExpertOutputsGpuDense(
+                gpuEngine, expertOutputsGpu, routingWeightsGpu, batchSize);
+        }
+
+        // Step 6: Apply activation function on GPU
+        var activationType = MapActivationToFused();
+        IGpuTensor<T> resultGpu;
+        if (activationType == FusedActivationType.ReLU)
+        {
+            resultGpu = gpuEngine.ReluGpu(combinedGpu);
+        }
+        else if (activationType == FusedActivationType.Tanh)
+        {
+            resultGpu = gpuEngine.TanhGpu(combinedGpu);
+        }
+        else
+        {
+            resultGpu = combinedGpu; // Identity or other activations
+        }
+
+        // Cache for backward pass (only in training mode - download to CPU)
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastRoutingLogits = routingLogitsGpu.ToTensor();
+            _lastRoutingWeights = routingWeightsGpu.ToTensor();
+            _lastPreActivation = combinedGpu.ToTensor();
+            _lastExpertOutputs = expertOutputsGpu.Select(e => e.ToTensor()).ToList();
+        }
+
+        return resultGpu;
+    }
+
+    /// <summary>
+    /// Combines expert outputs using sparse routing weights (Top-K) on GPU.
+    /// Uses pre-downloaded indices to avoid additional GPU-to-CPU transfers.
+    /// </summary>
+    private IGpuTensor<T> CombineExpertOutputsGpuSparse(
+        DirectGpuTensorEngine gpuEngine,
+        List<IGpuTensor<T>> expertOutputsGpu,
+        IGpuTensor<T> topKValuesGpu,
+        int[] topKIndicesFlat,
+        int batchSize,
+        int numExperts)
+    {
+        // For sparse routing, we need to iterate through top-K and accumulate weighted outputs
+        // topKValuesGpu: [batchSize, k] - normalized weights (GPU-resident)
+        // topKIndicesFlat: [batchSize * k] - pre-downloaded expert indices
+
+        // Get first expert output to determine output shape
+        int[] outputShape = expertOutputsGpu[0].Shape;
+
+        // Initialize combined output to zeros
+        var combinedGpu = gpuEngine.ZerosGpu<T>(outputShape);
+
+        // For each k position, weight the corresponding expert output and accumulate
+        // This is done by slicing and broadcasting on GPU
+        for (int k = 0; k < _topK; k++)
+        {
+            // Extract weight column k from GPU: [batchSize, 1]
+            var weightColumnGpu = gpuEngine.SliceColumnGpu(topKValuesGpu, k);
+
+            // For each expert that appears in this k position, add its weighted contribution
+            for (int expertIdx = 0; expertIdx < numExperts; expertIdx++)
+            {
+                // Check if this expert appears at position k for any batch item
+                // Using pre-downloaded indices (no additional GPU transfer)
+                bool expertUsedAtK = false;
+                for (int b = 0; b < batchSize; b++)
+                {
+                    if (topKIndicesFlat[b * _topK + k] == expertIdx)
+                    {
+                        expertUsedAtK = true;
+                        break;
+                    }
+                }
+
+                if (expertUsedAtK)
+                {
+                    // Multiply expert output by weight (GPU-resident), then accumulate
+                    var expertOutput = expertOutputsGpu[expertIdx];
+                    var weightedOutput = gpuEngine.BroadcastMultiplyColumnGpu(expertOutput, weightColumnGpu);
+                    combinedGpu = gpuEngine.AddGpu(combinedGpu, weightedOutput);
+                }
+            }
+        }
+
+        return combinedGpu;
+    }
+
+    /// <summary>
+    /// Combines expert outputs using dense routing weights on GPU.
+    /// </summary>
+    private IGpuTensor<T> CombineExpertOutputsGpuDense(
+        DirectGpuTensorEngine gpuEngine,
+        List<IGpuTensor<T>> expertOutputsGpu,
+        IGpuTensor<T> routingWeightsGpu,
+        int batchSize)
+    {
+        // For dense routing, combine all experts weighted by their routing weights
+        // routingWeightsGpu: [batchSize, numExperts]
+        // expertOutputsGpu[i]: [batchSize, outputDim...]
+
+        int numExperts = expertOutputsGpu.Count;
+        int[] outputShape = expertOutputsGpu[0].Shape;
+
+        // Initialize combined output to zeros
+        var combinedGpu = gpuEngine.ZerosGpu<T>(outputShape);
+
+        // For each expert, multiply by weight column and accumulate
+        for (int i = 0; i < numExperts; i++)
+        {
+            // Extract weight column i: [batchSize, 1]
+            var weightColumnGpu = gpuEngine.SliceColumnGpu(routingWeightsGpu, i);
+
+            // Multiply expert output by broadcast weight
+            var weightedOutput = gpuEngine.BroadcastMultiplyColumnGpu(expertOutputsGpu[i], weightColumnGpu);
+
+            // Accumulate
+            combinedGpu = gpuEngine.AddGpu(combinedGpu, weightedOutput);
+        }
+
+        return combinedGpu;
+    }
+
+    /// <summary>
+    /// Divides tensor A by broadcast of tensor B along axis 1.
+    /// A: [batchSize, features], B: [batchSize, 1] -> Result: A[i,j] / B[i,0]
+    /// </summary>
+    private IGpuTensor<T> DivideByBroadcastGpuHelper(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> a, IGpuTensor<T> b)
+    {
+        // For normalization: a / b where b is [batchSize, 1]
+        // We can compute 1/b then multiply
+        // But we need an inverse operation. For now, download, compute, upload
+        // TODO: Add InverseGpu or DivideGpu to DirectGpuTensorEngine
+        var aData = a.ToTensor();
+        var bData = b.ToTensor();
+
+        int batchSize = aData.Shape[0];
+        int features = aData.Shape[1];
+
+        var result = new Tensor<T>(aData.Shape);
+        for (int i = 0; i < batchSize; i++)
+        {
+            T divisor = bData[i, 0];
+            T safeDivisor = NumOps.GreaterThan(divisor, NumOps.Zero) ? divisor : NumOps.One;
+            for (int j = 0; j < features; j++)
+            {
+                result[i, j] = NumOps.Divide(aData[i, j], safeDivisor);
+            }
+        }
+
+        return gpuEngine.UploadToGpu(result, GpuTensorRole.Activation);
+    }
     #endregion
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

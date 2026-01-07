@@ -410,6 +410,98 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.ConvTranspose2D(input, kernel, output, batch, inChannels, inHeight, inWidth,
             outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW, outputPadH, outputPadW);
 
+    /// <inheritdoc/>
+    public virtual void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+        => Inner.LocallyConnectedConv2D(input, weights, bias, output, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW);
+
+    /// <inheritdoc/>
+    public virtual void LocallyConnectedConv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+        => Inner.LocallyConnectedConv2DBackwardInput(gradOutput, weights, gradInput, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW);
+
+    /// <inheritdoc/>
+    public virtual void LocallyConnectedConv2DBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW)
+        => Inner.LocallyConnectedConv2DBackwardWeights(gradOutput, input, gradWeights, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW);
+
+    /// <inheritdoc/>
+    public virtual void LocallyConnectedConv2DBackwardBias(IGpuBuffer gradOutput, IGpuBuffer gradBias,
+        int batch, int outChannels, int outHeight, int outWidth)
+        => Inner.LocallyConnectedConv2DBackwardBias(gradOutput, gradBias, batch, outChannels, outHeight, outWidth);
+
+    /// <inheritdoc/>
+    public virtual void DeformableConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+        => Inner.DeformableConv2D(input, weights, offsets, mask, output, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW,
+            dilationH, dilationW, groups, deformGroups);
+
+    /// <inheritdoc/>
+    public virtual void DeformableConv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+        => Inner.DeformableConv2DBackwardInput(gradOutput, weights, offsets, mask, gradInput, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW,
+            dilationH, dilationW, groups, deformGroups);
+
+    /// <inheritdoc/>
+    public virtual void DeformableConv2DBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradWeights,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+        => Inner.DeformableConv2DBackwardWeights(gradOutput, input, offsets, mask, gradWeights, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW,
+            dilationH, dilationW, groups, deformGroups);
+
+    /// <inheritdoc/>
+    public virtual void DeformableConv2DBackwardOffset(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer? mask, IGpuBuffer gradOffsets,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+        => Inner.DeformableConv2DBackwardOffset(gradOutput, input, weights, offsets, mask, gradOffsets, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW,
+            dilationH, dilationW, groups, deformGroups);
+
+    /// <inheritdoc/>
+    public virtual void DeformableConv2DBackwardMask(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer offsets, IGpuBuffer gradMask,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW,
+        int groups, int deformGroups)
+        => Inner.DeformableConv2DBackwardMask(gradOutput, input, weights, offsets, gradMask, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW,
+            dilationH, dilationW, groups, deformGroups);
+
     #endregion
 
     #region Pooling Operations
@@ -463,6 +555,59 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
         => Inner.AdaptiveAvgPool2D(input, output, batch, channels, inHeight, inWidth, outHeight, outWidth);
+
+    /// <inheritdoc/>
+    public virtual void MaxPool3D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int outDepth, int outHeight, int outWidth,
+        int kernelD, int kernelH, int kernelW,
+        int strideD, int strideH, int strideW)
+        => Inner.MaxPool3D(input, output, indices, batch, channels, inDepth, inHeight, inWidth,
+            outDepth, outHeight, outWidth, kernelD, kernelH, kernelW, strideD, strideH, strideW);
+
+    /// <inheritdoc/>
+    public virtual void MaxPool3DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int outDepth, int outHeight, int outWidth)
+        => Inner.MaxPool3DBackward(gradOutput, indices, gradInput, batch, channels,
+            inDepth, inHeight, inWidth, outDepth, outHeight, outWidth);
+
+    /// <inheritdoc/>
+    public virtual void NearestNeighborUpsample3D(IGpuBuffer input, IGpuBuffer output,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int scaleD, int scaleH, int scaleW)
+        => Inner.NearestNeighborUpsample3D(input, output, batch, channels, inDepth, inHeight, inWidth, scaleD, scaleH, scaleW);
+
+    /// <inheritdoc/>
+    public virtual void NearestNeighborUpsample3DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
+        int batch, int channels,
+        int inDepth, int inHeight, int inWidth,
+        int scaleD, int scaleH, int scaleW)
+        => Inner.NearestNeighborUpsample3DBackward(gradOutput, gradInput, batch, channels, inDepth, inHeight, inWidth, scaleD, scaleH, scaleW);
+
+    #endregion
+
+    #region Spatial Transformer Operations
+
+    /// <inheritdoc/>
+    public virtual void AffineGrid(IGpuBuffer theta, IGpuBuffer grid, int batch, int outputHeight, int outputWidth)
+        => Inner.AffineGrid(theta, grid, batch, outputHeight, outputWidth);
+
+    /// <inheritdoc/>
+    public virtual void GridSample(IGpuBuffer input, IGpuBuffer grid, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
+        int paddingMode = 0, bool alignCorners = false)
+        => Inner.GridSample(input, grid, output, batch, channels, inHeight, inWidth, outHeight, outWidth, paddingMode, alignCorners);
+
+    /// <inheritdoc/>
+    public virtual void GridSampleBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer grid,
+        IGpuBuffer gradInput, IGpuBuffer gradGrid,
+        int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
+        int paddingMode = 0, bool alignCorners = false)
+        => Inner.GridSampleBackward(gradOutput, input, grid, gradInput, gradGrid, batch, channels, inHeight, inWidth, outHeight, outWidth, paddingMode, alignCorners);
 
     #endregion
 
@@ -615,6 +760,10 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void Copy(IGpuBuffer source, IGpuBuffer destination, int size) => Inner.Copy(source, destination, size);
 
     /// <inheritdoc/>
+    public virtual void Copy(IGpuBuffer source, int sourceOffset, IGpuBuffer destination, int destinationOffset, int length)
+        => Inner.Copy(source, sourceOffset, destination, destinationOffset, length);
+
+    /// <inheritdoc/>
     public virtual void Copy2DStrided(IGpuBuffer source, IGpuBuffer destination, int numRows,
         int srcCols, int destTotalCols, int destColOffset)
         => Inner.Copy2DStrided(source, destination, numRows, srcCols, destTotalCols, destColOffset);
@@ -625,6 +774,35 @@ public class DelegatingGpuBackend : IDirectGpuBackend
 
     /// <inheritdoc/>
     public virtual void Fill(IGpuBuffer buffer, float value, int size) => Inner.Fill(buffer, value, size);
+
+    #endregion
+
+    #region Random Number Generation
+
+    /// <inheritdoc/>
+    public virtual void GenerateRandomUniform(IGpuBuffer output, int size, float min, float max, ulong seed)
+        => Inner.GenerateRandomUniform(output, size, min, max, seed);
+
+    /// <inheritdoc/>
+    public virtual void GenerateRandomNormal(IGpuBuffer output, int size, float mean, float stdDev, ulong seed)
+        => Inner.GenerateRandomNormal(output, size, mean, stdDev, seed);
+
+    #endregion
+
+    #region Specialized Layer Operations
+
+    /// <inheritdoc/>
+    public virtual void RbfForward(IGpuBuffer input, IGpuBuffer centers, IGpuBuffer epsilons, IGpuBuffer output, int batchSize, int numCenters, int inputDim)
+        => Inner.RbfForward(input, centers, epsilons, output, batchSize, numCenters, inputDim);
+
+    /// <inheritdoc/>
+    public virtual void StdpUpdate(IGpuBuffer weights, IGpuBuffer preTrace, IGpuBuffer postTrace, IGpuBuffer preSpike, IGpuBuffer postSpike,
+        float ltpRate, float ltdRate, float homeostasisRate, float minWeight, float maxWeight, int numPre, int numPost)
+        => Inner.StdpUpdate(weights, preTrace, postTrace, preSpike, postSpike, ltpRate, ltdRate, homeostasisRate, minWeight, maxWeight, numPre, numPost);
+
+    /// <inheritdoc/>
+    public virtual void UpdateTraces(IGpuBuffer traces, IGpuBuffer spikes, IGpuBuffer input, float decay, float threshold, int size)
+        => Inner.UpdateTraces(traces, spikes, input, decay, threshold, size);
 
     #endregion
 
@@ -801,12 +979,20 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.ArgMax(A, indices, outerSize, reduceSize);
 
     /// <inheritdoc/>
+    public virtual void ArgMaxAxis(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+        => Inner.ArgMaxAxis(A, indices, outerSize, reduceSize);
+
+    /// <inheritdoc/>
     public virtual void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
         => Inner.ArgMin(A, indices, outerSize, reduceSize);
 
     /// <inheritdoc/>
     public virtual void MaxAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
         => Inner.MaxAxis(A, B, outerSize, reduceSize);
+
+    /// <inheritdoc/>
+    public virtual void TopK(IGpuBuffer A, IGpuBuffer values, IGpuBuffer indices, int outerSize, int reduceSize, int k, bool sorted = true)
+        => Inner.TopK(A, values, indices, outerSize, reduceSize, k, sorted);
 
     /// <inheritdoc/>
     public virtual void BroadcastMultiplyLastAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)

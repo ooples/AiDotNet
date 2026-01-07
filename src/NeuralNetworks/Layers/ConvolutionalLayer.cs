@@ -1034,6 +1034,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             1, 1,                // dilationH, dilationW
             fusedActivation);
 
+        // Cache state for backward pass only during training
+        if (IsTrainingMode)
+        {
+            _lastInput = input4D.ToTensor();
+            _lastOutput = result.ToTensor();
+        }
+
         // Restore original shape if needed
         if (_originalInputShape != null && _originalInputShape.Length > 4)
         {
@@ -1302,6 +1309,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         };
     }
 
+    private Tensor<T>? _kernelsVelocity;
+    private Tensor<T>? _biasesVelocity;
+
     /// <summary>
     /// Updates the layer's parameters (kernel weights and biases) using the specified learning rate.
     /// </summary>
@@ -1328,32 +1338,65 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        // Update kernels
-        for (int o = 0; o < OutputDepth; o++)
+        if (_kernelsGradient == null || _biasesGradient == null)
+            return;
+
+        if (Engine is DirectGpuTensorEngine gpuEngine)
         {
-            for (int i = 0; i < InputDepth; i++)
+            float lr = (float)NumOps.ToDouble(learningRate);
+
+            // Initialize velocity tensors if needed (for SGD momentum, even if 0 here)
+            if (_kernelsVelocity == null)
             {
-                for (int ky = 0; ky < KernelSize; ky++)
+                _kernelsVelocity = new Tensor<T>(_kernels.Shape);
+                _kernelsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_kernelsVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_biasesVelocity == null)
+            {
+                _biasesVelocity = new Tensor<T>(_biases.Shape);
+                _biasesVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            // Perform GPU-resident SGD update
+            // Momentum = 0, WeightDecay = 0 to match CPU implementation
+            gpuEngine.SgdMomentumUpdateGpu(_kernels, _kernelsGradient, _kernelsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            // CPU Update
+            for (int o = 0; o < OutputDepth; o++)
+            {
+                for (int i = 0; i < InputDepth; i++)
                 {
-                    for (int kx = 0; kx < KernelSize; kx++)
+                    for (int ky = 0; ky < KernelSize; ky++)
                     {
-                        T update = NumOps.Multiply(learningRate, _kernels[o, i, ky, kx]);
-                        _kernels[o, i, ky, kx] = NumOps.Subtract(_kernels[o, i, ky, kx], update);
+                        for (int kx = 0; kx < KernelSize; kx++)
+                        {
+                            T update = NumOps.Multiply(learningRate, _kernelsGradient[o, i, ky, kx]);
+                            _kernels[o, i, ky, kx] = NumOps.Subtract(_kernels[o, i, ky, kx], update);
+                        }
                     }
                 }
             }
+
+            for (int o = 0; o < OutputDepth; o++)
+            {
+                T update = NumOps.Multiply(learningRate, _biasesGradient[o]);
+                _biases[o] = NumOps.Subtract(_biases[o], update);
+            }
         }
 
-        // Update biases
-        for (int o = 0; o < OutputDepth; o++)
+        // Notify engine that parameters have changed (for GPU cache invalidation if needed)
+        // Note: SgdMomentumUpdateGpu updates in-place on GPU, so cache is valid but CPU is stale.
+        // We keep using GPU buffers for forward pass.
+        if (!(Engine is DirectGpuTensorEngine))
         {
-            T update = NumOps.Multiply(learningRate, _biases[o]);
-            _biases[o] = NumOps.Subtract(_biases[o], update);
+            Engine.InvalidatePersistentTensor(_kernels);
+            Engine.InvalidatePersistentTensor(_biases);
         }
-
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

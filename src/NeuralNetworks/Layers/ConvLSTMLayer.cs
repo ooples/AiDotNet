@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -94,11 +96,22 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// - It will improve its performance as it sees more data
     /// - It participates in the learning process
     /// 
-    /// ConvLSTM layers always return true because they have parameters (like weights and biases) 
+    /// ConvLSTM layers always return true because they have parameters (like weights and biases)
     /// that can be updated during training to learn patterns in spatio-temporal data (like videos or weather data).
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU-accelerated forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ConvLSTM supports GPU execution when a DirectGpuTensorEngine is available.
+    /// The GPU implementation uses FusedConv2DGpu for convolutions and GPU-native gate operations.
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the ConvLSTMLayer class.
@@ -483,6 +496,233 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass of the ConvLSTM layer.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensor(s).</param>
+    /// <returns>GPU-resident output tensor after ConvLSTM processing.</returns>
+    /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.
+    /// The ConvLSTM gates are computed using GPU convolutions and element-wise operations.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        int rank = shape.Length;
+
+        // Parse input dimensions
+        int batchSize, timeSteps, height, width, channels;
+        if (rank == 4)
+        {
+            // 4D: [timeSteps, height, width, channels]
+            batchSize = 1;
+            timeSteps = shape[0];
+            height = shape[1];
+            width = shape[2];
+            channels = shape[3];
+        }
+        else if (rank == 5)
+        {
+            // 5D: [batchSize, timeSteps, height, width, channels]
+            batchSize = shape[0];
+            timeSteps = shape[1];
+            height = shape[2];
+            width = shape[3];
+            channels = shape[4];
+        }
+        else
+        {
+            throw new ArgumentException($"ConvLSTMLayer requires 4D or 5D input, got {rank}D");
+        }
+
+        // Calculate output spatial dimensions (same as input with padding)
+        int outHeight = height;
+        int outWidth = width;
+
+        // Prepare NCHW-format weight buffers (transpose from [kH, kW, inC, outC] to [outC, inC, kH, kW])
+        var weightsFiNCHW = _weightsFi.Transpose([3, 2, 0, 1]);
+        var weightsIiNCHW = _weightsIi.Transpose([3, 2, 0, 1]);
+        var weightsCiNCHW = _weightsCi.Transpose([3, 2, 0, 1]);
+        var weightsOiNCHW = _weightsOi.Transpose([3, 2, 0, 1]);
+        var weightsFhNCHW = _weightsFh.Transpose([3, 2, 0, 1]);
+        var weightsIhNCHW = _weightsIh.Transpose([3, 2, 0, 1]);
+        var weightsChNCHW = _weightsCh.Transpose([3, 2, 0, 1]);
+        var weightsOhNCHW = _weightsOh.Transpose([3, 2, 0, 1]);
+
+        // Upload weights to GPU
+        using var wFiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsFiNCHW.ToArray()));
+        using var wIiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsIiNCHW.ToArray()));
+        using var wCiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsCiNCHW.ToArray()));
+        using var wOiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsOiNCHW.ToArray()));
+        using var wFhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsFhNCHW.ToArray()));
+        using var wIhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsIhNCHW.ToArray()));
+        using var wChBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsChNCHW.ToArray()));
+        using var wOhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsOhNCHW.ToArray()));
+
+        // Upload biases (flatten from [1,1,1,filters] to [filters])
+        using var bFBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasF.ToArray()));
+        using var bIBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasI.ToArray()));
+        using var bCBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasC.ToArray()));
+        using var bOBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasO.ToArray()));
+
+        // State buffer sizes
+        int stateSize = batchSize * _filters * outHeight * outWidth; // NCHW format
+        int inputSliceSize = batchSize * channels * height * width;   // NCHW format
+
+        // Initialize hidden and cell state buffers (NCHW format)
+        var hiddenBuffer = backend.AllocateBuffer(stateSize);
+        var cellBuffer = backend.AllocateBuffer(stateSize);
+        backend.Fill(hiddenBuffer, 0.0f, stateSize);
+        backend.Fill(cellBuffer, 0.0f, stateSize);
+
+        // Allocate output buffer: [batch, timeSteps, outH, outW, filters] flattened
+        int outputSize = batchSize * timeSteps * outHeight * outWidth * _filters;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Temporary buffers for gate computations
+        using var convTemp1 = backend.AllocateBuffer(stateSize);
+        using var convTemp2 = backend.AllocateBuffer(stateSize);
+        using var gateTemp = backend.AllocateBuffer(stateSize);
+        using var forgetGate = backend.AllocateBuffer(stateSize);
+        using var inputGate = backend.AllocateBuffer(stateSize);
+        using var candidateCell = backend.AllocateBuffer(stateSize);
+        using var outputGate = backend.AllocateBuffer(stateSize);
+        var newCellBuffer = backend.AllocateBuffer(stateSize);
+        var newHiddenBuffer = backend.AllocateBuffer(stateSize);
+
+        try
+        {
+            for (int t = 0; t < timeSteps; t++)
+            {
+                // Get input slice for this timestep
+                // Input is in NHWC format, need to work with NCHW for GPU convolutions
+                // Slice offset in NHWC: t * batchSize * height * width * channels
+                int inputOffset = t * batchSize * height * width * channels;
+
+                // Create view of input slice (still NHWC)
+                var inputSliceNHWC = input.CreateView(inputOffset, [batchSize, height, width, channels]);
+
+                // For ConvLSTM, we need to work in NCHW format for GPU convolutions
+                // Since the input is NHWC, we need to permute it
+                // Use a temporary buffer for the NCHW version
+                using var inputSliceNCHW = backend.AllocateBuffer(inputSliceSize);
+                // Permute NHWC -> NCHW: [B, H, W, C] -> [B, C, H, W]
+                backend.Permute(inputSliceNHWC.Buffer, inputSliceNCHW, [batchSize, height, width, channels], [0, 3, 1, 2]);
+
+                // Forget Gate: f = sigmoid(conv(x, Wfi) + conv(h, Wfh) + bf)
+                backend.Conv2D(inputSliceNCHW, wFiBuffer, convTemp1,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Conv2D(hiddenBuffer, wFhBuffer, convTemp2,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(convTemp1, convTemp2, gateTemp, stateSize);
+                backend.Conv2DBiasAdd(gateTemp, bFBuffer, batchSize, _filters, outHeight * outWidth);
+                backend.Sigmoid(gateTemp, forgetGate, stateSize);
+
+                // Input Gate: i = sigmoid(conv(x, Wii) + conv(h, Wih) + bi)
+                backend.Conv2D(inputSliceNCHW, wIiBuffer, convTemp1,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Conv2D(hiddenBuffer, wIhBuffer, convTemp2,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(convTemp1, convTemp2, gateTemp, stateSize);
+                backend.Conv2DBiasAdd(gateTemp, bIBuffer, batchSize, _filters, outHeight * outWidth);
+                backend.Sigmoid(gateTemp, inputGate, stateSize);
+
+                // Candidate Cell: c_tilde = tanh(conv(x, Wci) + conv(h, Wch) + bc)
+                backend.Conv2D(inputSliceNCHW, wCiBuffer, convTemp1,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Conv2D(hiddenBuffer, wChBuffer, convTemp2,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(convTemp1, convTemp2, gateTemp, stateSize);
+                backend.Conv2DBiasAdd(gateTemp, bCBuffer, batchSize, _filters, outHeight * outWidth);
+                backend.Tanh(gateTemp, candidateCell, stateSize);
+
+                // Output Gate: o = sigmoid(conv(x, Woi) + conv(h, Woh) + bo)
+                backend.Conv2D(inputSliceNCHW, wOiBuffer, convTemp1,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Conv2D(hiddenBuffer, wOhBuffer, convTemp2,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(convTemp1, convTemp2, gateTemp, stateSize);
+                backend.Conv2DBiasAdd(gateTemp, bOBuffer, batchSize, _filters, outHeight * outWidth);
+                backend.Sigmoid(gateTemp, outputGate, stateSize);
+
+                // New Cell State: c_t = f * c_{t-1} + i * c_tilde
+                backend.Multiply(forgetGate, cellBuffer, convTemp1, stateSize);
+                backend.Multiply(inputGate, candidateCell, convTemp2, stateSize);
+                backend.Add(convTemp1, convTemp2, newCellBuffer, stateSize);
+
+                // New Hidden State: h_t = o * tanh(c_t)
+                backend.Tanh(newCellBuffer, convTemp1, stateSize);
+                backend.Multiply(outputGate, convTemp1, newHiddenBuffer, stateSize);
+
+                // Swap state buffers
+                var tempCell = cellBuffer;
+                cellBuffer = newCellBuffer;
+                newCellBuffer = tempCell;
+
+                var tempHidden = hiddenBuffer;
+                hiddenBuffer = newHiddenBuffer;
+                newHiddenBuffer = tempHidden;
+
+                // Store hidden state in output (convert from NCHW to NHWC)
+                // Output offset in NHWC format: t * batchSize * outH * outW * filters
+                int outputOffset = t * batchSize * outHeight * outWidth * _filters;
+                using var outputSliceNHWC = backend.AllocateBuffer(stateSize);
+                // Permute NCHW -> NHWC: [B, C, H, W] -> [B, H, W, C]
+                backend.Permute(hiddenBuffer, outputSliceNHWC, [batchSize, _filters, outHeight, outWidth], [0, 2, 3, 1]);
+                backend.Copy2DStrided(outputSliceNHWC, outputBuffer, 1, stateSize, outputSize, outputOffset);
+            }
+
+            // Cleanup state buffers
+            hiddenBuffer.Dispose();
+            cellBuffer.Dispose();
+            newCellBuffer.Dispose();
+            newHiddenBuffer.Dispose();
+
+            // Determine output shape
+            int[] outputShape = rank == 4
+                ? [timeSteps, outHeight, outWidth, _filters]
+                : [batchSize, timeSteps, outHeight, outWidth, _filters];
+
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        catch
+        {
+            // Cleanup on error
+            hiddenBuffer.Dispose();
+            cellBuffer.Dispose();
+            newCellBuffer.Dispose();
+            newHiddenBuffer.Dispose();
+            outputBuffer.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

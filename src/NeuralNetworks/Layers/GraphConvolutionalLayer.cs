@@ -1265,6 +1265,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         return inputGradient;
     }
 
+    private Tensor<T>? _weightsVelocity;
+    private Tensor<T>? _biasVelocity;
+
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
@@ -1293,12 +1296,39 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         if (_weightsGradient == null || _biasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Use Engine operations for parameter updates
-        var scaledWeightsGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
-        _weights = Engine.TensorSubtract(_weights, scaledWeightsGrad);
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
-        _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
+            if (_weightsVelocity == null)
+            {
+                _weightsVelocity = new Tensor<T>(_weights.Shape);
+                _weightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_biasVelocity == null)
+            {
+                _biasVelocity = new Tensor<T>(_bias.Shape);
+                _biasVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_biasVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_bias, _biasGradient, _biasVelocity, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            // Use Engine operations for parameter updates
+            var scaledWeightsGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
+            _weights = Engine.TensorSubtract(_weights, scaledWeightsGrad);
+
+            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
+            _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
+
+            // Notify engine that parameters have changed (for GPU cache invalidation if needed)
+            Engine.InvalidatePersistentTensor(_weights);
+            Engine.InvalidatePersistentTensor(_bias);
+        }
     }
 
     /// <summary>

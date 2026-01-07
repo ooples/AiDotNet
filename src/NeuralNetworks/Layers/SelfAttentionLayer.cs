@@ -206,6 +206,11 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T>? _outputBiasGradient;
 
+    private Tensor<T>? _queryWeightsVelocity;
+    private Tensor<T>? _keyWeightsVelocity;
+    private Tensor<T>? _valueWeightsVelocity;
+    private Tensor<T>? _outputBiasVelocity;
+
     /// <summary>
     /// The number of attention heads used in the multi-head attention mechanism.
     /// </summary>
