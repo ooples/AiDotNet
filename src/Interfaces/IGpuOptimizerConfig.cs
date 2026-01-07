@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -35,6 +37,67 @@ public interface IGpuOptimizerConfig
     /// Gets the current optimization step (used for bias correction in Adam-family optimizers).
     /// </summary>
     int Step { get; }
+
+    /// <summary>
+    /// Applies the optimizer update to the given parameter buffer using its gradient.
+    /// </summary>
+    /// <param name="backend">The GPU backend to execute the update.</param>
+    /// <param name="param">Buffer containing the parameters to update (modified in-place).</param>
+    /// <param name="gradient">Buffer containing the gradients.</param>
+    /// <param name="state">Optimizer state buffers (momentum, squared gradients, etc.).</param>
+    /// <param name="size">Number of parameters to update.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method applies the optimizer's update rule directly on the GPU.
+    /// Each optimizer type (SGD, Adam, etc.) implements its own update logic using GPU kernels.
+    /// The state parameter contains any auxiliary buffers needed (like velocity for SGD with momentum,
+    /// or m/v buffers for Adam).
+    /// </para>
+    /// <para><b>Design Note:</b> Following the Open/Closed Principle, each optimizer config knows
+    /// how to apply its own update, so adding new optimizers doesn't require modifying layer code.
+    /// </para>
+    /// </remarks>
+    void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient, 
+        GpuOptimizerState state, int size);
+}
+
+/// <summary>
+/// Holds the optimizer state buffers for GPU-resident training.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Different optimizers require different state:
+/// - SGD with momentum: velocity buffer
+/// - Adam/AdamW: first moment (m) and second moment (v) buffers
+/// - RMSprop: squared average buffer
+/// - Adagrad: accumulated gradient buffer
+/// </para>
+/// </remarks>
+public class GpuOptimizerState
+{
+    /// <summary>
+    /// Velocity buffer (for SGD momentum, NAG, LARS).
+    /// </summary>
+    public IGpuBuffer? Velocity { get; set; }
+
+    /// <summary>
+    /// First moment buffer (for Adam-family optimizers).
+    /// </summary>
+    public IGpuBuffer? M { get; set; }
+
+    /// <summary>
+    /// Second moment buffer (for Adam-family optimizers).
+    /// </summary>
+    public IGpuBuffer? V { get; set; }
+
+    /// <summary>
+    /// Squared average buffer (for RMSprop).
+    /// </summary>
+    public IGpuBuffer? SquaredAvg { get; set; }
+
+    /// <summary>
+    /// Accumulated gradient buffer (for Adagrad).
+    /// </summary>
+    public IGpuBuffer? AccumulatedGrad { get; set; }
 }
 
 /// <summary>
@@ -116,6 +179,16 @@ public class SgdGpuConfig : IGpuOptimizerConfig
         WeightDecay = weightDecay;
         Step = step;
     }
+
+    /// <inheritdoc/>
+    public void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
+        GpuOptimizerState state, int size)
+    {
+        if (state.Velocity == null)
+            throw new InvalidOperationException("SGD with momentum requires a velocity buffer in the optimizer state.");
+
+        backend.SgdMomentumUpdate(param, gradient, state.Velocity, LearningRate, Momentum, WeightDecay, size);
+    }
 }
 
 /// <summary>
@@ -181,6 +254,16 @@ public class AdamGpuConfig : IGpuOptimizerConfig
         WeightDecay = weightDecay;
         Step = step;
     }
+
+    /// <inheritdoc/>
+    public void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
+        GpuOptimizerState state, int size)
+    {
+        if (state.M == null || state.V == null)
+            throw new InvalidOperationException("Adam requires M and V buffers in the optimizer state.");
+
+        backend.AdamUpdate(param, gradient, state.M, state.V, LearningRate, Beta1, Beta2, Epsilon, WeightDecay, Step, size);
+    }
 }
 
 /// <summary>
@@ -244,6 +327,16 @@ public class AdamWGpuConfig : IGpuOptimizerConfig
         WeightDecay = weightDecay;
         Step = step;
     }
+
+    /// <inheritdoc/>
+    public void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
+        GpuOptimizerState state, int size)
+    {
+        if (state.M == null || state.V == null)
+            throw new InvalidOperationException("AdamW requires M and V buffers in the optimizer state.");
+
+        backend.AdamWUpdate(param, gradient, state.M, state.V, LearningRate, Beta1, Beta2, Epsilon, WeightDecay, Step, size);
+    }
 }
 
 /// <summary>
@@ -300,6 +393,16 @@ public class RmsPropGpuConfig : IGpuOptimizerConfig
         WeightDecay = weightDecay;
         Step = step;
     }
+
+    /// <inheritdoc/>
+    public void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
+        GpuOptimizerState state, int size)
+    {
+        if (state.SquaredAvg == null)
+            throw new InvalidOperationException("RMSprop requires a SquaredAvg buffer in the optimizer state.");
+
+        backend.RmspropUpdate(param, gradient, state.SquaredAvg, LearningRate, Rho, Epsilon, WeightDecay, size);
+    }
 }
 
 /// <summary>
@@ -347,6 +450,16 @@ public class AdagradGpuConfig : IGpuOptimizerConfig
         Epsilon = epsilon;
         WeightDecay = weightDecay;
         Step = step;
+    }
+
+    /// <inheritdoc/>
+    public void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
+        GpuOptimizerState state, int size)
+    {
+        if (state.AccumulatedGrad == null)
+            throw new InvalidOperationException("Adagrad requires an AccumulatedGrad buffer in the optimizer state.");
+
+        backend.AdagradUpdate(param, gradient, state.AccumulatedGrad, LearningRate, Epsilon, WeightDecay, size);
     }
 }
 
@@ -396,6 +509,16 @@ public class NagGpuConfig : IGpuOptimizerConfig
         Momentum = momentum;
         WeightDecay = weightDecay;
         Step = step;
+    }
+
+    /// <inheritdoc/>
+    public void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
+        GpuOptimizerState state, int size)
+    {
+        if (state.Velocity == null)
+            throw new InvalidOperationException("NAG requires a velocity buffer in the optimizer state.");
+
+        backend.NagUpdate(param, gradient, state.Velocity, LearningRate, Momentum, WeightDecay, size);
     }
 }
 
@@ -453,6 +576,16 @@ public class LarsGpuConfig : IGpuOptimizerConfig
         WeightDecay = weightDecay;
         TrustCoefficient = trustCoefficient;
         Step = step;
+    }
+
+    /// <inheritdoc/>
+    public void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
+        GpuOptimizerState state, int size)
+    {
+        if (state.Velocity == null)
+            throw new InvalidOperationException("LARS requires a velocity buffer in the optimizer state.");
+
+        backend.LarsUpdate(param, gradient, state.Velocity, LearningRate, Momentum, WeightDecay, TrustCoefficient, size);
     }
 }
 
@@ -517,5 +650,15 @@ public class LambGpuConfig : IGpuOptimizerConfig
         Epsilon = epsilon;
         WeightDecay = weightDecay;
         Step = step;
+    }
+
+    /// <inheritdoc/>
+    public void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
+        GpuOptimizerState state, int size)
+    {
+        if (state.M == null || state.V == null)
+            throw new InvalidOperationException("LAMB requires M and V buffers in the optimizer state.");
+
+        backend.LambUpdate(param, gradient, state.M, state.V, LearningRate, Beta1, Beta2, Epsilon, WeightDecay, Step, size);
     }
 }

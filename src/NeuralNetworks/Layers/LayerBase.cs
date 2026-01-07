@@ -998,39 +998,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     }
 
     /// <summary>
-    /// Updates the layer's parameters on GPU using the gradients computed during BackwardGpu.
-    /// </summary>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <param name="momentum">Optional momentum factor (default 0).</param>
-    /// <param name="weightDecay">Optional weight decay / L2 regularization factor (default 0).</param>
-    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU training.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method updates weights and biases directly on GPU using the gradients computed by BackwardGpu.
-    /// The update rule is: w = w - lr * (grad + weightDecay * w) + momentum * velocity
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates the layer's learned values entirely on GPU.
-    /// 
-    /// During GPU training:
-    /// - Weight gradients are already on GPU from BackwardGpu
-    /// - New weights are computed on GPU
-    /// - Weights stay on GPU for the next forward pass
-    /// 
-    /// This avoids downloading weights to CPU and re-uploading them.
-    /// </para>
-    /// </remarks>
-    [Obsolete("Use UpdateParametersGpu(IGpuOptimizerConfig) instead for full optimizer support.")]
-    public virtual void UpdateParametersGpu(T learningRate, T? momentum = default, T? weightDecay = default)
-    {
-        // Convert old-style call to new optimizer config
-        var config = new SgdGpuConfig(
-            NumOps.ToFloat(learningRate),
-            momentum: momentum != null ? NumOps.ToFloat(momentum) : 0.9f,
-            weightDecay: weightDecay != null ? NumOps.ToFloat(weightDecay) : 0f);
-        UpdateParametersGpu(config);
-    }
-
-    /// <summary>
     /// Updates the layer's parameters on GPU using the specified optimizer configuration.
     /// </summary>
     /// <param name="config">The GPU optimizer configuration specifying the update algorithm and hyperparameters.</param>

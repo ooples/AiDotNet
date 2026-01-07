@@ -1598,29 +1598,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Updates the layer's parameters on GPU using the gradients computed during BackwardGpu.
-    /// </summary>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <param name="momentum">Optional momentum factor (default 0).</param>
-    /// <param name="weightDecay">Optional weight decay / L2 regularization factor (default 0).</param>
-    /// <remarks>
-    /// <para>
-    /// Updates weights and biases directly on GPU:
-    /// w = w - learningRate * gradient
-    /// </para>
-    /// </remarks>
-    [Obsolete("Use UpdateParametersGpu(IGpuOptimizerConfig) instead for full optimizer support.")]
-    public override void UpdateParametersGpu(T learningRate, T? momentum = default, T? weightDecay = default)
-    {
-        // Delegate to new method with SGD config
-        var config = new SgdGpuConfig(
-            NumOps.ToFloat(learningRate),
-            momentum: momentum != null ? NumOps.ToFloat(momentum) : 0f,
-            weightDecay: weightDecay != null ? NumOps.ToFloat(weightDecay) : 0f);
-        UpdateParametersGpu(config);
-    }
-
-    /// <summary>
     /// Updates the layer's parameters on GPU using the specified optimizer configuration.
     /// </summary>
     /// <param name="config">The GPU optimizer configuration specifying the update algorithm and hyperparameters.</param>
@@ -1651,77 +1628,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int weightsSize = _weights.Length;
         int biasesSize = _biases.Length;
 
-        // Apply optimizer-specific update based on config type
-        switch (config)
-        {
-            case SgdGpuConfig sgd:
-                // Initialize velocity buffers if needed
-                EnsureGpuOptimizerState(backend, GpuOptimizerType.Sgd);
-                backend.SgdMomentumUpdate(weightsBuffer, weightsGradBuffer, _gpuWeightsVelocity!.Buffer,
-                    sgd.LearningRate, sgd.Momentum, sgd.WeightDecay, weightsSize);
-                backend.SgdMomentumUpdate(biasesBuffer, biasesGradBuffer, _gpuBiasesVelocity!.Buffer,
-                    sgd.LearningRate, sgd.Momentum, sgd.WeightDecay, biasesSize);
-                break;
+        // Ensure optimizer state buffers are allocated
+        EnsureGpuOptimizerState(backend, config.OptimizerType);
 
-            case AdamGpuConfig adam:
-                EnsureGpuOptimizerState(backend, GpuOptimizerType.Adam);
-                backend.AdamUpdate(weightsBuffer, weightsGradBuffer, _gpuWeightsM!.Buffer, _gpuWeightsV!.Buffer,
-                    adam.LearningRate, adam.Beta1, adam.Beta2, adam.Epsilon, adam.WeightDecay, adam.Step, weightsSize);
-                backend.AdamUpdate(biasesBuffer, biasesGradBuffer, _gpuBiasesM!.Buffer, _gpuBiasesV!.Buffer,
-                    adam.LearningRate, adam.Beta1, adam.Beta2, adam.Epsilon, adam.WeightDecay, adam.Step, biasesSize);
-                break;
+        // Build state objects for weights and biases
+        var weightsState = BuildOptimizerState(config.OptimizerType, isWeights: true);
+        var biasesState = BuildOptimizerState(config.OptimizerType, isWeights: false);
 
-            case AdamWGpuConfig adamw:
-                EnsureGpuOptimizerState(backend, GpuOptimizerType.AdamW);
-                backend.AdamWUpdate(weightsBuffer, weightsGradBuffer, _gpuWeightsM!.Buffer, _gpuWeightsV!.Buffer,
-                    adamw.LearningRate, adamw.Beta1, adamw.Beta2, adamw.Epsilon, adamw.WeightDecay, adamw.Step, weightsSize);
-                backend.AdamWUpdate(biasesBuffer, biasesGradBuffer, _gpuBiasesM!.Buffer, _gpuBiasesV!.Buffer,
-                    adamw.LearningRate, adamw.Beta1, adamw.Beta2, adamw.Epsilon, adamw.WeightDecay, adamw.Step, biasesSize);
-                break;
-
-            case RmsPropGpuConfig rmsprop:
-                EnsureGpuOptimizerState(backend, GpuOptimizerType.RmsProp);
-                backend.RmspropUpdate(weightsBuffer, weightsGradBuffer, _gpuWeightsSquaredAvg!.Buffer,
-                    rmsprop.LearningRate, rmsprop.Rho, rmsprop.Epsilon, rmsprop.WeightDecay, weightsSize);
-                backend.RmspropUpdate(biasesBuffer, biasesGradBuffer, _gpuBiasesSquaredAvg!.Buffer,
-                    rmsprop.LearningRate, rmsprop.Rho, rmsprop.Epsilon, rmsprop.WeightDecay, biasesSize);
-                break;
-
-            case AdagradGpuConfig adagrad:
-                EnsureGpuOptimizerState(backend, GpuOptimizerType.Adagrad);
-                backend.AdagradUpdate(weightsBuffer, weightsGradBuffer, _gpuWeightsAccumulatedGrad!.Buffer,
-                    adagrad.LearningRate, adagrad.Epsilon, adagrad.WeightDecay, weightsSize);
-                backend.AdagradUpdate(biasesBuffer, biasesGradBuffer, _gpuBiasesAccumulatedGrad!.Buffer,
-                    adagrad.LearningRate, adagrad.Epsilon, adagrad.WeightDecay, biasesSize);
-                break;
-
-            case NagGpuConfig nag:
-                EnsureGpuOptimizerState(backend, GpuOptimizerType.Nag);
-                backend.NagUpdate(weightsBuffer, weightsGradBuffer, _gpuWeightsVelocity!.Buffer,
-                    nag.LearningRate, nag.Momentum, nag.WeightDecay, weightsSize);
-                backend.NagUpdate(biasesBuffer, biasesGradBuffer, _gpuBiasesVelocity!.Buffer,
-                    nag.LearningRate, nag.Momentum, nag.WeightDecay, biasesSize);
-                break;
-
-            case LarsGpuConfig lars:
-                EnsureGpuOptimizerState(backend, GpuOptimizerType.Lars);
-                backend.LarsUpdate(weightsBuffer, weightsGradBuffer, _gpuWeightsVelocity!.Buffer,
-                    lars.LearningRate, lars.Momentum, lars.WeightDecay, lars.TrustCoefficient, weightsSize);
-                backend.LarsUpdate(biasesBuffer, biasesGradBuffer, _gpuBiasesVelocity!.Buffer,
-                    lars.LearningRate, lars.Momentum, lars.WeightDecay, lars.TrustCoefficient, biasesSize);
-                break;
-
-            case LambGpuConfig lamb:
-                EnsureGpuOptimizerState(backend, GpuOptimizerType.Lamb);
-                backend.LambUpdate(weightsBuffer, weightsGradBuffer, _gpuWeightsM!.Buffer, _gpuWeightsV!.Buffer,
-                    lamb.LearningRate, lamb.Beta1, lamb.Beta2, lamb.Epsilon, lamb.WeightDecay, lamb.Step, weightsSize);
-                backend.LambUpdate(biasesBuffer, biasesGradBuffer, _gpuBiasesM!.Buffer, _gpuBiasesV!.Buffer,
-                    lamb.LearningRate, lamb.Beta1, lamb.Beta2, lamb.Epsilon, lamb.WeightDecay, lamb.Step, biasesSize);
-                break;
-
-            default:
-                throw new NotSupportedException($"GPU optimizer type {config.OptimizerType} is not supported by DenseLayer.");
-        }
+        // Apply optimizer update using polymorphic dispatch (follows Open/Closed Principle)
+        config.ApplyUpdate(backend, weightsBuffer, weightsGradBuffer, weightsState, weightsSize);
+        config.ApplyUpdate(backend, biasesBuffer, biasesGradBuffer, biasesState, biasesSize);
 
         // Sync weights back to CPU for interoperability (can be skipped for full GPU training)
         _weights = _gpuWeights.ToTensor();
@@ -1730,6 +1646,33 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Notify engine that CPU tensors have changed
         Engine.InvalidatePersistentTensor(_weights);
         Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <summary>
+    /// Builds the GPU optimizer state for weights or biases based on optimizer type.
+    /// </summary>
+    private GpuOptimizerState BuildOptimizerState(GpuOptimizerType optimizerType, bool isWeights)
+    {
+        return optimizerType switch
+        {
+            GpuOptimizerType.Sgd or GpuOptimizerType.Nag or GpuOptimizerType.Lars =>
+                new GpuOptimizerState { Velocity = isWeights ? _gpuWeightsVelocity?.Buffer : _gpuBiasesVelocity?.Buffer },
+
+            GpuOptimizerType.Adam or GpuOptimizerType.AdamW or GpuOptimizerType.Lamb =>
+                new GpuOptimizerState
+                {
+                    M = isWeights ? _gpuWeightsM?.Buffer : _gpuBiasesM?.Buffer,
+                    V = isWeights ? _gpuWeightsV?.Buffer : _gpuBiasesV?.Buffer
+                },
+
+            GpuOptimizerType.RmsProp =>
+                new GpuOptimizerState { SquaredAvg = isWeights ? _gpuWeightsSquaredAvg?.Buffer : _gpuBiasesSquaredAvg?.Buffer },
+
+            GpuOptimizerType.Adagrad =>
+                new GpuOptimizerState { AccumulatedGrad = isWeights ? _gpuWeightsAccumulatedGrad?.Buffer : _gpuBiasesAccumulatedGrad?.Buffer },
+
+            _ => throw new NotSupportedException($"GPU optimizer type {optimizerType} is not supported.")
+        };
     }
 
     /// <summary>
