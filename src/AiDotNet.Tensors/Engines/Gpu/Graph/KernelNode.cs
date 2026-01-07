@@ -129,7 +129,7 @@ public sealed class KernelNode : ExecutionNode
                     longTensor.MarkModified(syncPoint);
                     syncPointUsed = true;
                     break;
-                // Note: Half/bfloat16 types can be added when supported
+                    // Note: Half/bfloat16 types can be added when supported
             }
 
             // Dispose the sync point if it wasn't used (unrecognized tensor type)
