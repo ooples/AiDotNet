@@ -882,6 +882,112 @@ public interface IDirectGpuBackend : IDisposable
     void LambUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
 
+    /// <summary>
+    /// Vanilla SGD optimizer update (no momentum).
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
+        float learningRate, float weightDecay, int size);
+
+    /// <summary>
+    /// AdaDelta optimizer update: uses adaptive learning rate based on accumulated gradients and updates.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="accumGrad">Accumulated squared gradients (state).</param>
+    /// <param name="accumUpdate">Accumulated squared updates (state).</param>
+    /// <param name="rho">Decay rate for exponential averages (typically 0.95).</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
+        float rho, float epsilon, float weightDecay, int size);
+
+    /// <summary>
+    /// AMSGrad optimizer update: Adam variant with max of second moment for stability.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">First moment estimate (state).</param>
+    /// <param name="v">Second moment estimate (state).</param>
+    /// <param name="vMax">Max of second moment estimate (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Exponential decay rate for first moment.</param>
+    /// <param name="beta2">Exponential decay rate for second moment.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="step">Current optimization step (for bias correction).</param>
+    /// <param name="size">Number of parameters.</param>
+    void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    /// <summary>
+    /// AdaMax optimizer update: Adam variant using infinity norm instead of L2 norm.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">First moment estimate (state).</param>
+    /// <param name="u">Infinity norm of gradients (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Exponential decay rate for first moment.</param>
+    /// <param name="beta2">Exponential decay rate for infinity norm.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="step">Current optimization step (for bias correction).</param>
+    /// <param name="size">Number of parameters.</param>
+    void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    /// <summary>
+    /// Lion optimizer update: uses sign of interpolated momentum for efficient updates.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">Momentum state.</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Interpolation weight for update computation.</param>
+    /// <param name="beta2">Exponential decay rate for momentum.</param>
+    /// <param name="weightDecay">Decoupled weight decay coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
+        float learningRate, float beta1, float beta2, float weightDecay, int size);
+
+    /// <summary>
+    /// Nadam optimizer update: Nesterov-accelerated Adam optimizer.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">First moment estimate (state).</param>
+    /// <param name="v">Second moment estimate (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Exponential decay rate for first moment.</param>
+    /// <param name="beta2">Exponential decay rate for second moment.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="step">Current optimization step (for bias correction).</param>
+    /// <param name="size">Number of parameters.</param>
+    void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    /// <summary>
+    /// FTRL (Follow The Regularized Leader) optimizer update: efficient for sparse data.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="z">Accumulated sum state.</param>
+    /// <param name="n">Accumulated squared gradient state.</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="l1Reg">L1 regularization coefficient.</param>
+    /// <param name="l2Reg">L2 regularization coefficient.</param>
+    /// <param name="beta">Learning rate power parameter.</param>
+    /// <param name="size">Number of parameters.</param>
+    void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
+        float learningRate, float l1Reg, float l2Reg, float beta, int size);
+
     #endregion
 
     #region FFT and Signal Processing

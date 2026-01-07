@@ -4080,6 +4080,238 @@ public sealed class HipBackend : IDirectGpuBackend
         }
     }
 
+    /// <inheritdoc/>
+    public unsafe void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
+        float learningRate, float weightDecay, int size)
+    {
+        if (!_kernelCache.TryGetValue("sgd_update", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: sgd_update");
+
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(param.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradient.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(learningRate, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(weightDecay, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
+        float rho, float epsilon, float weightDecay, int size)
+    {
+        if (!_kernelCache.TryGetValue("adadelta_update", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: adadelta_update");
+
+        var handles = new GCHandle[8];
+        try
+        {
+            handles[0] = GCHandle.Alloc(param.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradient.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(accumGrad.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(accumUpdate.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(rho, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(weightDecay, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[8];
+            for (int i = 0; i < 8; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        if (!_kernelCache.TryGetValue("amsgrad_update", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: amsgrad_update");
+
+        var handles = new GCHandle[12];
+        try
+        {
+            handles[0] = GCHandle.Alloc(param.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradient.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(m.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(v.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(vMax.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(learningRate, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(beta1, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(beta2, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(weightDecay, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(step, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[12];
+            for (int i = 0; i < 12; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        if (!_kernelCache.TryGetValue("adamax_update", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: adamax_update");
+
+        var handles = new GCHandle[11];
+        try
+        {
+            handles[0] = GCHandle.Alloc(param.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradient.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(m.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(u.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(learningRate, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(beta1, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(beta2, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(weightDecay, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(step, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[11];
+            for (int i = 0; i < 11; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
+        float learningRate, float beta1, float beta2, float weightDecay, int size)
+    {
+        if (!_kernelCache.TryGetValue("lion_update", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: lion_update");
+
+        var handles = new GCHandle[8];
+        try
+        {
+            handles[0] = GCHandle.Alloc(param.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradient.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(m.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(learningRate, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(beta1, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(beta2, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(weightDecay, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[8];
+            for (int i = 0; i < 8; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        if (!_kernelCache.TryGetValue("nadam_update", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: nadam_update");
+
+        var handles = new GCHandle[11];
+        try
+        {
+            handles[0] = GCHandle.Alloc(param.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradient.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(m.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(v.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(learningRate, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(beta1, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(beta2, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(weightDecay, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(step, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[11];
+            for (int i = 0; i < 11; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public unsafe void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
+        float learningRate, float l1Reg, float l2Reg, float beta, int size)
+    {
+        if (!_kernelCache.TryGetValue("ftrl_update", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: ftrl_update");
+
+        var handles = new GCHandle[9];
+        try
+        {
+            handles[0] = GCHandle.Alloc(param.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradient.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(z.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(n.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(learningRate, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(l1Reg, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(l2Reg, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(beta, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(size, GCHandleType.Pinned);
+
+            var args = new IntPtr[9];
+            for (int i = 0; i < 9; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
     #endregion
 
     #region FFT and Signal Processing

@@ -667,6 +667,232 @@ __kernel void lamb_update(
     param[idx] = p - learningRate * update;
 }
 
+// Vanilla SGD update (no momentum)
+__kernel void sgd_update(
+    __global float* param,
+    __global const float* gradient,
+    const float learningRate,
+    const float weightDecay,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    param[idx] -= learningRate * grad;
+}
+
+// AdaDelta optimizer update
+__kernel void adadelta_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* accumGrad,
+    __global float* accumUpdate,
+    const float rho,
+    const float epsilon,
+    const float weightDecay,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float ag = rho * accumGrad[idx] + (1.0f - rho) * grad * grad;
+    accumGrad[idx] = ag;
+
+    float rmsUpdate = sqrt(accumUpdate[idx] + epsilon);
+    float rmsGrad = sqrt(ag + epsilon);
+    float update = (rmsUpdate / rmsGrad) * grad;
+
+    accumUpdate[idx] = rho * accumUpdate[idx] + (1.0f - rho) * update * update;
+
+    param[idx] -= update;
+}
+
+// AMSGrad optimizer update
+__kernel void amsgrad_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* m,
+    __global float* v,
+    __global float* vMax,
+    const float learningRate,
+    const float beta1,
+    const float beta2,
+    const float epsilon,
+    const float weightDecay,
+    const int step,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float mVal = beta1 * m[idx] + (1.0f - beta1) * grad;
+    m[idx] = mVal;
+
+    float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
+    v[idx] = vVal;
+
+    float vMaxVal = fmax(vMax[idx], vVal);
+    vMax[idx] = vMaxVal;
+
+    float mHat = mVal / (1.0f - pow(beta1, (float)step));
+
+    param[idx] -= learningRate * mHat / (sqrt(vMaxVal) + epsilon);
+}
+
+// AdaMax optimizer update
+__kernel void adamax_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* m,
+    __global float* u,
+    const float learningRate,
+    const float beta1,
+    const float beta2,
+    const float epsilon,
+    const float weightDecay,
+    const int step,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float mVal = beta1 * m[idx] + (1.0f - beta1) * grad;
+    m[idx] = mVal;
+
+    float uVal = fmax(beta2 * u[idx], fabs(grad));
+    u[idx] = uVal;
+
+    float biasCorrection = 1.0f - pow(beta1, (float)step);
+
+    param[idx] -= (learningRate / biasCorrection) * mVal / (uVal + epsilon);
+}
+
+// Lion optimizer update
+__kernel void lion_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* m,
+    const float learningRate,
+    const float beta1,
+    const float beta2,
+    const float weightDecay,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    float mVal = m[idx];
+
+    float interp = beta1 * mVal + (1.0f - beta1) * grad;
+    float update = (interp > 0.0f) ? 1.0f : ((interp < 0.0f) ? -1.0f : 0.0f);
+
+    m[idx] = beta2 * mVal + (1.0f - beta2) * grad;
+
+    if (weightDecay > 0.0f) {
+        update += weightDecay * param[idx];
+    }
+
+    param[idx] -= learningRate * update;
+}
+
+// Nadam optimizer update
+__kernel void nadam_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* m,
+    __global float* v,
+    const float learningRate,
+    const float beta1,
+    const float beta2,
+    const float epsilon,
+    const float weightDecay,
+    const int step,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float mVal = beta1 * m[idx] + (1.0f - beta1) * grad;
+    m[idx] = mVal;
+
+    float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
+    v[idx] = vVal;
+
+    float beta1Pow = pow(beta1, (float)step);
+    float beta2Pow = pow(beta2, (float)step);
+    float mHat = mVal / (1.0f - beta1Pow);
+    float vHat = vVal / (1.0f - beta2Pow);
+
+    float mNesterov = beta1 * mHat + (1.0f - beta1) * grad / (1.0f - beta1Pow);
+
+    param[idx] -= learningRate * mNesterov / (sqrt(vHat) + epsilon);
+}
+
+// FTRL optimizer update
+__kernel void ftrl_update(
+    __global float* param,
+    __global const float* gradient,
+    __global float* z,
+    __global float* n,
+    const float learningRate,
+    const float l1Reg,
+    const float l2Reg,
+    const float beta,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    float nVal = n[idx];
+    float zVal = z[idx];
+    float pVal = param[idx];
+
+    float nNew = nVal + grad * grad;
+    n[idx] = nNew;
+
+    float sigma = (sqrt(nNew) - sqrt(nVal)) / learningRate;
+
+    zVal = zVal + grad - sigma * pVal;
+    z[idx] = zVal;
+
+    float zSign = (zVal > 0.0f) ? 1.0f : ((zVal < 0.0f) ? -1.0f : 0.0f);
+    float zAbs = fabs(zVal);
+
+    if (zAbs <= l1Reg) {
+        param[idx] = 0.0f;
+    } else {
+        float denom = (beta + sqrt(nNew)) / learningRate + l2Reg;
+        param[idx] = -zSign * (zAbs - l1Reg) / denom;
+    }
+}
+
 // ===========================================================================
 // UTILITY KERNELS
 // ===========================================================================
@@ -1573,6 +1799,7 @@ __kernel void adaptive_avgpool_backward(
                 // Optimizers
                 "sgd_momentum_update", "adam_update", "adamw_update",
                 "rmsprop_update", "adagrad_update", "nag_update", "lars_update", "lamb_update",
+                "sgd_update", "adadelta_update", "amsgrad_update", "adamax_update", "lion_update", "nadam_update", "ftrl_update",
                 // Utilities
                 "clamp_values", "clip_by_value",
                 "transpose2d", "batched_transpose",

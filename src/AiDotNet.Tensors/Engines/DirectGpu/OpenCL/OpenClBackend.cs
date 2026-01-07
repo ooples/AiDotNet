@@ -5639,6 +5639,140 @@ KERNEL VARIANTS (A/B testing):
             k.Execute1D(size, Math.Min(256, size));
         }
 
+        /// <inheritdoc/>
+        public void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
+            float learningRate, float weightDecay, int size)
+        {
+            var k = _kernelCache["sgd_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
+            float rho, float epsilon, float weightDecay, int size)
+        {
+            var k = _kernelCache["adadelta_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)accumGrad).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)accumUpdate).Buffer.Handle);
+            k.SetArg(arg++, rho);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
+            float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        {
+            var k = _kernelCache["amsgrad_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)m).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)v).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)vMax).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, beta1);
+            k.SetArg(arg++, beta2);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, step);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
+            float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        {
+            var k = _kernelCache["adamax_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)m).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)u).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, beta1);
+            k.SetArg(arg++, beta2);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, step);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
+            float learningRate, float beta1, float beta2, float weightDecay, int size)
+        {
+            var k = _kernelCache["lion_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)m).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, beta1);
+            k.SetArg(arg++, beta2);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+            float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        {
+            var k = _kernelCache["nadam_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)m).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)v).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, beta1);
+            k.SetArg(arg++, beta2);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, step);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
+        /// <inheritdoc/>
+        public void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
+            float learningRate, float l1Reg, float l2Reg, float beta, int size)
+        {
+            var k = _kernelCache["ftrl_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)z).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)n).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, l1Reg);
+            k.SetArg(arg++, l2Reg);
+            k.SetArg(arg++, beta);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+        }
+
         #endregion
 
         #region FFT and Signal Processing

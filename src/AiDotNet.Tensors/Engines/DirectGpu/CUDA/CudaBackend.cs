@@ -2979,8 +2979,8 @@ public sealed class CudaBackend : IDirectGpuBackend
     public unsafe void SgdMomentumUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
         float learningRate, float momentum, float weightDecay, int size)
     {
-        if (!_kernelCache.TryGetValue("sgd_momentum_update", out var kernel))
-            throw new InvalidOperationException("CUDA kernel not found: sgd_momentum_update");
+        if (!_kernelCache.TryGetValue("sgd_step", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: sgd_step");
 
         using var _ = PushContext();
         uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
@@ -3001,8 +3001,8 @@ public sealed class CudaBackend : IDirectGpuBackend
     public unsafe void AdamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
-        if (!_kernelCache.TryGetValue("adam_update", out var kernel))
-            throw new InvalidOperationException("CUDA kernel not found: adam_update");
+        if (!_kernelCache.TryGetValue("adam_step", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: adam_step");
 
         using var _ = PushContext();
         uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
@@ -3028,8 +3028,8 @@ public sealed class CudaBackend : IDirectGpuBackend
     public unsafe void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
-        if (!_kernelCache.TryGetValue("adamw_update", out var kernel))
-            throw new InvalidOperationException("CUDA kernel not found: adamw_update");
+        if (!_kernelCache.TryGetValue("adamw_step", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: adamw_step");
 
         using var _ = PushContext();
         uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
@@ -3171,6 +3171,202 @@ public sealed class CudaBackend : IDirectGpuBackend
         args[8] = &weightDecay;
         args[9] = &step;
         args[10] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
+        float learningRate, float weightDecay, int size)
+    {
+        if (!_kernelCache.TryGetValue("sgd_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: sgd_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &learningRate;
+        args[3] = &weightDecay;
+        int sizeArg = size;
+        void** args2 = stackalloc void*[5];
+        args2[0] = &paramPtr;
+        args2[1] = &gradPtr;
+        args2[2] = &learningRate;
+        args2[3] = &weightDecay;
+        args2[4] = &sizeArg;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args2);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
+        float rho, float epsilon, float weightDecay, int size)
+    {
+        if (!_kernelCache.TryGetValue("adadelta_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: adadelta_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr accumGradPtr = accumGrad.Handle;
+        IntPtr accumUpdatePtr = accumUpdate.Handle;
+        void** args = stackalloc void*[7];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &accumGradPtr;
+        args[3] = &accumUpdatePtr;
+        args[4] = &rho;
+        args[5] = &epsilon;
+        args[6] = &weightDecay;
+        int sizeArg = size;
+        void** args2 = stackalloc void*[8];
+        args2[0] = &paramPtr;
+        args2[1] = &gradPtr;
+        args2[2] = &accumGradPtr;
+        args2[3] = &accumUpdatePtr;
+        args2[4] = &rho;
+        args2[5] = &epsilon;
+        args2[6] = &weightDecay;
+        args2[7] = &sizeArg;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args2);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        if (!_kernelCache.TryGetValue("amsgrad_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: amsgrad_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        IntPtr vPtr = v.Handle;
+        IntPtr vMaxPtr = vMax.Handle;
+        void** args = stackalloc void*[12];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &vPtr;
+        args[4] = &vMaxPtr;
+        args[5] = &learningRate;
+        args[6] = &beta1;
+        args[7] = &beta2;
+        args[8] = &epsilon;
+        args[9] = &weightDecay;
+        args[10] = &step;
+        args[11] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        if (!_kernelCache.TryGetValue("adamax_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: adamax_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        IntPtr uPtr = u.Handle;
+        void** args = stackalloc void*[11];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &uPtr;
+        args[4] = &learningRate;
+        args[5] = &beta1;
+        args[6] = &beta2;
+        args[7] = &epsilon;
+        args[8] = &weightDecay;
+        args[9] = &step;
+        args[10] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
+        float learningRate, float beta1, float beta2, float weightDecay, int size)
+    {
+        if (!_kernelCache.TryGetValue("lion_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: lion_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        void** args = stackalloc void*[8];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &learningRate;
+        args[4] = &beta1;
+        args[5] = &beta2;
+        args[6] = &weightDecay;
+        args[7] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        if (!_kernelCache.TryGetValue("nadam_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: nadam_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        IntPtr vPtr = v.Handle;
+        void** args = stackalloc void*[11];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &vPtr;
+        args[4] = &learningRate;
+        args[5] = &beta1;
+        args[6] = &beta2;
+        args[7] = &epsilon;
+        args[8] = &weightDecay;
+        args[9] = &step;
+        args[10] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
+        float learningRate, float l1Reg, float l2Reg, float beta, int size)
+    {
+        if (!_kernelCache.TryGetValue("ftrl_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: ftrl_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr zPtr = z.Handle;
+        IntPtr nPtr = n.Handle;
+        void** args = stackalloc void*[9];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &zPtr;
+        args[3] = &nPtr;
+        args[4] = &learningRate;
+        args[5] = &l1Reg;
+        args[6] = &l2Reg;
+        args[7] = &beta;
+        args[8] = &size;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 

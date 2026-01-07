@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -556,4 +557,64 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         // Reverse the update: params_old = params_new + update
         return (Vector<T>)Engine.Add(updatedParameters, update);
     }
+
+    #region GPU Optimizer Support
+
+    /// <summary>
+    /// GPU buffer for squared gradient moving average.
+    /// </summary>
+    private IGpuBuffer? _gpuSquaredAvg;
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    public override bool SupportsGpuUpdate => true;
+
+    /// <summary>
+    /// Initializes RMSprop optimizer state on the GPU.
+    /// </summary>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuSquaredAvg != null)
+            return;
+
+        var zeros = new float[parameterCount];
+        _gpuSquaredAvg = backend.AllocateBuffer(zeros);
+
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Updates parameters on the GPU using the RMSprop kernel.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuSquaredAvg == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        backend.RmspropUpdate(
+            parameters,
+            gradients,
+            _gpuSquaredAvg!,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            (float)_options.Decay,
+            (float)_options.Epsilon,
+            0.0f, // RMSprop doesn't have weight decay in these options
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuSquaredAvg?.Dispose();
+        _gpuSquaredAvg = null;
+        _gpuStateInitialized = false;
+    }
+
+    #endregion
 }

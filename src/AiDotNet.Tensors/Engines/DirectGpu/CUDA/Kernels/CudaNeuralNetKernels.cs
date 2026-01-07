@@ -580,6 +580,185 @@ extern ""C"" __global__ void lamb_step(
     param[idx] = p - learningRate * update;
 }
 
+// Vanilla SGD update (no momentum)
+extern ""C"" __global__ void sgd_update(
+    float* param, const float* gradient,
+    float learningRate, float weightDecay, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    param[idx] -= learningRate * grad;
+}
+
+// AdaDelta optimizer update
+extern ""C"" __global__ void adadelta_update(
+    float* param, const float* gradient, float* accumGrad, float* accumUpdate,
+    float rho, float epsilon, float weightDecay, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float ag = rho * accumGrad[idx] + (1.0f - rho) * grad * grad;
+    accumGrad[idx] = ag;
+
+    float rmsUpdate = sqrtf(accumUpdate[idx] + epsilon);
+    float rmsGrad = sqrtf(ag + epsilon);
+    float update = (rmsUpdate / rmsGrad) * grad;
+
+    accumUpdate[idx] = rho * accumUpdate[idx] + (1.0f - rho) * update * update;
+
+    param[idx] -= update;
+}
+
+// AMSGrad optimizer update
+extern ""C"" __global__ void amsgrad_update(
+    float* param, const float* gradient, float* m, float* v, float* vMax,
+    float learningRate, float beta1, float beta2, float epsilon,
+    float weightDecay, int step, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float mVal = beta1 * m[idx] + (1.0f - beta1) * grad;
+    m[idx] = mVal;
+
+    float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
+    v[idx] = vVal;
+
+    float vMaxVal = fmaxf(vMax[idx], vVal);
+    vMax[idx] = vMaxVal;
+
+    float mHat = mVal / (1.0f - powf(beta1, (float)step));
+
+    param[idx] -= learningRate * mHat / (sqrtf(vMaxVal) + epsilon);
+}
+
+// AdaMax optimizer update
+extern ""C"" __global__ void adamax_update(
+    float* param, const float* gradient, float* m, float* u,
+    float learningRate, float beta1, float beta2, float epsilon,
+    float weightDecay, int step, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float mVal = beta1 * m[idx] + (1.0f - beta1) * grad;
+    m[idx] = mVal;
+
+    float uVal = fmaxf(beta2 * u[idx], fabsf(grad));
+    u[idx] = uVal;
+
+    float biasCorrection = 1.0f - powf(beta1, (float)step);
+
+    param[idx] -= (learningRate / biasCorrection) * mVal / (uVal + epsilon);
+}
+
+// Lion optimizer update
+extern ""C"" __global__ void lion_update(
+    float* param, const float* gradient, float* m,
+    float learningRate, float beta1, float beta2, float weightDecay, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    float mVal = m[idx];
+
+    float interp = beta1 * mVal + (1.0f - beta1) * grad;
+    float update = (interp > 0.0f) ? 1.0f : ((interp < 0.0f) ? -1.0f : 0.0f);
+
+    m[idx] = beta2 * mVal + (1.0f - beta2) * grad;
+
+    if (weightDecay > 0.0f) {
+        update += weightDecay * param[idx];
+    }
+
+    param[idx] -= learningRate * update;
+}
+
+// Nadam optimizer update
+extern ""C"" __global__ void nadam_update(
+    float* param, const float* gradient, float* m, float* v,
+    float learningRate, float beta1, float beta2, float epsilon,
+    float weightDecay, int step, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    if (weightDecay > 0.0f) {
+        grad += weightDecay * param[idx];
+    }
+
+    float mVal = beta1 * m[idx] + (1.0f - beta1) * grad;
+    m[idx] = mVal;
+
+    float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
+    v[idx] = vVal;
+
+    float beta1Pow = powf(beta1, (float)step);
+    float beta2Pow = powf(beta2, (float)step);
+    float mHat = mVal / (1.0f - beta1Pow);
+    float vHat = vVal / (1.0f - beta2Pow);
+
+    float mNesterov = beta1 * mHat + (1.0f - beta1) * grad / (1.0f - beta1Pow);
+
+    param[idx] -= learningRate * mNesterov / (sqrtf(vHat) + epsilon);
+}
+
+// FTRL optimizer update
+extern ""C"" __global__ void ftrl_update(
+    float* param, const float* gradient, float* z, float* n,
+    float learningRate, float l1Reg, float l2Reg, float beta, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float grad = gradient[idx];
+    float nVal = n[idx];
+    float zVal = z[idx];
+    float pVal = param[idx];
+
+    float nNew = nVal + grad * grad;
+    n[idx] = nNew;
+
+    float sigma = (sqrtf(nNew) - sqrtf(nVal)) / learningRate;
+
+    zVal = zVal + grad - sigma * pVal;
+    z[idx] = zVal;
+
+    float zSign = (zVal > 0.0f) ? 1.0f : ((zVal < 0.0f) ? -1.0f : 0.0f);
+    float zAbs = fabsf(zVal);
+
+    if (zAbs <= l1Reg) {
+        param[idx] = 0.0f;
+    } else {
+        float denom = (beta + sqrtf(nNew)) / learningRate + l2Reg;
+        param[idx] = -zSign * (zAbs - l1Reg) / denom;
+    }
+}
+
 // ===========================================================================
 // DROPOUT AND EMBEDDING KERNELS
 // ===========================================================================
@@ -1372,6 +1551,13 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
                 "nag_step",
                 "lars_step",
                 "lamb_step",
+                "sgd_update",
+                "adadelta_update",
+                "amsgrad_update",
+                "adamax_update",
+                "lion_update",
+                "nadam_update",
+                "ftrl_update",
                 // Dropout and embedding
                 "dropout_forward",
                 "dropout_backward",

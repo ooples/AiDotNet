@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -476,4 +477,63 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_NAG_{_options.InitialMomentum}_{_options.InitialLearningRate}";
     }
+
+    #region GPU Optimizer Support
+
+    /// <summary>
+    /// GPU buffer for velocity state.
+    /// </summary>
+    private IGpuBuffer? _gpuVelocity;
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    public override bool SupportsGpuUpdate => true;
+
+    /// <summary>
+    /// Initializes NAG optimizer state on the GPU.
+    /// </summary>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuVelocity != null)
+            return;
+
+        var zeros = new float[parameterCount];
+        _gpuVelocity = backend.AllocateBuffer(zeros);
+
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Updates parameters on the GPU using the NAG kernel.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuVelocity == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        backend.NagUpdate(
+            parameters,
+            gradients,
+            _gpuVelocity!,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            (float)NumOps.ToDouble(CurrentMomentum),
+            0.0f, // NAG doesn't have weight decay in these options
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuVelocity?.Dispose();
+        _gpuVelocity = null;
+        _gpuStateInitialized = false;
+    }
+
+    #endregion
 }

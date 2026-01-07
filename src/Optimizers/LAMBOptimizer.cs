@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -761,4 +762,78 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_LAMB_{_options.InitialLearningRate}_{_options.Beta1}_{_options.Beta2}_{_options.WeightDecay}";
     }
+
+    #region GPU Optimizer Support
+
+    /// <summary>
+    /// GPU buffer for first moment estimates (m).
+    /// </summary>
+    private IGpuBuffer? _gpuM;
+
+    /// <summary>
+    /// GPU buffer for second moment estimates (v).
+    /// </summary>
+    private IGpuBuffer? _gpuV;
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    public override bool SupportsGpuUpdate => true;
+
+    /// <summary>
+    /// Initializes LAMB optimizer state on the GPU.
+    /// </summary>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuM != null && _gpuV != null)
+            return;
+
+        var zeros = new float[parameterCount];
+        _gpuM = backend.AllocateBuffer(zeros);
+        _gpuV = backend.AllocateBuffer(zeros);
+
+        _t = 0;
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Updates parameters on the GPU using the LAMB kernel.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuM == null || _gpuV == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        _t++;
+
+        backend.LambUpdate(
+            parameters,
+            gradients,
+            _gpuM!,
+            _gpuV!,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            (float)_options.Beta1,
+            (float)_options.Beta2,
+            (float)_options.Epsilon,
+            (float)_options.WeightDecay,
+            _t,
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuM?.Dispose();
+        _gpuM = null;
+        _gpuV?.Dispose();
+        _gpuV = null;
+        _gpuStateInitialized = false;
+    }
+
+    #endregion
 }

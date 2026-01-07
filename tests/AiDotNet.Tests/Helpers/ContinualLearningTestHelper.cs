@@ -338,8 +338,6 @@ public class MockLayer<T> : ILayer<T>
         }
     }
 
-    public string Name => "MockLayer";
-
     // ILayer<T> members
     public int[] GetInputShape() => [10];
 
