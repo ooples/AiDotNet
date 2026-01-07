@@ -59,5 +59,11 @@ public enum GpuTensorRole
     /// Attention cache for transformer models (KV cache).
     /// These can be large and benefit from persistent GPU residency.
     /// </summary>
-    AttentionCache = 9
+    AttentionCache = 9,
+
+    /// <summary>
+    /// Optimizer state tensor (momentum, Adam m/v buffers, etc.).
+    /// Persists across training steps and benefits from permanent GPU residency.
+    /// </summary>
+    OptimizerState = 10
 }

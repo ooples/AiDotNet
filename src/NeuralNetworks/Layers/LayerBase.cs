@@ -1019,7 +1019,38 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// This avoids downloading weights to CPU and re-uploading them.
     /// </para>
     /// </remarks>
+    [Obsolete("Use UpdateParametersGpu(IGpuOptimizerConfig) instead for full optimizer support.")]
     public virtual void UpdateParametersGpu(T learningRate, T? momentum = default, T? weightDecay = default)
+    {
+        // Convert old-style call to new optimizer config
+        var config = new SgdGpuConfig(
+            NumOps.ToFloat(learningRate),
+            momentum: momentum != null ? NumOps.ToFloat(momentum) : 0.9f,
+            weightDecay: weightDecay != null ? NumOps.ToFloat(weightDecay) : 0f);
+        UpdateParametersGpu(config);
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters on GPU using the specified optimizer configuration.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration specifying the update algorithm and hyperparameters.</param>
+    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates weights and biases directly on GPU using the optimizer specified in the config.
+    /// Supported optimizers include SGD, Adam, AdamW, RMSprop, Adagrad, NAG, LARS, and LAMB.
+    /// </para>
+    /// <para><b>For Beginners:</b> This updates the layer's learned values entirely on GPU.
+    /// 
+    /// The config determines which optimizer algorithm to use:
+    /// - SGD: Simple gradient descent with optional momentum
+    /// - Adam: Adaptive learning rates with moment estimates (most popular)
+    /// - AdamW: Adam with proper weight decay (recommended for transformers)
+    /// 
+    /// Using this method keeps all training computation on the GPU for maximum speed.
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParametersGpu(IGpuOptimizerConfig config)
     {
         throw new NotSupportedException(
             $"GPU parameter updates are not supported by {GetType().Name}. Use UpdateParameters() instead or check CanTrainOnGpu first.");

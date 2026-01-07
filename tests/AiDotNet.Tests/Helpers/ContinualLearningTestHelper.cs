@@ -488,4 +488,27 @@ public class MockLayer<T> : ILayer<T>
     {
         return new WeightLoadResult { Success = true };
     }
+
+    // GPU Training interface members (mock implementations)
+    public bool SupportsGpuTraining => false;
+
+    public void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        // No-op for mock - GPU training not supported
+    }
+
+    public void UploadWeightsToGpu()
+    {
+        // No-op for mock - GPU training not supported
+    }
+
+    public void DownloadWeightsFromGpu()
+    {
+        // No-op for mock - GPU training not supported
+    }
+
+    public void ZeroGradientsGpu()
+    {
+        // No-op for mock - GPU training not supported
+    }
 }

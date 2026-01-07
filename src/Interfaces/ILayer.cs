@@ -276,4 +276,90 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// affect how the next sentence is processed.
     /// </remarks>
     void ResetState();
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether this layer supports GPU-resident training (forward, backward, and parameter updates on GPU).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you if the layer can be trained entirely on the GPU.
+    /// GPU training is much faster because:
+    /// - Data stays on GPU between forward and backward passes
+    /// - No expensive CPU-GPU transfers during each training step
+    /// - GPU kernels handle all computation in parallel
+    /// 
+    /// If this returns true, you can use the GPU training methods (BackwardGpu, UpdateParametersGpu).
+    /// If false, training will fall back to the CPU implementation.
+    /// </remarks>
+    bool SupportsGpuTraining { get; }
+
+    /// <summary>
+    /// Updates the layer's parameters on GPU using the specified optimizer configuration.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration specifying the update algorithm and hyperparameters.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method updates the layer's weights and biases entirely on the GPU.
+    /// 
+    /// The optimizer config determines how the update is done:
+    /// - SGD: Simple gradient descent with optional momentum
+    /// - Adam: Adaptive learning rates with moment estimates
+    /// - AdamW: Adam with decoupled weight decay
+    /// - And more...
+    /// 
+    /// Using this method keeps all training computation on the GPU, which is much faster
+    /// than downloading gradients to CPU, computing updates, and uploading back.
+    /// 
+    /// Call BackwardGpu first to compute gradients, then call this to update weights.
+    /// </remarks>
+    void UpdateParametersGpu(IGpuOptimizerConfig config);
+
+    /// <summary>
+    /// Uploads the layer's weights and biases to GPU memory for GPU-resident training.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Call this once before starting GPU training.
+    /// 
+    /// It copies the layer's learned values (weights and biases) from CPU memory to GPU memory.
+    /// After this, training can happen entirely on the GPU without CPU involvement.
+    /// 
+    /// Also allocates GPU buffers for:
+    /// - Gradients (computed during BackwardGpu)
+    /// - Optimizer state (momentum, Adam moments, etc.)
+    /// </remarks>
+    void UploadWeightsToGpu();
+
+    /// <summary>
+    /// Downloads the layer's weights and biases from GPU memory back to CPU.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Call this after GPU training to sync the learned values back to CPU.
+    /// 
+    /// During GPU training, only the GPU copies of weights are updated.
+    /// Call this to:
+    /// - Save the model to disk
+    /// - Switch to CPU inference
+    /// - Inspect the trained weights
+    /// 
+    /// This is relatively expensive, so only call it when necessary (not every batch).
+    /// </remarks>
+    void DownloadWeightsFromGpu();
+
+    /// <summary>
+    /// Resets the GPU gradient accumulators to zero.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Call this at the start of each training batch.
+    /// 
+    /// Each batch computes new gradients. Before processing a new batch:
+    /// 1. Call this to clear old gradients
+    /// 2. Run ForwardGpu on the batch
+    /// 3. Run BackwardGpu to compute new gradients
+    /// 4. Call UpdateParametersGpu to apply the updates
+    /// 
+    /// If you forget to zero gradients, they accumulate and training goes wrong!
+    /// </remarks>
+    void ZeroGradientsGpu();
+
+    #endregion
 }

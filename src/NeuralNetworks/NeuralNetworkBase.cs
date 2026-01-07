@@ -628,7 +628,36 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// to actually update the weights. Everything happens on GPU for maximum speed.
     /// </para>
     /// </remarks>
+    [Obsolete("Use UpdateParametersGpu(IGpuOptimizerConfig) instead for full optimizer support.")]
     public virtual void UpdateParametersGpu(T learningRate, T? momentum = default, T? weightDecay = default)
+    {
+        // Convert to new config-based API
+        var config = new SgdGpuConfig(
+            NumOps.ToFloat(learningRate),
+            momentum: momentum != null ? NumOps.ToFloat(momentum) : 0.9f,
+            weightDecay: weightDecay != null ? NumOps.ToFloat(weightDecay) : 0f);
+        UpdateParametersGpu(config);
+    }
+
+    /// <summary>
+    /// Updates all trainable parameters in the network using the specified optimizer configuration.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration specifying the update algorithm and hyperparameters.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the network doesn't support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates weights and biases directly on GPU using gradients computed by BackpropagateGpu.
+    /// Supports all GPU optimizer types: SGD, Adam, AdamW, RMSprop, Adagrad, NAG, LARS, LAMB.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> After computing gradients with BackpropagateGpu(), call this
+    /// to actually update the weights. The config determines which optimizer algorithm to use:
+    /// - SGD: Simple gradient descent with optional momentum
+    /// - Adam: Adaptive learning rates (most popular)
+    /// - AdamW: Adam with proper weight decay (best for transformers)
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParametersGpu(IGpuOptimizerConfig config)
     {
         if (!CanTrainOnGpu)
         {
@@ -640,7 +669,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (layer is LayerBase<T> layerBase && layerBase.SupportsGpuTraining)
             {
-                layerBase.UpdateParametersGpu(learningRate, momentum, weightDecay);
+                layerBase.UpdateParametersGpu(config);
             }
         }
     }

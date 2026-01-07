@@ -158,30 +158,38 @@ The following methods have been added to LayerBase:
 | Gradient checkpointing on GPU | ❌ | Memory-efficient backward with GPU recompute |
 | Mixed precision training | ❌ | FP16 forward/backward with FP32 accumulation |
 
-### Phase 3: Optimizer GPU Integration ✅ KERNELS COMPLETE
-All optimizer kernels now exist. Wiring to optimizer classes is the next step.
+### Phase 3: Optimizer GPU Integration ✅ COMPLETE FOR DENSELAYER
+All optimizer kernels exist and DenseLayer has full wiring. Other layers need the same pattern.
 
 | Optimizer | Kernel Status | Integration Status |
 |-----------|---------------|-------------------|
-| SGD | ✅ `sgd_step` | ❌ Not wired |
-| Adam | ✅ `adam_step` | ❌ Not wired |
-| AdamW | ✅ `adamw_step` | ❌ Not wired |
-| Momentum | ✅ In sgd_step | ❌ Not wired |
-| RMSprop | ✅ `rmsprop_step` | ❌ Not wired |
-| Adagrad | ✅ `adagrad_step` | ❌ Not wired |
-| NAG | ✅ `nag_step` | ❌ Not wired |
-| LARS | ✅ `lars_step` | ❌ Not wired |
-| LAMB | ✅ `lamb_step` | ❌ Not wired |
+| SGD | ✅ `sgd_step` | ✅ Wired in DenseLayer |
+| Adam | ✅ `adam_step` | ✅ Wired in DenseLayer |
+| AdamW | ✅ `adamw_step` | ✅ Wired in DenseLayer |
+| Momentum | ✅ In sgd_step | ✅ Wired in DenseLayer |
+| RMSprop | ✅ `rmsprop_step` | ✅ Wired in DenseLayer |
+| Adagrad | ✅ `adagrad_step` | ✅ Wired in DenseLayer |
+| NAG | ✅ `nag_step` | ✅ Wired in DenseLayer |
+| LARS | ✅ `lars_step` | ✅ Wired in DenseLayer |
+| LAMB | ✅ `lamb_step` | ✅ Wired in DenseLayer |
 
 **Backend Implementation Status:**
 - CUDA: ✅ All 9 optimizer update methods
 - HIP: ✅ All 9 optimizer update methods  
 - OpenCL: ✅ All 9 optimizer update methods
 
+**Layer GPU Training Status:**
+| Layer | BackwardGpu | UpdateParametersGpu | SupportsGpuTraining |
+|-------|-------------|---------------------|---------------------|
+| DenseLayer | ✅ | ✅ All optimizers | ✅ |
+| DropoutLayer | ✅ | ➖ No params | ✅ |
+| FlattenLayer | ✅ | ➖ No params | ✅ |
+| ReshapeLayer | ✅ | ➖ No params | ✅ |
+| ActivationLayer | ✅ | ➖ No params | ❌ (needs update) |
+
 **Remaining Work:**
-- Wire optimizer classes to use GPU update methods
-- Add optimizer state buffers to layers (m, v for Adam, velocity for SGD, etc.)
-- Integrate with LayerBase.UpdateParametersGpu()
+- Add BackwardGpu + UpdateParametersGpu to other trainable layers (Conv, LSTM, Attention, etc.)
+- Update ActivationLayer.SupportsGpuTraining to true
 
 ### Phase 3: Loss Function GPU Integration
 | Loss Function | Status | Description |
@@ -247,7 +255,7 @@ All optimizer kernels now exist. Wiring to optimizer classes is the next step.
 ### Dense/Linear Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
-| DenseLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** |
+| DenseLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** - All 9 optimizers |
 | FullyConnectedLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** |
 | LocallyConnectedLayer | ✅ | ❌ | ❌ | ❌ | Per-position weights |
 | HyperbolicLinearLayer | ✅ | ❌ | ❌ | ❌ | Hyperbolic geometry |
@@ -393,17 +401,17 @@ All optimizer kernels now exist. Wiring to optimizer classes is the next step.
 
 - **Total Layers**: 118
 - **ForwardGpu Implemented**: 104 (88%)
-- **BackwardGpu Implemented**: 8 (7%) - ActivationLayer, DropoutLayer, FlattenLayer, ReshapeLayer + 4 pooling layers
-- **UpdateParametersGpu Implemented**: 0 (0%)
-- **GPU Weight Storage**: 0 (0%)
+- **BackwardGpu Implemented**: 9 (8%) - DenseLayer, ActivationLayer, DropoutLayer, FlattenLayer, ReshapeLayer + 4 pooling layers
+- **UpdateParametersGpu Implemented**: 1 (DenseLayer with all 9 optimizers)
+- **GPU Weight Storage**: 1 (DenseLayer)
 
 ## Required GPU Kernels
 
 ### High Priority Kernels
 | Kernel | Status | Used By | Complexity |
 |--------|--------|---------|------------|
-| GEMM Backward (dW) | ❌ | Dense, FC, Attention | Medium - transpose + GEMM |
-| GEMM Backward (dX) | ❌ | Dense, FC, Attention | Medium - transpose + GEMM |
+| GEMM Backward (dW) | ✅ | Dense, FC, Attention | Medium - transpose + GEMM |
+| GEMM Backward (dX) | ✅ | Dense, FC, Attention | Medium - transpose + GEMM |
 | Conv2D Backward (dW) | ❌ | All conv layers | High - im2col + GEMM |
 | Conv2D Backward (dX) | ❌ | All conv layers | High - col2im + GEMM |
 | BatchNorm Backward | ❌ | BatchNorm, ResNet | Medium - mean/var grads |
