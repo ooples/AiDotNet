@@ -523,20 +523,18 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         // Add bias
         backend.BiasAdd(preActivationBuffer, biasBuffer, preActivationBuffer, numEdges, OutputChannels);
 
-        // Cache pre-activation for backward pass
-        var preActData = backend.DownloadBuffer(preActivationBuffer);
-        _lastPreActivation = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(preActData), [numEdges, OutputChannels]);
-
         // Apply activation on GPU
         var outputBuffer = backend.AllocateBuffer(numEdges * OutputChannels);
         var fusedActivation = GetFusedActivationType();
         ApplyGpuActivation(backend, preActivationBuffer, outputBuffer, numEdges * OutputChannels, fusedActivation);
 
-        // Cache output for backward pass
+        // Batch download for backward pass caching - do all downloads together after GPU compute
+        var preActData = backend.DownloadBuffer(preActivationBuffer);
         var outputData = backend.DownloadBuffer(outputBuffer);
-        _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numEdges, OutputChannels]);
 
-        // Also cache input
+        // Cache pre-activation, output, and input for backward pass
+        _lastPreActivation = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(preActData), [numEdges, OutputChannels]);
+        _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numEdges, OutputChannels]);
         _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
 
         return new GpuTensor<T>(backend, outputBuffer, [numEdges, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);

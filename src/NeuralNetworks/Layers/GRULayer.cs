@@ -808,12 +808,24 @@ public class GRULayer<T> : LayerBase<T>
         List<float[]>? cachedHCan = null;
         List<float[]>? cachedH = null;
 
+        // Store buffer snapshots for deferred download (keep data on GPU during loop)
+        List<IGpuBuffer>? zBufferSnapshots = null;
+        List<IGpuBuffer>? rBufferSnapshots = null;
+        List<IGpuBuffer>? hCanBufferSnapshots = null;
+        List<IGpuBuffer>? hBufferSnapshots = null;
+
         if (IsTrainingMode)
         {
             cachedZ = new List<float[]>(sequenceLength);
             cachedR = new List<float[]>(sequenceLength);
             cachedHCan = new List<float[]>(sequenceLength);
             cachedH = new List<float[]>(sequenceLength);
+            
+            // Allocate snapshot buffers to store intermediate states on GPU
+            zBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
+            rBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
+            hCanBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
+            hBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
         }
 
         try
@@ -864,13 +876,24 @@ public class GRULayer<T> : LayerBase<T>
                     backend.Copy2DStrided(newHBuffer, outputBuffer, 1, hiddenBufferSize, outputSize, outputOffset);
                 }
 
-                // Cache states if training
-                if (IsTrainingMode && cachedZ != null)
+                // Cache states if training - copy to GPU snapshot buffers (defer download until after loop)
+                if (IsTrainingMode && zBufferSnapshots != null)
                 {
-                    cachedZ.Add(backend.DownloadBuffer(zGateBuffer));
-                    cachedR!.Add(backend.DownloadBuffer(rGateBuffer));
-                    cachedHCan!.Add(backend.DownloadBuffer(hCandidateBuffer));
-                    cachedH!.Add(backend.DownloadBuffer(newHBuffer));
+                    // Allocate snapshot buffers and copy current state
+                    var zSnapshot = backend.AllocateBuffer(hiddenBufferSize);
+                    var rSnapshot = backend.AllocateBuffer(hiddenBufferSize);
+                    var hCanSnapshot = backend.AllocateBuffer(hiddenBufferSize);
+                    var hSnapshot = backend.AllocateBuffer(hiddenBufferSize);
+                    
+                    backend.Copy(zGateBuffer, zSnapshot, hiddenBufferSize);
+                    backend.Copy(rGateBuffer, rSnapshot, hiddenBufferSize);
+                    backend.Copy(hCandidateBuffer, hCanSnapshot, hiddenBufferSize);
+                    backend.Copy(newHBuffer, hSnapshot, hiddenBufferSize);
+                    
+                    zBufferSnapshots.Add(zSnapshot);
+                    rBufferSnapshots!.Add(rSnapshot);
+                    hCanBufferSnapshots!.Add(hCanSnapshot);
+                    hBufferSnapshots!.Add(hSnapshot);
                 }
 
                 // Swap hidden state buffers
@@ -885,8 +908,28 @@ public class GRULayer<T> : LayerBase<T>
                 backend.Copy(currentHBuffer, outputBuffer, hiddenBufferSize);
             }
 
+            // Batch download all cached states AFTER the compute loop completes
+            // This keeps all data on GPU during the loop for better performance
+            if (IsTrainingMode && zBufferSnapshots != null && sequenceLength > 0)
+            {
+                // Download all snapshots in sequence (GPU work is done, now we transfer)
+                for (int t = 0; t < sequenceLength; t++)
+                {
+                    cachedZ!.Add(backend.DownloadBuffer(zBufferSnapshots[t]));
+                    cachedR!.Add(backend.DownloadBuffer(rBufferSnapshots![t]));
+                    cachedHCan!.Add(backend.DownloadBuffer(hCanBufferSnapshots![t]));
+                    cachedH!.Add(backend.DownloadBuffer(hBufferSnapshots![t]));
+                    
+                    // Dispose snapshot buffers after download
+                    zBufferSnapshots[t].Dispose();
+                    rBufferSnapshots[t].Dispose();
+                    hCanBufferSnapshots[t].Dispose();
+                    hBufferSnapshots[t].Dispose();
+                }
+            }
+
             // Reconstruct CPU tensors for backward pass if training
-            if (IsTrainingMode && cachedZ != null && sequenceLength > 0)
+            if (IsTrainingMode && cachedZ != null && cachedZ.Count > 0)
             {
                 // Store last timestep activations for single-step backward compatibility
                 _lastZ = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(cachedZ[sequenceLength - 1]), [batchSize, _hiddenSize]);
@@ -918,6 +961,15 @@ public class GRULayer<T> : LayerBase<T>
             outputBuffer.Dispose();
             currentHBuffer.Dispose();
             newHBuffer.Dispose();
+            
+            // Clean up snapshot buffers on error
+            if (zBufferSnapshots != null)
+            {
+                foreach (var buf in zBufferSnapshots) buf?.Dispose();
+                foreach (var buf in rBufferSnapshots!) buf?.Dispose();
+                foreach (var buf in hCanBufferSnapshots!) buf?.Dispose();
+                foreach (var buf in hBufferSnapshots!) buf?.Dispose();
+            }
             throw;
         }
     }
