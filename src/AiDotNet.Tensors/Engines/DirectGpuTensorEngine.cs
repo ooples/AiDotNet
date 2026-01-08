@@ -31,6 +31,30 @@ internal sealed class GpuBufferCacheEntry : IDisposable
 }
 
 /// <summary>
+/// Cache entry for intermediate activation tensors to avoid re-uploading between layers.
+/// When a layer's output is downloaded, we cache the GPU buffer so the next layer
+/// can reuse it without re-uploading if it uses the same data.
+/// </summary>
+internal sealed class ActivationCacheEntry : IDisposable
+{
+    public IGpuBuffer Buffer { get; }
+    public int[] Shape { get; }
+    public long Timestamp { get; }
+
+    public ActivationCacheEntry(IGpuBuffer buffer, int[] shape, long timestamp)
+    {
+        Buffer = buffer;
+        Shape = shape;
+        Timestamp = timestamp;
+    }
+
+    public void Dispose()
+    {
+        Buffer.Dispose();
+    }
+}
+
+/// <summary>
 /// IEngine implementation that routes supported ops to DirectGpuEngine and falls back to CPU.
 /// </summary>
 public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
@@ -43,6 +67,13 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     // Version tracking for invalidation
     private readonly ConcurrentDictionary<object, int> _tensorVersions = new();
+
+    // Activation cache for intermediate tensors - enables GPU-resident layer chaining
+    // Key: tensor data array reference, Value: (buffer, shape, timestamp)
+    // This cache holds the last N activation buffers to avoid re-uploading layer outputs
+    private readonly ConcurrentDictionary<object, ActivationCacheEntry> _activationCache = new();
+    private const int MaxActivationCacheSize = 16; // Limit memory usage
+    private long _activationCacheTimestamp = 0;
 
     public DirectGpuTensorEngine()
     {
@@ -341,15 +372,78 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// <summary>
     /// Gets a GPU buffer for the tensor data, using cache if available.
     /// Returns an OwnedBuffer that only disposes if we allocated it (not cached).
+    /// Checks both persistent tensor cache (weights/biases) and activation cache (layer outputs).
     /// </summary>
     private OwnedBuffer GetOrAllocateBuffer<T>(IDirectGpuBackend backend, T[] data)
     {
+        // First check persistent tensor cache (for weights/biases)
         var cached = TryGetCachedBuffer(data);
         if (cached != null)
             return new OwnedBuffer(cached, ownsBuffer: false);
 
+        // Check activation cache (for intermediate layer outputs)
+        if (_activationCache.TryGetValue(data, out var activationEntry))
+        {
+            // Found in activation cache - reuse buffer without re-uploading
+            // Return with ownsBuffer=false so we don't dispose the cached buffer
+            return new OwnedBuffer(activationEntry.Buffer, ownsBuffer: false);
+        }
+
+        // Not cached - need to upload
         float[] floatData = DirectGpuEngine.ToFloatArray(data);
         return new OwnedBuffer(backend.AllocateBuffer(floatData), ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Caches the result buffer for potential reuse by the next layer.
+    /// The result data array serves as the cache key.
+    /// </summary>
+    private void CacheActivation<T>(T[] resultData, IGpuBuffer buffer, int[] shape)
+    {
+        // Evict old entries if cache is full
+        if (_activationCache.Count >= MaxActivationCacheSize)
+        {
+            EvictOldestActivations();
+        }
+
+        var timestamp = System.Threading.Interlocked.Increment(ref _activationCacheTimestamp);
+        var entry = new ActivationCacheEntry(buffer, shape, timestamp);
+        _activationCache.TryAdd(resultData, entry);
+    }
+
+    /// <summary>
+    /// Evicts the oldest half of the activation cache entries.
+    /// </summary>
+    private void EvictOldestActivations()
+    {
+        var entries = _activationCache.ToArray();
+        if (entries.Length == 0) return;
+
+        // Sort by timestamp (oldest first)
+        var sorted = entries.OrderBy(e => e.Value.Timestamp).ToArray();
+
+        // Remove oldest half
+        int removeCount = sorted.Length / 2;
+        for (int i = 0; i < removeCount; i++)
+        {
+            if (_activationCache.TryRemove(sorted[i].Key, out var removed))
+            {
+                removed.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clears the activation cache to free GPU memory.
+    /// Call this between inference batches if memory is tight.
+    /// </summary>
+    public void ClearActivationCache()
+    {
+        foreach (var entry in _activationCache.Values)
+        {
+            entry.Dispose();
+        }
+        _activationCache.Clear();
     }
 
     /// <summary>
@@ -881,11 +975,17 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int resultSize = batchSize * outputFeatures;
             float[] resultFloat = new float[resultSize];
             backend.DownloadBuffer(resultBuffer, resultFloat);
-            resultBuffer.Dispose();
 
             // Convert back to T
             T[] resultData = DirectGpuEngine.FromFloatArray<T>(resultFloat);
-            return new Tensor<T>(resultData, new[] { batchSize, outputFeatures });
+            int[] resultShape = new[] { batchSize, outputFeatures };
+
+            // Cache the result buffer for potential reuse by the next layer
+            // The next layer's input will be this layer's output (same data array)
+            // So when GetOrAllocateBuffer is called with resultData, it can reuse this buffer
+            CacheActivation(resultData, resultBuffer, resultShape);
+
+            return new Tensor<T>(resultData, resultShape);
         }
         catch
         {
