@@ -228,21 +228,6 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Checks if all layers support GPU execution for the GPU-resident optimization path.
-    /// </summary>
-    private bool CanUseGpuResidentPath()
-    {
-        foreach (var layer in Layers)
-        {
-            if (!layer.CanExecuteOnGpu)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /// <summary>
     /// Trains the neural network on input-output pairs.
     /// </summary>
     /// <param name="input">The input tensor for training.</param>

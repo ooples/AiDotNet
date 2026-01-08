@@ -218,6 +218,11 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+
         var expectedShape = Architecture.GetInputShape();
 
         // Validate input shape - accept both 3D [C,H,W] and 4D [B,C,H,W]

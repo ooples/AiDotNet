@@ -575,6 +575,74 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Checks if all layers in the network support GPU execution.
+    /// Used to determine if the GPU-resident optimization path can be used.
+    /// </summary>
+    /// <returns>True if all layers can execute on GPU; false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method checks if every layer in your network can run on the GPU.
+    /// If even one layer needs the CPU, we can't use the fast GPU-only path.
+    /// </para>
+    /// </remarks>
+    protected virtual bool CanUseGpuResidentPath()
+    {
+        foreach (var layer in Layers)
+        {
+            if (!layer.CanExecuteOnGpu)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to perform a GPU-resident forward pass with automatic fallback to CPU.
+    /// Use this in derived class Forward() methods to get GPU optimization with minimal code.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <param name="result">The output tensor if GPU path succeeded.</param>
+    /// <returns>True if GPU path was used successfully; false if CPU path should be used.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Derived Classes:</b> Call this at the start of your Forward() method:
+    /// </para>
+    /// <code>
+    /// public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)
+    /// {
+    ///     if (TryForwardGpuOptimized(input, out var result))
+    ///         return result;
+    ///     
+    ///     // CPU fallback path
+    ///     ...
+    /// }
+    /// </code>
+    /// </remarks>
+    protected bool TryForwardGpuOptimized(Tensor<T> input, out Tensor<T> result)
+    {
+        result = null!;
+        
+        if (Engine is not DirectGpuTensorEngine)
+            return false;
+            
+        if (!CanUseGpuResidentPath())
+            return false;
+            
+        try
+        {
+            using var gpuResult = ForwardGpu(input);
+            result = gpuResult.ToTensor();
+            return true;
+        }
+        catch
+        {
+            // Fall back to CPU path on any GPU error
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Performs a GPU-resident forward pass, keeping intermediate results on GPU.
     /// Only downloads the final result to CPU when the returned tensor is accessed.
     /// </summary>

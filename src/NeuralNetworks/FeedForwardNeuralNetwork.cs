@@ -168,22 +168,9 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(FeedForwardNeuralNetwork<T>), "forward pass");
 
-        // GPU-resident optimization: when GPU engine is available and all layers support GPU,
-        // use the GPU-resident path to avoid per-layer CPU downloads.
-        // This can provide 10-50x speedup for inference workloads.
-        if (Engine is DirectGpuTensorEngine && CanUseGpuResidentPath())
-        {
-            try
-            {
-                // ForwardGpu chains layers on GPU without intermediate CPU downloads
-                using var gpuResult = ForwardGpu(input);
-                return gpuResult.ToTensor();
-            }
-            catch
-            {
-                // Fall back to CPU path on any GPU error
-            }
-        }
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
 
         // CPU path: each layer processes input and may download results
         Tensor<T> output = input;
@@ -193,21 +180,6 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Checks if all layers support GPU execution for the GPU-resident optimization path.
-    /// </summary>
-    private bool CanUseGpuResidentPath()
-    {
-        foreach (var layer in Layers)
-        {
-            if (!layer.CanExecuteOnGpu)
-            {
-                return false;
-            }
-        }
-        return true;
     }
 
     /// <summary>
