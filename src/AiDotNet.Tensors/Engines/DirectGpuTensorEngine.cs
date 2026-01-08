@@ -40,12 +40,14 @@ internal sealed class ActivationCacheEntry : IDisposable
     public IGpuBuffer Buffer { get; }
     public int[] Shape { get; }
     public long Timestamp { get; }
+    public IDirectGpuBackend Backend { get; }
 
-    public ActivationCacheEntry(IGpuBuffer buffer, int[] shape, long timestamp)
+    public ActivationCacheEntry(IGpuBuffer buffer, int[] shape, long timestamp, IDirectGpuBackend backend)
     {
         Buffer = buffer;
         Shape = shape;
         Timestamp = timestamp;
+        Backend = backend;
     }
 
     public void Dispose()
@@ -72,7 +74,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     // Key: tensor data array reference, Value: (buffer, shape, timestamp)
     // This cache holds the last N activation buffers to avoid re-uploading layer outputs
     private readonly ConcurrentDictionary<object, ActivationCacheEntry> _activationCache = new();
-    private const int MaxActivationCacheSize = 16; // Limit memory usage
+    private const int DefaultActivationCacheSize = 16;
+    private int _maxActivationCacheSize = DefaultActivationCacheSize;
     private long _activationCacheTimestamp = 0;
 
     public DirectGpuTensorEngine()
@@ -94,6 +97,17 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         : "CPU Engine (DirectGpu unavailable)";
 
     public new bool SupportsGpu => IsGpuAvailable;
+
+    /// <summary>
+    /// Gets or sets the maximum number of activation cache entries.
+    /// Larger values use more GPU memory but reduce re-uploads for deep networks.
+    /// Default is 16.
+    /// </summary>
+    public int MaxActivationCacheSize
+    {
+        get => _maxActivationCacheSize;
+        set => _maxActivationCacheSize = value > 0 ? value : DefaultActivationCacheSize;
+    }
 
     DirectGpuEngine? IEngine.DirectGpu => _directGpu;
 
@@ -391,9 +405,11 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             return new OwnedBuffer(cached, ownsBuffer: false);
 
         // Check activation cache (for intermediate layer outputs)
-        if (_activationCache.TryGetValue(data, out var activationEntry))
+        // Only reuse if the cached buffer was created by the same backend to avoid cross-backend issues
+        if (_activationCache.TryGetValue(data, out var activationEntry) &&
+            ReferenceEquals(activationEntry.Backend, backend))
         {
-            // Found in activation cache - reuse buffer without re-uploading
+            // Found in activation cache with matching backend - reuse buffer without re-uploading
             // Return with ownsBuffer=false so we don't dispose the cached buffer
             return new OwnedBuffer(activationEntry.Buffer, ownsBuffer: false);
         }
@@ -407,16 +423,16 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// Caches the result buffer for potential reuse by the next layer.
     /// The result data array serves as the cache key.
     /// </summary>
-    private void CacheActivation<T>(T[] resultData, IGpuBuffer buffer, int[] shape)
+    private void CacheActivation<T>(T[] resultData, IGpuBuffer buffer, int[] shape, IDirectGpuBackend backend)
     {
         // Evict old entries if cache is full
-        if (_activationCache.Count >= MaxActivationCacheSize)
+        if (_activationCache.Count >= _maxActivationCacheSize)
         {
             EvictOldestActivations();
         }
 
         var timestamp = System.Threading.Interlocked.Increment(ref _activationCacheTimestamp);
-        var entry = new ActivationCacheEntry(buffer, shape, timestamp);
+        var entry = new ActivationCacheEntry(buffer, shape, timestamp, backend);
         if (!_activationCache.TryAdd(resultData, entry))
         {
             // Entry was not added (key already exists); dispose to avoid leaking the buffer.
@@ -1036,7 +1052,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             // Cache the result buffer for potential reuse by the next layer
             // The next layer's input will be this layer's output (same data array)
             // So when GetOrAllocateBuffer is called with resultData, it can reuse this buffer
-            CacheActivation(resultData, resultBuffer, resultShape);
+            CacheActivation(resultData, resultBuffer, resultShape, backend);
 
             return new Tensor<T>(resultData, resultShape);
         }

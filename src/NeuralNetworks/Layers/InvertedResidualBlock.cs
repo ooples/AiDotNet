@@ -50,7 +50,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
     private readonly ConvolutionalLayer<T> _projectConv;
     private readonly BatchNormalizationLayer<T> _projectBn;
 
-    private readonly IActivationFunction<T> _activation;
     private readonly bool _useResidual;
     private readonly bool _hasExpansion;
     private readonly bool _useSE;
@@ -120,7 +119,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         IActivationFunction<T>? activationFunction = null)
         : base(
             inputShape: [inChannels, inputHeight, inputWidth],
-            outputShape: [outChannels, (inputHeight + stride - 1) / stride, (inputWidth + stride - 1) / stride])
+            outputShape: [outChannels, (inputHeight + stride - 1) / stride, (inputWidth + stride - 1) / stride],
+            scalarActivation: activationFunction ?? new ReLU6Activation<T>())
     {
         InChannels = inChannels;
         OutChannels = outChannels;
@@ -128,7 +128,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         Stride = stride;
 
         int hiddenDim = inChannels * expansionRatio;
-        _activation = activationFunction ?? new ReLU6Activation<T>();
         _hasExpansion = expansionRatio != 1;
         _useSE = useSE;
 
@@ -278,8 +277,23 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         x = gpuEngine.ActivationGpu(dwBnOut, GetFusedActivationType());
 
         // Squeeze-and-Excitation phase (optional)
-        // Note: SE layer is skipped in GPU path due to format transposition complexity
-        // The SE layer's effect is typically small and can be omitted for inference speed
+        if (_useSE && _se is not null)
+        {
+            // Permute from NCHW [B, C, H, W] to NHWC [B, H, W, C] for SE layer
+            var xNhwc = gpuEngine.PermuteGpu(x, [0, 2, 3, 1]);
+
+            // Apply SE layer (expects NHWC format)
+            var seOut = _se.ForwardGpu(xNhwc);
+
+            // Permute back from NHWC [B, H, W, C] to NCHW [B, C, H, W]
+            var seOutNchw = gpuEngine.PermuteGpu(seOut, [0, 3, 1, 2]);
+
+            // Dispose intermediate tensors
+            xNhwc.Dispose();
+            seOut.Dispose();
+
+            x = seOutNchw;
+        }
 
         // Projection phase (LINEAR - no activation)
         var projectOut = _projectConv.ForwardGpu(x);
@@ -292,26 +306,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         }
 
         return projectBnOut;
-    }
-
-
-    /// <summary>
-    /// Gets the FusedActivationType corresponding to the activation function.
-    /// </summary>
-    private new FusedActivationType GetFusedActivationType()
-    {
-        return _activation switch
-        {
-            ReLUActivation<T> => FusedActivationType.ReLU,
-            LeakyReLUActivation<T> => FusedActivationType.LeakyReLU,
-            SigmoidActivation<T> => FusedActivationType.Sigmoid,
-            TanhActivation<T> => FusedActivationType.Tanh,
-            GELUActivation<T> => FusedActivationType.GELU,
-            SwishActivation<T> => FusedActivationType.Swish,
-            SiLUActivation<T> => FusedActivationType.Swish,
-            ReLU6Activation<T> => FusedActivationType.ReLU, // Approximate ReLU6 with ReLU for GPU
-            _ => FusedActivationType.None
-        };
     }
 
     /// <summary>
@@ -518,7 +512,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
                 return false;
 
             // Check activation supports JIT
-            if (!_activation.SupportsJitCompilation)
+            if (ScalarActivation is not null && !ScalarActivation.SupportsJitCompilation)
                 return false;
 
             return true;
@@ -578,7 +572,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
                 epsilon: NumOps.ToDouble(_expandBn.GetEpsilon()));
 
             // Apply activation using proper JIT graph integration
-            current = _activation.ApplyToGraph(current);
+            if (ScalarActivation is not null)
+                current = ScalarActivation.ApplyToGraph(current);
         }
 
         // Depthwise convolution phase
@@ -602,7 +597,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
                 epsilon: NumOps.ToDouble(_dwBn.GetEpsilon()));
 
             // Apply activation using proper JIT graph integration
-            current = _activation.ApplyToGraph(current);
+            if (ScalarActivation is not null)
+                current = ScalarActivation.ApplyToGraph(current);
         }
 
         // Squeeze-and-Excitation phase (if used)
@@ -653,12 +649,16 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
 
     private Tensor<T> ApplyBlockActivation(Tensor<T> input)
     {
-        return _activation.Activate(input);
+        if (ScalarActivation is null)
+            return input;
+        return ScalarActivation.Activate(input);
     }
 
     private Tensor<T> ApplyBlockActivationDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var derivative = _activation.Derivative(input);
+        if (ScalarActivation is null)
+            return gradient;
+        var derivative = ScalarActivation.Derivative(input);
         return MultiplyTensors(gradient, derivative);
     }
 
