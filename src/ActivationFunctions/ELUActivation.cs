@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -188,4 +189,54 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
         double alphaDouble = Convert.ToDouble(_alpha);
         return TensorOperations<T>.ELU(input, alphaDouble);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether ELU supports GPU-resident training.
+    /// </summary>
+    /// <value>True because ELU has GPU kernels for both forward and backward passes.</value>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the ELU activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// ELU on GPU: output[i] = input[i] > 0 ? input[i] : alpha * (exp(input[i]) - 1)
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        float alpha = (float)NumOps.ToDouble(_alpha);
+        backend.Elu(input, output, alpha, size);
+    }
+
+    /// <summary>
+    /// Calculates the ELU backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass.</param>
+    /// <param name="output">The output buffer from the forward pass.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// ELU backward on GPU: gradInput[i] = gradOutput[i] * (input[i] > 0 ? 1 : output[i] + alpha)
+    /// Note: ELU backward needs both input and output from forward pass.
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input), "ELU backward requires the input from forward pass.");
+        if (output == null)
+            throw new ArgumentNullException(nameof(output), "ELU backward requires the output from forward pass.");
+
+        float alpha = (float)NumOps.ToDouble(_alpha);
+        backend.EluBackward(gradOutput, input, output, gradInput, alpha, size);
+    }
+
+    #endregion
 }

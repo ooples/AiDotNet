@@ -4070,6 +4070,130 @@ public sealed class CudaBackend : IAsyncGpuBackend
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
+    // SiLU backward uses SwishBackward since they're mathematically equivalent
+    public void SiluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        SwishBackward(gradOutput, input, gradInput, size);
+    }
+
+    public unsafe void MishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("mish_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: mish_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void SoftplusBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("softplus_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: softplus_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void HardswishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardswish_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hardswish_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void SeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, float scale, int size)
+    {
+        if (!_kernelCache.TryGetValue("selu_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: selu_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[6];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &alpha;
+        args[4] = &scale;
+        args[5] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void HardsigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardsigmoid_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hardsigmoid_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void HardtanhBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float minVal, float maxVal, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardtanh_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hardtanh_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[6];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &minVal;
+        args[4] = &maxVal;
+        args[5] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
     #endregion
 
 

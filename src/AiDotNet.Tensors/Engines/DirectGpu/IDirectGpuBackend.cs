@@ -1219,12 +1219,19 @@ public interface IDirectGpuBackend : IDisposable
     void Swish(IGpuBuffer A, IGpuBuffer B, int size);
     void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Silu(IGpuBuffer A, IGpuBuffer B, int size);
+    void SiluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Mish(IGpuBuffer A, IGpuBuffer B, int size);
+    void MishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Softplus(IGpuBuffer A, IGpuBuffer B, int size);
+    void SoftplusBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Hardswish(IGpuBuffer A, IGpuBuffer B, int size);
+    void HardswishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Selu(IGpuBuffer A, IGpuBuffer B, float alpha, float scale, int size);
+    void SeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, float scale, int size);
     void Hardsigmoid(IGpuBuffer A, IGpuBuffer B, int size);
+    void HardsigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Hardtanh(IGpuBuffer A, IGpuBuffer B, float minVal, float maxVal, int size);
+    void HardtanhBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float minVal, float maxVal, int size);
 
     #endregion
 

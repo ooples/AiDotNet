@@ -1,5 +1,5 @@
 using AiDotNet.Autodiff;
-
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -140,4 +140,51 @@ public class MishActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.Mish(input);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether Mish supports GPU-resident training.
+    /// </summary>
+    /// <value>True because Mish has GPU kernels for both forward and backward passes.</value>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the Mish activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// Mish on GPU: output[i] = input[i] * tanh(softplus(input[i]))
+    /// where softplus(x) = ln(1 + exp(x))
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        backend.Mish(input, output, size);
+    }
+
+    /// <summary>
+    /// Calculates the Mish backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass.</param>
+    /// <param name="output">Not used for Mish (can be null). Mish backward uses forward input.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// Mish backward on GPU computes the gradient using the chain rule with the
+    /// derivative of the Mish function.
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input), "Mish backward requires the input from forward pass.");
+
+        backend.MishBackward(gradOutput, input, gradInput, size);
+    }
+
+    #endregion
 }

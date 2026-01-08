@@ -577,11 +577,13 @@ public class ActivationLayer<T> : LayerBase<T>
     /// Gets whether this layer supports GPU-resident training.
     /// </summary>
     /// <value>
-    /// True for common activations (ReLU, Sigmoid, Tanh, GELU, LeakyReLU) that have GPU backward kernels.
+    /// True if the activation function reports GPU training support via its SupportsGpuTraining property.
     /// </value>
     /// <remarks>
     /// <para>
-    /// GPU training is supported for activations that have GPU-accelerated backward kernels.
+    /// GPU training is supported if the underlying activation function has implemented
+    /// GPU kernels for both forward and backward passes. This is determined by the
+    /// activation function's SupportsGpuTraining property.
     /// Vector activations like Softmax are not yet supported for GPU training.
     /// </para>
     /// </remarks>
@@ -593,18 +595,9 @@ public class ActivationLayer<T> : LayerBase<T>
             if (_useVectorActivation)
                 return false;
 
-            // Check if we have a known scalar activation with GPU support
+            // Delegate to the activation function's GPU support property
             var activation = ScalarActivation;
-            if (activation == null)
-                return false;
-
-            // Check activation type name for known supported types
-            // Note: GELU is excluded because BackwardGpu doesn't have a GPU GELU backward kernel yet
-            var typeName = activation.GetType().Name;
-            return typeName.Contains("ReLU") ||
-                   typeName.Contains("Sigmoid") ||
-                   typeName.Contains("Tanh") ||
-                   typeName.Contains("LeakyReLU");
+            return activation?.SupportsGpuTraining ?? false;
         }
     }
 
@@ -640,71 +633,27 @@ public class ActivationLayer<T> : LayerBase<T>
         // Store GPU input for backward pass
         _gpuLastInput = input;
 
-        // Try GPU-native activation first
-        if (!_useVectorActivation && ScalarActivation != null)
+        // Use activation function's GPU method if supported
+        if (!_useVectorActivation && ScalarActivation is { SupportsGpuTraining: true })
         {
-            var typeName = ScalarActivation.GetType().Name;
-            IGpuBuffer outputBuffer;
-
-            if (typeName.Contains("ReLU") && !typeName.Contains("Leaky"))
-            {
-                outputBuffer = backend.AllocateBuffer(size);
-                backend.Relu(input.Buffer, outputBuffer, size);
-                var gpuOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation);
-                _gpuLastOutput = gpuOutput;
-                return gpuOutput;
-            }
-            else if (typeName.Contains("LeakyReLU") || typeName.Contains("LeakyRelu"))
-            {
-                outputBuffer = backend.AllocateBuffer(size);
-                // Get alpha from the LeakyReLU activation instance
-                float alpha = 0.01f; // default
-                if (ScalarActivation is LeakyReLUActivation<T> leakyRelu)
-                {
-                    alpha = (float)NumOps.ToDouble(leakyRelu.Alpha);
-                }
-                backend.LeakyRelu(input.Buffer, outputBuffer, alpha, size);
-                var gpuOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation);
-                _gpuLastOutput = gpuOutput;
-                return gpuOutput;
-            }
-            else if (typeName.Contains("Sigmoid"))
-            {
-                outputBuffer = backend.AllocateBuffer(size);
-                backend.Sigmoid(input.Buffer, outputBuffer, size);
-                var gpuOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation);
-                _gpuLastOutput = gpuOutput;
-                return gpuOutput;
-            }
-            else if (typeName.Contains("Tanh"))
-            {
-                outputBuffer = backend.AllocateBuffer(size);
-                backend.Tanh(input.Buffer, outputBuffer, size);
-                var gpuOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation);
-                _gpuLastOutput = gpuOutput;
-                return gpuOutput;
-            }
-            else if (typeName.Contains("GELU") || typeName.Contains("Gelu"))
-            {
-                outputBuffer = backend.AllocateBuffer(size);
-                backend.Gelu(input.Buffer, outputBuffer, size);
-                var gpuOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation);
-                _gpuLastOutput = gpuOutput;
-                return gpuOutput;
-            }
+            var outputBuffer = backend.AllocateBuffer(size);
+            ScalarActivation.ForwardGpu(backend, input.Buffer, outputBuffer, size);
+            var gpuOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation);
+            _gpuLastOutput = gpuOutput;
+            return gpuOutput;
         }
 
         // Fallback to CPU for unsupported activations
         var cpuInput = input.ToTensor();
         var cpuOutput = _useVectorActivation ? ApplyVectorActivation(cpuInput) : ApplyScalarActivation(cpuInput);
-        
+
         // Store CPU input for backward compatibility
         _lastInput = cpuInput;
 
         // Upload result to GPU
         var gpuOutputFallback = new GpuTensor<T>(backend, cpuOutput, GpuTensorRole.Activation);
         _gpuLastOutput = gpuOutputFallback;
-        
+
         return gpuOutputFallback;
     }
 
@@ -717,9 +666,9 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <exception cref="NotSupportedException">Thrown when the activation type is not supported for GPU.</exception>
     /// <remarks>
     /// <para>
-    /// This method computes the activation gradient on GPU. For activations like ReLU, it needs
-    /// the input; for Sigmoid/Tanh, it needs the output. The appropriate GPU kernel is selected
-    /// based on the activation type.
+    /// This method computes the activation gradient on GPU. The activation function's BackwardGpu
+    /// method is called directly, which knows whether it needs the input or output from the
+    /// forward pass based on the specific activation type.
     /// </para>
     /// </remarks>
     public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
@@ -750,55 +699,19 @@ public class ActivationLayer<T> : LayerBase<T>
         var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
         int size = outputGradient.ElementCount;
 
-        // Try GPU-native backward first
-        if (ScalarActivation != null)
+        // Use activation function's GPU backward method if supported
+        if (ScalarActivation is { SupportsGpuTraining: true })
         {
-            var typeName = ScalarActivation.GetType().Name;
-            IGpuBuffer gradInputBuffer;
-
-            if (typeName.Contains("ReLU") && !typeName.Contains("Leaky"))
-            {
-                // ReLU backward needs input: grad_input = grad_output * (input > 0)
-                gradInputBuffer = backend.AllocateBuffer(size);
-                backend.ReluBackward(outputGradient.Buffer, _gpuLastInput.Buffer, gradInputBuffer, size);
-                return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient);
-            }
-            else if (typeName.Contains("LeakyReLU") || typeName.Contains("LeakyRelu"))
-            {
-                // LeakyReLU backward needs input
-                gradInputBuffer = backend.AllocateBuffer(size);
-                // Get alpha from the LeakyReLU activation instance
-                float alpha = 0.01f; // default
-                if (ScalarActivation is LeakyReLUActivation<T> leakyRelu)
-                {
-                    alpha = (float)NumOps.ToDouble(leakyRelu.Alpha);
-                }
-                backend.LeakyReluBackward(outputGradient.Buffer, _gpuLastInput.Buffer, gradInputBuffer, alpha, size);
-                return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient);
-            }
-            else if (typeName.Contains("Sigmoid"))
-            {
-                // Sigmoid backward needs output: grad_input = grad_output * output * (1 - output)
-                if (_gpuLastOutput == null)
-                {
-                    throw new InvalidOperationException("Sigmoid backward requires cached forward output.");
-                }
-                gradInputBuffer = backend.AllocateBuffer(size);
-                backend.SigmoidBackward(outputGradient.Buffer, _gpuLastOutput.Buffer, gradInputBuffer, size);
-                return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient);
-            }
-            else if (typeName.Contains("Tanh"))
-            {
-                // Tanh backward needs output: grad_input = grad_output * (1 - output^2)
-                if (_gpuLastOutput == null)
-                {
-                    throw new InvalidOperationException("Tanh backward requires cached forward output.");
-                }
-                gradInputBuffer = backend.AllocateBuffer(size);
-                backend.TanhBackward(outputGradient.Buffer, _gpuLastOutput.Buffer, gradInputBuffer, size);
-                return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient);
-            }
-            // GELU backward would need to be added to IDirectGpuBackend
+            var gradInputBuffer = backend.AllocateBuffer(size);
+            // Pass both input and output - the activation function knows which one it needs
+            ScalarActivation.BackwardGpu(
+                backend,
+                outputGradient.Buffer,
+                _gpuLastInput?.Buffer,
+                _gpuLastOutput?.Buffer,
+                gradInputBuffer,
+                size);
+            return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient);
         }
 
         // Fallback to CPU for unsupported activations

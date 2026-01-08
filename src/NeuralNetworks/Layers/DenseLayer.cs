@@ -1425,7 +1425,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     // GPU-resident tensors for training
     private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastOutput;
+    private IGpuTensor<T>? _gpuLastOutput;       // Activated output (needed for Sigmoid/Tanh backward)
+    private IGpuTensor<T>? _gpuPreActivation;    // Pre-activation output (needed for ReLU/GELU/Swish backward)
     private IGpuTensor<T>? _gpuWeights;
     private IGpuTensor<T>? _gpuBiases;
     private IGpuTensor<T>? _gpuWeightsGradient;
@@ -1497,14 +1498,35 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var matmulResult = gpuEngine.MatMulGpu(flattenedInput, _gpuWeights);
         var withBias = gpuEngine.AddBiasGpu(matmulResult, _gpuBiases);
 
-        // Cache pre-activation output for backward
-        _gpuLastOutput = withBias;
+        // Cache pre-activation output for backward (needed for ReLU, GELU, Swish backward)
+        _gpuPreActivation = withBias;
 
-        // TODO: Apply activation on GPU when activation backward kernels are integrated
-        // For now, download, apply activation, upload
-        var cpuOutput = withBias.ToTensor();
-        var activatedCpu = ApplyActivation(cpuOutput);
-        var result = new GpuTensor<T>(backend, activatedCpu, GpuTensorRole.Activation);
+        // Apply activation on GPU using the activation function's own GPU methods
+        IGpuTensor<T> result;
+
+        if (ScalarActivation is { SupportsGpuTraining: true })
+        {
+            // Use the activation function's GPU forward method directly
+            int size = withBias.ElementCount;
+            var outputBuffer = backend.AllocateBuffer(size);
+            ScalarActivation.ForwardGpu(backend, withBias.Buffer, outputBuffer, size);
+            result = new GpuTensor<T>(backend, outputBuffer, withBias.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            _gpuLastOutput = result; // Cache activated output for Sigmoid/Tanh backward
+        }
+        else if (UsingVectorActivation || ScalarActivation != null)
+        {
+            // Fallback to CPU for unsupported activations (Softmax, etc.)
+            var cpuOutput = withBias.ToTensor();
+            var activatedCpu = ApplyActivation(cpuOutput);
+            result = new GpuTensor<T>(backend, activatedCpu, GpuTensorRole.Activation);
+            _gpuLastOutput = result;
+        }
+        else
+        {
+            // No activation - output is the linear transformation
+            result = withBias;
+            _gpuLastOutput = result;
+        }
 
         // Reshape back to original shape with outputSize as last dimension
         if (input.Shape.Length > 2)
@@ -1546,20 +1568,45 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
 
-        // 1. Calculate activation gradient (for now, download/upload)
-        // TODO: Integrate GPU activation backward kernels
-        var lastOutputCpu = _gpuLastOutput.ToTensor();
-        var gradOutputCpu = outputGradient.ToTensor();
+        // 1. Calculate activation gradient on GPU using the activation function's own GPU methods
+        int size = outputGradient.ElementCount;
+        IGpuTensor<T> activationGradient;
 
-        Tensor<T> activationGradientCpu;
-        if (UsingVectorActivation && VectorActivation != null)
-            activationGradientCpu = VectorActivation.Backward(lastOutputCpu, gradOutputCpu);
-        else if (ScalarActivation != null)
-            activationGradientCpu = ScalarActivation.Backward(lastOutputCpu, gradOutputCpu);
+        if (ScalarActivation is { SupportsGpuTraining: true })
+        {
+            // Use the activation function's GPU backward method directly
+            var gradInputBuffer = backend.AllocateBuffer(size);
+            // Pass both pre-activation (input) and output - the activation function knows which one it needs
+            ScalarActivation.BackwardGpu(
+                backend,
+                outputGradient.Buffer,
+                _gpuPreActivation?.Buffer,  // Input for ReLU, GELU, Swish, LeakyReLU
+                _gpuLastOutput?.Buffer,     // Output for Sigmoid, Tanh
+                gradInputBuffer,
+                size);
+            activationGradient = new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+        else if (UsingVectorActivation && VectorActivation != null && _gpuLastOutput is not null)
+        {
+            // Vector activations (Softmax, etc.) - use CPU for now
+            var lastOutputCpu = _gpuLastOutput.ToTensor();
+            var gradOutputCpu = outputGradient.ToTensor();
+            var activationGradientCpu = VectorActivation.Backward(lastOutputCpu, gradOutputCpu);
+            activationGradient = new GpuTensor<T>(backend, activationGradientCpu, GpuTensorRole.Gradient);
+        }
+        else if (ScalarActivation != null && _gpuLastOutput is not null)
+        {
+            // Unsupported scalar activation (no GPU support) - use CPU
+            var lastOutputCpu = _gpuLastOutput.ToTensor();
+            var gradOutputCpu = outputGradient.ToTensor();
+            var activationGradientCpu = ScalarActivation.Backward(lastOutputCpu, gradOutputCpu);
+            activationGradient = new GpuTensor<T>(backend, activationGradientCpu, GpuTensorRole.Gradient);
+        }
         else
-            activationGradientCpu = gradOutputCpu;
-
-        var activationGradient = new GpuTensor<T>(backend, activationGradientCpu, GpuTensorRole.Gradient);
+        {
+            // No activation - gradient passes through unchanged
+            activationGradient = outputGradient;
+        }
 
         // Flatten to 2D for gradient computation
         int inputSize = _gpuLastInput.Shape[^1];

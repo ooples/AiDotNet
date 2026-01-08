@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Interfaces;
 
@@ -148,4 +149,72 @@ public interface IActivationFunction<T>
     /// </para>
     /// </remarks>
     Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient);
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether this activation function supports GPU-resident training.
+    /// </summary>
+    /// <value>True if the activation can perform forward and backward passes entirely on GPU.</value>
+    /// <remarks>
+    /// <para>
+    /// Activation functions return false if:
+    /// - The GPU backend does not have kernels for this activation type
+    /// - The activation has dynamic behavior that cannot be executed on GPU
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> GPU-resident training keeps all data on the graphics card during
+    /// training, avoiding slow data transfers between CPU and GPU memory. This property indicates
+    /// whether this activation function can participate in GPU-resident training.
+    /// </para>
+    /// </remarks>
+    bool SupportsGpuTraining { get; }
+
+    /// <summary>
+    /// Applies the activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// <para>
+    /// This method applies the activation function entirely on GPU, avoiding CPU-GPU data transfers.
+    /// The input and output buffers may be the same for in-place operations if supported.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is the GPU-accelerated version of the Activate method.
+    /// Instead of processing data on the CPU, this runs thousands of calculations in parallel
+    /// on the GPU, making it much faster for large tensors.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Thrown if SupportsGpuTraining is false.</exception>
+    void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size);
+
+    /// <summary>
+    /// Calculates the backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass (needed for ReLU, GELU, Swish, LeakyReLU).</param>
+    /// <param name="output">The output buffer from the forward pass (needed for Sigmoid, Tanh).</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// <para>
+    /// This method computes the activation gradient entirely on GPU.
+    /// Different activation functions require different cached values from forward pass:
+    /// - ReLU, LeakyReLU, GELU, Swish: Need the input from forward pass
+    /// - Sigmoid, Tanh: Need the output from forward pass
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> During training, we need to compute gradients to update the network.
+    /// This method computes the gradient of the activation function on GPU, which is essential
+    /// for efficient GPU-resident training.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Thrown if SupportsGpuTraining is false.</exception>
+    void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size);
+
+    #endregion
 }

@@ -871,6 +871,34 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void Hardtanh(IGpuBuffer A, IGpuBuffer B, float minVal, float maxVal, int size)
         => Inner.Hardtanh(A, B, minVal, maxVal, size);
 
+    /// <inheritdoc/>
+    public virtual void SiluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.SiluBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void MishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.MishBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void SoftplusBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.SoftplusBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void HardswishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.HardswishBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void SeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, float scale, int size)
+        => Inner.SeluBackward(gradOutput, input, gradInput, alpha, scale, size);
+
+    /// <inheritdoc/>
+    public virtual void HardsigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.HardsigmoidBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void HardtanhBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float minVal, float maxVal, int size)
+        => Inner.HardtanhBackward(gradOutput, input, gradInput, minVal, maxVal, size);
+
     #endregion
 
     #region Loss Functions

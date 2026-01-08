@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -170,4 +171,49 @@ public class ReLUActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.ReLU(input);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether ReLU supports GPU-resident training.
+    /// </summary>
+    /// <value>True because ReLU has GPU kernels for both forward and backward passes.</value>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the ReLU activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// ReLU on GPU: output[i] = max(0, input[i])
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        backend.Relu(input, output, size);
+    }
+
+    /// <summary>
+    /// Calculates the ReLU backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass.</param>
+    /// <param name="output">Not used for ReLU (can be null).</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// ReLU backward on GPU: gradInput[i] = gradOutput[i] * (input[i] > 0 ? 1 : 0)
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input), "ReLU backward requires the input from forward pass.");
+
+        backend.ReluBackward(gradOutput, input, gradInput, size);
+    }
+
+    #endregion
 }

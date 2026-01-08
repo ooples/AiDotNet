@@ -2290,6 +2290,92 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         Engine.InvalidatePersistentTensor(tensor);
     }
 
+    #region OCP-Compliant Activation GPU Methods
+
+    /// <summary>
+    /// Checks if the layer's scalar activation function supports GPU training.
+    /// </summary>
+    /// <returns>True if the activation function has GPU kernels; false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Not all activation functions have GPU implementations yet.
+    /// This method checks whether the layer's activation can run entirely on the GPU.
+    /// If false, the layer must fall back to CPU computation for the activation.
+    /// </para>
+    /// </remarks>
+    protected bool HasGpuActivation()
+    {
+        return ScalarActivation?.SupportsGpuTraining ?? false;
+    }
+
+    /// <summary>
+    /// Applies the layer's activation function forward pass on GPU using the activation's own GPU method.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <returns>True if the activation was applied on GPU; false if no activation or GPU not supported.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method follows the Open/Closed Principle by delegating to the activation function's
+    /// own GPU implementation rather than using a switch statement on activation types.
+    /// Each activation function knows how to apply itself on GPU.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Instead of having one giant switch statement that handles every
+    /// possible activation type, each activation function has its own ForwardGpu method.
+    /// This makes it easy to add new activation functions without modifying this code.
+    /// </para>
+    /// </remarks>
+    protected bool ApplyActivationForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        if (ScalarActivation is not { SupportsGpuTraining: true })
+        {
+            return false;
+        }
+
+        ScalarActivation.ForwardGpu(backend, input, output, size);
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the layer's activation function backward pass on GPU using the activation's own GPU method.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass (needed for some activations).</param>
+    /// <param name="output">The output buffer from the forward pass (needed for some activations).</param>
+    /// <param name="gradInput">The buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <returns>True if the backward pass was applied on GPU; false if no activation or GPU not supported.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method follows the Open/Closed Principle by delegating to the activation function's
+    /// own GPU backward implementation. Each activation function knows what it needs:
+    /// - ReLU, GELU, Swish, LeakyReLU, SiLU, Mish, etc.: Need the input from forward pass
+    /// - Sigmoid, Tanh: Need the output from forward pass
+    /// - ELU: Needs both input and output from forward pass
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> During training, we need to compute how the activation affects
+    /// the gradients. Each activation function handles this differently, and by delegating
+    /// to the activation's BackwardGpu method, we don't need to know the details here.
+    /// </para>
+    /// </remarks>
+    protected bool ApplyActivationBackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (ScalarActivation is not { SupportsGpuTraining: true })
+        {
+            return false;
+        }
+
+        ScalarActivation.BackwardGpu(backend, gradOutput, input, output, gradInput, size);
+        return true;
+    }
+
+    #endregion
+
     /// <summary>
     /// Gets the fused activation type for IEngine fused operations.
     /// </summary>
@@ -2339,9 +2425,21 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <param name="size">The number of elements to process.</param>
     /// <param name="activation">The type of activation function to apply.</param>
     /// <remarks>
-    /// This method provides a reusable GPU activation function that can be called by any layer
-    /// that implements custom GPU forward passes. It maps FusedActivationType enum values to
+    /// <para>
+    /// This method is primarily used for fused kernel operations where the activation type
+    /// is specified via the <see cref="FusedActivationType"/> enum. It maps enum values to
     /// the corresponding backend activation kernels.
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> For new code, prefer using <see cref="ApplyActivationForwardGpu"/> which
+    /// follows the Open/Closed Principle by delegating to each activation function's own
+    /// GPU implementation. This allows new activation functions to be added without modifying
+    /// this switch statement.
+    /// </para>
+    /// <para>
+    /// This static method only supports common activations (ReLU, Sigmoid, Tanh, GELU, LeakyReLU, Swish).
+    /// For other activations, use the OCP-compliant method instead.
+    /// </para>
     /// </remarks>
     protected static void ApplyGpuActivation(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size, FusedActivationType activation)
     {
@@ -2368,6 +2466,90 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             default:
                 backend.Copy(input, output, size);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Applies the backward pass of the specified activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for activation backward.</param>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The input from the forward pass (needed for ReLU, LeakyReLU, GELU, Swish).</param>
+    /// <param name="output">The output from the forward pass (needed for Sigmoid, Tanh).</param>
+    /// <param name="gradInput">The buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <param name="activation">The type of activation function.</param>
+    /// <param name="alpha">Alpha parameter for LeakyReLU (default 0.01).</param>
+    /// <returns>True if the backward was handled on GPU, false if CPU fallback is needed.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is primarily used for fused kernel operations where the activation type
+    /// is specified via the <see cref="FusedActivationType"/> enum.
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> For new code, prefer using <see cref="ApplyActivationBackwardGpu"/> which
+    /// follows the Open/Closed Principle by delegating to each activation function's own
+    /// GPU backward implementation. This allows new activation functions to be added without
+    /// modifying this switch statement.
+    /// </para>
+    /// <para>
+    /// Different activation functions require different cached values from forward pass:
+    /// <list type="bullet">
+    /// <item><description>ReLU, LeakyReLU, GELU, Swish: Need the input from forward pass</description></item>
+    /// <item><description>Sigmoid, Tanh: Need the output from forward pass</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    protected static bool ApplyGpuActivationBackward(
+        IDirectGpuBackend backend,
+        IGpuBuffer gradOutput,
+        IGpuBuffer? input,
+        IGpuBuffer? output,
+        IGpuBuffer gradInput,
+        int size,
+        FusedActivationType activation,
+        float alpha = 0.01f)
+    {
+        switch (activation)
+        {
+            case FusedActivationType.ReLU:
+                if (input == null) return false;
+                backend.ReluBackward(gradOutput, input, gradInput, size);
+                return true;
+
+            case FusedActivationType.Sigmoid:
+                if (output == null) return false;
+                backend.SigmoidBackward(gradOutput, output, gradInput, size);
+                return true;
+
+            case FusedActivationType.Tanh:
+                if (output == null) return false;
+                backend.TanhBackward(gradOutput, output, gradInput, size);
+                return true;
+
+            case FusedActivationType.GELU:
+                if (input == null) return false;
+                backend.GeluBackward(gradOutput, input, gradInput, size);
+                return true;
+
+            case FusedActivationType.LeakyReLU:
+                if (input == null) return false;
+                backend.LeakyReluBackward(gradOutput, input, gradInput, alpha, size);
+                return true;
+
+            case FusedActivationType.Swish:
+                if (input == null) return false;
+                backend.SwishBackward(gradOutput, input, gradInput, size);
+                return true;
+
+            case FusedActivationType.None:
+                // No activation means gradient passes through unchanged
+                backend.Copy(gradOutput, gradInput, size);
+                return true;
+
+            default:
+                // Unsupported activation - caller should use CPU fallback
+                return false;
         }
     }
 

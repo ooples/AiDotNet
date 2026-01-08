@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -142,4 +143,52 @@ public class HardTanhActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.HardTanh(input);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether HardTanh supports GPU-resident training.
+    /// </summary>
+    /// <value>True because HardTanh has GPU kernels for both forward and backward passes.</value>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the HardTanh activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// HardTanh on GPU: output[i] = max(-1, min(1, input[i]))
+    /// Uses fixed min=-1 and max=1 bounds.
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        backend.Hardtanh(input, output, -1.0f, 1.0f, size);
+    }
+
+    /// <summary>
+    /// Calculates the HardTanh backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass.</param>
+    /// <param name="output">Not used for HardTanh (can be null). HardTanh backward uses forward input.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// HardTanh backward on GPU:
+    /// - For -1 &lt; input &lt; 1: gradInput[i] = gradOutput[i]
+    /// - Otherwise: gradInput[i] = 0
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input), "HardTanh backward requires the input from forward pass.");
+
+        backend.HardtanhBackward(gradOutput, input, gradInput, -1.0f, 1.0f, size);
+    }
+
+    #endregion
 }
