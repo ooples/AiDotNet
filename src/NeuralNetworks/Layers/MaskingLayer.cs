@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -83,17 +87,22 @@ public class MaskingLayer<T> : LayerBase<T>
     /// ResetState is called.
     /// </para>
     /// <para><b>For Beginners:</b> This stores the pattern of 0s and 1s created in the last forward pass.
-    /// 
+    ///
     /// The layer remembers:
     /// - Which positions were masked (set to 0) in the forward pass
     /// - This same pattern must be applied during the backward pass
     /// - This ensures consistency between forward and backward operations
-    /// 
+    ///
     /// By keeping the mask, the layer doesn't need to recalculate it during
     /// the backward pass, which saves computation time.
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastMask;
+
+    /// <summary>
+    /// The GPU mask tensor from the last GPU forward pass (for backward pass caching).
+    /// </summary>
+    private IGpuTensor<T>? _lastMaskGpu;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -115,6 +124,11 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaskingLayer{T}"/> class.
@@ -173,6 +187,54 @@ public class MaskingLayer<T> : LayerBase<T>
         _lastInput = input;
         _lastMask = CreateMask(input);
         return ApplyMask(input, _lastMask);
+    }
+
+    /// <summary>
+    /// Performs the GPU-resident forward pass of the masking layer.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor after masking.</returns>
+    /// <remarks>
+    /// All computations stay on the GPU. Uses NotEqualScalar to create the mask
+    /// and Multiply for element-wise application.
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var gpuEngine = Engine as DirectGpuTensorEngine;
+        if (gpuEngine == null)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        int size = input.ElementCount;
+
+        // Create mask buffer: 1 where input != maskValue, 0 where input == maskValue
+        var maskBuffer = backend.AllocateBuffer(size);
+        float maskValueFloat = (float)NumOps.ToDouble(_maskValue);
+        backend.NotEqualScalar(input.Buffer, maskBuffer, maskValueFloat, size);
+
+        // Create output buffer: output = input * mask
+        var outputBuffer = backend.AllocateBuffer(size);
+        backend.Multiply(input.Buffer, maskBuffer, outputBuffer, size);
+
+        // Store mask GPU tensor for backward pass (if training)
+        if (IsTrainingMode)
+        {
+            _lastMaskGpu = new GpuTensor<T>(backend, maskBuffer, input.Shape, GpuTensorRole.Intermediate, ownsBuffer: true);
+        }
+        else
+        {
+            // In inference mode, dispose the mask immediately
+            maskBuffer.Dispose();
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -415,6 +477,13 @@ public class MaskingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
         _lastMask = null;
+
+        // Clear GPU mask tensor
+        if (_lastMaskGpu is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        _lastMaskGpu = null;
     }
 
     /// <summary>

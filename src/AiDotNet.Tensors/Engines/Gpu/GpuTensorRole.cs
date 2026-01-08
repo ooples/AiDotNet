@@ -62,8 +62,7 @@ public enum GpuTensorRole
     AttentionCache = 9,
 
     /// <summary>
-    /// Optimizer state tensor (momentum, Adam m/v buffers, etc.).
-    /// Persists across training steps and benefits from permanent GPU residency.
+    /// Constant tensor that doesn't change (e.g., lookup tables, fixed masks).
     /// </summary>
-    OptimizerState = 10
+    Constant = 10
 }

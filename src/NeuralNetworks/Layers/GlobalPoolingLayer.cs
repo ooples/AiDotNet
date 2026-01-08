@@ -1,4 +1,6 @@
-
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -579,6 +581,56 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
 
         // Use generic activation support - works for ALL 39 built-in activations
         return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <value><c>true</c> if GPU execution is supported; otherwise, <c>false</c>.</value>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>The GPU-resident output tensor after global pooling.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var input = inputs[0];
+
+        IGpuTensor<T> output;
+        if (_poolingType == PoolingType.Average)
+        {
+            output = gpuEngine.GlobalMeanPoolGpu(input);
+            _maxIndices = null;
+        }
+        else // Max pooling
+        {
+            output = gpuEngine.GlobalMaxPoolGpu(input, out _maxIndices);
+        }
+
+        // Apply activation on GPU if non-trivial activation exists
+        var fusedType = MapActivationToFused();
+        if (fusedType != FusedActivationType.None)
+        {
+            output = gpuEngine.ActivationGpu(output, fusedType);
+        }
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastOutput = output.ToTensor();
+        }
+
+        return output;
     }
 
     /// <summary>

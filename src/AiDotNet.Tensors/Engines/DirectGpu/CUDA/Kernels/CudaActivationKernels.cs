@@ -287,6 +287,20 @@ extern ""C"" __global__ void bias_add_out(const float* A, const float* bias, flo
     C[idx] = A[idx] + bias[col];
 }
 
+// Conv2D bias add in NCHW format: output[b,c,h,w] += bias[c]
+// Memory layout: output is [batch, channels, height, width] in row-major order
+// For element at linear index idx:
+//   - spatial_idx = idx % spatialSize (position within H*W)
+//   - channel = (idx / spatialSize) % channels
+extern ""C"" __global__ void conv2d_bias_add(float* output, const float* bias, int batch, int channels, int spatialSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+    int channel = (idx / spatialSize) % channels;
+    output[idx] += bias[channel];
+}
+
 // ===========================================================================
 // TRIGONOMETRIC KERNELS
 // ===========================================================================
@@ -493,7 +507,8 @@ extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
                 "reduce_max",
                 "sum_axis",
                 "bias_add",
-                "bias_add_out"
+                "bias_add_out",
+                "conv2d_bias_add"
             };
         }
     }

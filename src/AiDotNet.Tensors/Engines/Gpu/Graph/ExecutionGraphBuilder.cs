@@ -123,7 +123,21 @@ public sealed class ExecutionGraphBuilder : IDisposable
     public ExecutionGraphBuilder AddDownload(IGpuBuffer sourceBuffer, int size)
     {
         var node = TransferNode.CreateD2H(sourceBuffer, size);
-        return AddNode(node);
+        AddNode(node);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a device-to-host transfer and returns the transfer node for deferred access.
+    /// </summary>
+    /// <param name="sourceBuffer">The source GPU buffer to download.</param>
+    /// <param name="size">The number of elements to download.</param>
+    /// <returns>The transfer node that will contain the downloaded data after execution.</returns>
+    public TransferNode AddDownloadWithHandle(IGpuBuffer sourceBuffer, int size)
+    {
+        var node = TransferNode.CreateD2H(sourceBuffer, size);
+        AddNode(node);
+        return node;
     }
 
     /// <summary>

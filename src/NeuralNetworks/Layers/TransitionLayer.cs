@@ -1,6 +1,9 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -67,6 +70,12 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// All sub-layers (BatchNorm, Conv, AvgPool) support GPU.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TransitionLayer{T}"/> class.
@@ -179,6 +188,77 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensors.</param>
+    /// <returns>A GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// Chains GPU operations through sub-layers: BN → ReLU → Conv1x1 → AvgPool.
+    /// All intermediate results stay GPU-resident.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+
+        // Ensure 4D shape [B, C, H, W]
+        IGpuTensor<T> processInput;
+        bool added3DBatch = false;
+
+        if (shape.Length == 4)
+        {
+            processInput = input;
+        }
+        else if (shape.Length == 3)
+        {
+            processInput = gpuEngine.ReshapeGpu(input, new[] { 1, shape[0], shape[1], shape[2] });
+            added3DBatch = true;
+        }
+        else
+        {
+            throw new ArgumentException($"TransitionLayer requires 3D or 4D input, got {shape.Length}D");
+        }
+
+        // Cache for backward pass
+        if (IsTrainingMode)
+        {
+            _lastInput = processInput.ToTensor();
+            _originalInputShape = shape;
+        }
+
+        // Chain GPU operations: BN → ReLU → Conv1x1 → AvgPool
+        var bnOutput = _bn.ForwardGpu(processInput);
+        var reluOutput = gpuEngine.ActivationGpu(bnOutput, FusedActivationType.ReLU);
+        var convOutput = _conv.ForwardGpu(reluOutput);
+        var poolOutput = _pool.ForwardGpu(convOutput);
+
+        // Cache intermediates for backward during training
+        if (IsTrainingMode)
+        {
+            _bnOut = bnOutput.ToTensor();
+            _reluOut = reluOutput.ToTensor();
+            _convOut = convOutput.ToTensor();
+        }
+
+        // Remove batch dimension if we added it
+        if (added3DBatch)
+        {
+            var outShape = poolOutput.Shape;
+            return gpuEngine.ReshapeGpu(poolOutput, new[] { outShape[1], outShape[2], outShape[3] });
+        }
+
+        return poolOutput;
     }
 
     /// <summary>

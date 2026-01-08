@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -482,6 +485,11 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer can execute on GPU.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Gets the total number of trainable parameters in this layer.
     /// </summary>
     /// <remarks>
@@ -707,6 +715,75 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// GPU-resident forward pass for the transformer decoder layer.
+    /// Performs self-attention, cross-attention, and feed-forward operations entirely on GPU.
+    /// </summary>
+    /// <param name="inputs">Array containing [decoderInput, encoderOutput] GPU tensors.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    /// <exception cref="ArgumentException">Thrown when inputs array doesn't contain exactly 2 tensors.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs the entire transformer decoder forward pass on the GPU without downloading
+    /// intermediate results to CPU. All sublayer operations (self-attention, cross-attention, layer normalization,
+    /// feed-forward networks, residual connections) remain GPU-resident for maximum performance.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length < 2)
+            throw new ArgumentException("TransformerDecoderLayer requires two inputs: [decoderInput, encoderOutput]");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        IGpuTensor<T> decoderInput = inputs[0];
+        IGpuTensor<T> encoderOutput = inputs[1];
+
+        // 1. Self-attention sublayer
+        var selfAttentionOutput = _selfAttention.ForwardGpu(decoderInput);
+
+        // 2. First residual connection: input + selfAttentionOutput
+        var residual1 = gpuEngine.AddGpu(decoderInput, selfAttentionOutput);
+
+        // 3. First layer normalization
+        var (normalized1, _, _) = gpuEngine.LayerNormGpu(residual1, _norm1.GetGammaTensor(), _norm1.GetBetaTensor(), Convert.ToDouble(_norm1.GetEpsilon()));
+
+        // 4. Cross-attention sublayer (decoder attends to encoder output)
+        var crossAttentionOutput = _crossAttention.ForwardGpu(normalized1, encoderOutput);
+
+        // 5. Second residual connection: normalized1 + crossAttentionOutput
+        var residual2 = gpuEngine.AddGpu(normalized1, crossAttentionOutput);
+
+        // 6. Second layer normalization
+        var (normalized2, _, _) = gpuEngine.LayerNormGpu(residual2, _norm2.GetGammaTensor(), _norm2.GetBetaTensor(), Convert.ToDouble(_norm2.GetEpsilon()));
+
+        // 7. Feed-forward network (two layers)
+        var ffHidden = _feedForward.ForwardGpu(normalized2);
+        var ffProjected = _feedForwardProjection.ForwardGpu(ffHidden);
+
+        // 8. Third residual connection: normalized2 + ffProjected
+        var residual3 = gpuEngine.AddGpu(normalized2, ffProjected);
+
+        // 9. Third layer normalization (final output)
+        var (output, _, _) = gpuEngine.LayerNormGpu(residual3, _norm3.GetGammaTensor(), _norm3.GetBetaTensor(), Convert.ToDouble(_norm3.GetEpsilon()));
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            _lastInput = decoderInput.ToTensor();
+            _lastEncoderOutput = encoderOutput.ToTensor();
+            _lastSelfAttentionOutput = selfAttentionOutput.ToTensor();
+            _lastNormalized1 = normalized1.ToTensor();
+            _lastCrossAttentionOutput = crossAttentionOutput.ToTensor();
+            _lastNormalized2 = normalized2.ToTensor();
+            _lastFeedForwardOutput = ffProjected.ToTensor();
+        }
+
+        return output;
+    }
+
+    /// <summary>
     /// Performs the backward pass of the transformer decoder layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
@@ -718,30 +795,30 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// of the forward pass, ensuring that residual connections are properly handled.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the layer's inputs should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass, we go through the same steps as the forward pass, but in reverse order:
-    /// 
+    ///
     /// 1. Final Layer Normalization:
     ///    - Compute how the normalization's input should change based on output errors
-    /// 
+    ///
     /// 2. Feed-Forward Network:
     ///    - Determine how the feed-forward network's input should change
     ///    - Account for the residual connection by adding gradients
-    /// 
+    ///
     /// 3. Second Layer Normalization:
     ///    - Compute how the second normalization's input should change
-    /// 
+    ///
     /// 4. Cross-Attention:
     ///    - Determine how the cross-attention's inputs should change
     ///    - Account for the residual connection
-    /// 
+    ///
     /// 5. First Layer Normalization:
     ///    - Compute how the first normalization's input should change
-    /// 
+    ///
     /// 6. Self-Attention:
     ///    - Determine how the self-attention's input should change
     ///    - Account for the final residual connection
-    /// 
+    ///
     /// This reverse flow of gradients allows each component to learn how it contributed to any errors.
     /// </para>
     /// </remarks>

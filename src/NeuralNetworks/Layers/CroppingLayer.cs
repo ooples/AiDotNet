@@ -1,5 +1,8 @@
 using AiDotNet.Autodiff;
 
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -134,6 +137,77 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0) throw new ArgumentException("CroppingLayer requires an input tensor.");
+        var input = inputs[0];
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        int[] inputShape = input.Shape;
+        int[] outputShape = CalculateOutputShape(inputShape, _cropTop, _cropBottom, _cropLeft, _cropRight);
+        int outputSize = 1;
+        foreach (var dim in outputShape) outputSize *= dim;
+
+        // Generate linear index mapping from output to input on CPU
+        int[] indices = new int[outputSize];
+        int rank = inputShape.Length;
+        int[] outputStrides = new int[rank];
+        int[] inputStrides = new int[rank];
+
+        outputStrides[rank - 1] = 1;
+        inputStrides[rank - 1] = 1;
+        for (int i = rank - 2; i >= 0; i--)
+        {
+            outputStrides[i] = outputStrides[i + 1] * outputShape[i + 1];
+            inputStrides[i] = inputStrides[i + 1] * inputShape[i + 1];
+        }
+
+        System.Threading.Tasks.Parallel.For(0, outputSize, i =>
+        {
+            int remaining = i;
+            int inputIdx = 0;
+
+            for (int d = 0; d < rank; d++)
+            {
+                int dimIdx = remaining / outputStrides[d];
+                remaining %= outputStrides[d];
+
+                // Calculate input index by adding top/left crop offsets for each dimension
+                inputIdx += (dimIdx + _cropTop[d] + _cropLeft[d]) * inputStrides[d];
+            }
+            indices[i] = inputIdx;
+        });
+
+        using var indicesBuffer = backend.AllocateIntBuffer(indices);
+
+        // Perform GPU-resident crop via gather operation
+        var result = gpuEngine.GatherGpu(input, indicesBuffer, outputSize, 1);
+        result = gpuEngine.ReshapeGpu(result, outputShape);
+
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None)
+        {
+            var activated = gpuEngine.ActivationGpu(result, fusedOp);
+            result.Dispose();
+            result = activated;
+        }
+
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CroppingLayer{T}"/> class with the specified 

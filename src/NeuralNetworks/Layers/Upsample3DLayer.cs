@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -80,6 +83,14 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// Upsample3D supports GPU execution via CUDA, OpenCL, and HIP backends using nearest neighbor interpolation.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
     /// <value><c>true</c> if the input shape is configured.</value>
@@ -99,6 +110,16 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// The input tensor from the last forward pass, cached for backward computation.
     /// </summary>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Cached GPU input shape for backward pass.
+    /// </summary>
+    private int[]? _gpuInputShape;
+
+    /// <summary>
+    /// Whether batch dimension was added in ForwardGpu.
+    /// </summary>
+    private bool _addedBatchDimension;
 
     #endregion
 
@@ -246,6 +267,90 @@ public class Upsample3DLayer<T> : LayerBase<T>
         return output;
     }
 
+    /// <summary>
+    /// Performs GPU-resident forward pass of 3D upsampling, keeping all data on GPU.
+    /// </summary>
+    /// <param name="inputs">The input tensors on GPU (uses first input).</param>
+    /// <returns>The upsampled output as a GPU-resident tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var input = inputs[0];
+
+        // Ensure input is 5D [batch, channels, depth, height, width]
+        IGpuTensor<T> input5D;
+        bool addedBatch = false;
+
+        if (input.Shape.Length == 4)
+        {
+            // Add batch dimension: [C, D, H, W] -> [1, C, D, H, W]
+            addedBatch = true;
+            input5D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
+        }
+        else if (input.Shape.Length == 5)
+        {
+            input5D = input;
+        }
+        else
+        {
+            throw new ArgumentException("Input must be 4D [C, D, H, W] or 5D [batch, C, D, H, W]");
+        }
+
+        _gpuInputShape = input5D.Shape;
+        _addedBatchDimension = addedBatch;
+
+        // Store _lastInput for backward pass
+        _lastInput = input.ToTensor();
+
+        var output = gpuEngine.NearestNeighborUpsample3DGpu<T>(input5D, ScaleDepth, ScaleHeight, ScaleWidth);
+
+        // Return with matching dimensions
+        if (addedBatch)
+        {
+            return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass of 3D upsampling.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the output on GPU.</param>
+    /// <returns>The gradient with respect to input as a GPU-resident tensor.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        if (_gpuInputShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        // Ensure gradient is 5D
+        IGpuTensor<T> gradient5D;
+        if (outputGradient.Shape.Length == 4)
+        {
+            gradient5D = outputGradient.CreateView(0, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3] });
+        }
+        else
+        {
+            gradient5D = outputGradient;
+        }
+
+        var inputGrad = gpuEngine.NearestNeighborUpsample3DBackwardGpu<T>(gradient5D, _gpuInputShape, ScaleDepth, ScaleHeight, ScaleWidth);
+
+        // Return with matching dimensions
+        if (_addedBatchDimension)
+        {
+            return inputGrad.CreateView(0, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3], inputGrad.Shape[4] });
+        }
+        return inputGrad;
+    }
+
     #endregion
 
     #region Backward Pass
@@ -335,6 +440,8 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+        _gpuInputShape = null;
+        _addedBatchDimension = false;
     }
 
     #endregion

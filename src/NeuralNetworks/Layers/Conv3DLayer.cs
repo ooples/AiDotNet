@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -467,6 +468,93 @@ public class Conv3DLayer<T> : LayerBase<T>
         }
 
         return activated;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors, keeping all data on GPU.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensor [batch, inChannels, inDepth, inHeight, inWidth] in NCDHW format.</param>
+    /// <returns>GPU-resident output tensor [batch, outChannels, outDepth, outHeight, outWidth] in NCDHW format.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var input = inputs[0];
+
+        // Validate input shape - GPU uses NCDHW format [batch, channels, depth, height, width]
+        if (input.Shape.Length < 4)
+        {
+            throw new ArgumentException(
+                $"Conv3D input requires at least 4D tensor [C, D, H, W]. Got rank {input.Shape.Length}.");
+        }
+
+        int rank = input.Shape.Length;
+
+        // Reshape input to 5D NCDHW [B, C, D, H, W] for 3D convolution
+        IGpuTensor<T> input5D;
+        bool addedBatchDimension = false;
+        if (rank == 4)
+        {
+            // 4D [C, D, H, W] -> 5D [1, C, D, H, W]
+            addedBatchDimension = true;
+            input5D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]]);
+        }
+        else if (rank == 5)
+        {
+            // 5D [B, C, D, H, W] - no reshaping needed
+            input5D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+            {
+                flatBatch *= input.Shape[d];
+            }
+            input5D = input.CreateView(0, [flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+
+        // Validate input channels
+        int actualInputChannels = input5D.Shape[1];
+        if (actualInputChannels != InputChannels)
+        {
+            throw new ArgumentException(
+                $"Expected input channels {InputChannels}, but got {actualInputChannels}.");
+        }
+
+        // Map activation function to FusedActivationType
+        var fusedActivation = GetFusedActivationType();
+
+        // Execute GPU-fused Conv3D + Bias + Activation
+        var result = gpuEngine.FusedConv3DGpu(
+            input5D,
+            _kernels,
+            _biases,
+            Stride, Stride, Stride,      // strideD, strideH, strideW
+            Padding, Padding, Padding,    // padD, padH, padW
+            1, 1, 1,                       // dilationD, dilationH, dilationW
+            fusedActivation);
+
+        // Restore original shape if needed
+        if (addedBatchDimension)
+        {
+            // Input was 4D [C, D, H, W], output should also be 4D [OutC, OutD, OutH, OutW]
+            return result.CreateView(0, [OutputChannels, result.Shape[2], result.Shape[3], result.Shape[4]]);
+        }
+
+        return result;
     }
 
     /// <summary>

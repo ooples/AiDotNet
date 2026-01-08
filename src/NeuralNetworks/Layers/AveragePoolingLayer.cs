@@ -1,4 +1,5 @@
-
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -61,6 +62,11 @@ public class AveragePoolingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the input shape from GPU forward pass for backward pass.
+    /// </summary>
+    private int[]? _gpuInputShape;
+
+    /// <summary>
     /// Stores the output shape for backward pass gradient distribution.
     /// </summary>
     private int[]? _lastOutputShape;
@@ -85,6 +91,98 @@ public class AveragePoolingLayer<T> : LayerBase<T>
     {
         PoolSize = poolSize;
         Strides = strides;
+    }
+
+    /// <summary>
+    /// Indicates that this layer supports GPU-accelerated execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs GPU-resident forward pass of average pooling, keeping all data on GPU.
+    /// </summary>
+    /// <param name="inputs">The input tensors on GPU (uses first input).</param>
+    /// <returns>The pooled output as a GPU-resident tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var input = inputs[0];
+
+        // Ensure input is 4D [batch, channels, height, width]
+        IGpuTensor<T> input4D;
+        bool addedBatch = false;
+
+        if (input.Shape.Length == 3)
+        {
+            // Add batch dimension: [C, H, W] -> [1, C, H, W]
+            addedBatch = true;
+            input4D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        }
+        else if (input.Shape.Length == 4)
+        {
+            input4D = input;
+        }
+        else
+        {
+            throw new ArgumentException("Input must be 3D [C, H, W] or 4D [batch, C, H, W]");
+        }
+
+        _gpuInputShape = input4D.Shape;
+        _addedBatchDimension = addedBatch;
+
+        var poolSizeArr = new[] { PoolSize, PoolSize };
+        var strideArr = new[] { Strides, Strides };
+
+        var output = gpuEngine.AvgPool2DGpu<T>(input4D, poolSizeArr, strideArr);
+
+        // Return with matching dimensions
+        if (addedBatch)
+        {
+            return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass of average pooling.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the output on GPU.</param>
+    /// <returns>The gradient with respect to input as a GPU-resident tensor.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        if (_gpuInputShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        // Ensure gradient is 4D
+        IGpuTensor<T> gradient4D;
+        if (outputGradient.Shape.Length == 3)
+        {
+            gradient4D = outputGradient.CreateView(0, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
+        }
+        else
+        {
+            gradient4D = outputGradient;
+        }
+
+        var poolSizeArr = new[] { PoolSize, PoolSize };
+        var strideArr = new[] { Strides, Strides };
+
+        var inputGrad = gpuEngine.AvgPool2DBackwardGpu<T>(gradient4D, _gpuInputShape, poolSizeArr, strideArr);
+
+        // Return with matching dimensions
+        if (_addedBatchDimension)
+        {
+            return inputGrad.CreateView(0, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3] });
+        }
+        return inputGrad;
     }
 
     /// <summary>
@@ -481,6 +579,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutputShape = null;
         _addedBatchDimension = false;
+        _gpuInputShape = null;
     }
 
     /// <summary>

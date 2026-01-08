@@ -291,11 +291,11 @@ return DirectGpuEngine.FromFloatArray<T>(resultFloat);
 |-------|-------|--------|------------------|
 | 1.1 | Double computation | COMPLETE (all layers) | TBD - needs benchmark |
 | 1.2 | Redundant Synchronize | COMPLETE (47+ calls removed) | TBD - needs benchmark |
-| 2.1 | GPU-resident results | Not Started | TBD |
-| 2.2 | Input caching | Not Started | TBD |
+| 2.1 | GPU-resident results | COMPLETE (infrastructure built) | TBD - needs benchmark |
+| 2.2 | Input caching | COMPLETE (infrastructure built) | TBD - needs benchmark |
 | 3.1 | Float conversion | COMPLETE (scalar + span optimizations) | TBD - needs benchmark |
 
-**Last Updated**: 2026-01-04
+**Last Updated**: 2026-01-05
 
 ### Phase 1 Completed Changes
 - All 22+ layers updated with `IsTrainingMode` checks to skip `_lastOutput` caching during inference
@@ -303,3 +303,179 @@ return DirectGpuEngine.FromFloatArray<T>(resultFloat);
 - Optimized `ToFloatScalar` and `FromFloatScalar` to avoid single-element array allocation
 - Added span-based buffer allocation (`AllocateBufferFromSpan`) to avoid `.ToArray()` copies
 - Updated `MatrixAdd`, `MatrixSubtract`, `MatrixMultiplyScalar` to use span-based methods
+
+### Phase 2 Infrastructure Completed
+#### GPU-Resident Tensor Infrastructure (Phase 2.1)
+- Created `IGpuTensor<T>` interface for GPU-resident tensor abstraction
+- Implemented `GpuTensor<T>` with lazy CPU download (data stays on GPU until explicitly requested)
+- Added `GpuTensorRole` enum for memory management decisions (Weight, Bias, Activation, Intermediate, etc.)
+- Created `GpuSyncPoint` abstract class for deferred synchronization
+- Implemented `GpuTensorRegistry` for buffer lifecycle management with memory pressure handling
+- Added `GpuExecutionContext` as thread-local facade with auto-detection
+
+#### Multi-Stream Execution Infrastructure (Phase 2.2)
+- Created `IGpuStream` interface for stream abstraction (CUDA stream, OpenCL queue, HIP stream)
+- Created `IGpuEvent` interface for synchronization events
+- Implemented `GpuStreamPool` for managing compute/transfer streams
+- Created `IAsyncGpuBackend` interface extending IDirectGpuBackend with async operations
+- Added `GpuExecutionOptions` with environment variable support
+
+#### HIP Backend Async Implementation
+- Created `HipStream` - HIP stream wrapper implementing IGpuStream
+- Created `HipEvent` - HIP event wrapper implementing IGpuEvent with timing support
+- Created `HipSyncPoint` - HIP sync point using events for deferred synchronization
+- Implemented `IAsyncGpuBackend` on `HipBackend` with:
+  - Multi-stream support (SupportsMultiStream, MaxConcurrentStreams)
+  - Event support (SupportsEvents, CreateEvent, RecordEvent, StreamWaitEvent)
+  - Async memory transfers (UploadBufferAsync, DownloadBufferAsync, CopyBufferAsync)
+  - Stream-aware kernel launches (GemmAsync, FusedGemmBiasActivationAsync with proper stream support)
+  - Stream/event query methods (QueryStreamComplete, QueryEventComplete, GetEventElapsedTime)
+- Added stream-aware kernel launch helpers (LaunchKernelOnStream, LaunchKernel2DOnStream, etc.)
+- Added native bindings for hipStreamQuery, hipStreamCreateWithPriority, hipEventQuery, hipEventCreateWithFlags
+
+#### Files Created/Modified
+**New Files:**
+- `src/AiDotNet.Tensors/Engines/Gpu/IGpuTensor.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/GpuTensor.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/GpuTensorRole.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/GpuSyncPoint.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/GpuTensorRegistry.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionContext.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/IGpuStream.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/IGpuEvent.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs`
+- `src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs`
+- `src/AiDotNet.Tensors/Engines/DirectGpu/HIP/HipStream.cs`
+- `src/AiDotNet.Tensors/Engines/DirectGpu/HIP/HipEvent.cs`
+- `src/AiDotNet.Tensors/Engines/DirectGpu/HIP/HipSyncPoint.cs`
+
+**Modified Files:**
+- `src/AiDotNet.Tensors/Engines/DirectGpu/HIP/HipBackend.cs` - Implemented IAsyncGpuBackend
+- `src/AiDotNet.Tensors/Engines/DirectGpu/HIP/HipNativeBindings.cs` - Added stream/event native bindings
+
+#### CUDA Backend Async Implementation
+- Created `CudaStream` - CUDA stream wrapper implementing IGpuStream with priority support
+- Created `CudaEvent` - CUDA event wrapper implementing IGpuEvent with timing support
+- Created `CudaSyncPoint` - CUDA sync point using events for deferred synchronization
+- Implemented `IAsyncGpuBackend` on `CudaBackend` with:
+  - Multi-stream support (SupportsMultiStream, MaxConcurrentStreams)
+  - Event support (SupportsEvents, CreateEvent, RecordEvent, StreamWaitEvent)
+  - Async memory transfers (UploadBufferAsync, DownloadBufferAsync, CopyBufferAsync)
+  - Stream-aware kernel launches with cuBLAS stream switching (GemmAsync, FusedGemmBiasActivationAsync)
+  - Stream/event query methods (QueryStreamComplete, QueryEventComplete, GetEventElapsedTime)
+- Added native bindings for cuStreamQuery, cuStreamCreateWithPriority, cuStreamWaitEvent, cuEventCreate, cuEventDestroy, cuEventRecord, cuEventSynchronize, cuEventQuery, cuEventElapsedTime, cuMemcpyHtoDAsync, cuMemcpyDtoHAsync, cuMemcpyDtoDAsync
+
+**New Files:**
+- `src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaStream.cs`
+- `src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaEvent.cs`
+- `src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaSyncPoint.cs`
+
+**Modified Files:**
+- `src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaBackend.cs` - Implemented IAsyncGpuBackend
+- `src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaNativeBindings.cs` - Added stream/event native bindings
+- `src/AiDotNet.Tensors/Engines/CuBlasNative.cs` - Added NotReady result code
+
+#### OpenCL Backend Async Implementation
+- Created `OpenClCommandQueue` - OpenCL command queue wrapper implementing IGpuStream
+- Created `OpenClEvent` - OpenCL event wrapper implementing IGpuEvent with timing support
+- Created `OpenClSyncPoint` - OpenCL sync point using events for deferred synchronization
+- Implemented `IAsyncGpuBackend` on `OpenClBackend` with:
+  - Multi-stream support (SupportsMultiStream, MaxConcurrentStreams)
+  - Event support (SupportsEvents, CreateEvent, RecordEvent, StreamWaitEvent)
+  - Async memory transfers (UploadBufferAsync, DownloadBufferAsync, CopyBufferAsync)
+  - Stream-aware kernel launches (GemmAsync, FusedGemmBiasActivationAsync with Execute2DOnQueue)
+  - Stream/event query methods (QueryStreamComplete, QueryEventComplete, GetEventElapsedTime)
+- Added native bindings for clGetEventInfo, clEnqueueMarkerWithWaitList with event status constants
+- Added Execute1DOnQueue, Execute2DOnQueue, Execute3DOnQueue methods to DirectOpenClKernel
+
+**New Files:**
+- `src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClCommandQueue.cs`
+- `src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClEvent.cs`
+- `src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClSyncPoint.cs`
+
+**Modified Files:**
+- `src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs` - Implemented IAsyncGpuBackend
+- `src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClNativeBindings.cs` - Added event query bindings
+- `src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/DirectOpenClKernel.cs` - Added queue-specific execution methods
+
+#### DirectGpuTensorEngine Integration
+- Added `CurrentContext` static property to access active GpuExecutionContext
+- Added `IsGpuContextActive` static property to check if context is active
+- Added `ShouldUseGpu(elementCount)` method with context-aware thresholds
+- Added `UploadToContext<T>()`, `EmptyInContext<T>()`, `ZerosInContext<T>()` helper methods
+- Added `WithGpuContext()` convenience methods for scoped GPU execution
+- All methods integrate with thread-local GpuExecutionContext.Current
+
+### Phase 2 & 3 Infrastructure Complete
+All backend implementations (HIP, CUDA, OpenCL) now support:
+- Multi-stream execution with IGpuStream interface
+- Inter-stream synchronization with IGpuEvent interface
+- Deferred synchronization with GpuSyncPoint
+- Async memory transfers (UploadBufferAsync, DownloadBufferAsync, CopyBufferAsync)
+- Stream-aware kernel launches (GemmAsync, FusedGemmBiasActivationAsync)
+- Event timing and profiling (GetEventElapsedTime)
+
+### Phase 4 - Neural Network Integration (Future Work)
+The infrastructure is complete; the following integration work remains:
+- Modify neural network layers to use GpuExecutionContext for GPU-resident operations
+
+### Phase 3.1 - Execution Graph Infrastructure (COMPLETE)
+Audit Date: 2026-01-05
+
+All execution graph infrastructure is fully implemented:
+
+**ExecutionNodeType Enum** (`src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionNodeType.cs`)
+- 14 node types: Allocate, TransferH2D, TransferD2H, Kernel, FusedKernel, Barrier, RecordEvent, WaitEvent, Deallocate, Copy, Reduction, Normalization, Attention, Convolution
+
+**ExecutionNode Base Class** (`src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionNode.cs`)
+- Abstract base with dependency tracking
+- Async execution support (ExecuteAsync with IGpuStream)
+- Circular dependency detection
+- Cost estimation for scheduling
+- Input/output tensor tracking
+
+**Concrete Node Implementations:**
+- `KernelNode.cs` - Kernel execution with factory methods (CreateGemm, CreateActivation, CreateElementWise)
+- `FusedKernelNode.cs` - Fused operations with TryFuse for pattern detection (GEMM+Bias+Activation)
+- `TransferNode.cs` - Memory transfers (H2D, D2H, D2D) with timing support
+- `AllocationNode.cs` - Buffer allocation/deallocation with role tracking
+- `BarrierNode.cs` - Stream synchronization (single stream or full device sync)
+- `EventNode.cs` - Event recording and waiting
+
+**Graph Components:**
+- `ExecutionGraph.cs` - Compiled graph with topological ordering, level computation, multi-stream execution
+- `ExecutionGraphBuilder.cs` - Operation recording with automatic dependency tracking, fluent API
+- `GraphCompiler.cs` - Orchestrates optimization passes, runs 6 default passes
+- `CompiledGraphCache.cs` - LRU cache for compiled graphs
+
+### Phase 3.2 - Graph Optimization Passes (COMPLETE)
+Audit Date: 2026-01-05
+
+All 6 optimization passes are fully implemented:
+
+| Pass | Priority | Description |
+|------|----------|-------------|
+| DeadCodeEliminationPass | 50 | Removes unused computations, marks needed nodes via dependency traversal |
+| KernelFusionPass | 100 | Fuses GEMM+Bias+Activation, Conv+BatchNorm+Activation, LayerNorm+Activation patterns |
+| OperationReorderingPass | 200 | Critical path analysis, prioritizes compute-bound ops, moves transfers for overlap |
+| StreamAssignmentPass | 300 | Level-based stream assignment, inserts barriers for cross-stream dependencies |
+| MemoryPlanningPass | 400 | Buffer liveness analysis, computes reuse opportunities to minimize allocation |
+| PrefetchPass | 500 | Moves H2D transfers earlier to hide latency |
+
+**Interface & Statistics:**
+- `IGraphOptimizationPass.cs` - Interface with Name, Priority, IsEnabled, Apply method
+- `OptimizationContext` - Holds options, buffer reuse map, statistics
+- `OptimizationStatistics` - Tracks nodes eliminated, kernels fused, per-pass stats
+
+### Updated Progress Table
+
+| Phase | Issue | Status | Speedup Achieved |
+|-------|-------|--------|------------------|
+| 1.1 | Double computation | COMPLETE (all layers) | TBD - needs benchmark |
+| 1.2 | Redundant Synchronize | COMPLETE (47+ calls removed) | TBD - needs benchmark |
+| 2.1 | GPU-resident results | COMPLETE (infrastructure built) | TBD - needs benchmark |
+| 2.2 | Input caching | COMPLETE (infrastructure built) | TBD - needs benchmark |
+| 3.1 | Float conversion | COMPLETE (scalar + span optimizations) | TBD - needs benchmark |
+| 3.1 | Execution Graph Infrastructure | COMPLETE (all node types, graph compiler) | TBD - needs benchmark |
+| 3.2 | Graph Optimization Passes | COMPLETE (all 6 passes implemented) | TBD - needs benchmark |

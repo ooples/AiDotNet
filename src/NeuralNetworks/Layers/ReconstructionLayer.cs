@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -118,6 +120,14 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// Returns true since the internal FullyConnectedLayers support GPU execution.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ReconstructionLayer{T}"/> class with scalar activation functions.
@@ -251,6 +261,27 @@ public class ReconstructionLayer<T> : LayerBase<T>
         var x = _fc1.Forward(input);
         x = _fc2.Forward(x);
         return _fc3.Forward(x);
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass by chaining through sublayers.
+    /// </summary>
+    /// <param name="inputs">Input GPU tensors (uses first input).</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Chain through the three fully connected layers
+        var x = _fc1.ForwardGpu(inputs[0]);
+        var x2 = _fc2.ForwardGpu(x);
+        x.Dispose(); // Dispose intermediate tensor
+
+        var output = _fc3.ForwardGpu(x2);
+        x2.Dispose(); // Dispose intermediate tensor
+
+        return output;
     }
 
     /// <summary>

@@ -96,6 +96,34 @@ public sealed class GpuTensorRegistry : IDisposable
     }
 
     /// <summary>
+    /// Tries to register a GPU-resident tensor with the registry if it's not already registered.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="tensor">The tensor to register.</param>
+    /// <returns>True if the tensor was registered, false if already registered or disposed.</returns>
+    public bool TryRegister<T>(IGpuTensor<T> tensor)
+    {
+        if (_disposed || tensor.Buffer is null)
+        {
+            return false;
+        }
+
+        // Check if this buffer is already registered
+        var bufferHandle = tensor.Buffer.Handle;
+        foreach (var entry in _tensors.Values)
+        {
+            if (entry.Buffer.Handle == bufferHandle)
+            {
+                return false; // Already registered
+            }
+        }
+
+        // Register the tensor
+        Register(tensor);
+        return true;
+    }
+
+    /// <summary>
     /// Marks a tensor as recently used to prevent eviction.
     /// </summary>
     /// <param name="registrationId">The registration ID.</param>

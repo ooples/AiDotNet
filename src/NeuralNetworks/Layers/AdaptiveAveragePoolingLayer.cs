@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -43,6 +44,11 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// Pooling layers don't have trainable parameters, but they support backpropagation.
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AdaptiveAveragePoolingLayer{T}"/> class.
@@ -167,6 +173,98 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         }
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Performs the forward pass of adaptive average pooling on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after pooling.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the native GPU AdaptiveAvgPool2D operation for efficient
+    /// pooling to any target output size.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Handle different tensor ranks - need [batch, channels, height, width]
+        int batch, channels, inputHeight, inputWidth;
+
+        if (shape.Length == 3)
+        {
+            // [C, H, W] - add implicit batch of 1
+            batch = 1;
+            channels = shape[0];
+            inputHeight = shape[1];
+            inputWidth = shape[2];
+        }
+        else if (shape.Length == 4)
+        {
+            // [B, C, H, W]
+            batch = shape[0];
+            channels = shape[1];
+            inputHeight = shape[2];
+            inputWidth = shape[3];
+        }
+        else if (shape.Length >= 5)
+        {
+            // Flatten leading batch dimensions
+            batch = 1;
+            for (int d = 0; d < shape.Length - 3; d++)
+                batch *= shape[d];
+            channels = shape[shape.Length - 3];
+            inputHeight = shape[shape.Length - 2];
+            inputWidth = shape[shape.Length - 1];
+        }
+        else
+        {
+            throw new ArgumentException($"AdaptiveAveragePooling requires at least 3D input, got {shape.Length}D.");
+        }
+
+        // Cache for backward pass
+        _lastInputShape = shape;
+
+        // Allocate output buffer
+        int outputSize = batch * channels * _outputHeight * _outputWidth;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Use native GPU AdaptiveAvgPool2D operation
+        backend.AdaptiveAvgPool2D(input.Buffer, outputBuffer, batch, channels, inputHeight, inputWidth, _outputHeight, _outputWidth);
+
+        // Build output shape preserving leading dimensions
+        int[] outputShape;
+        if (shape.Length == 3)
+        {
+            outputShape = [channels, _outputHeight, _outputWidth];
+        }
+        else if (shape.Length == 4)
+        {
+            outputShape = [batch, channels, _outputHeight, _outputWidth];
+        }
+        else
+        {
+            // Restore leading dimensions
+            outputShape = new int[shape.Length];
+            for (int d = 0; d < shape.Length - 3; d++)
+                outputShape[d] = shape[d];
+            outputShape[shape.Length - 3] = channels;
+            outputShape[shape.Length - 2] = _outputHeight;
+            outputShape[shape.Length - 1] = _outputWidth;
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

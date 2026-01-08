@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -472,6 +474,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Gets the total number of trainable parameters in this layer.
     /// </summary>
     /// <remarks>
@@ -779,6 +786,316 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _lastOutput = output;
         return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the Squeeze-and-Excitation layer on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after SE processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the GPU-accelerated forward pass of the SE layer.
+    /// All tensor ranks are handled natively on GPU using GlobalAvgPool2D for squeeze,
+    /// FusedLinearGpu for excitation, and BroadcastMultiplyFirstAxis for scaling.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+        int rank = shape.Length;
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Transpose weights for FusedLinearGpu: [in, out] -> [out, in] for proper matrix multiply
+        var weights1T = Engine.TensorTranspose(_weights1);
+        var weights2T = Engine.TensorTranspose(_weights2);
+
+        // For 2D inputs [B, C], we can run entirely on GPU without squeeze step
+        if (rank == 2)
+        {
+            return ForwardGpu2D(input, weights1T, weights2T, backend, gpuEngine);
+        }
+
+        // For 4D inputs [B, H, W, C], use full GPU path with permute + GlobalAvgPool2D
+        if (rank == 4)
+        {
+            return ForwardGpu4D(input, weights1T, weights2T, backend, gpuEngine);
+        }
+
+        // For 3D inputs [B, L, C], use GPU path with MeanAxis
+        if (rank == 3)
+        {
+            return ForwardGpu3D(input, weights1T, weights2T, backend, gpuEngine);
+        }
+
+        // For 1D inputs [C], reshape to [1, C] and process
+        if (rank == 1)
+        {
+            return ForwardGpu1D(input, weights1T, weights2T, backend, gpuEngine);
+        }
+
+        // For higher-rank tensors [B, D1, D2, ..., C], flatten spatial dims and process
+        return ForwardGpuND(input, weights1T, weights2T, backend, gpuEngine);
+    }
+
+    /// <summary>
+    /// GPU forward pass for 2D inputs [B, C] - no squeeze needed.
+    /// </summary>
+    private IGpuTensor<T> ForwardGpu2D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input.Shape;
+        int batchSize = shape[0];
+
+        // FC1 + activation
+        var fc1Type = GetFirstActivationType();
+        var fc1Output = gpuEngine.FusedLinearGpu(input, weights1T, _bias1, fc1Type);
+
+        // FC2 + activation (sigmoid)
+        var fc2Type = GetSecondActivationType();
+        var excitation = gpuEngine.FusedLinearGpu(fc1Output, weights2T, _bias2, fc2Type);
+
+        // Scale: input * excitation (element-wise for same shape)
+        int size = batchSize * _channels;
+        var outputBuffer = backend.AllocateBuffer(size);
+        backend.Multiply(input.Buffer, excitation.Buffer, outputBuffer, size);
+
+        // Cache for backward pass if training
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastExcitationWeights = excitation.ToTensor();
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU forward pass for 4D inputs [B, H, W, C] - uses GlobalAvgPool2D.
+    /// </summary>
+    private IGpuTensor<T> ForwardGpu4D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input.Shape;
+        int batchSize = shape[0];
+        int height = shape[1];
+        int width = shape[2];
+        int channels = shape[3];
+        int spatialSize = height * width;
+        int totalSize = batchSize * spatialSize * channels;
+
+        // Step 1: Permute from [B, H, W, C] to [B, C, H, W] for GlobalAvgPool2D
+        var permutedBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(input.Buffer, permutedBuffer, shape, [0, 3, 1, 2]);
+        var permutedShape = new[] { batchSize, channels, height, width };
+
+        // Step 2: Global Average Pooling [B, C, H, W] -> [B, C]
+        int squeezedSize = batchSize * channels;
+        var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
+        backend.GlobalAvgPool2D(permutedBuffer, squeezedBuffer, batchSize, channels, height, width);
+        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Step 3: Excitation - FC1 + activation + FC2 + sigmoid
+        var fc1Type = GetFirstActivationType();
+        var fc1Output = gpuEngine.FusedLinearGpu(squeezedGpu, weights1T, _bias1, fc1Type);
+
+        var fc2Type = GetSecondActivationType();
+        var excitation = gpuEngine.FusedLinearGpu(fc1Output, weights2T, _bias2, fc2Type);
+
+        // Step 4: Scale with broadcasting
+        // We need to multiply [B, C, H, W] by [B, C] broadcast over [H, W]
+        // Reshape permuted to [B*C, H*W] and excitation to [B*C]
+        // Then BroadcastMultiplyFirstAxis: C[i,j] = A[i,j] * B[i]
+        var scaledBuffer = backend.AllocateBuffer(totalSize);
+        backend.BroadcastMultiplyFirstAxis(permutedBuffer, excitation.Buffer, scaledBuffer, batchSize * channels, spatialSize);
+
+        // Step 5: Permute back from [B, C, H, W] to [B, H, W, C]
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(scaledBuffer, outputBuffer, permutedShape, [0, 2, 3, 1]);
+
+        // Cleanup temporary buffers
+        permutedBuffer.Dispose();
+        scaledBuffer.Dispose();
+
+        // Cache for backward pass if training
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastExcitationWeights = excitation.ToTensor();
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU forward pass for 3D inputs [B, L, C] - uses MeanAxis for squeeze.
+    /// </summary>
+    private IGpuTensor<T> ForwardGpu3D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input.Shape;
+        int batchSize = shape[0];
+        int seqLen = shape[1];
+        int channels = shape[2];
+        int totalSize = batchSize * seqLen * channels;
+
+        // Step 1: Squeeze - mean over sequence dimension
+        // Reshape [B, L, C] to [B, L*C] view, then MeanAxis to get [B, C]
+        // Actually we need to reduce over L for each (B, C) pair
+        // MeanAxis(A, B, outerSize, reduceSize) reduces: B[i] = mean(A[i, 0..reduceSize])
+        // For [B, L, C], we want mean over L, giving [B, C]
+        // Permute to [B, C, L], then MeanAxis with outerSize=B*C, reduceSize=L
+        var permutedBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(input.Buffer, permutedBuffer, shape, [0, 2, 1]); // [B, C, L]
+
+        int squeezedSize = batchSize * channels;
+        var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
+        backend.MeanAxis(permutedBuffer, squeezedBuffer, squeezedSize, seqLen);
+        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Step 2: Excitation
+        var fc1Type = GetFirstActivationType();
+        var fc1Output = gpuEngine.FusedLinearGpu(squeezedGpu, weights1T, _bias1, fc1Type);
+
+        var fc2Type = GetSecondActivationType();
+        var excitation = gpuEngine.FusedLinearGpu(fc1Output, weights2T, _bias2, fc2Type);
+
+        // Step 3: Scale with broadcasting
+        // Multiply [B, C, L] by [B, C] broadcast over L
+        var scaledBuffer = backend.AllocateBuffer(totalSize);
+        backend.BroadcastMultiplyFirstAxis(permutedBuffer, excitation.Buffer, scaledBuffer, batchSize * channels, seqLen);
+
+        // Step 4: Permute back from [B, C, L] to [B, L, C]
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(scaledBuffer, outputBuffer, [batchSize, channels, seqLen], [0, 2, 1]);
+
+        // Cleanup
+        permutedBuffer.Dispose();
+        scaledBuffer.Dispose();
+
+        // Cache for backward pass
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastExcitationWeights = excitation.ToTensor();
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU forward pass for 1D inputs [C] - reshape to [1, C] and process.
+    /// </summary>
+    private IGpuTensor<T> ForwardGpu1D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input.Shape;
+        int channels = shape[0];
+
+        // Treat as [1, C] batch
+        var input2D = new GpuTensor<T>(backend, input.Buffer, [1, channels], GpuTensorRole.Activation, ownsBuffer: false);
+        var result2D = ForwardGpu2D(input2D, weights1T, weights2T, backend, gpuEngine);
+
+        // Return with original 1D shape (the buffer is the same but we view it as 1D)
+        return new GpuTensor<T>(backend, result2D.Buffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU forward pass for higher-rank tensors [B, D1, D2, ..., C] - flatten spatial dims.
+    /// </summary>
+    private IGpuTensor<T> ForwardGpuND(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input.Shape;
+        int batchSize = shape[0];
+        int channels = shape[shape.Length - 1];
+        int spatialSize = 1;
+        for (int i = 1; i < shape.Length - 1; i++)
+            spatialSize *= shape[i];
+        int totalSize = batchSize * spatialSize * channels;
+
+        // Flatten to [B, spatialSize, C], then treat like 3D case
+        var flatShape = new[] { batchSize, spatialSize, channels };
+
+        // Permute to [B, C, spatialSize]
+        var permutedBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(input.Buffer, permutedBuffer, flatShape, [0, 2, 1]);
+
+        // Squeeze: mean over spatialSize
+        int squeezedSize = batchSize * channels;
+        var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
+        backend.MeanAxis(permutedBuffer, squeezedBuffer, squeezedSize, spatialSize);
+        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Excitation
+        var fc1Type = GetFirstActivationType();
+        var fc1Output = gpuEngine.FusedLinearGpu(squeezedGpu, weights1T, _bias1, fc1Type);
+
+        var fc2Type = GetSecondActivationType();
+        var excitation = gpuEngine.FusedLinearGpu(fc1Output, weights2T, _bias2, fc2Type);
+
+        // Scale: multiply [B, C, spatialSize] by [B, C]
+        var scaledBuffer = backend.AllocateBuffer(totalSize);
+        backend.BroadcastMultiplyFirstAxis(permutedBuffer, excitation.Buffer, scaledBuffer, batchSize * channels, spatialSize);
+
+        // Permute back to [B, spatialSize, C] then reshape to original
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(scaledBuffer, outputBuffer, [batchSize, channels, spatialSize], [0, 2, 1]);
+
+        // Cleanup
+        permutedBuffer.Dispose();
+        scaledBuffer.Dispose();
+
+        // Cache
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastExcitationWeights = excitation.ToTensor();
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Gets the FusedActivationType corresponding to the first activation function.
+    /// </summary>
+    private FusedActivationType GetFirstActivationType()
+    {
+        if (_firstActivation is ReLUActivation<T> || _firstVectorActivation is ReLUActivation<T>)
+            return FusedActivationType.ReLU;
+        if (_firstActivation is TanhActivation<T> || _firstVectorActivation is TanhActivation<T>)
+            return FusedActivationType.Tanh;
+        if (_firstActivation is SigmoidActivation<T> || _firstVectorActivation is SigmoidActivation<T>)
+            return FusedActivationType.Sigmoid;
+        if (_firstActivation is GELUActivation<T> || _firstVectorActivation is GELUActivation<T>)
+            return FusedActivationType.GELU;
+        // Default to ReLU for SE blocks
+        return FusedActivationType.ReLU;
+    }
+
+    /// <summary>
+    /// Gets the FusedActivationType corresponding to the second activation function.
+    /// </summary>
+    private FusedActivationType GetSecondActivationType()
+    {
+        if (_secondActivation is SigmoidActivation<T> || _secondVectorActivation is SigmoidActivation<T>)
+            return FusedActivationType.Sigmoid;
+        if (_secondActivation is TanhActivation<T> || _secondVectorActivation is TanhActivation<T>)
+            return FusedActivationType.Tanh;
+        if (_secondActivation is ReLUActivation<T> || _secondVectorActivation is ReLUActivation<T>)
+            return FusedActivationType.ReLU;
+        if (_secondActivation is GELUActivation<T> || _secondVectorActivation is GELUActivation<T>)
+            return FusedActivationType.GELU;
+        // Default to Sigmoid for SE blocks
+        return FusedActivationType.Sigmoid;
     }
 
     /// <summary>

@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -65,6 +69,22 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => _forwardLayer.SupportsTraining || _backwardLayer.SupportsTraining;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU-accelerated forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The bidirectional layer supports GPU execution when both the forward and backward inner layers
+    /// support GPU execution. This ensures that the entire bidirectional processing can be done on the GPU.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property indicates whether this layer can use the GPU for faster processing.
+    /// Since the bidirectional layer wraps two inner layers, it can only use the GPU if both of those layers
+    /// support GPU execution.
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsGpuExecution =>
+        _forwardLayer.CanExecuteOnGpu && _backwardLayer.CanExecuteOnGpu;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BidirectionalLayer{T}"/> class with the specified inner layer
@@ -217,6 +237,182 @@ public class BidirectionalLayer<T> : LayerBase<T>
 
         // Merge outputs
         return MergeOutputs(_lastForwardOutput, _lastBackwardOutput);
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass of the bidirectional layer.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensor(s).</param>
+    /// <returns>GPU-resident output tensor after bidirectional processing.</returns>
+    /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable or inner layers don't support GPU.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.
+    /// The input sequence is processed in both forward and backward directions using GPU operations,
+    /// and the results are merged on the GPU.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (!_forwardLayer.CanExecuteOnGpu || !_backwardLayer.CanExecuteOnGpu)
+        {
+            throw new InvalidOperationException(
+                "BidirectionalLayer requires both inner layers to support GPU execution.");
+        }
+
+        var input = inputs[0];
+        var shape = input.Shape;
+
+        // Expected input shape: [batch, timeSteps, features] or [timeSteps, features]
+        int batchSize, timeSteps, features;
+        if (shape.Length == 2)
+        {
+            batchSize = 1;
+            timeSteps = shape[0];
+            features = shape[1];
+        }
+        else if (shape.Length == 3)
+        {
+            batchSize = shape[0];
+            timeSteps = shape[1];
+            features = shape[2];
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"BidirectionalLayer expects 2D or 3D input, got {shape.Length}D tensor.");
+        }
+
+        // Forward pass through forward layer
+        var forwardOutput = _forwardLayer.ForwardGpu(input);
+
+        // Reverse the input sequence for backward layer
+        var reversedInput = ReverseSequenceGpu(backend, input, batchSize, timeSteps, features);
+
+        // Forward pass through backward layer (with reversed input)
+        var backwardOutput = _backwardLayer.ForwardGpu(reversedInput);
+
+        // Reverse the backward output to match the original sequence order
+        var reversedBackwardOutput = ReverseSequenceGpu(backend, backwardOutput, batchSize, timeSteps,
+            backwardOutput.Shape[backwardOutput.Shape.Length - 1]);
+
+        // Dispose intermediate tensors
+        reversedInput.Dispose();
+        backwardOutput.Dispose();
+
+        // Merge outputs based on merge mode
+        return MergeOutputsGpu(backend, forwardOutput, reversedBackwardOutput, batchSize, timeSteps);
+    }
+
+    /// <summary>
+    /// Reverses a sequence along the time dimension on the GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend.</param>
+    /// <param name="input">Input tensor to reverse.</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="timeSteps">Number of time steps.</param>
+    /// <param name="features">Feature dimension size.</param>
+    /// <returns>GPU tensor with the sequence reversed along the time dimension.</returns>
+    private static IGpuTensor<T> ReverseSequenceGpu(
+        IDirectGpuBackend backend,
+        IGpuTensor<T> input,
+        int batchSize,
+        int timeSteps,
+        int features)
+    {
+        int sliceSize = batchSize * features;
+        int totalSize = batchSize * timeSteps * features;
+
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+
+        // Reverse by copying each time step to its mirror position
+        // For input[b, t, f], output[b, t, f] = input[b, timeSteps-1-t, f]
+        for (int t = 0; t < timeSteps; t++)
+        {
+            int srcOffset = (timeSteps - 1 - t) * sliceSize;
+            int dstOffset = t * sliceSize;
+
+            // Use Copy2DStrided to copy the slice
+            var srcView = input.CreateView(srcOffset, [sliceSize]);
+            backend.Copy2DStrided(srcView.Buffer, outputBuffer, 1, sliceSize, totalSize, dstOffset);
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Merges forward and backward outputs on the GPU according to the merge mode.
+    /// </summary>
+    /// <param name="backend">The GPU backend.</param>
+    /// <param name="forward">Forward layer output.</param>
+    /// <param name="backward">Backward layer output (already reversed).</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="timeSteps">Number of time steps.</param>
+    /// <returns>Merged GPU tensor.</returns>
+    private IGpuTensor<T> MergeOutputsGpu(
+        IDirectGpuBackend backend,
+        IGpuTensor<T> forward,
+        IGpuTensor<T> backward,
+        int batchSize,
+        int timeSteps)
+    {
+        int hiddenSize = forward.Shape[forward.Shape.Length - 1];
+        int totalElements = forward.Buffer.Size;
+
+        if (_mergeMode)
+        {
+            // Add forward and backward outputs element-wise
+            var outputBuffer = backend.AllocateBuffer(totalElements);
+            backend.Add(forward.Buffer, backward.Buffer, outputBuffer, totalElements);
+
+            // Dispose inputs since we're returning a new buffer
+            forward.Dispose();
+            backward.Dispose();
+
+            return new GpuTensor<T>(backend, outputBuffer, forward.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        else
+        {
+            // Stack outputs along a new dimension [2, batch, timeSteps, hiddenSize]
+            int[] stackedShape;
+            if (forward.Shape.Length == 2)
+            {
+                stackedShape = [2, timeSteps, hiddenSize];
+            }
+            else
+            {
+                stackedShape = [2, batchSize, timeSteps, hiddenSize];
+            }
+
+            int stackedSize = totalElements * 2;
+            var outputBuffer = backend.AllocateBuffer(stackedSize);
+
+            // Copy forward output to first half
+            backend.Copy2DStrided(forward.Buffer, outputBuffer, 1, totalElements, stackedSize, 0);
+
+            // Copy backward output to second half
+            backend.Copy2DStrided(backward.Buffer, outputBuffer, 1, totalElements, stackedSize, totalElements);
+
+            // Dispose inputs since we're returning a new buffer
+            forward.Dispose();
+            backward.Dispose();
+
+            return new GpuTensor<T>(backend, outputBuffer, stackedShape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
     }
 
     /// <summary>

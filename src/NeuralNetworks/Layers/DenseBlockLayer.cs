@@ -1,6 +1,9 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -24,6 +27,11 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _relu2Out;
 
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     public DenseBlockLayer(int inputChannels, int growthRate, int height, int width, double bnMomentum = 0.1)
         : base([inputChannels, height, width], [growthRate, height, width])
@@ -69,6 +77,39 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _bn2Out = _bn2.Forward(_conv1Out);
         _relu2Out = _relu.Activate(_bn2Out);
         var output = _conv3x3.Forward(_relu2Out);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Performs the GPU-resident forward pass of the dense block layer.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor.</returns>
+    /// <remarks>
+    /// Chains GPU operations: BN1 → ReLU → Conv1x1 → BN2 → ReLU → Conv3x3.
+    /// All computations stay on GPU.
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var gpuEngine = Engine as DirectGpuTensorEngine;
+        if (gpuEngine == null)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // BN1 → ReLU → Conv1x1
+        var bn1Output = _bn1.ForwardGpu(input);
+        var relu1Output = gpuEngine.ActivationGpu(bn1Output, FusedActivationType.ReLU);
+        var conv1Output = _conv1x1.ForwardGpu(relu1Output);
+
+        // BN2 → ReLU → Conv3x3
+        var bn2Output = _bn2.ForwardGpu(conv1Output);
+        var relu2Output = gpuEngine.ActivationGpu(bn2Output, FusedActivationType.ReLU);
+        var output = _conv3x3.ForwardGpu(relu2Output);
 
         return output;
     }

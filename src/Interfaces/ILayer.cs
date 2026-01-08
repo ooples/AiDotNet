@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -64,6 +66,46 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// This is called the "forward pass" because data is moving forward through the network.
     /// </remarks>
     Tensor<T> Forward(Tensor<T> input);
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass, keeping the result on the GPU.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensor(s). Most layers use only the first input,
+    /// but some layers like cross-attention require multiple inputs.</param>
+    /// <returns>GPU-resident output tensor. Caller is responsible for disposal.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if <see cref="CanExecuteOnGpu"/> is false or no GPU backend is available.
+    /// </exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like the regular Forward method, but optimized for GPU execution.
+    ///
+    /// Instead of copying data back and forth between CPU and GPU after each layer,
+    /// this method keeps everything on the GPU until you're done processing. This can be
+    /// 10-50x faster for deep networks with many layers!
+    ///
+    /// Use this method when:
+    /// - You have a GPU available and want maximum performance
+    /// - You're running inference (predictions) on batches of data
+    /// - You have multiple layers that all support GPU execution
+    ///
+    /// The result stays on the GPU until you call ToTensor() to download it to CPU memory.
+    /// </remarks>
+    IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs);
+
+    /// <summary>
+    /// Gets whether this layer can execute on GPU.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Not all layers support GPU acceleration yet. This property tells you
+    /// if this particular layer can run on the GPU.
+    ///
+    /// If this returns true, you can use <see cref="ForwardGpu"/> for faster execution.
+    /// If this returns false, the layer will fall back to CPU execution.
+    ///
+    /// Common layers like Dense, Convolutional, and Attention layers typically support GPU.
+    /// Specialized layers may only support CPU execution.
+    /// </remarks>
+    bool CanExecuteOnGpu { get; }
 
     /// <summary>
     /// Calculates gradients during the backward pass of backpropagation.

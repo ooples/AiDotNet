@@ -2,6 +2,8 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -111,6 +113,11 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => false;
 
     /// <inheritdoc />
     public override bool SupportsJitCompilation

@@ -59,6 +59,51 @@ extern ""C"" __global__ void swish(const float* input, float* output, int size)
     output[idx] = x / (1.0f + expf(-x));
 }
 
+extern ""C"" __global__ void leaky_relu(const float* input, float* output, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    output[idx] = x > 0.0f ? x : alpha * x;
+}
+
+extern ""C"" __global__ void leaky_relu_backward(const float* gradOutput, const float* input, float* gradInput, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float grad = gradOutput[idx];
+    float x = input[idx];
+    gradInput[idx] = x > 0.0f ? grad : alpha * grad;
+}
+
+extern ""C"" __global__ void elu(const float* input, float* output, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    output[idx] = x > 0.0f ? x : alpha * (expf(x) - 1.0f);
+}
+
+extern ""C"" __global__ void elu_backward(const float* gradOutput, const float* input, const float* output, float* gradInput, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float grad = gradOutput[idx];
+    float x = input[idx];
+    float y = output[idx];
+    gradInput[idx] = x > 0.0f ? grad : grad * (y + alpha);
+}
+
+extern ""C"" __global__ void swish_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float sigmoid = 1.0f / (1.0f + expf(-x));
+    float swish = x * sigmoid;
+    gradInput[idx] = gradOutput[idx] * (swish + sigmoid * (1.0f - swish));
+}
+
 extern ""C"" __global__ void softmax(const float* input, float* output, int batchSize, int features)
 {
     int batch = blockIdx.x * blockDim.x + threadIdx.x;
@@ -420,6 +465,71 @@ extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
     if (idx >= size) return;
     B[idx] = truncf(A[idx]);
 }
+
+// Mish: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x)))
+extern ""C"" __global__ void mish_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = A[idx];
+    float sp = logf(1.0f + expf(x));
+    B[idx] = x * tanhf(sp);
+}
+
+// Softplus: ln(1 + exp(x)) with numerical stability
+extern ""C"" __global__ void softplus_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = A[idx];
+    B[idx] = x > 20.0f ? x : logf(1.0f + expf(x));
+}
+
+// Hardswish: x * min(max(x+3, 0), 6) / 6
+extern ""C"" __global__ void hardswish_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = A[idx];
+    B[idx] = x * fminf(fmaxf(x + 3.0f, 0.0f), 6.0f) / 6.0f;
+}
+
+// SELU: scale * (x > 0 ? x : alpha * (exp(x) - 1))
+extern ""C"" __global__ void selu_vector(const float* A, float* B, float alpha, float scale, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = A[idx];
+    B[idx] = scale * (x > 0.0f ? x : alpha * (expf(x) - 1.0f));
+}
+
+// Hardsigmoid: min(max((x+3)/6, 0), 1)
+extern ""C"" __global__ void hardsigmoid_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = A[idx];
+    B[idx] = fminf(fmaxf((x + 3.0f) / 6.0f, 0.0f), 1.0f);
+}
+
+// Hardtanh: clamp(x, minVal, maxVal)
+extern ""C"" __global__ void hardtanh_vector(const float* A, float* B, float minVal, float maxVal, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = fminf(fmaxf(A[idx], minVal), maxVal);
+}
+
+// Conv2D bias add in NCHW format: output[b,c,h,w] += bias[c]
+// Memory layout: output is [batch, channels, height, width] in row-major order
+extern ""C"" __global__ void conv2d_bias_add(float* output, const float* bias, int batch, int channels, int spatialSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+    int channel = (idx / spatialSize) % channels;
+    output[idx] += bias[channel];
+}
 ";
     }
 
@@ -428,6 +538,7 @@ extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
         return new[]
         {
             "relu", "sigmoid", "tanh_activation", "gelu", "swish", "softmax",
+            "leaky_relu", "leaky_relu_backward", "elu", "elu_backward", "swish_backward",
             "add_vectors", "subtract_vectors", "multiply_vectors", "divide_vectors",
             "min_vectors", "max_vectors", "scale_vector", "power_scalar",
             "abs_vector", "exp_vector", "log_vector", "log2_vector", "exp2_vector",
@@ -436,7 +547,10 @@ extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
             "sinh_vector", "cosh_vector", "asinh_vector", "acosh_vector", "atanh_vector",
             "reciprocal_vector", "cbrt_vector", "log10_vector", "negate_vector",
             "floor_vector", "ceil_vector", "round_vector", "trunc_vector",
-            "reduce_sum", "reduce_max", "sum_axis", "bias_add"
+            "mish_vector", "softplus_vector", "hardswish_vector", "selu_vector",
+            "hardsigmoid_vector", "hardtanh_vector",
+            "reduce_sum", "reduce_max", "sum_axis", "bias_add",
+            "conv2d_bias_add"
         };
     }
 }

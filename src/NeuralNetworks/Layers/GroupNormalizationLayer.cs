@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -45,6 +47,11 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _betaGradient;
 
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     internal override Dictionary<string, string> GetMetadata()
     {
@@ -149,6 +156,126 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         return _addedBatchDimension
             ? output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3])
             : output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensors.</param>
+    /// <returns>A GPU-resident output tensor after group normalization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs group normalization entirely on the GPU without downloading
+    /// intermediate results to CPU. Uses native GroupNorm GPU kernel for maximum performance.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+
+        // Determine dimensions based on input rank
+        int batch, channels, spatialSize;
+        int[] outputShape;
+        bool addedBatch = false;
+
+        if (shape.Length == 4)
+        {
+            // Standard NCHW format
+            batch = shape[0];
+            channels = shape[1];
+            spatialSize = shape[2] * shape[3];
+            outputShape = shape;
+        }
+        else if (shape.Length == 3)
+        {
+            // CHW format without batch - add batch dimension
+            batch = 1;
+            channels = shape[0];
+            spatialSize = shape[1] * shape[2];
+            outputShape = new[] { 1, shape[0], shape[1], shape[2] };
+            addedBatch = true;
+        }
+        else if (shape.Length == 2)
+        {
+            // [N, C] format - no spatial dimensions
+            batch = shape[0];
+            channels = shape[1];
+            spatialSize = 1;
+            outputShape = shape;
+        }
+        else
+        {
+            throw new ArgumentException($"GroupNormalization expects 2D, 3D, or 4D input, got {shape.Length}D.");
+        }
+
+        if (channels != _numChannels)
+            throw new ArgumentException($"Input has {channels} channels but layer expects {_numChannels} channels.");
+
+        // Upload gamma and beta to GPU
+        float[] gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data);
+        float[] betaData = DirectGpuEngine.ToFloatArray<T>(_beta.Data);
+        using var gammaBuffer = backend.AllocateBuffer(gammaData);
+        using var betaBuffer = backend.AllocateBuffer(betaData);
+
+        // Allocate output and statistics buffers
+        int totalSize = batch * channels * spatialSize;
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+
+        // Allocate buffers for mean and variance (for backward pass during training)
+        int statsSize = batch * _numGroups;
+        var meanBuffer = backend.AllocateBuffer(statsSize);
+        var invVarBuffer = backend.AllocateBuffer(statsSize);
+
+        // Execute GPU GroupNorm kernel
+        backend.GroupNorm(
+            input.Buffer,
+            outputBuffer,
+            gammaBuffer,
+            betaBuffer,
+            meanBuffer,
+            invVarBuffer,
+            batch,
+            _numGroups,
+            channels,
+            spatialSize,
+            (float)NumOps.ToDouble(_epsilon));
+
+        // Cache statistics for backward pass during training
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastMean = new Tensor<T>(new[] { batch, _numGroups },
+                new Vector<T>(DirectGpuEngine.FromFloatArray<T>(backend.DownloadBuffer(meanBuffer))));
+            _lastVariance = new Tensor<T>(new[] { batch, _numGroups },
+                new Vector<T>(DirectGpuEngine.FromFloatArray<T>(backend.DownloadBuffer(invVarBuffer))));
+            _addedBatchDimension = addedBatch;
+        }
+
+        // Dispose statistics buffers if not needed
+        meanBuffer.Dispose();
+        invVarBuffer.Dispose();
+
+        // Create output tensor with correct shape
+        var result = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Remove batch dimension if we added it
+        if (addedBatch)
+        {
+            return gpuEngine.ReshapeGpu(result, new[] { shape[0], shape[1], shape[2] });
+        }
+
+        return result;
     }
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)

@@ -1,4 +1,6 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -93,6 +95,9 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -401,6 +406,266 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         }
 
         return result;
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine tensorEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = tensorEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        if (_adjacencyMatrix == null)
+            throw new InvalidOperationException("Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+
+        if (_edgeFeatures == null)
+            throw new InvalidOperationException("Edge features must be set using SetEdgeFeatures before calling ForwardGpu.");
+
+        var input = inputs[0];
+
+        // Get input dimensions - expect [batchSize, numNodes, inputFeatures]
+        int[] inputShape = input.Shape;
+        int batchSize = inputShape.Length >= 3 ? inputShape[0] : 1;
+        int numNodes = inputShape.Length >= 3 ? inputShape[1] : inputShape[0];
+        int inputFeatures = inputShape.Length >= 3 ? inputShape[2] : inputShape[1];
+
+        // Normalize adjacency and edge features on CPU (one-time preprocessing)
+        var normalizedAdj = NormalizeAdjacency(_adjacencyMatrix, batchSize, numNodes);
+        var normalizedEdge = NormalizeEdgeFeatures(_edgeFeatures, batchSize);
+        int numEdges = normalizedEdge.Shape[1];
+
+        // Upload edge network weights and biases
+        using var w1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkWeights1.Data));
+        using var w2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkWeights2.Data));
+        using var b1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkBias1.Data));
+        using var b2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkBias2.Data));
+        using var selfBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bias.Data));
+
+        // Upload edge features: [batch, numEdges, edgeFeatures]
+        using var edgeBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(normalizedEdge.Data));
+
+        // ===== Edge Network Layer 1: [batch*numEdges, edgeFeatures] @ [edgeFeatures, hiddenDim] =====
+        // Uses fused GemmBiasRelu for optimal GPU performance
+        int M1 = batchSize * numEdges;
+        int K1 = _edgeFeaturesCount;
+        int N1 = _edgeNetworkHiddenDim;
+        using var hidden1Buffer = backend.GemmBiasRelu(edgeBuffer, w1Buffer, b1Buffer, M1, N1, K1);
+
+        // ===== Edge Network Layer 2: [batch*numEdges, hiddenDim] @ [hiddenDim, inF*outF] =====
+        int M2 = batchSize * numEdges;
+        int K2 = _edgeNetworkHiddenDim;
+        int N2 = _inputFeatures * _outputFeatures;
+        using var flatWeightsBuffer = backend.AllocateBuffer(M2 * N2);
+
+        // GEMM + bias broadcast (no activation) - use BiasAdd for efficient broadcast
+        backend.Gemm(hidden1Buffer, w2Buffer, flatWeightsBuffer, M2, N2, K2);
+        backend.BiasAdd(flatWeightsBuffer, b2Buffer, flatWeightsBuffer, M2, N2);
+
+        // ===== Edge-Conditioned Aggregation: h_i' = Σ_{j∈N(i)} θ(e_ij) · h_j =====
+        // GPU-native implementation using Gather, BatchedGemm, and ScatterAdd
+
+        // Step 1: Pre-compute edge source/target indices from normalized adjacency (one-time preprocessing)
+        var (sourceIndices, targetIndices) = BuildEdgeIndicesFromAdjacency(normalizedAdj, batchSize, numNodes, numEdges);
+
+        // Upload edge indices to GPU (use AllocateIntBuffer for int arrays)
+        using var sourceIdxBuffer = backend.AllocateIntBuffer(sourceIndices);
+        using var targetIdxBuffer = backend.AllocateIntBuffer(targetIndices);
+
+        // Step 2: Gather neighbor features for all edges: [batchSize * numEdges, inputFeatures]
+        // For each edge e at batch b, get input[b, sourceIdx[e], :]
+        using var neighborFeaturesBuffer = backend.AllocateBuffer(batchSize * numEdges * _inputFeatures);
+
+        // Gather with batch handling: each batch has numEdges edges
+        for (int b = 0; b < batchSize; b++)
+        {
+            int inputBatchOffset = b * numNodes * _inputFeatures;
+            int edgeBatchOffset = b * numEdges;
+            int outputBatchOffset = b * numEdges * _inputFeatures;
+
+            // Gather neighbor features for this batch's edges
+            // sourceIndices[edgeBatchOffset...edgeBatchOffset+numEdges] contains source node indices
+            // We need a custom gather that handles the batch offset
+            var batchSourceIndices = new int[numEdges];
+            for (int e = 0; e < numEdges; e++)
+            {
+                // Compute absolute index into flattened input
+                int relativeNodeIdx = sourceIndices[edgeBatchOffset + e];
+                batchSourceIndices[e] = inputBatchOffset / _inputFeatures + relativeNodeIdx;
+            }
+            using var batchSourceIdxBuffer = backend.AllocateIntBuffer(batchSourceIndices);
+
+            // Create a view for this batch's output
+            var batchNeighborData = new float[numEdges * _inputFeatures];
+            using var batchNeighborBuffer = backend.AllocateBuffer(batchNeighborData);
+
+            // Gather: output[e, :] = input[batchSourceIndices[e], :]
+            backend.Gather(input.Buffer, batchSourceIdxBuffer, batchNeighborBuffer, numEdges, _inputFeatures);
+
+            // Copy to the correct batch position in neighborFeaturesBuffer
+            backend.Copy2DStrided(batchNeighborBuffer, neighborFeaturesBuffer, 1, numEdges * _inputFeatures,
+                batchSize * numEdges * _inputFeatures, outputBatchOffset);
+        }
+
+        // Step 3: Apply per-edge transformations using BatchedGemm
+        // For each edge e, compute: transformed[e] = neighborFeatures[e] @ edgeWeights[e]
+        // where edgeWeights[e] is reshaped from flat [inF*outF] to [inF, outF]
+        //
+        // Memory layout analysis for BatchedGemm(A, B, C, M, N, K, batchCount):
+        // - A: [batchCount, M, K] with stride M*K per batch -> [numEdges, 1, inF], stride inF
+        // - B: [batchCount, K, N] with stride K*N per batch -> [numEdges, inF, outF], stride inF*outF
+        // - C: [batchCount, M, N] with stride M*N per batch -> [numEdges, 1, outF], stride outF
+        //
+        // Our buffers:
+        // - neighborFeaturesBuffer: [batchSize*numEdges, inF] = contiguous rows of inF elements ✓
+        // - flatWeightsBuffer: [batchSize*numEdges, inF*outF] = contiguous rows of inF*outF elements ✓
+        // - transformedBuffer: [batchSize*numEdges, outF] = contiguous rows of outF elements ✓
+        //
+        // The strides match exactly, so BatchedGemm works correctly with our layout.
+        using var transformedBuffer = backend.AllocateBuffer(batchSize * numEdges * _outputFeatures);
+        backend.BatchedGemm(neighborFeaturesBuffer, flatWeightsBuffer, transformedBuffer,
+            1, _outputFeatures, _inputFeatures, batchSize * numEdges);
+
+        // Step 4: Scatter-add transformed features to target nodes
+        // Download transformed buffer once, scatter on CPU per batch, upload aggregated result once
+        // This is O(1) roundtrips vs O(numNodes * numEdges) in the original implementation
+        var transformedData = backend.DownloadBuffer(transformedBuffer);
+        var aggregatedOutput = new float[batchSize * numNodes * _outputFeatures];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int edgeBatchOffset = b * numEdges;
+            int outputBatchOffset = b * numNodes * _outputFeatures;
+            int transformedBatchOffset = b * numEdges * _outputFeatures;
+
+            // Scatter-add: for each edge, accumulate transformed features to target node
+            for (int e = 0; e < numEdges; e++)
+            {
+                int targetNode = targetIndices[edgeBatchOffset + e];
+                for (int f = 0; f < _outputFeatures; f++)
+                {
+                    int srcIdx = transformedBatchOffset + e * _outputFeatures + f;
+                    int dstIdx = outputBatchOffset + targetNode * _outputFeatures + f;
+                    aggregatedOutput[dstIdx] += transformedData[srcIdx];
+                }
+            }
+        }
+
+        using var aggBuffer = backend.AllocateBuffer(aggregatedOutput);
+
+        // ===== Self-Loop Transformation: input @ selfWeights =====
+        // Use input buffer directly (already on GPU) for GEMM
+        int MSelf = batchSize * numNodes;
+        using var selfOutputBuffer = backend.AllocateBuffer(MSelf * _outputFeatures);
+        backend.Gemm(input.Buffer, selfBuffer, selfOutputBuffer, MSelf, _outputFeatures, _inputFeatures);
+
+        // ===== Combine: aggregated + selfLoop =====
+        int totalOutput = batchSize * numNodes * _outputFeatures;
+        using var combinedBuffer = backend.AllocateBuffer(totalOutput);
+        backend.Add(aggBuffer, selfOutputBuffer, combinedBuffer, totalOutput);
+
+        // Add bias using BiasAdd (efficient GPU broadcast) - treats output as [batch*numNodes, outputFeatures]
+        backend.BiasAdd(combinedBuffer, biasBuffer, combinedBuffer, MSelf, _outputFeatures);
+
+        // ===== Apply Activation =====
+        var finalBuffer = backend.AllocateBuffer(totalOutput);
+        ApplyGpuActivation(backend, combinedBuffer, finalBuffer, totalOutput, GetFusedActivationType());
+
+        return new GpuTensor<T>(backend, finalBuffer, [batchSize, numNodes, _outputFeatures], GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Computes edge-conditioned aggregation on CPU due to edge-specific indexing.
+    /// </summary>
+    private float[] ComputeEdgeConditionedAggregationCpu(
+        float[] input, float[] flatEdgeWeights, Tensor<T> normalizedAdj,
+        int batchSize, int numNodes, int numEdges, int inF, int outF)
+    {
+        var output = new float[batchSize * numNodes * outF];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int edgeIdx = 0;
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    if (NumOps.Equals(normalizedAdj[b, i, j], NumOps.Zero))
+                        continue;
+
+                    // Get edge-specific transformation θ(e_ij) from flatEdgeWeights
+                    int edgeOffset = (b * numEdges + edgeIdx) * (inF * outF);
+
+                    // Apply transformation: θ(e_ij) · h_j and accumulate to h_i
+                    for (int oF = 0; oF < outF; oF++)
+                    {
+                        float sum = 0f;
+                        for (int iF = 0; iF < inF; iF++)
+                        {
+                            // Edge weight at [inF, outF]
+                            float edgeWeight = flatEdgeWeights[edgeOffset + iF * outF + oF];
+                            // Neighbor feature h_j[iF]
+                            float neighborFeature = input[(b * numNodes + j) * inF + iF];
+                            sum += edgeWeight * neighborFeature;
+                        }
+                        output[(b * numNodes + i) * outF + oF] += sum;
+                    }
+
+                    edgeIdx++;
+                }
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Builds source and target node indices from adjacency matrix for GPU edge processing.
+    /// Returns (sourceIndices, targetIndices) where each index array has length batchSize * numEdges.
+    /// </summary>
+    /// <param name="normalizedAdj">Normalized adjacency matrix [batchSize, numNodes, numNodes].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="numNodes">Number of nodes.</param>
+    /// <param name="numEdges">Expected number of edges per batch.</param>
+    /// <returns>Tuple of (sourceIndices, targetIndices) as int arrays.</returns>
+    private (int[] sourceIndices, int[] targetIndices) BuildEdgeIndicesFromAdjacency(
+        Tensor<T> normalizedAdj, int batchSize, int numNodes, int numEdges)
+    {
+        var sourceIndices = new int[batchSize * numEdges];
+        var targetIndices = new int[batchSize * numEdges];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int edgeIdx = 0;
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    if (NumOps.Equals(normalizedAdj[b, i, j], NumOps.Zero))
+                        continue;
+
+                    int globalEdgeIdx = b * numEdges + edgeIdx;
+                    sourceIndices[globalEdgeIdx] = j;  // Source node (neighbor)
+                    targetIndices[globalEdgeIdx] = i;  // Target node (current)
+                    edgeIdx++;
+                }
+            }
+
+            // Verify edge count matches expected
+            if (edgeIdx != numEdges)
+            {
+                throw new InvalidOperationException(
+                    $"Edge count mismatch at batch {b}: expected {numEdges}, found {edgeIdx}");
+            }
+        }
+
+        return (sourceIndices, targetIndices);
     }
 
     /// <summary>

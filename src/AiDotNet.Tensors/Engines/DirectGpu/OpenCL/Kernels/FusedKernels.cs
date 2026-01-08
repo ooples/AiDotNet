@@ -498,6 +498,172 @@ __kernel void bias_dropout(
     uint m = mask[idx];
     output[idx] = (m != 0) ? val * scale : 0.0f;
 }
+
+// ===========================================================================
+// FUSED BATCHNORM + ACTIVATION KERNELS (INFERENCE MODE)
+// Uses running mean/var statistics, not batch statistics
+// ===========================================================================
+
+// Fused BatchNorm + ReLU (Inference)
+// output = ReLU(gamma * (input - runningMean) / sqrt(runningVar + eps) + beta)
+__kernel void batchnorm_relu(
+    __global const float* input,
+    __global float* output,
+    __global const float* gamma,
+    __global const float* beta,
+    __global const float* runningMean,
+    __global const float* runningVar,
+    const int batch,
+    const int channels,
+    const int spatialSize,
+    const float epsilon)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    // Compute channel index
+    const int c = (idx / spatialSize) % channels;
+
+    // Normalize and apply affine transform
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrt(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float result = g * normalized + b;
+    output[idx] = fmax(0.0f, result);  // ReLU
+}
+
+// Fused BatchNorm + GELU (Inference)
+__kernel void batchnorm_gelu(
+    __global const float* input,
+    __global float* output,
+    __global const float* gamma,
+    __global const float* beta,
+    __global const float* runningMean,
+    __global const float* runningVar,
+    const int batch,
+    const int channels,
+    const int spatialSize,
+    const float epsilon)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    const int c = (idx / spatialSize) % channels;
+
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrt(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float x = g * normalized + b;
+
+    // GELU approximation
+    const float SQRT_2_OVER_PI = 0.7978845608f;
+    const float COEFF = 0.044715f;
+    float x3 = x * x * x;
+    float inner = SQRT_2_OVER_PI * (x + COEFF * x3);
+    output[idx] = 0.5f * x * (1.0f + tanh(inner));
+}
+
+// Fused BatchNorm + Sigmoid (Inference)
+__kernel void batchnorm_sigmoid(
+    __global const float* input,
+    __global float* output,
+    __global const float* gamma,
+    __global const float* beta,
+    __global const float* runningMean,
+    __global const float* runningVar,
+    const int batch,
+    const int channels,
+    const int spatialSize,
+    const float epsilon)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    const int c = (idx / spatialSize) % channels;
+
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrt(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float x = g * normalized + b;
+    output[idx] = 1.0f / (1.0f + exp(-x));  // Sigmoid
+}
+
+// Fused BatchNorm + Tanh (Inference)
+__kernel void batchnorm_tanh(
+    __global const float* input,
+    __global float* output,
+    __global const float* gamma,
+    __global const float* beta,
+    __global const float* runningMean,
+    __global const float* runningVar,
+    const int batch,
+    const int channels,
+    const int spatialSize,
+    const float epsilon)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    const int c = (idx / spatialSize) % channels;
+
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrt(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float x = g * normalized + b;
+    output[idx] = tanh(x);
+}
+
+// Fused Residual + BatchNorm + ReLU (for ResNet skip connections)
+__kernel void residual_batchnorm_relu(
+    __global const float* input,
+    __global const float* residual,
+    __global float* output,
+    __global const float* gamma,
+    __global const float* beta,
+    __global const float* runningMean,
+    __global const float* runningVar,
+    const int batch,
+    const int channels,
+    const int spatialSize,
+    const float epsilon)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    const int c = (idx / spatialSize) % channels;
+
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrt(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    // BatchNorm the input, then add residual
+    float normalized = (input[idx] - mean) * invStd;
+    float result = g * normalized + b + residual[idx];
+    output[idx] = fmax(0.0f, result);  // ReLU
+}
 ";
         }
 
@@ -511,7 +677,9 @@ __kernel void bias_dropout(
                 "gemm_bias_relu", "gemm_bias_gelu",
                 "gemm_bias_sigmoid", "gemm_bias_tanh", "gemm_bias",
                 "layernorm_relu", "layernorm_gelu",
-                "residual_layernorm", "scaled_softmax", "bias_dropout"
+                "residual_layernorm", "scaled_softmax", "bias_dropout",
+                "batchnorm_relu", "batchnorm_gelu",
+                "batchnorm_sigmoid", "batchnorm_tanh", "residual_batchnorm_relu"
             };
         }
     }

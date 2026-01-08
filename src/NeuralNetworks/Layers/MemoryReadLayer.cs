@@ -1,4 +1,6 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -223,6 +225,9 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MemoryReadLayer{T}"/> class with the specified dimensions
@@ -839,6 +844,130 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return Forward(input, defaultMemory);
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        int[] inputShape = input.Shape;
+        int batchSize = inputShape.Length >= 2 ? inputShape[0] : 1;
+        int inputDim = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
+
+        // Derive dimensions from weight tensor shapes
+        // _keyWeights: [inputDim, keyDim]
+        // _valueWeights: [memDim, valueDim]
+        // _outputWeights: [valueDim, outputDim]
+        // _outputBias: [outputDim]
+        int keyDim = _keyWeights.Shape[1];
+        int memDim = _valueWeights.Shape[0];
+        int valueDim = _valueWeights.Shape[1];
+        int outputDim = _outputBias.Shape[0];
+
+        // Get memory from inputs or use default memory if available
+        IGpuTensor<T>? memoryTensor = inputs.Length >= 2 ? inputs[1] : null;
+        int memorySlots;
+        IGpuBuffer memoryBuffer;
+        bool memoryBufferOwned = false;
+
+        if (memoryTensor is not null)
+        {
+            memorySlots = memoryTensor.Shape[0];
+            memoryBuffer = memoryTensor.Buffer;
+        }
+        else if (_lastMemory is not null)
+        {
+            memorySlots = _lastMemory.Shape[0];
+            float[] memoryData = DirectGpuEngine.ToFloatArray<T>(_lastMemory.Data);
+            memoryBuffer = backend.AllocateBuffer(memoryData);
+            memoryBufferOwned = true;
+        }
+        else
+        {
+            throw new InvalidOperationException("Memory not provided and no cached memory available.");
+        }
+
+        // Upload weights to GPU
+        float[] keyWeightData = DirectGpuEngine.ToFloatArray<T>(_keyWeights.Data);
+        float[] valueWeightData = DirectGpuEngine.ToFloatArray<T>(_valueWeights.Data);
+        float[] outputWeightData = DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data);
+        float[] outputBiasData = DirectGpuEngine.ToFloatArray<T>(_outputBias.Data);
+
+        using var keyWeightsBuffer = backend.AllocateBuffer(keyWeightData);
+        using var valueWeightsBuffer = backend.AllocateBuffer(valueWeightData);
+        using var outputWeightsBuffer = backend.AllocateBuffer(outputWeightData);
+        using var outputBiasBuffer = backend.AllocateBuffer(outputBiasData);
+
+        // Step 1: Compute keys = input @ keyWeights -> [batch, keyDim]
+        int keysSize = batchSize * keyDim;
+        using var keysBuffer = backend.AllocateBuffer(keysSize);
+        backend.Gemm(input.Buffer, keyWeightsBuffer, keysBuffer, batchSize, keyDim, inputDim);
+
+        // Step 2: Compute attention scores = keys @ memory^T -> [batch, memorySlots]
+        // Memory is [memSlots, memDim], need [memDim, memSlots] for matmul
+        int memorySize = memorySlots * memDim;
+        using var memoryTransposedBuffer = backend.AllocateBuffer(memorySize);
+        backend.BatchedTranspose(memoryBuffer, memoryTransposedBuffer, 1, memorySlots, memDim);
+
+        int scoresSize = batchSize * memorySlots;
+        using var scoresBuffer = backend.AllocateBuffer(scoresSize);
+        backend.Gemm(keysBuffer, memoryTransposedBuffer, scoresBuffer, batchSize, memorySlots, keyDim);
+
+        // Step 3: Apply softmax to get attention weights
+        using var attentionBuffer = backend.AllocateBuffer(scoresSize);
+        backend.Softmax(scoresBuffer, attentionBuffer, batchSize, memorySlots);
+
+        // Step 4: Read from memory: attention @ memory -> [batch, memDim]
+        int readSize = batchSize * memDim;
+        using var readBuffer = backend.AllocateBuffer(readSize);
+        backend.Gemm(attentionBuffer, memoryBuffer, readBuffer, batchSize, memDim, memorySlots);
+
+        // Step 5: Apply value transformation: read @ valueWeights -> [batch, valueDim]
+        int transformedSize = batchSize * valueDim;
+        using var transformedBuffer = backend.AllocateBuffer(transformedSize);
+        backend.Gemm(readBuffer, valueWeightsBuffer, transformedBuffer, batchSize, valueDim, memDim);
+
+        // Step 6: Apply output projection: transformed @ outputWeights -> [batch, outputDim]
+        int outputSize = batchSize * outputDim;
+        using var projectedBuffer = backend.AllocateBuffer(outputSize);
+        backend.Gemm(transformedBuffer, outputWeightsBuffer, projectedBuffer, batchSize, outputDim, valueDim);
+
+        // Step 7: Add bias - copy projected data then apply BiasAdd in-place
+        var withBiasBuffer = backend.AllocateBuffer(outputSize);
+        backend.Copy(projectedBuffer, withBiasBuffer, outputSize);
+        backend.BiasAdd(withBiasBuffer, outputBiasBuffer, withBiasBuffer, batchSize, outputDim);
+
+        // Step 8: Apply activation using helper method
+        var activationType = GetFusedActivationType();
+        IGpuBuffer outputBuffer;
+        if (activationType != FusedActivationType.None)
+        {
+            var activatedBuffer = backend.AllocateBuffer(outputSize);
+            ApplyGpuActivation(backend, withBiasBuffer, activatedBuffer, outputSize, activationType);
+            withBiasBuffer.Dispose();
+            outputBuffer = activatedBuffer;
+        }
+        else
+        {
+            outputBuffer = withBiasBuffer;
+        }
+
+        if (memoryBufferOwned)
+        {
+            memoryBuffer.Dispose();
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, [batchSize, outputDim], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -1025,6 +1027,269 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    // GPU Caches
+    private readonly Dictionary<(int batch, int height, int width), IGpuTensor<T>> _identityGridCache = new();
+    private readonly Dictionary<(int batch, int channels, int height, int width), (IGpuBuffer idx1, IGpuBuffer idx2)> _sliceIndicesCache = new();
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0) throw new ArgumentException("SpyNetLayer requires an input tensor.");
+        var input = inputs[0];
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        // Input: [B, 2*C, H, W]
+        int batch = input.Shape[0];
+        int doubleChannels = input.Shape[1];
+        int channels = doubleChannels / 2;
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        var backend = gpuEngine.GetBackend()!;
+        var cleanup = new List<IDisposable>();
+
+        try
+        {
+            // Slice into frame1 and frame2 using cached indices
+            var (frame1, frame2) = SliceChannelsGpu(input, batch, channels, height, width, gpuEngine, backend);
+            cleanup.Add(frame1);
+            cleanup.Add(frame2);
+
+            if (IsTrainingMode)
+            {
+                _lastInput1 = frame1.ToTensor();
+                _lastInput2 = frame2.ToTensor();
+            }
+
+            // Estimate Flow
+            var flow = EstimateFlowGpu(frame1, frame2, batch, height, width, gpuEngine, backend);
+
+            if (IsTrainingMode)
+            {
+                _lastFlow = flow.ToTensor();
+            }
+
+            return flow;
+        }
+        finally
+        {
+            foreach (var resource in cleanup)
+            {
+                resource.Dispose();
+            }
+        }
+    }
+
+    private (IGpuTensor<T> frame1, IGpuTensor<T> frame2) SliceChannelsGpu(
+        IGpuTensor<T> input, int batch, int channels, int height, int width,
+        DirectGpuTensorEngine engine, IDirectGpuBackend backend)
+    {
+        var key = (batch, channels, height, width);
+        if (!_sliceIndicesCache.TryGetValue(key, out var indices))
+        {
+            int frameSize = channels * height * width;
+            var frame1Indices = new int[batch * frameSize];
+            var frame2Indices = new int[batch * frameSize];
+
+            System.Threading.Tasks.Parallel.For(0, batch, b =>
+            {
+                int srcBase = b * 2 * frameSize;
+                int dstBase = b * frameSize;
+                for (int i = 0; i < frameSize; i++)
+                {
+                    frame1Indices[dstBase + i] = srcBase + i;
+                    frame2Indices[dstBase + i] = srcBase + frameSize + i;
+                }
+            });
+
+            var idx1 = backend.AllocateIntBuffer(frame1Indices);
+            var idx2 = backend.AllocateIntBuffer(frame2Indices);
+            indices = (idx1, idx2);
+            _sliceIndicesCache[key] = indices;
+        }
+
+        int size = batch * channels * height * width;
+        var f1 = engine.GatherGpu(input, indices.idx1, size, 1);
+        var f2 = engine.GatherGpu(input, indices.idx2, size, 1);
+
+        var shape = new[] { batch, channels, height, width };
+        var f1Reshaped = engine.ReshapeGpu(f1, shape);
+        var f2Reshaped = engine.ReshapeGpu(f2, shape);
+        
+        f1.Dispose();
+        f2.Dispose();
+
+        return (f1Reshaped, f2Reshaped);
+    }
+
+    private IGpuTensor<T> EstimateFlowGpu(IGpuTensor<T> frame1, IGpuTensor<T> frame2, int batch, int height, int width, 
+        DirectGpuTensorEngine engine, IDirectGpuBackend backend)
+    {
+        var cleanup = new List<IDisposable>();
+        try 
+        {
+            var pyramid1 = BuildPyramidGpu(frame1, engine);
+            var pyramid2 = BuildPyramidGpu(frame2, engine);
+            foreach (var t in pyramid1) if (t != frame1) cleanup.Add(t);
+            foreach (var t in pyramid2) if (t != frame2) cleanup.Add(t);
+
+            int coarseH = height >> (_numLevels - 1);
+            int coarseW = width >> (_numLevels - 1);
+            var flow = engine.ZerosGpu<T>([batch, 2, coarseH, coarseW]);
+
+            for (int level = _numLevels - 1; level >= 0; level--)
+            {
+                var img1 = pyramid1[level];
+                var img2 = pyramid2[level];
+                int levelH = img1.Shape[2];
+                int levelW = img1.Shape[3];
+
+                if (level < _numLevels - 1)
+                {
+                    var upsampled = engine.UpsampleGpu(flow, 2);
+                    var scaled = engine.ScaleGpu(upsampled, 2.0f);
+                    
+                    cleanup.Add(flow); 
+                    cleanup.Add(upsampled);
+                    flow = scaled;
+                }
+
+                var (warped2, grid) = WarpImageWithGridGpu(img2, flow, engine, backend);
+                cleanup.Add(warped2);
+                cleanup.Add(grid);
+                
+                var moduleInput = engine.ConcatGpu<T>([img1, warped2, flow], 1);
+                cleanup.Add(moduleInput);
+
+                var residualFlow = _basicModules[level].ForwardGpu(moduleInput);
+                cleanup.Add(residualFlow);
+
+                int sliceSize = batch * 2 * levelH * levelW;
+                var sliceIndices = new int[sliceSize];
+                int chStride = levelH * levelW;
+                int batchStride = 32 * chStride;
+                int outBatchStride = 2 * chStride;
+                
+                System.Threading.Tasks.Parallel.For(0, batch, b =>
+                {
+                    int srcBase = b * batchStride;
+                    int dstBase = b * outBatchStride;
+                    for(int i=0; i<chStride; i++) sliceIndices[dstBase + i] = srcBase + i;
+                    for(int i=0; i<chStride; i++) sliceIndices[dstBase + chStride + i] = srcBase + chStride + i;
+                });
+                
+                using var idxBuffer = backend.AllocateIntBuffer(sliceIndices);
+                var slicedResidual = engine.GatherGpu(residualFlow, idxBuffer, sliceSize, 1);
+                var reshapedResidual = engine.ReshapeGpu(slicedResidual, [batch, 2, levelH, levelW]);
+                
+                var newFlow = engine.AddGpu(flow, reshapedResidual);
+                
+                cleanup.Add(slicedResidual);
+                cleanup.Add(reshapedResidual);
+                cleanup.Add(flow);
+                
+                flow = newFlow;
+            }
+            
+            return flow;
+        }
+        catch
+        {
+            foreach (var r in cleanup) r.Dispose();
+            throw;
+        }
+    }
+
+    private (IGpuTensor<T> warped, IGpuTensor<T> grid) WarpImageWithGridGpu(
+        IGpuTensor<T> image, IGpuTensor<T> flow, DirectGpuTensorEngine engine, IDirectGpuBackend backend)
+    {
+        int batch = image.Shape[0];
+        int height = image.Shape[2];
+        int width = image.Shape[3];
+
+        var gridKey = (batch, height, width);
+        if (!_identityGridCache.TryGetValue(gridKey, out var identityGrid))
+        {
+            var gridData = new float[batch * height * width * 2];
+            for (int b = 0; b < batch; b++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        int idx = b * height * width * 2 + h * width * 2 + w * 2;
+                        gridData[idx] = (float)(2.0 * w / (width - 1) - 1.0);
+                        gridData[idx + 1] = (float)(2.0 * h / (height - 1) - 1.0);
+                    }
+                }
+            }
+            using var buffer = backend.AllocateBuffer(gridData);
+            identityGrid = new GpuTensor<T>(backend, buffer, [batch, height, width, 2], GpuTensorRole.Constant, ownsBuffer: true);
+            _identityGridCache[gridKey] = identityGrid;
+        }
+
+        var flowPermuted = engine.PermuteGpu(flow, [0, 2, 3, 1]);
+        
+        float scaleX = 2.0f / (width - 1);
+        float scaleY = 2.0f / (height - 1);
+        
+        var scaleData = new float[] { scaleX, scaleY };
+        using var scaleBuffer = backend.AllocateBuffer(scaleData);
+        var scaleTensor = new GpuTensor<T>(backend, scaleBuffer, [1, 1, 1, 2], GpuTensorRole.Constant, ownsBuffer: false);
+        
+        var scaledFlow = engine.BroadcastMultiplyRowGpu(flowPermuted, scaleTensor);
+        
+        var grid = engine.AddGpu(identityGrid, scaledFlow);
+        
+        flowPermuted.Dispose();
+        scaledFlow.Dispose();
+        
+        var warped = engine.GridSampleGpu(image, grid);
+        
+        return (warped, grid);
+    }
+
+    private List<IGpuTensor<T>> BuildPyramidGpu(IGpuTensor<T> image, DirectGpuTensorEngine engine)
+    {
+        var pyramid = new List<IGpuTensor<T>> { image };
+        var current = image;
+        for (int i = 1; i < _numLevels; i++)
+        {
+            var down = engine.AvgPool2DGpu(current, [2, 2], [2, 2]);
+            pyramid.Add(down);
+            current = down;
+        }
+        return pyramid;
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            foreach (var grid in _identityGridCache.Values)
+            {
+                grid.Dispose();
+            }
+            _identityGridCache.Clear();
+
+            foreach (var indices in _sliceIndicesCache.Values)
+            {
+                indices.idx1.Dispose();
+                indices.idx2.Dispose();
+            }
+            _sliceIndicesCache.Clear();
+        }
+        base.Dispose(disposing);
+    }
 
     /// <inheritdoc/>
     public override bool SupportsJitCompilation

@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -157,6 +160,11 @@ public class ReservoirLayer<T> : LayerBase<T>
     public override bool SupportsTraining => false;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ReservoirLayer{T}"/> class with specified dimensions and properties.
     /// </summary>
     /// <param name="inputSize">The size of the input to the layer at each time step.</param>
@@ -304,6 +312,183 @@ public class ReservoirLayer<T> : LayerBase<T>
         return outputs.Reshape(outputShape);
     }
 
+    // Cached GPU buffers for weights (uploaded once, reused)
+    private IGpuBuffer? _gpuInputWeights;
+    private IGpuBuffer? _gpuReservoirWeights;
+    private IGpuBuffer? _gpuState;
+
+    /// <summary>
+    /// Performs the GPU-accelerated forward pass for the reservoir layer.
+    /// </summary>
+    /// <param name="inputs">The GPU tensor inputs. First element is the input activation.</param>
+    /// <returns>A GPU tensor containing the reservoir state outputs.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs all matrix multiplications and activations on the GPU.
+    /// The reservoir state is maintained on GPU between time steps, minimizing data transfers.
+    /// </para>
+    /// <para>
+    /// GPU operations used:
+    /// - MatMul for input weights × input (M=reservoirSize, N=1, K=inputSize)
+    /// - MatMul for reservoir weights × state (M=reservoirSize, N=1, K=reservoirSize)
+    /// - Add for combining contributions
+    /// - Tanh for activation
+    /// - Scale and Add for leaking rate blending
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend is not available.");
+
+        // Upload weights to GPU once (cached for reuse)
+        if (_gpuInputWeights == null)
+        {
+            var inputWeightsData = new float[_inputWeights.Length];
+            for (int i = 0; i < _inputWeights.Length; i++)
+                inputWeightsData[i] = NumOps.ToFloat(_inputWeights[i]);
+            _gpuInputWeights = backend.AllocateBuffer(inputWeightsData);
+        }
+
+        if (_gpuReservoirWeights == null)
+        {
+            var reservoirWeightsData = new float[_reservoirWeights.Length];
+            for (int i = 0; i < _reservoirWeights.Length; i++)
+                reservoirWeightsData[i] = NumOps.ToFloat(_reservoirWeights[i]);
+            _gpuReservoirWeights = backend.AllocateBuffer(reservoirWeightsData);
+        }
+
+        // Initialize GPU state buffer if needed
+        if (_gpuState == null)
+        {
+            var stateData = new float[_reservoirSize];
+            for (int i = 0; i < _reservoirSize; i++)
+                stateData[i] = NumOps.ToFloat(_reservoirState[i]);
+            _gpuState = backend.AllocateBuffer(stateData);
+        }
+
+        // Determine batch dimensions
+        int rank = input.Shape.Length;
+        int inputDimension = input.Shape[^1];
+        if (inputDimension != _inputSize)
+            throw new ArgumentException($"Expected input feature size {_inputSize} but got {inputDimension}.");
+
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            flatBatch *= input.Shape[d];
+
+        // Allocate output buffer on GPU
+        var outputBuffer = backend.AllocateBuffer(flatBatch * _reservoirSize);
+
+        // Pre-allocate working buffers for GPU operations
+        var inputContribution = backend.AllocateBuffer(_reservoirSize);
+        var weightedState = backend.AllocateBuffer(_reservoirSize);
+        var preActivation = backend.AllocateBuffer(_reservoirSize);
+        var newState = backend.AllocateBuffer(_reservoirSize);
+        var scaledOldState = backend.AllocateBuffer(_reservoirSize);
+        var scaledNewState = backend.AllocateBuffer(_reservoirSize);
+
+        float inputScale = (float)_inputScaling;
+        float leakRate = (float)_leakingRate;
+        float keepRate = 1.0f - leakRate;
+
+        // Process each time step on GPU
+        for (int step = 0; step < flatBatch; step++)
+        {
+            // Create a view into the input tensor for this step's data
+            // This is zero-copy - just references the same GPU buffer at an offset
+            using var stepInputView = input.CreateView(step * _inputSize, [_inputSize, 1]);
+
+            // GPU: inputContribution = inputScale * inputWeights @ input[step]
+            // Using Gemm: C = alpha * A * B + beta * C
+            backend.Gemm(
+                _gpuInputWeights,      // A: [reservoirSize, inputSize]
+                stepInputView.Buffer,  // B: [inputSize, 1] (column vector for this step)
+                inputContribution,     // C: [reservoirSize, 1]
+                _reservoirSize,        // M
+                1,                     // N
+                _inputSize,            // K
+                inputScale,            // alpha = inputScaling
+                0.0f                   // beta = 0
+            );
+
+            // GPU: weightedState = reservoirWeights @ currentState
+            backend.Gemm(
+                _gpuReservoirWeights,  // A: [reservoirSize, reservoirSize]
+                _gpuState,             // B: [reservoirSize, 1]
+                weightedState,         // C: [reservoirSize, 1]
+                _reservoirSize,        // M
+                1,                     // N
+                _reservoirSize,        // K
+                1.0f,                  // alpha
+                0.0f                   // beta
+            );
+
+            // GPU: preActivation = weightedState + inputContribution
+            backend.Add(weightedState, inputContribution, preActivation, _reservoirSize);
+
+            // GPU: newState = tanh(preActivation)
+            backend.Tanh(preActivation, newState, _reservoirSize);
+
+            // GPU: apply leaking rate
+            // finalState = (1 - leakRate) * oldState + leakRate * newState
+            backend.Scale(_gpuState, scaledOldState, keepRate, _reservoirSize);
+            backend.Scale(newState, scaledNewState, leakRate, _reservoirSize);
+            backend.Add(scaledOldState, scaledNewState, _gpuState, _reservoirSize);
+
+            // Copy current state to output - use Copy2DStrided with 1 row to handle offset
+            // destination[0, step*reservoirSize : step*reservoirSize + reservoirSize] = state[:]
+            backend.Copy2DStrided(
+                _gpuState,             // source: [reservoirSize]
+                outputBuffer,          // destination: [flatBatch * reservoirSize]
+                1,                     // numRows = 1 (single row copy)
+                _reservoirSize,        // srcCols = reservoirSize
+                flatBatch * _reservoirSize, // destTotalCols = total output size
+                step * _reservoirSize  // destColOffset = where to put this step's output
+            );
+        }
+
+        // Clean up working buffers
+        inputContribution.Dispose();
+        weightedState.Dispose();
+        preActivation.Dispose();
+        newState.Dispose();
+        scaledOldState.Dispose();
+        scaledNewState.Dispose();
+
+        // Sync GPU state back to CPU state tensor for consistency
+        if (IsTrainingMode)
+        {
+            var stateData = backend.DownloadBuffer(_gpuState);
+            for (int i = 0; i < _reservoirSize; i++)
+                _reservoirState[i] = NumOps.FromDouble(stateData[i]);
+        }
+
+        // Determine output shape
+        int[] outputShape;
+        if (rank == 1)
+        {
+            outputShape = new[] { _reservoirSize };
+        }
+        else
+        {
+            outputShape = new int[rank];
+            for (int d = 0; d < rank - 1; d++)
+                outputShape[d] = input.Shape[d];
+            outputShape[rank - 1] = _reservoirSize;
+        }
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
 
     /// <summary>
     /// Performs the backward pass of the reservoir layer.

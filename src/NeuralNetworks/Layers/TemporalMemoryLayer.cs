@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -138,6 +141,9 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TemporalMemoryLayer{T}"/> class.
     /// </summary>
@@ -241,6 +247,34 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         var output = Engine.TensorMultiply(mask, flatCellStates);
 
         return output;
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        var input = inputs[0];
+        int outputSize = ColumnCount * CellsPerColumn;
+
+        // Convert cell states to float array and upload to GPU
+        var cellStatesData = DirectGpuEngine.ToFloatArray<T>(CellStates.Data);
+        using var cellStatesBuffer = backend.AllocateBuffer(cellStatesData);
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Use BroadcastMultiplyFirstAxis: output[col, cell] = cellStates[col, cell] * input[col]
+        // This broadcasts input[ColumnCount] across the CellsPerColumn dimension without CPU download
+        backend.BroadcastMultiplyFirstAxis(cellStatesBuffer, input.Buffer, outputBuffer, ColumnCount, CellsPerColumn);
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { outputSize }, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

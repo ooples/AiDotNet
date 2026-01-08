@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -158,6 +162,14 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// PrimaryCapsuleLayer requires Im2Col transformation and data reordering that don't have
+    /// GPU kernel implementations. The previous "GPU" implementation downloaded to CPU for these
+    /// operations, defeating GPU benefits - CPU fallback is used instead.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PrimaryCapsuleLayer{T}"/> class with the specified parameters

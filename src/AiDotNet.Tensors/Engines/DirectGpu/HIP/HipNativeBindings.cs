@@ -420,6 +420,20 @@ internal static class HipNativeBindings
         IntPtr hipEvent,
         uint flags);
 
+    [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
+    public static extern HipError hipStreamQuery(IntPtr stream);
+
+    [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
+    public static extern HipError hipStreamCreateWithPriority(
+        ref IntPtr stream,
+        uint flags,
+        int priority);
+
+    [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
+    public static extern HipError hipDeviceGetStreamPriorityRange(
+        ref int leastPriority,
+        ref int greatestPriority);
+
     #endregion
 
     #region Module and Kernel Management
@@ -531,6 +545,14 @@ internal static class HipNativeBindings
         ref float ms,
         IntPtr start,
         IntPtr stop);
+
+    [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
+    public static extern HipError hipEventQuery(IntPtr hipEvent);
+
+    [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
+    public static extern HipError hipEventCreateWithFlags(
+        ref IntPtr hipEvent,
+        uint flags);
 
     #endregion
 

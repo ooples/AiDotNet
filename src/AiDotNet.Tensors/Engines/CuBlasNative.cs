@@ -55,6 +55,7 @@ public enum CudaResult
     NotMappedAsArray = 212,
     NotMappedAsPointer = 213,
     LaunchFailed = 719,
+    NotReady = 600,
     Unknown = 999
 }
 
@@ -472,6 +473,7 @@ public static class CuBlasNative
             CudaResult.InvalidDevice => "Invalid device",
             CudaResult.InvalidContext => "Invalid context",
             CudaResult.LaunchFailed => "Kernel launch failed",
+            CudaResult.NotReady => "Operation not ready (async operation still in progress)",
             _ => $"Unknown CUDA error ({(int)result})"
         };
     }

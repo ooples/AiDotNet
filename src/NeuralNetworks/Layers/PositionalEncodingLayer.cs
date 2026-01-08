@@ -1,4 +1,5 @@
-
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -615,4 +616,137 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     }
 
     public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs the forward pass on GPU, adding positional encodings to input embeddings.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensors (uses first input).</param>
+    /// <returns>GPU-resident output tensor with positional encodings added.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var inputShape = input.Shape;
+        int rank = inputShape.Length;
+
+        // Handle 1D input by treating as [1, embed]
+        bool was1D = rank == 1;
+        IGpuTensor<T> workingInput = input;
+
+        if (was1D)
+        {
+            workingInput = gpuEngine.ReshapeGpu(input, [1, inputShape[0]]);
+            rank = 2;
+        }
+
+        // Last dim is embed, second-to-last is sequence
+        int seqLength = workingInput.Shape[rank - 2];
+        int inputEmbedDim = workingInput.Shape[rank - 1];
+
+        Tensor<T> currentEncodings;
+        int currentEmbeddingSize;
+
+        lock (_encodingLock)
+        {
+            // Dynamically adjust embedding size if needed
+            if (inputEmbedDim != embeddingSize)
+            {
+                embeddingSize = inputEmbedDim;
+                encodings = new Tensor<T>([maxSequenceLength, embeddingSize]);
+                InitializeEncodings();
+            }
+
+            // Dynamically extend encodings if needed
+            if (seqLength > maxSequenceLength)
+            {
+                int oldMaxSeq = maxSequenceLength;
+                maxSequenceLength = seqLength;
+                var newEncodings = new Tensor<T>([maxSequenceLength, embeddingSize]);
+
+                for (int pos = 0; pos < oldMaxSeq; pos++)
+                {
+                    for (int e = 0; e < embeddingSize; e++)
+                    {
+                        newEncodings[pos, e] = encodings[pos, e];
+                    }
+                }
+
+                for (int pos = oldMaxSeq; pos < maxSequenceLength; pos++)
+                {
+                    for (int i = 0; i < embeddingSize / 2; i++)
+                    {
+                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * i, embeddingSize);
+                        double divTerm = 1.0 / Math.Pow(10000, exponent);
+                        newEncodings[pos, 2 * i] = NumOps.FromDouble(Math.Sin(pos * divTerm));
+                        newEncodings[pos, 2 * i + 1] = NumOps.FromDouble(Math.Cos(pos * divTerm));
+                    }
+                    if (embeddingSize % 2 == 1)
+                    {
+                        int lastDimIdx = embeddingSize - 1;
+                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2.0), embeddingSize);
+                        double divTerm = 1.0 / Math.Pow(10000, exponent);
+                        newEncodings[pos, lastDimIdx] = NumOps.FromDouble(Math.Sin(pos * divTerm));
+                    }
+                }
+
+                encodings = newEncodings;
+            }
+
+            currentEncodings = encodings;
+            currentEmbeddingSize = embeddingSize;
+        }
+
+        // Slice encodings to match input sequence length
+        var slicedEncodings = currentEncodings.Slice(0, 0, seqLength, currentEmbeddingSize);
+
+        // Upload encodings to GPU
+        var gpuEncodings = gpuEngine.UploadToGpu(slicedEncodings, GpuTensorRole.Activation);
+
+        IGpuTensor<T> result;
+        if (rank == 2)
+        {
+            // Direct add for 2D input
+            result = gpuEngine.AddGpu(workingInput, gpuEncodings);
+        }
+        else
+        {
+            // For higher-rank input, we need to broadcast
+            // Reshape encodings to match broadcast shape: [1, 1, ..., 1, seq, embed]
+            var broadcastShape = new int[rank];
+            for (int d = 0; d < rank - 2; d++)
+                broadcastShape[d] = 1;
+            broadcastShape[rank - 2] = seqLength;
+            broadcastShape[rank - 1] = currentEmbeddingSize;
+
+            var reshapedEncodings = gpuEngine.ReshapeGpu(gpuEncodings, broadcastShape);
+
+            // Tile encodings to match input's batch dimensions
+            int totalBatchSize = 1;
+            for (int d = 0; d < rank - 2; d++)
+                totalBatchSize *= workingInput.Shape[d];
+
+            var tiledEncodings = gpuEngine.TileBatchGpu(reshapedEncodings, totalBatchSize);
+            var finalEncodings = gpuEngine.ReshapeGpu(tiledEncodings, workingInput.Shape);
+
+            result = gpuEngine.AddGpu(workingInput, finalEncodings);
+        }
+
+        // Reshape back to 1D if needed
+        if (was1D)
+        {
+            result = gpuEngine.ReshapeGpu(result, [result.Shape[^1]]);
+        }
+
+        return result;
+    }
 }

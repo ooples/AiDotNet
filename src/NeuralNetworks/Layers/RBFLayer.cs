@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -136,6 +139,35 @@ public class RBFLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0) throw new ArgumentException("RBFLayer requires an input tensor.");
+        var input = inputs[0];
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        // Input: [batch, inputSize] (ensure 2D)
+        int batch = input.Shape[0];
+        var input2D = input.Shape.Length == 1 ? gpuEngine.ReshapeGpu(input, [1, input.Shape[0]]) : input;
+        
+        // Use custom RBF kernel on GPU
+        // Weights are persistent tensors, handled by engine
+        var output = gpuEngine.RbfKernelGpu(input2D, _centers, _widths);
+
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastOutput = output.ToTensor();
+        }
+
+        return output;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RBFLayer{T}"/> class with specified dimensions and radial basis function.

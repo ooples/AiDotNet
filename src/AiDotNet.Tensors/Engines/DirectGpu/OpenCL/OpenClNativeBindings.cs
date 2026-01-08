@@ -197,6 +197,30 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         [DllImport(OpenClLibrary, EntryPoint = "clRetainEvent")]
         public static extern int RetainEvent(IntPtr eventHandle);
 
+        [DllImport(OpenClLibrary, EntryPoint = "clGetEventInfo")]
+        public static extern int GetEventInfo(
+            IntPtr eventHandle,
+            uint paramName,
+            UIntPtr paramValueSize,
+            IntPtr paramValue,
+            out UIntPtr paramValueSizeRet);
+
+        [DllImport(OpenClLibrary, EntryPoint = "clEnqueueMarkerWithWaitList")]
+        public static extern int EnqueueMarkerWithWaitList(
+            IntPtr commandQueue,
+            uint numEventsInWaitList,
+            [In] IntPtr[]? eventWaitList,
+            out IntPtr eventOut);
+
+        // Event info constants
+        public const uint CL_EVENT_COMMAND_EXECUTION_STATUS = 0x11D3;
+
+        // Event execution status values
+        public const int CL_QUEUED = 3;
+        public const int CL_SUBMITTED = 2;
+        public const int CL_RUNNING = 1;
+        public const int CL_COMPLETE = 0;
+
         #endregion
 
         #region Memory Functions

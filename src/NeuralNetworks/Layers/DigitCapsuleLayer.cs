@@ -1,3 +1,7 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -234,6 +238,13 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// DigitCapsuleLayer requires per-capsule routing with complex tensor indexing patterns.
+    /// Without specialized GPU kernels, true GPU-resident execution isn't possible - CPU fallback is used.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DigitCapsuleLayer{T}"/> class.

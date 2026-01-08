@@ -1,4 +1,7 @@
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -197,6 +200,15 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// MessagePassingLayer supports GPU execution with efficient message computation,
+    /// sum aggregation, and GRU-style update on GPU.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -1096,6 +1108,358 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _resetWeightsGradient = null;
         _resetMessageWeightsGradient = null;
         _resetBiasGradient = null;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for Message Passing Neural Network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Implements the actual MPNN algorithm on GPU:
+    /// 1. For each edge (i→j), gather source and target features
+    /// 2. Compute per-edge message: m_ij = MLP(concat(h_source, h_target))
+    /// 3. Scatter-add to aggregate messages per target node: m_i = Σ_{j∈N(i)} m_ji
+    /// 4. GRU-style update: h'_i = (1-z)*h_i + z*m_i
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+        if (input.Shape == null || input.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
+
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("No GPU backend available.");
+
+        int rank = input.Shape.Length;
+        int batchSize, numNodes, inputFeatures;
+
+        if (rank == 2)
+        {
+            batchSize = 1;
+            numNodes = input.Shape[0];
+            inputFeatures = input.Shape[1];
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            numNodes = input.Shape[rank - 2];
+            inputFeatures = input.Shape[rank - 1];
+        }
+
+        if (inputFeatures != _inputFeatures)
+            throw new ArgumentException($"Input features ({inputFeatures}) doesn't match layer input features ({_inputFeatures}).");
+
+        // Extract edge list from adjacency matrix
+        bool adj2D = _adjacencyMatrix.Shape.Length == 2;
+        var edgeSourceList = new List<int>();
+        var edgeTargetList = new List<int>();
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                T adjVal = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[0, i, j];
+                if (!NumOps.Equals(adjVal, NumOps.Zero))
+                {
+                    edgeSourceList.Add(j);  // Source node
+                    edgeTargetList.Add(i);  // Target node (edge j→i)
+                }
+            }
+        }
+
+        int numEdges = edgeSourceList.Count;
+        if (numEdges == 0)
+        {
+            throw new InvalidOperationException("Graph has no edges. Cannot perform message passing.");
+        }
+
+        var edgeSources = edgeSourceList.ToArray();
+        var edgeTargets = edgeTargetList.ToArray();
+
+        // Upload edge indices to GPU
+        var srcIdxBuffer = backend.AllocateIntBuffer(edgeSources);
+        var tgtIdxBuffer = backend.AllocateIntBuffer(edgeTargets);
+
+        // Upload message MLP weights to GPU
+        int messageInputDim = 2 * _inputFeatures;
+        var msgW1Data = new float[messageInputDim * _messageFeatures];
+        for (int i = 0; i < messageInputDim; i++)
+        {
+            for (int j = 0; j < _messageFeatures; j++)
+            {
+                msgW1Data[i * _messageFeatures + j] = (float)NumOps.ToDouble(_messageWeights1[i, j]);
+            }
+        }
+        var msgW1Buffer = backend.AllocateBuffer(msgW1Data);
+
+        var msgW2Data = new float[_messageFeatures * _messageFeatures];
+        for (int i = 0; i < _messageFeatures; i++)
+        {
+            for (int j = 0; j < _messageFeatures; j++)
+            {
+                msgW2Data[i * _messageFeatures + j] = (float)NumOps.ToDouble(_messageWeights2[i, j]);
+            }
+        }
+        var msgW2Buffer = backend.AllocateBuffer(msgW2Data);
+
+        var msgB1Data = new float[_messageFeatures];
+        var msgB2Data = new float[_messageFeatures];
+        for (int i = 0; i < _messageFeatures; i++)
+        {
+            msgB1Data[i] = (float)NumOps.ToDouble(_messageBias1[i]);
+            msgB2Data[i] = (float)NumOps.ToDouble(_messageBias2[i]);
+        }
+        var msgB1Buffer = backend.AllocateBuffer(msgB1Data);
+        var msgB2Buffer = backend.AllocateBuffer(msgB2Data);
+
+        // Upload GRU weights
+        var updateWData = new float[_inputFeatures * _outputFeatures];
+        var updateMsgWData = new float[_messageFeatures * _outputFeatures];
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                updateWData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_updateWeights[i, j]);
+            }
+        }
+        for (int i = 0; i < _messageFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                updateMsgWData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_updateMessageWeights[i, j]);
+            }
+        }
+        var updateWBuffer = backend.AllocateBuffer(updateWData);
+        var updateMsgWBuffer = backend.AllocateBuffer(updateMsgWData);
+
+        var updateBData = new float[_outputFeatures];
+        for (int i = 0; i < _outputFeatures; i++)
+            updateBData[i] = (float)NumOps.ToDouble(_updateBias[i]);
+        var updateBBuffer = backend.AllocateBuffer(updateBData);
+
+        var resetWData = new float[_inputFeatures * _outputFeatures];
+        var resetMsgWData = new float[_messageFeatures * _outputFeatures];
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                resetWData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_resetWeights[i, j]);
+            }
+        }
+        for (int i = 0; i < _messageFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                resetMsgWData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_resetMessageWeights[i, j]);
+            }
+        }
+        var resetWBuffer = backend.AllocateBuffer(resetWData);
+        var resetMsgWBuffer = backend.AllocateBuffer(resetMsgWData);
+
+        var resetBData = new float[_outputFeatures];
+        for (int i = 0; i < _outputFeatures; i++)
+            resetBData[i] = (float)NumOps.ToDouble(_resetBias[i]);
+        var resetBBuffer = backend.AllocateBuffer(resetBData);
+
+        // Allocate output buffer
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        var outputBuffer = backend.AllocateBuffer(new float[outputSize]);
+
+        // Allocate per-edge and per-node buffers
+        var edgeSrcFeatBuffer = backend.AllocateBuffer(new float[numEdges * _inputFeatures]);
+        var edgeTgtFeatBuffer = backend.AllocateBuffer(new float[numEdges * _inputFeatures]);
+        var edgeConcatBuffer = backend.AllocateBuffer(new float[numEdges * messageInputDim]);
+        var edgeMsgHiddenBuffer = backend.AllocateBuffer(new float[numEdges * _messageFeatures]);
+        var edgeMsgBuffer = backend.AllocateBuffer(new float[numEdges * _messageFeatures]);
+        var aggregatedBuffer = backend.AllocateBuffer(new float[numNodes * _messageFeatures]);
+        var resetGateBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+        var updateGateBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+        var tempBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+        var nodeOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+
+        // Allocate temporary buffers for GRU computation
+        var onesBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        backend.Fill(onesBuffer, 1.0f, numNodes * _outputFeatures);
+        var oneMinusZBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        var hiddenTermBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        var msgTermBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+
+        // Process each batch
+        for (int b = 0; b < batchSize; b++)
+        {
+            // For single batch, use input directly; for multi-batch, extract slice
+            IGpuBuffer batchInputBuffer;
+            bool ownsBatchBuffer = false;
+            if (batchSize == 1)
+            {
+                batchInputBuffer = input.Buffer;
+            }
+            else
+            {
+                // Multi-batch: need to extract slice (TODO: optimize with GPU slice view)
+                int batchOffset = b * numNodes * inputFeatures;
+                var fullData = backend.DownloadBuffer(input.Buffer);
+                var batchData = new float[numNodes * inputFeatures];
+                Array.Copy(fullData, batchOffset, batchData, 0, numNodes * inputFeatures);
+                batchInputBuffer = backend.AllocateBuffer(batchData);
+                ownsBatchBuffer = true;
+            }
+
+            // Step 1: Gather source and target features for each edge using GPU
+            backend.Gather(batchInputBuffer, srcIdxBuffer, edgeSrcFeatBuffer, numEdges, _inputFeatures);
+            backend.Gather(batchInputBuffer, tgtIdxBuffer, edgeTgtFeatBuffer, numEdges, _inputFeatures);
+
+            // Step 2: Concatenate source and target features
+            // Copy source features to first half, target features to second half
+            backend.Copy(edgeSrcFeatBuffer, edgeConcatBuffer, numEdges * _inputFeatures);
+            // For second half, need to copy with offset - use ScatterAdd pattern
+            var concatOffsetIndices = new int[numEdges * _inputFeatures];
+            for (int e = 0; e < numEdges; e++)
+            {
+                for (int f = 0; f < _inputFeatures; f++)
+                {
+                    concatOffsetIndices[e * _inputFeatures + f] = e * messageInputDim + _inputFeatures + f;
+                }
+            }
+            using var concatIdxBuffer = backend.AllocateIntBuffer(concatOffsetIndices);
+            backend.ScatterAdd(edgeTgtFeatBuffer, concatIdxBuffer, edgeConcatBuffer, numEdges * _inputFeatures, numEdges * messageInputDim);
+
+            // Step 3: Per-edge message MLP - Layer 1 with ReLU (fused GPU operation)
+            var msgHiddenResult = backend.GemmBiasRelu(edgeConcatBuffer, msgW1Buffer, msgB1Buffer, numEdges, _messageFeatures, messageInputDim);
+            backend.Copy(msgHiddenResult, edgeMsgHiddenBuffer, numEdges * _messageFeatures);
+            msgHiddenResult.Dispose();
+
+            // Step 4: Per-edge message MLP - Layer 2 (fused GPU operation)
+            var msgResult = backend.GemmBias(edgeMsgHiddenBuffer, msgW2Buffer, msgB2Buffer, numEdges, _messageFeatures, _messageFeatures);
+            backend.Copy(msgResult, edgeMsgBuffer, numEdges * _messageFeatures);
+            msgResult.Dispose();
+
+            // Step 5: Scatter-add messages to aggregate per target node using GPU
+            backend.Fill(aggregatedBuffer, 0.0f, numNodes * _messageFeatures);
+            backend.ScatterAddEdges(edgeMsgBuffer, srcIdxBuffer, tgtIdxBuffer, null, aggregatedBuffer, numNodes, numEdges, _messageFeatures);
+
+            // Step 6: Compute reset gate: r = sigmoid(h @ W_r + m @ W_rm + b_r)
+            backend.Gemm(batchInputBuffer, resetWBuffer, resetGateBuffer, numNodes, _outputFeatures, _inputFeatures);
+            backend.Gemm(aggregatedBuffer, resetMsgWBuffer, tempBuffer, numNodes, _outputFeatures, _messageFeatures);
+            backend.Add(resetGateBuffer, tempBuffer, resetGateBuffer, numNodes * _outputFeatures);
+            backend.BiasAdd(resetGateBuffer, resetBBuffer, resetGateBuffer, numNodes, _outputFeatures);
+            backend.Sigmoid(resetGateBuffer, resetGateBuffer, numNodes * _outputFeatures);
+
+            // Step 7: Compute update gate: z = sigmoid(h @ W_z + m @ W_zm + b_z)
+            backend.Gemm(batchInputBuffer, updateWBuffer, updateGateBuffer, numNodes, _outputFeatures, _inputFeatures);
+            backend.Gemm(aggregatedBuffer, updateMsgWBuffer, tempBuffer, numNodes, _outputFeatures, _messageFeatures);
+            backend.Add(updateGateBuffer, tempBuffer, updateGateBuffer, numNodes * _outputFeatures);
+            backend.BiasAdd(updateGateBuffer, updateBBuffer, updateGateBuffer, numNodes, _outputFeatures);
+            backend.Sigmoid(updateGateBuffer, updateGateBuffer, numNodes * _outputFeatures);
+
+            // Step 8: GRU-style update on GPU: h' = (1 - z) * h + z * m
+            // oneMinusZ = 1 - z
+            backend.Subtract(onesBuffer, updateGateBuffer, oneMinusZBuffer, numNodes * _outputFeatures);
+            // hiddenTerm = (1 - z) * h (use first _outputFeatures of input if dimensions match)
+            int effectiveHiddenSize = Math.Min(_inputFeatures, _outputFeatures);
+            if (_inputFeatures == _outputFeatures)
+            {
+                backend.Multiply(oneMinusZBuffer, batchInputBuffer, hiddenTermBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                // Need to handle dimension mismatch - project input first
+                backend.Fill(hiddenTermBuffer, 0.0f, numNodes * _outputFeatures);
+            }
+            // msgTerm = z * m
+            int effectiveMsgSize = Math.Min(_messageFeatures, _outputFeatures);
+            if (_messageFeatures >= _outputFeatures)
+            {
+                backend.Multiply(updateGateBuffer, aggregatedBuffer, msgTermBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                backend.Fill(msgTermBuffer, 0.0f, numNodes * _outputFeatures);
+            }
+            // output = hiddenTerm + msgTerm
+            backend.Add(hiddenTermBuffer, msgTermBuffer, nodeOutputBuffer, numNodes * _outputFeatures);
+
+            // Copy to output buffer at correct batch offset
+            if (batchSize == 1)
+            {
+                backend.Copy(nodeOutputBuffer, outputBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                // Multi-batch: need to write to offset (download, modify, upload)
+                int outputOffset = b * numNodes * _outputFeatures;
+                var outputData = backend.DownloadBuffer(outputBuffer);
+                var nodeData = backend.DownloadBuffer(nodeOutputBuffer);
+                Array.Copy(nodeData, 0, outputData, outputOffset, numNodes * _outputFeatures);
+                using var tempOut = backend.AllocateBuffer(outputData);
+                backend.Copy(tempOut, outputBuffer, outputSize);
+            }
+
+            if (ownsBatchBuffer)
+            {
+                batchInputBuffer.Dispose();
+            }
+        }
+
+        // Clean up GRU buffers
+        onesBuffer.Dispose();
+        oneMinusZBuffer.Dispose();
+        hiddenTermBuffer.Dispose();
+        msgTermBuffer.Dispose();
+
+        // Apply activation using base class GPU activation method
+        var activationType = GetFusedActivationType();
+        if (activationType != FusedActivationType.None)
+        {
+            ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, activationType);
+        }
+
+        // Clean up
+        srcIdxBuffer.Dispose();
+        tgtIdxBuffer.Dispose();
+        msgW1Buffer.Dispose();
+        msgW2Buffer.Dispose();
+        msgB1Buffer.Dispose();
+        msgB2Buffer.Dispose();
+        updateWBuffer.Dispose();
+        updateMsgWBuffer.Dispose();
+        updateBBuffer.Dispose();
+        resetWBuffer.Dispose();
+        resetMsgWBuffer.Dispose();
+        resetBBuffer.Dispose();
+        edgeSrcFeatBuffer.Dispose();
+        edgeTgtFeatBuffer.Dispose();
+        edgeConcatBuffer.Dispose();
+        edgeMsgHiddenBuffer.Dispose();
+        edgeMsgBuffer.Dispose();
+        aggregatedBuffer.Dispose();
+        resetGateBuffer.Dispose();
+        updateGateBuffer.Dispose();
+        tempBuffer.Dispose();
+        nodeOutputBuffer.Dispose();
+
+        int[] outputShape = rank == 2
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
 
     /// <inheritdoc/>

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -90,6 +91,9 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T>? _betaGradient;
 
+    private Tensor<T>? _gammaVelocity;
+    private Tensor<T>? _betaVelocity;
+
     /// <summary>
     /// Returns layer-specific metadata required for cloning/serialization.
     /// </summary>
@@ -128,6 +132,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU-resident execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the gamma (scale) parameters of the layer normalization layer.
@@ -232,7 +241,10 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        if (IsTrainingMode)
+        {
+            _lastInput = input;
+        }
 
         // Use Engine for GPU/CPU accelerated Layer Normalization
         // This replaces the manual loop over batch items
@@ -244,8 +256,43 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             out var mean,
             out var variance);
 
-        _lastMean = mean;
-        _lastVariance = variance;
+        if (IsTrainingMode)
+        {
+            _lastMean = mean;
+            _lastVariance = variance;
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// GPU-resident forward pass for layer normalization.
+    /// Normalizes input across the feature dimension entirely on GPU.
+    /// </summary>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident normalized output tensor.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        double epsilonDouble = NumOps.ToDouble(_epsilon);
+
+        var (output, saveMean, saveInvVar) = gpuEngine.LayerNormGpu(
+            input, _gamma, _beta, epsilonDouble);
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            _lastInput = input.ToTensor();
+            _lastMean = saveMean;
+            _lastVariance = saveInvVar;
+        }
 
         return output;
     }
@@ -428,12 +475,34 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         if (_gammaGradient == null || _betaGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
+            if (_gammaVelocity == null)
+            {
+                _gammaVelocity = new Tensor<T>(_gamma.Shape);
+                _gammaVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_gammaVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_betaVelocity == null)
+            {
+                _betaVelocity = new Tensor<T>(_beta.Shape);
+                _betaVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_betaVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            gpuEngine.SgdMomentumUpdateGpu(_gamma, _gammaGradient, _gammaVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_beta, _betaGradient, _betaVelocity, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+            _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+
+            Engine.InvalidatePersistentTensor(_gamma);
+            Engine.InvalidatePersistentTensor(_beta);
+        }
     }
 
     /// <summary>

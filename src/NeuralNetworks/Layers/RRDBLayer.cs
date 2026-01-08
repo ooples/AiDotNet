@@ -1,6 +1,8 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -104,6 +106,11 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
     /// <inheritdoc />
     public override bool SupportsJitCompilation
     {
@@ -204,6 +211,47 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         // Global residual: output = RDB3_output * residualScale + input
         return AddResidual(x, input, _residualScale);
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after RRDB processing.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var shape = input.Shape;
+
+        // Store input buffer for global residual
+        var inputBuffer = input.Buffer;
+
+        // Pass through 3 Residual Dense Blocks sequentially on GPU
+        var x = _rdbBlocks[0].ForwardGpu(input);
+        x = _rdbBlocks[1].ForwardGpu(x);
+        x = _rdbBlocks[2].ForwardGpu(x);
+
+        // Global residual: output = RDB3_output * residualScale + input
+        int outputSize = shape.Aggregate(1, (a, b) => a * b);
+
+        var scaledBuffer = backend.AllocateBuffer(outputSize);
+        backend.Scale(x.Buffer, scaledBuffer, (float)_residualScale, outputSize);
+
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+        backend.Add(scaledBuffer, inputBuffer, outputBuffer, outputSize);
+
+        scaledBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion

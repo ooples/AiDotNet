@@ -583,6 +583,146 @@ extern ""C"" __global__ void bias_dropout(
     unsigned int m = mask[idx];
     output[idx] = (m != 0) ? val * scale : 0.0f;
 }
+
+// ===========================================================================
+// FUSED BATCHNORM + ACTIVATION KERNELS (INFERENCE MODE)
+// ===========================================================================
+
+// Fused BatchNorm + ReLU (Inference)
+extern ""C"" __global__ void batchnorm_relu(
+    const float* __restrict__ input,
+    float* __restrict__ output,
+    const float* __restrict__ gamma,
+    const float* __restrict__ beta,
+    const float* __restrict__ runningMean,
+    const float* __restrict__ runningVar,
+    int batch, int channels, int spatialSize, float epsilon)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    int c = (idx / spatialSize) % channels;
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrtf(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float result = g * normalized + b;
+    output[idx] = fmaxf(0.0f, result);
+}
+
+// Fused BatchNorm + GELU (Inference)
+extern ""C"" __global__ void batchnorm_gelu(
+    const float* __restrict__ input,
+    float* __restrict__ output,
+    const float* __restrict__ gamma,
+    const float* __restrict__ beta,
+    const float* __restrict__ runningMean,
+    const float* __restrict__ runningVar,
+    int batch, int channels, int spatialSize, float epsilon)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    int c = (idx / spatialSize) % channels;
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrtf(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float x = g * normalized + b;
+
+    const float SQRT_2_OVER_PI = 0.7978845608f;
+    const float COEFF = 0.044715f;
+    float x3 = x * x * x;
+    float inner = SQRT_2_OVER_PI * (x + COEFF * x3);
+    output[idx] = 0.5f * x * (1.0f + tanhf(inner));
+}
+
+// Fused BatchNorm + Sigmoid (Inference)
+extern ""C"" __global__ void batchnorm_sigmoid(
+    const float* __restrict__ input,
+    float* __restrict__ output,
+    const float* __restrict__ gamma,
+    const float* __restrict__ beta,
+    const float* __restrict__ runningMean,
+    const float* __restrict__ runningVar,
+    int batch, int channels, int spatialSize, float epsilon)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    int c = (idx / spatialSize) % channels;
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrtf(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float x = g * normalized + b;
+    output[idx] = 1.0f / (1.0f + expf(-x));
+}
+
+// Fused BatchNorm + Tanh (Inference)
+extern ""C"" __global__ void batchnorm_tanh(
+    const float* __restrict__ input,
+    float* __restrict__ output,
+    const float* __restrict__ gamma,
+    const float* __restrict__ beta,
+    const float* __restrict__ runningMean,
+    const float* __restrict__ runningVar,
+    int batch, int channels, int spatialSize, float epsilon)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    int c = (idx / spatialSize) % channels;
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrtf(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float x = g * normalized + b;
+    output[idx] = tanhf(x);
+}
+
+// Fused Residual + BatchNorm + ReLU
+extern ""C"" __global__ void residual_batchnorm_relu(
+    const float* __restrict__ input,
+    const float* __restrict__ residual,
+    float* __restrict__ output,
+    const float* __restrict__ gamma,
+    const float* __restrict__ beta,
+    const float* __restrict__ runningMean,
+    const float* __restrict__ runningVar,
+    int batch, int channels, int spatialSize, float epsilon)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = batch * channels * spatialSize;
+    if (idx >= totalSize) return;
+
+    int c = (idx / spatialSize) % channels;
+    float mean = runningMean[c];
+    float var = runningVar[c];
+    float invStd = rsqrtf(var + epsilon);
+    float g = gamma[c];
+    float b = beta[c];
+
+    float normalized = (input[idx] - mean) * invStd;
+    float result = g * normalized + b + residual[idx];
+    output[idx] = fmaxf(0.0f, result);
+}
 ";
         }
 
@@ -604,7 +744,12 @@ extern ""C"" __global__ void bias_dropout(
                 "layernorm_gelu",
                 "residual_layernorm",
                 "scaled_softmax",
-                "bias_dropout"
+                "bias_dropout",
+                "batchnorm_relu",
+                "batchnorm_gelu",
+                "batchnorm_sigmoid",
+                "batchnorm_tanh",
+                "residual_batchnorm_relu"
             };
         }
     }
