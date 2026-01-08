@@ -77,4 +77,6 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
 
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
+
+    
 }

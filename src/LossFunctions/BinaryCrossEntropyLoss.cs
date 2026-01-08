@@ -90,4 +90,6 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
 
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
+
+    
 }

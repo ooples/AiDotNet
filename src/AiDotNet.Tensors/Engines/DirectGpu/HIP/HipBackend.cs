@@ -48,6 +48,7 @@ public sealed class HipBackend : IDirectGpuBackend
     private IntPtr _fusedModule;
     private IntPtr _attentionModule;
     private IntPtr _fftModule;
+    private IntPtr _mixedPrecisionModule;
 
     private const int DefaultBlockSize = 256;
 
@@ -264,6 +265,11 @@ public sealed class HipBackend : IDirectGpuBackend
             // Compile FFT kernels (Cooley-Tukey radix-2 FFT, STFT, Mel spectrogram)
             CompileKernelModule(HipFFTKernels.GetSource(), "fft", ref _fftModule,
                 HipFFTKernels.GetKernelNames());
+            
+            // Compile Mixed Precision kernels (FP16/FP32 conversion, gradient accumulation)
+            CompileKernelModule(HipMixedPrecisionKernels.ConvertFp32ToFp16 + "\n" + HipMixedPrecisionKernels.ConvertFp16ToFp32 + "\n" + HipMixedPrecisionKernels.MixedPrecisionGradientAccumulate, 
+                "mixed_precision", ref _mixedPrecisionModule,
+                ["convert_fp32_to_fp16", "convert_fp16_to_fp32", "mixed_precision_gradient_accumulate"]);
 
             Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Total: {_kernelCache.Count}");
@@ -5044,6 +5050,50 @@ public sealed class HipBackend : IDirectGpuBackend
         finally
         {
             foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        var kernel = _kernelCache["convert_fp32_to_fp16"];
+        int blockSize = 256;
+        int gridSize = (size + blockSize - 1) / blockSize;
+        
+        IntPtr[] args = new IntPtr[3];
+        args[0] = input.Handle;
+        args[1] = output.Handle;
+        args[2] = Marshal.AllocHGlobal(sizeof(int));
+        Marshal.WriteInt32(args[2], size);
+        
+        try
+        {
+            LaunchKernel(kernel, (uint)gridSize, (uint)blockSize, args);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(args[2]);
+        }
+    }
+
+    public unsafe void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        var kernel = _kernelCache["convert_fp16_to_fp32"];
+        int blockSize = 256;
+        int gridSize = (size + blockSize - 1) / blockSize;
+        
+        IntPtr[] args = new IntPtr[3];
+        args[0] = input.Handle;
+        args[1] = output.Handle;
+        args[2] = Marshal.AllocHGlobal(sizeof(int));
+        Marshal.WriteInt32(args[2], size);
+        
+        try
+        {
+            LaunchKernel(kernel, (uint)gridSize, (uint)blockSize, args);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(args[2]);
         }
     }
 

@@ -88,24 +88,27 @@ public class QuantileLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
+        
+        var result = new T[predicted.Length];
+        
         for (int i = 0; i < predicted.Length; i++)
         {
             T diff = NumOps.Subtract(actual[i], predicted[i]);
-
+            
             if (NumOps.GreaterThan(diff, NumOps.Zero))
             {
-                // If actual > predicted, derivative is -quantile
-                derivative[i] = NumOps.Negate(_quantile);
+                // Underestimation: derivative is -quantile
+                result[i] = NumOps.Negate(_quantile);
             }
             else
             {
-                // If actual <= predicted, derivative is (1-quantile)
-                derivative[i] = NumOps.Subtract(NumOps.One, _quantile);
+                // Overestimation: derivative is (1 - quantile)
+                result[i] = NumOps.Subtract(NumOps.One, _quantile);
             }
         }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
+        
+        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
     }
+
+    
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -39,18 +41,14 @@ public interface ILossFunction<T>
     Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual);
 
     /// <summary>
-    /// Calculates the loss between predicted and actual tensors on GPU.
+    /// Calculates both loss and gradient on GPU in a single pass.
     /// </summary>
-    /// <param name="predicted">The predicted tensor from the model (on GPU).</param>
-    /// <param name="actual">The actual (target) tensor (on GPU).</param>
-    /// <returns>The loss value.</returns>
-    T CalculateLossGpu(Tensor<T> predicted, Tensor<T> actual);
-
-    /// <summary>
-    /// Calculates the derivative (gradient) of the loss function on GPU.
-    /// </summary>
-    /// <param name="predicted">The predicted tensor from the model (on GPU).</param>
-    /// <param name="actual">The actual (target) tensor (on GPU).</param>
-    /// <returns>A tensor containing the derivatives of the loss with respect to each prediction (on GPU).</returns>
-    Tensor<T> CalculateDerivativeGpu(Tensor<T> predicted, Tensor<T> actual);
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    /// <remarks>
+    /// This method is more efficient than calling separate loss and gradient calculations
+    /// as it can compute both in a single GPU kernel invocation.
+    /// </remarks>
+    (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual);
 }

@@ -3907,6 +3907,90 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     #endregion
 
+    #region Gradient Checkpointing
+
+    public void CheckpointActivationGpu<T>(IGpuTensor<T> activation, string checkpointKey)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend not available");
+
+        // Store the activation buffer in persistent cache with Activation role
+        var entry = new GpuBufferCacheEntry(activation.Buffer, PersistentTensorRole.Other);
+        _persistentBufferCache[checkpointKey] = entry;
+    }
+
+    public IGpuTensor<T> RecomputeFromCheckpointGpu<T>(string checkpointKey, Func<IGpuTensor<T>, IGpuTensor<T>> recomputeFunc)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend not available");
+
+        if (!_persistentBufferCache.TryGetValue(checkpointKey, out var entry))
+            throw new InvalidOperationException($"Checkpoint '{checkpointKey}' not found");
+
+        // Retrieve the checkpointed activation
+        var checkpointTensor = new GpuTensor<T>(backend, entry.Buffer, Array.Empty<int>(), GpuTensorRole.Activation);
+        
+        // Recompute forward pass from checkpoint
+        return recomputeFunc(checkpointTensor);
+    }
+
+    public void ClearCheckpointGpu(string checkpointKey)
+    {
+        if (_persistentBufferCache.TryRemove(checkpointKey, out var entry))
+        {
+            entry.Dispose();
+        }
+    }
+
+    #endregion
+
+    #region Mixed Precision Training
+
+    public IGpuTensor<T> ConvertToFp16Gpu<T>(IGpuTensor<T> input)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend not available");
+
+        int size = input.ElementCount;
+        var outputBuffer = backend.AllocateBuffer(size);
+        
+        // Use conversion kernel
+        backend.ConvertToFp16(input.Buffer, outputBuffer, size);
+        
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate);
+    }
+
+    public IGpuTensor<T> ConvertToFp32Gpu<T>(IGpuTensor<T> input)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend not available");
+
+        int size = input.ElementCount;
+        var outputBuffer = backend.AllocateBuffer(size);
+        
+        // Use conversion kernel
+        backend.ConvertToFp32(input.Buffer, outputBuffer, size);
+        
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate);
+    }
+
+    public IGpuTensor<T> MixedPrecisionForwardGpu<T>(IGpuTensor<T> input, Func<IGpuTensor<T>, IGpuTensor<T>> operation)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("GPU backend not available");
+
+        // Convert to FP16 for forward pass
+        var fp16Input = ConvertToFp16Gpu(input);
+        
+        // Run operation in FP16
+        var fp16Output = operation(fp16Input);
+        
+        // Convert back to FP32 for accumulation
+        return ConvertToFp32Gpu(fp16Output);
+    }
+
+    #endregion
+
     public void Dispose()
     {
         // Dispose all cached GPU buffers

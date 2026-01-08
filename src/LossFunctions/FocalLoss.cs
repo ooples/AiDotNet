@@ -101,42 +101,32 @@ public class FocalLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
+        
+        var result = new T[predicted.Length];
+        
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp predicted values to prevent division by zero using NumericalStabilityHelper
             T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
-
-            // pt is the probability of the target class
-            T pt = NumOps.Equals(actual[i], NumOps.One) ? p : NumOps.Subtract(NumOps.One, p);
-
-            // alpha term handles class imbalance
-            T alphaT = NumOps.Equals(actual[i], NumOps.One) ? _alpha : NumOps.Subtract(NumOps.One, _alpha);
-
-            // (1-pt)^(gamma-1)
-            T focusingTerm = NumOps.Power(
-                NumOps.Subtract(NumOps.One, pt),
-                NumOps.Subtract(_gamma, NumOps.One)
-            );
-
-            // Calculate the derivative components
-            T term1 = NumOps.Multiply(NumOps.Negate(alphaT), focusingTerm);
-            T term2 = NumOps.Subtract(
-                NumOps.Multiply(_gamma, NumOps.Subtract(NumOps.One, pt)),
-                pt
-            );
-
-            // Combine the terms
-            derivative[i] = NumOps.Multiply(term1, term2);
-
-            // Apply sign adjustment based on class (positive/negative)
-            if (!NumOps.Equals(actual[i], NumOps.One))
-            {
-                derivative[i] = NumOps.Negate(derivative[i]);
-            }
+            T y = actual[i];
+            
+            T pt = NumOps.Equals(y, NumOps.One) ? p : NumOps.Subtract(NumOps.One, p);
+            T alphaT = NumOps.Equals(y, NumOps.One) ? _alpha : NumOps.Subtract(NumOps.One, _alpha);
+            
+            T focusingTerm = NumOps.Power(NumOps.Subtract(NumOps.One, pt), _gamma);
+            T logPt = NumericalStabilityHelper.SafeLog(pt, NumericalStabilityHelper.SmallEpsilon);
+            
+            // Derivative of focal loss with respect to p
+            T gammaFactor = NumOps.Multiply(_gamma, NumOps.Power(NumOps.Subtract(NumOps.One, pt), NumOps.Subtract(_gamma, NumOps.One)));
+            T term1 = NumOps.Multiply(gammaFactor, logPt);
+            T term2 = NumOps.Divide(focusingTerm, pt);
+            
+            T grad = NumOps.Multiply(alphaT, NumOps.Subtract(term1, term2));
+            
+            result[i] = NumOps.Equals(y, NumOps.One) ? grad : NumOps.Negate(grad);
         }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
+        
+        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
     }
+
+    
 }

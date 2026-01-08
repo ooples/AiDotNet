@@ -612,6 +612,40 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Performs backpropagation through all layers with deferred GPU execution.
+    /// </summary>
+    /// <param name="outputGradients">The GPU-resident gradient of loss with respect to network output.</param>
+    /// <param name="options">Optional GPU execution options.</param>
+    /// <returns>The GPU-resident gradient with respect to network input.</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses deferred execution to batch all backward pass operations into a single GPU command buffer.
+    /// This reduces CPU-GPU synchronization overhead and improves performance.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> BackpropagateGpuDeferred(
+        IGpuTensor<T> outputGradients,
+        GpuExecutionOptions? options = null)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        if (engine?.Backend == null)
+        {
+            // Fallback to non-deferred if no GPU backend
+            return BackpropagateGpu(outputGradients);
+        }
+
+        var backend = engine.Backend as IAsyncGpuBackend;
+        if (backend == null)
+        {
+            return BackpropagateGpu(outputGradients);
+        }
+
+        return backend.ExecuteDeferred(
+            scope => BackpropagateGpu(outputGradients),
+            options);
+    }
+
+    /// <summary>
     /// Updates all trainable parameters in the network using GPU-computed gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
@@ -672,6 +706,195 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 layerBase.UpdateParametersGpu(config);
             }
         }
+    }
+
+    /// <summary>
+    /// Updates all trainable parameters with deferred GPU execution.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    /// <param name="options">Optional GPU execution options.</param>
+    /// <remarks>
+    /// <para>
+    /// Uses deferred execution to batch all parameter update operations into a single GPU command buffer.
+    /// This reduces CPU-GPU synchronization overhead and improves training performance.
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParametersGpuDeferred(
+        IGpuOptimizerConfig config,
+        GpuExecutionOptions? options = null)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        if (engine?.Backend == null)
+        {
+            // Fallback to non-deferred if no GPU backend
+            UpdateParametersGpu(config);
+            return;
+        }
+
+        var backend = engine.Backend as IAsyncGpuBackend;
+        if (backend == null)
+        {
+            UpdateParametersGpu(config);
+            return;
+        }
+
+        backend.ExecuteDeferred(
+            scope => UpdateParametersGpu(config),
+            options);
+    }
+
+    /// <summary>
+    /// Performs a complete training step (forward + backward + update) on GPU with deferred execution.
+    /// </summary>
+    /// <param name="input">The GPU-resident input batch.</param>
+    /// <param name="target">The GPU-resident target batch.</param>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    /// <param name="options">Optional GPU execution options for deferred execution.</param>
+    /// <returns>The loss value for this batch.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method wraps forward, backward, and update in a deferred execution scope, allowing the GPU
+    /// to optimize the entire training step as a single execution graph. This provides significant
+    /// performance improvements through:
+    /// - Kernel fusion
+    /// - Memory optimization
+    /// - Stream parallelization
+    /// - Reduced synchronization overhead
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is the fastest way to train on GPU. Instead of executing each
+    /// operation immediately, it records all operations and executes them as one optimized graph.
+    /// Think of it like batch processing - more efficient than doing things one at a time.
+    /// </para>
+    /// </remarks>
+    public virtual T TrainBatchGpuDeferred(
+        IGpuTensor<T> input,
+        IGpuTensor<T> target,
+        IGpuOptimizerConfig config,
+        GpuExecutionOptions? options = null)
+    {
+        if (!CanTrainOnGpu)
+        {
+            throw new InvalidOperationException(
+                "GPU training is not supported. Check CanTrainOnGpu before calling this method.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("GPU training requires a GPU engine.");
+        }
+
+        options ??= new GpuExecutionOptions
+        {
+            EnableGraphCompilation = true,
+            EnableAutoFusion = true,
+            EnableGpuResidency = true
+        };
+
+        T lossValue = NumOps.Zero;
+        
+        var backend = gpuEngine.Backend as IAsyncGpuBackend;
+        if (backend == null)
+        {
+            throw new InvalidOperationException("GPU training requires an async GPU backend.");
+        }
+
+        // Execute the entire training step as a deferred graph
+        backend.ExecuteDeferred(
+            scope =>
+            {
+                // Forward pass
+                var output = ForwardGpu(input);
+
+                // Compute loss
+                var lossResult = LossFunction.CalculateLossAndGradientGpu(output, target);
+                lossValue = lossResult.Loss;
+
+                // Backward pass
+                BackpropagateGpu(lossResult.Gradient);
+
+                // Update parameters
+                UpdateParametersGpu(config);
+            },
+            options);
+
+        return lossValue;
+    }
+
+    /// <summary>
+    /// Performs a complete training step (forward + backward + update) on GPU with deferred execution asynchronously.
+    /// </summary>
+    /// <param name="input">The GPU-resident input batch.</param>
+    /// <param name="target">The GPU-resident target batch.</param>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    /// <param name="options">Optional GPU execution options for deferred execution.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The loss value for this batch.</returns>
+    public virtual async Task<T> TrainBatchGpuDeferredAsync(
+        IGpuTensor<T> input,
+        IGpuTensor<T> target,
+        IGpuOptimizerConfig config,
+        GpuExecutionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanTrainOnGpu)
+        {
+            throw new InvalidOperationException(
+                "GPU training is not supported. Check CanTrainOnGpu before calling this method.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("GPU training requires a GPU engine.");
+        }
+
+        options ??= new GpuExecutionOptions
+        {
+            EnableGraphCompilation = true,
+            EnableAutoFusion = true,
+            EnableGpuResidency = true
+        };
+
+        T lossValue = NumOps.Zero;
+        
+        var backend = gpuEngine.Backend as IAsyncGpuBackend;
+        if (backend == null)
+        {
+            throw new InvalidOperationException("GPU training requires an async GPU backend.");
+        }
+
+        // Execute the entire training step as a deferred graph asynchronously
+        await backend.ExecuteDeferredAsync(
+            scope =>
+            {
+                // Forward pass
+                var output = ForwardGpu(input);
+
+                // Compute loss
+                var lossResult = LossFunction.CalculateLossAndGradientGpu(output, target);
+                lossValue = lossResult.Loss;
+
+                // Backward pass
+                BackpropagateGpu(lossResult.Gradient);
+
+                // Update parameters
+
+                // Compute loss
+                var lossResult = LossFunction.CalculateLossGpu(output, target);
+                lossValue = lossResult.Loss;
+
+                // Backward pass
+                BackpropagateGpu(lossResult.Gradient);
+
+                // Update parameters
+                UpdateParametersGpu(config);
+
+                return lossValue;
+            },
+            options,
+            cancellationToken);
+
+        return lossValue;
     }
 
     /// <summary>

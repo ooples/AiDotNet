@@ -55,10 +55,14 @@ public class MeanAbsoluteErrorLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         // The derivative of MAE is sign(predicted-actual)/n
-        // When predicted == actual (difference is 0), the derivative is 0 (subgradient)
         return predicted.Subtract(actual).Transform(x =>
-            NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One :
-            NumOps.LessThan(x, NumOps.Zero) ? NumOps.Negate(NumOps.One) : NumOps.Zero
-        ).Divide(NumOps.FromDouble(predicted.Length));
+        {
+            if (NumOps.GreaterThan(x, NumOps.Zero))
+                return NumOps.One;
+            else if (NumOps.LessThan(x, NumOps.Zero))
+                return NumOps.FromDouble(-1);
+            else
+                return NumOps.Zero; // Subgradient at 0
+        }).Divide(NumOps.FromDouble(predicted.Length));
     }
 }

@@ -765,6 +765,20 @@ public interface IDirectGpuBackend : IDisposable
     void Fma(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, IGpuBuffer D, int size);
     void ScatterAdd(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer destination, int sourceSize, int destSize);
 
+    #endregion
+
+    #region Mixed Precision
+
+    /// <summary>
+    /// Convert FP32 buffer to FP16 for mixed precision training.
+    /// </summary>
+    void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size);
+
+    /// <summary>
+    /// Convert FP16 buffer to FP32 for mixed precision training.
+    /// </summary>
+    void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size);
+
     /// <summary>
     /// Computes the backward pass for scatter-add operation.
     /// The gradient of scatter-add is a gather operation that collects gradients from destination

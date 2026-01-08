@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -298,6 +299,21 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated DFP.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
+        
+        backend.DFPUpdate(
+            parameters,
+            gradients,
+            learningRate,
+            parameterCount
+        );
     }
 
     /// <summary>

@@ -25,6 +25,7 @@ public sealed class CudaBackend : IDirectGpuBackend
     private IntPtr _fusedModule;
     private IntPtr _attentionModule;
     private IntPtr _fftModule;
+    private IntPtr _mixedPrecisionModule;
     private bool _disposed;
 
     public bool IsAvailable { get; }
@@ -261,6 +262,7 @@ public sealed class CudaBackend : IDirectGpuBackend
         _fusedModule = CompileKernelModule(device, CudaFusedKernels.GetSource(), "fused_kernels", CudaFusedKernels.GetKernelNames());
         _attentionModule = CompileKernelModule(device, CudaAttentionKernels.GetSource(), "attention_kernels", CudaAttentionKernels.GetKernelNames());
         _fftModule = CompileKernelModule(device, Kernels.CudaFFTKernels.GetSource(), "fft_kernels", Kernels.CudaFFTKernels.GetKernelNames());
+        _mixedPrecisionModule = CompileKernelModule(device, CudaMixedPrecisionKernels.ConvertFp32ToFp16 + "\n" + CudaMixedPrecisionKernels.ConvertFp16ToFp32 + "\n" + CudaMixedPrecisionKernels.MixedPrecisionGradientAccumulate, "mixed_precision_kernels", ["convert_fp32_to_fp16", "convert_fp16_to_fp32", "mixed_precision_gradient_accumulate"]);
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -3965,5 +3967,39 @@ public sealed class CudaBackend : IDirectGpuBackend
         {
             Dispose();
         }
+    }
+
+    public unsafe void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        using var _ = PushContext();
+        var kernel = _kernelCache["convert_fp32_to_fp16"];
+        int blockSize = 256;
+        int gridSize = (size + blockSize - 1) / blockSize;
+        
+        void** args = stackalloc void*[3];
+        IntPtr inputPtr = input.Handle;
+        IntPtr outputPtr = output.Handle;
+        args[0] = &inputPtr;
+        args[1] = &outputPtr;
+        args[2] = &size;
+        
+        LaunchKernel(kernel, (uint)gridSize, (uint)blockSize, args);
+    }
+
+    public unsafe void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        using var _ = PushContext();
+        var kernel = _kernelCache["convert_fp16_to_fp32"];
+        int blockSize = 256;
+        int gridSize = (size + blockSize - 1) / blockSize;
+        
+        void** args = stackalloc void*[3];
+        IntPtr inputPtr = input.Handle;
+        IntPtr outputPtr = output.Handle;
+        args[0] = &inputPtr;
+        args[1] = &outputPtr;
+        args[2] = &size;
+        
+        LaunchKernel(kernel, (uint)gridSize, (uint)blockSize, args);
     }
 }

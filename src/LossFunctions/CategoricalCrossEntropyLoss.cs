@@ -72,4 +72,6 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         // Note: Not averaged since the loss is a sum over classes
         return predicted.Subtract(actual);
     }
+
+    
 }

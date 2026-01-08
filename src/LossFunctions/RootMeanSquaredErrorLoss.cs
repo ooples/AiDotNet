@@ -42,19 +42,22 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-
-        // Calculate RMSE for use in derivative calculation
-        T rmse = StatisticsHelper<T>.CalculateRootMeanSquaredError(predicted, actual);
-
-        // Avoid division by zero - if RMSE is zero, all predictions are perfect
+        
+        var diff = predicted - actual;
+        var mse = diff.PointwiseMultiply(diff).Average();
+        var rmse = NumOps.Sqrt(mse);
+        
         if (NumOps.Equals(rmse, NumOps.Zero))
         {
-            return new Vector<T>(predicted.Length);
+            var zeros = new T[predicted.Length];
+            for (int i = 0; i < zeros.Length; i++)
+                zeros[i] = NumOps.Zero;
+            return new Vector<T>(zeros);
         }
-
-        // The derivative of RMSE is: (predicted - actual) / (n * RMSE)
-        T denominator = NumOps.Multiply(NumOps.FromDouble(predicted.Length), rmse);
-
-        return predicted.Subtract(actual).Divide(denominator);
+        
+        var n = NumOps.FromDouble(predicted.Length);
+        return diff.Divide(NumOps.Multiply(rmse, n));
     }
+
+    
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -41,32 +43,28 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     public abstract Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual);
 
     /// <summary>
-    /// Calculates the loss between predicted and actual tensors on GPU.
-    /// Default implementation falls back to CPU.
+    /// Calculates both loss and gradient on GPU in a single pass.
+    /// Default implementation falls back to separate calls.
     /// </summary>
-    /// <param name="predicted">The predicted tensor from the model (on GPU).</param>
-    /// <param name="actual">The actual (target) tensor (on GPU).</param>
-    /// <returns>The loss value.</returns>
-    public virtual T CalculateLossGpu(Tensor<T> predicted, Tensor<T> actual)
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public virtual (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
     {
         // Default: fall back to CPU
-        return CalculateLoss(predicted.ToVector(), actual.ToVector());
-    }
-
-    /// <summary>
-    /// Calculates the derivative (gradient) of the loss function on GPU.
-    /// Default implementation falls back to CPU.
-    /// </summary>
-    /// <param name="predicted">The predicted tensor from the model (on GPU).</param>
-    /// <param name="actual">The actual (target) tensor (on GPU).</param>
-    /// <returns>A tensor containing the derivatives of the loss with respect to each prediction (on GPU).</returns>
-    public virtual Tensor<T> CalculateDerivativeGpu(Tensor<T> predicted, Tensor<T> actual)
-    {
-        // Default: fall back to CPU
-        var derivative = CalculateDerivative(predicted.ToVector(), actual.ToVector());
-        var result = new Tensor<T>(predicted.Shape);
-        Array.Copy(derivative.ToArray(), result.Data, derivative.Length);
-        return result;
+        var predictedCpu = predicted.ToTensor();
+        var actualCpu = actual.ToTensor();
+        
+        var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
+        var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
+        
+        var gradientTensor = new Tensor<T>(predictedCpu.Shape);
+        Array.Copy(gradientCpu.ToArray(), gradientTensor.Data, gradientCpu.Length);
+        
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var gradientGpu = new GpuTensor<T>(engine!.Backend, gradientTensor, GpuTensorRole.Gradient);
+        
+        return (loss, gradientGpu);
     }
 
     /// <summary>

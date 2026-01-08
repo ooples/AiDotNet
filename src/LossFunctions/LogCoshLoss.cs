@@ -75,15 +75,23 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
+        
+        var result = new T[predicted.Length];
+        
         for (int i = 0; i < predicted.Length; i++)
         {
             T diff = NumOps.Subtract(predicted[i], actual[i]);
-            // The derivative of log(cosh(x)) is tanh(x)
-            derivative[i] = MathHelper.Tanh(diff);
+            // Derivative of log(cosh(x)) is tanh(x) = (e^x - e^-x) / (e^x + e^-x)
+            T expPos = NumOps.Exp(diff);
+            T expNeg = NumOps.Exp(NumOps.Negate(diff));
+            result[i] = NumOps.Divide(
+                NumOps.Subtract(expPos, expNeg),
+                NumOps.Add(expPos, expNeg)
+            );
         }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
+        
+        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
     }
+
+    
 }

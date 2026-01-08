@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -429,6 +430,23 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated Levenberg-Marquardt.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
+        float damping = (_options as LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>)?.DampingParameter ?? 0.01f;
+        
+        backend.LevenbergMarquardtUpdate(
+            parameters,
+            gradients,
+            learningRate,
+            damping,
+            parameterCount
+        );
     }
 
     /// <summary>

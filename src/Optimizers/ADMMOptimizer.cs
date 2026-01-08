@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -327,6 +328,23 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated ADMM.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
+        float rho = (float)((_options as ADMMOptimizerOptions<T, TInput, TOutput>)?.Rho ?? 1.0);
+        
+        backend.ADMMUpdate(
+            parameters,
+            gradients,
+            learningRate,
+            (float)rho,
+            parameterCount
+        );
     }
 
     /// <summary>

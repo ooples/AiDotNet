@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -259,6 +260,21 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         {
             throw new ArgumentException("Invalid options type. Expected BFGSOptimizerOptions.");
         }
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated BFGS.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
+        
+        backend.BFGSUpdate(
+            parameters,
+            gradients,
+            learningRate,
+            parameterCount
+        );
     }
 
     /// <summary>

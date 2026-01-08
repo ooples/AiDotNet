@@ -3,6 +3,8 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
+namespace AiDotNet.Optimizers;
+
 /// <summary>
 /// Implements a Proximal Gradient Descent optimization algorithm which combines gradient descent with regularization.
 /// </summary>
@@ -287,6 +289,23 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     }
 
     /// <summary>
+    /// Updates parameters using GPU-accelerated proximal gradient descent.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
+        float regularizationStrength = (float)((_options as ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>)?.RegularizationStrength ?? 0.01f);
+        
+        backend.ProximalGradientUpdate(
+            parameters,
+            gradients,
+            learningRate,
+            regularizationStrength,
+            parameterCount
+        );
+    }
+
+    /// <summary>
     /// Reverses a Proximal Gradient Descent update to recover original parameters.
     /// </summary>
     /// <param name="updatedParameters">Parameters after PGD update</param>
@@ -542,19 +561,8 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_PGD_{_options.InitialLearningRate}_{_regularization.GetType().Name}_{_options.Tolerance}_{_iteration}";
     }
-
-    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
-    {
-        // Proximal gradient step: minimize f + regularization
-        // For now, simplified to SGD-like update
-        // TODO: Implement proper proximal operator kernel for L1 regularization
-        
-        backend.SgdUpdate(
-            parameters,
-            gradients,
-            (float)_options.InitialLearningRate,
-            0.0f, // weight decay
-            parameterCount
-        );
-    }
 }
+
+
+
+

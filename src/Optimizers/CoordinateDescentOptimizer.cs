@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -211,6 +212,23 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
         _previousUpdate[index] = update;
 
         return NumOps.Negate(update);
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated coordinate descent.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        // Coordinate descent typically uses coordinate-specific learning rates
+        // For GPU, we use an average learning rate
+        float avgLearningRate = (float)NumOps.ToDouble(_learningRates.Average());
+        
+        backend.CoordinateDescentUpdate(
+            parameters,
+            gradients,
+            avgLearningRate,
+            parameterCount
+        );
     }
 
     /// <summary>

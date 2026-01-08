@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
 
@@ -331,6 +332,21 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated L-BFGS.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
+        
+        backend.LBFGSUpdate(
+            parameters,
+            gradients,
+            learningRate,
+            parameterCount
+        );
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -261,6 +262,21 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
         {
             throw new ArgumentException("Invalid options type. Expected ConjugateGradientOptimizerOptions.");
         }
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated conjugate gradient.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
+        
+        backend.ConjugateGradientUpdate(
+            parameters,
+            gradients,
+            learningRate,
+            parameterCount
+        );
     }
 
     /// <summary>

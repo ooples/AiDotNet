@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -677,19 +678,22 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             return gradient;
         }
 
-        public TLoss CalculateLossGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
+        public (TLoss Loss, IGpuTensor<TLoss> Gradient) CalculateLossAndGradientGpu(IGpuTensor<TLoss> predicted, IGpuTensor<TLoss> actual)
         {
             // Fall back to CPU for now
-            return CalculateLoss(predicted.ToVector(), actual.ToVector());
-        }
-
-        public Tensor<TLoss> CalculateDerivativeGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
-        {
-            // Fall back to CPU for now
-            var derivative = CalculateDerivative(predicted.ToVector(), actual.ToVector());
-            var result = new Tensor<TLoss>(predicted.Shape);
-            Array.Copy(derivative.ToArray(), result.Data, derivative.Length);
-            return result;
+            var predictedCpu = predicted.ToTensor();
+            var actualCpu = actual.ToTensor();
+            
+            var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
+            var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
+            
+            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape);
+            Array.Copy(gradientCpu.ToArray(), gradientTensor.Data, gradientCpu.Length);
+            
+            var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+            var gradientGpu = new GpuTensor<TLoss>(engine!.Backend, gradientTensor, GpuTensorRole.Gradient);
+            
+            return (loss, gradientGpu);
         }
     }
 

@@ -286,6 +286,24 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 }
                 Console.WriteLine($"[OpenClBackend] Neural network kernels compiled: {NeuralNetKernels.GetKernelNames().Length} kernels");
 
+                // Compile mixed precision kernels
+                Console.WriteLine("[OpenClBackend] Compiling mixed precision kernels...");
+                var mixedPrecisionSource = string.Join("\n\n", 
+                    MixedPrecisionKernels.ConvertFp32ToFp16,
+                    MixedPrecisionKernels.ConvertFp16ToFp32,
+                    MixedPrecisionKernels.MixedPrecisionForward,
+                    MixedPrecisionKernels.MixedPrecisionBackward,
+                    MixedPrecisionKernels.AccumulateGradientFp32);
+                var mpProgram = new DirectOpenClProgram(_context, mixedPrecisionSource);
+                mpProgram.Build(optimizationFlags);
+                _programs.Add(mpProgram);
+                _kernelCache["convert_fp32_to_fp16"] = new DirectOpenClKernel(_context, mpProgram, "convert_fp32_to_fp16");
+                _kernelCache["convert_fp16_to_fp32"] = new DirectOpenClKernel(_context, mpProgram, "convert_fp16_to_fp32");
+                _kernelCache["mixed_precision_forward"] = new DirectOpenClKernel(_context, mpProgram, "mixed_precision_forward");
+                _kernelCache["mixed_precision_backward"] = new DirectOpenClKernel(_context, mpProgram, "mixed_precision_backward");
+                _kernelCache["accumulate_gradient_fp32"] = new DirectOpenClKernel(_context, mpProgram, "accumulate_gradient_fp32");
+                Console.WriteLine("[OpenClBackend] Mixed precision kernels compiled: 5 kernels");
+
                 // Compile attention kernels (FlashAttention, GQA, ScaledDotProduct)
                 Console.WriteLine("[OpenClBackend] Compiling attention kernels...");
                 var attnProgram = new DirectOpenClProgram(_context, AttentionKernels.GetSource());
@@ -6124,6 +6142,26 @@ KERNEL VARIANTS (A/B testing):
             kernel.SetArg(2, n);
             kernel.SetArg(3, refValue);
             kernel.Execute1D(n, Math.Min(256, n));
+        }
+
+        public void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size)
+        {
+            var k = _kernelCache["convert_fp32_to_fp16"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, size);
+            k.Execute1D(size, 256);
+        }
+
+        public void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size)
+        {
+            var k = _kernelCache["convert_fp16_to_fp32"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, size);
+            k.Execute1D(size, 256);
         }
 
         private void CopyBuffer(IGpuBuffer src, IGpuBuffer dst, int size)
