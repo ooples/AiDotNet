@@ -187,29 +187,16 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Set network to inference mode (not training)
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
 
         try
         {
-            // GPU-resident optimization: when GPU engine is available and all layers support GPU,
-            // use the GPU-resident path to avoid per-layer CPU downloads.
-            // This can provide 10-50x speedup for inference workloads.
-            if (Engine is DirectGpuTensorEngine && CanUseGpuResidentPath())
-            {
-                try
-                {
-                    // ForwardGpu chains layers on GPU without intermediate CPU downloads
-                    using var gpuResult = ForwardGpu(input);
-                    return gpuResult.ToTensor();
-                }
-                catch
-                {
-                    // Fall back to CPU path on any GPU error
-                }
-            }
-
             // CPU path: forward pass through all layers
             Tensor<T> current = input;
 

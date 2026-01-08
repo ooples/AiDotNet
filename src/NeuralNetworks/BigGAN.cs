@@ -1004,6 +1004,10 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // For general prediction, generate with random classes
         var batchSize = input.Shape[0];
         var classIndices = new int[batchSize];

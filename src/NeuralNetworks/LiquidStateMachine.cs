@@ -329,6 +329,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Clear any stored state from previous predictions
         ResetState();
 

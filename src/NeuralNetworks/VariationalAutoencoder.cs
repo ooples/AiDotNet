@@ -556,6 +556,10 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Flatten the input tensor to a vector
         var inputVector = input.ToVector();
 

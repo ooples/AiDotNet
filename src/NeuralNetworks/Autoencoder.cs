@@ -867,6 +867,10 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Process input as a tensor through the network
         var current = input;
         for (int i = 0; i < Layers.Count; i++)

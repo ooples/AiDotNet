@@ -210,6 +210,10 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         // The recurrent layers will internally adapt to the input dimensions
         // This is industry standard behavior for flexible neural networks
 
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Forward pass through each layer in the network
         Tensor<T> currentOutput = input;
         foreach (var layer in Layers)

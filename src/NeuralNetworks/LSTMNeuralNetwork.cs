@@ -341,6 +341,10 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         // Set to inference mode
         SetTrainingMode(false);
 
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Simple layer-by-layer forward pass
         // Each layer (including LSTM layers) handles its own time-stepping internally
         // This matches the industry-standard approach used by GRU networks

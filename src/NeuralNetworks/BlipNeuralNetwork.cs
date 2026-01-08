@@ -1574,6 +1574,10 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Default prediction returns image embedding
         var embedding = GetImageEmbedding(input);
         return Tensor<T>.FromVector(embedding);

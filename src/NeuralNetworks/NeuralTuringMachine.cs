@@ -512,6 +512,10 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>The output tensor after processing.</returns>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Get batch size and sequence length from input shape
         // For 1D input: treat as single sample, no sequence
         // For 2D input [batch, features]: no sequence dimension

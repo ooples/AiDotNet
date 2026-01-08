@@ -993,6 +993,10 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         if (input is null)
         {
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");

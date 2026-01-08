@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Hopfield Network, a recurrent neural network designed for pattern storage and retrieval.
@@ -392,6 +392,10 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Convert input tensor to vector
         Vector<T> inputVector = input.ToVector();
 

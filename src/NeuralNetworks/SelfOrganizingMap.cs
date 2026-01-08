@@ -621,6 +621,10 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Handle any rank input - flatten to 1D if needed
         var flatInput = input.Rank == 1 ? input : input.Reshape([input.Length]);
 

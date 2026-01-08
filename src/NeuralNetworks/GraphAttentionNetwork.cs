@@ -656,6 +656,10 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out bool wasReshaped);
         var adjacencyMatrix = EnsureAdjacencyMatrix(normalizedInput);
 

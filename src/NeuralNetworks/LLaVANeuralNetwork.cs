@@ -1161,6 +1161,10 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         SetTrainingMode(false);
         var features = ExtractVisualFeatures(input);
         return ProjectToLanguageSpace(features);
