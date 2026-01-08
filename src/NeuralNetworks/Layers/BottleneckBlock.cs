@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -73,6 +75,11 @@ public class BottleneckBlock<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer has a GPU implementation.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BottleneckBlock{T}"/> class.
@@ -208,6 +215,50 @@ public class BottleneckBlock<T> : LayerBase<T>
 
         // Final ReLU
         return ApplyReLU(_lastPreActivation);
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU, keeping data GPU-resident.
+    /// </summary>
+    /// <param name="inputs">The input tensors (expects single input).</param>
+    /// <returns>The output tensor on GPU.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3
+        var conv1Out = _conv1.ForwardGpu(input);
+        var bn1Out = _bn1.ForwardGpu(conv1Out);
+        var relu1Out = gpuEngine.ReluGpu(bn1Out);
+        var conv2Out = _conv2.ForwardGpu(relu1Out);
+        var bn2Out = _bn2.ForwardGpu(conv2Out);
+        var relu2Out = gpuEngine.ReluGpu(bn2Out);
+        var conv3Out = _conv3.ForwardGpu(relu2Out);
+        var bn3Out = _bn3.ForwardGpu(conv3Out);
+
+        // Identity/skip branch
+        IGpuTensor<T> identity;
+        if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
+        {
+            var dsConvOut = _downsampleConv.ForwardGpu(input);
+            identity = _downsampleBn.ForwardGpu(dsConvOut);
+        }
+        else
+        {
+            identity = input;
+        }
+
+        // Add residual connection
+        var preActivation = gpuEngine.AddGpu(bn3Out, identity);
+
+        // Final ReLU
+        return gpuEngine.ReluGpu(preActivation);
     }
 
     /// <summary>

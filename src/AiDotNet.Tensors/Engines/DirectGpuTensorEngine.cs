@@ -57,7 +57,7 @@ internal sealed class ActivationCacheEntry : IDisposable
 /// <summary>
 /// IEngine implementation that routes supported ops to DirectGpuEngine and falls back to CPU.
 /// </summary>
-public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
+public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 {
     private readonly DirectGpuEngine? _directGpu;
     private readonly bool _ownsDirectGpu;
