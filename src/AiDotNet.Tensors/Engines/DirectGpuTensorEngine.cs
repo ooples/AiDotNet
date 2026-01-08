@@ -447,6 +447,39 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// Gets a GPU buffer for weight/bias tensor, auto-caching if not already persistent.
+    /// Unlike GetOrAllocateBuffer, this caches the buffer in the persistent cache
+    /// so subsequent calls reuse the same GPU buffer without re-uploading.
+    /// </summary>
+    private OwnedBuffer GetOrCacheWeightBuffer<T>(IDirectGpuBackend backend, T[] data, PersistentTensorRole role)
+    {
+        // First check persistent tensor cache
+        var cached = TryGetCachedBuffer(data);
+        if (cached != null)
+            return new OwnedBuffer(cached, ownsBuffer: false);
+
+        // Not cached - upload and cache for future use
+        float[] floatData = DirectGpuEngine.ToFloatArray(data);
+        IGpuBuffer gpuBuffer = backend.AllocateBuffer(floatData);
+
+        // Add to persistent cache so future calls don't re-upload
+        var entry = new GpuBufferCacheEntry(gpuBuffer, role);
+        if (_persistentBufferCache.TryAdd(data, entry))
+        {
+            _tensorVersions.TryAdd(data, 0);
+            // Return with ownsBuffer=false since cache now owns it
+            return new OwnedBuffer(gpuBuffer, ownsBuffer: false);
+        }
+        else
+        {
+            // Another thread cached it - use that one and dispose ours
+            gpuBuffer.Dispose();
+            var alreadyCached = TryGetCachedBuffer(data);
+            return new OwnedBuffer(alreadyCached!, ownsBuffer: false);
+        }
+    }
+
+    /// <summary>
     /// Allocates a GPU buffer from span data (no caching, avoids ToArray() allocation).
     /// </summary>
     private OwnedBuffer AllocateBufferFromSpan<T>(IDirectGpuBackend backend, ReadOnlySpan<T> data)
@@ -913,8 +946,9 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         // Use cache-aware buffer allocation (OwnedBuffer auto-disposes only if we allocated)
         using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var weightsBuffer = GetOrAllocateBuffer(backend, weights.Data);
-        using var biasBuffer = bias != null ? GetOrAllocateBuffer(backend, bias.Data) : default;
+        // Auto-cache weights and biases so they stay on GPU for subsequent calls
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default;
 
         try
         {
@@ -1022,10 +1056,11 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int inputFeatures = weights.Shape[0];
         int outputFeatures = weights.Shape[1];
 
-        // Upload input to GPU
+        // Upload input to GPU (activations are not cached persistently)
         using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var weightsBuffer = GetOrAllocateBuffer(backend, weights.Data);
-        using var biasBuffer = bias != null ? GetOrAllocateBuffer(backend, bias.Data) : default;
+        // Auto-cache weights and biases so they stay on GPU for subsequent calls
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default;
 
         // Execute the fused kernel and get result buffer
         var resultBuffer = ExecuteFusedLinearKernel(backend, inputBuffer.Buffer, weightsBuffer.Buffer,
@@ -1065,8 +1100,9 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outputFeatures = weights.Shape[1];
 
         // Input is already on GPU - use its buffer directly
-        using var weightsBuffer = GetOrAllocateBuffer(backend, weights.Data);
-        using var biasBuffer = bias != null ? GetOrAllocateBuffer(backend, bias.Data) : default;
+        // Auto-cache weights and biases so they stay on GPU for subsequent calls
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default;
 
         // Execute the fused kernel and get result buffer
         var resultBuffer = ExecuteFusedLinearKernel(backend, input.Buffer, weightsBuffer.Buffer,
