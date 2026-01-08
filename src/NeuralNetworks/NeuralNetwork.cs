@@ -191,18 +191,55 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
 
-        // Forward pass through all layers
-        Tensor<T> current = input;
+        try
+        {
+            // GPU-resident optimization: when GPU engine is available and all layers support GPU,
+            // use the GPU-resident path to avoid per-layer CPU downloads.
+            // This can provide 10-50x speedup for inference workloads.
+            if (Engine is DirectGpuTensorEngine && CanUseGpuResidentPath())
+            {
+                try
+                {
+                    // ForwardGpu chains layers on GPU without intermediate CPU downloads
+                    using var gpuResult = ForwardGpu(input);
+                    return gpuResult.ToTensor();
+                }
+                catch
+                {
+                    // Fall back to CPU path on any GPU error
+                }
+            }
 
+            // CPU path: forward pass through all layers
+            Tensor<T> current = input;
+
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
+        }
+        finally
+        {
+            // Restore original training mode
+            SetTrainingMode(originalTrainingMode);
+        }
+    }
+
+    /// <summary>
+    /// Checks if all layers support GPU execution for the GPU-resident optimization path.
+    /// </summary>
+    private bool CanUseGpuResidentPath()
+    {
         foreach (var layer in Layers)
         {
-            current = layer.Forward(current);
+            if (!layer.CanExecuteOnGpu)
+            {
+                return false;
+            }
         }
-
-        // Restore original training mode
-        SetTrainingMode(originalTrainingMode);
-
-        return current;
+        return true;
     }
 
     /// <summary>

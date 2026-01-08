@@ -135,6 +135,25 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         // - 2D inputs (treated as single-channel images)
         // - 3D inputs (standard channels, height, width format)
         // - 4D+ inputs (batch dimensions preserved)
+
+        // GPU-resident optimization: when GPU engine is available and all layers support GPU,
+        // use the GPU-resident path to avoid per-layer CPU downloads.
+        // This can provide 10-50x speedup for inference workloads.
+        if (Engine is DirectGpuTensorEngine && CanUseGpuResidentPath())
+        {
+            try
+            {
+                // ForwardGpu chains layers on GPU without intermediate CPU downloads
+                using var gpuResult = ForwardGpu(input);
+                return gpuResult.ToTensor();
+            }
+            catch
+            {
+                // Fall back to CPU path on any GPU error
+            }
+        }
+
+        // CPU path: each layer processes input and may download results
         Tensor<T> output = input;
         foreach (var layer in Layers)
         {
@@ -142,6 +161,21 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Checks if all layers support GPU execution for the GPU-resident optimization path.
+    /// </summary>
+    private bool CanUseGpuResidentPath()
+    {
+        foreach (var layer in Layers)
+        {
+            if (!layer.CanExecuteOnGpu)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>
