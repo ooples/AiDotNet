@@ -213,7 +213,7 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// <returns>A GPU tensor containing the classical probability distribution.</returns>
     /// <remarks>
     /// The measurement layer converts quantum amplitudes to probabilities via the Born rule.
-    /// This method downloads complex input, processes measurement on CPU, and uploads probabilities to GPU.
+    /// This method uses a specialized CUDA kernel to perform measurement entirely on GPU.
     /// </remarks>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
@@ -230,28 +230,50 @@ public class MeasurementLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend is not available.");
 
-        // Download input from GPU for processing
-        var inputData = backend.DownloadBuffer(input.Buffer);
+        // Determine batch size and state size from input shape
+        int batchSize;
+        int stateSize = InputShape[0];
 
-        // Convert to Tensor<T>
-        var inputTensor = new Tensor<T>(input.Shape);
-        for (int i = 0; i < inputData.Length; i++)
+        if (input.Shape.Length == 1)
         {
-            inputTensor[i] = NumOps.FromDouble(inputData[i]);
+            batchSize = 1;
+        }
+        else if (input.Shape.Length == 2)
+        {
+            batchSize = input.Shape[0];
+        }
+        else
+        {
+            // Flatten higher-rank tensors to batch
+            batchSize = 1;
+            for (int d = 0; d < input.Shape.Length - 1; d++)
+            {
+                batchSize *= input.Shape[d];
+            }
         }
 
-        // Process using existing Forward logic (handles complex-valued quantum measurement)
-        var output = Forward(inputTensor);
+        // Allocate output buffer for probabilities
+        var outputBuffer = backend.AllocateBuffer(batchSize * stateSize);
 
-        // Upload output to GPU
-        var outputData = new float[output.Length];
-        for (int i = 0; i < output.Length; i++)
+        // Call the GPU kernel for measurement forward
+        backend.MeasurementForward(input.Buffer, outputBuffer, batchSize, stateSize);
+
+        // Determine output shape
+        int[] outputShape;
+        if (input.Shape.Length == 1)
         {
-            outputData[i] = NumOps.ToFloat(output[i]);
+            outputShape = [stateSize];
         }
-
-        var outputBuffer = backend.AllocateBuffer(outputData);
-        var outputShape = output.Shape;
+        else if (input.Shape.Length == 2)
+        {
+            outputShape = [batchSize, stateSize];
+        }
+        else
+        {
+            // Restore original shape
+            outputShape = (int[])input.Shape.Clone();
+            outputShape[input.Shape.Length - 1] = stateSize;
+        }
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }

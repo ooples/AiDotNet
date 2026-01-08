@@ -587,14 +587,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual bool CanUseGpuResidentPath()
     {
-        foreach (var layer in Layers)
-        {
-            if (!layer.CanExecuteOnGpu)
-            {
-                return false;
-            }
-        }
-        return true;
+        return Layers.All(layer => layer.CanExecuteOnGpu);
     }
 
     /// <summary>
@@ -635,9 +628,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             result = gpuResult.ToTensor();
             return true;
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
         {
-            // Fall back to CPU path on any GPU error
+            // Log GPU failure for diagnostics before falling back to CPU path
+            System.Diagnostics.Debug.WriteLine($"[NeuralNetworkBase] GPU forward failed ({ex.GetType().Name}): {ex.Message}");
             return false;
         }
     }
@@ -971,9 +965,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             using var result = ForwardGpu(input);
             return result.ToTensor();
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
         {
-            // Final fallback to CPU predict
+            // Log GPU failure for diagnostics before final fallback to CPU
+            System.Diagnostics.Debug.WriteLine($"[NeuralNetworkBase] GPU forward failed in ForwardDeferred ({ex.GetType().Name}): {ex.Message}");
             return Predict(input);
         }
     }
@@ -1089,8 +1084,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 using var result = ForwardGpu(input);
                 return result.ToTensor();
             }
-            catch
+            catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
+                // Log GPU failure for diagnostics before falling back to CPU
+                System.Diagnostics.Debug.WriteLine($"[NeuralNetworkBase] Async GPU forward failed ({ex.GetType().Name}): {ex.Message}");
                 return Predict(input);
             }
         }, cancellationToken);

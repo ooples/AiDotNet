@@ -270,12 +270,9 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         // Step 4: Update parameters using gradients and learning rate
         T learningRate = NumOps.FromDouble(0.01);
 
-        foreach (var layer in Layers)
+        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(learningRate);
-            }
+            layer.UpdateParameters(learningRate);
         }
     }
 

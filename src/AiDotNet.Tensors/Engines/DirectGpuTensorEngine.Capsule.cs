@@ -76,7 +76,13 @@ public partial class DirectGpuTensorEngine
             inversePermutation[permutation[i]] = i;
         }
 
-        return PermuteGpu(permutedOutput, inversePermutation);
+        var result = PermuteGpu(permutedOutput, inversePermutation);
+
+        // Dispose intermediate tensors after permute completes
+        permutedInput.Dispose();
+        permutedOutput.Dispose();
+
+        return result;
     }
 
     /// <summary>
@@ -144,7 +150,14 @@ public partial class DirectGpuTensorEngine
             inversePermutation[permutation[i]] = i;
         }
 
-        return PermuteGpu(permutedGradInput, inversePermutation);
+        var result = PermuteGpu(permutedGradInput, inversePermutation);
+
+        // Dispose intermediate tensors after permute completes
+        permutedGradOutput.Dispose();
+        permutedInput.Dispose();
+        permutedGradInput.Dispose();
+
+        return result;
     }
 
     /// <summary>
@@ -211,8 +224,15 @@ public partial class DirectGpuTensorEngine
                 var agreement = MultiplyGpu(predictions, outputExpanded);
                 var agreementSum = SumAxisGpu(agreement, axis: 3); // [B, I, C]
 
-                // couplings += agreement
+                // couplings += agreement - dispose old couplings before reassignment
+                var oldCouplings = couplings;
                 couplings = AddGpu(couplings, agreementSum);
+                oldCouplings.Dispose();
+
+                // Dispose intermediate tensors from agreement computation
+                outputExpanded.Dispose();
+                agreement.Dispose();
+                agreementSum.Dispose();
             }
 
             // Dispose intermediate tensors to free GPU memory
@@ -489,8 +509,15 @@ public partial class DirectGpuTensorEngine
                 var agreement = MultiplyGpu(transformedInput, outputExpanded);
                 var agreementSum = SumAxisGpu(agreement, axis: 3); // [B, I, J]
 
-                // couplings += agreement
+                // couplings += agreement - dispose old couplings before reassignment
+                var oldCouplings = couplings;
                 couplings = AddGpu(couplings, agreementSum);
+                oldCouplings.Dispose();
+
+                // Dispose intermediate tensors from agreement computation
+                outputExpanded.Dispose();
+                agreement.Dispose();
+                agreementSum.Dispose();
             }
 
             // Dispose intermediate tensors

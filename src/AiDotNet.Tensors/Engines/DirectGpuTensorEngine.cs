@@ -417,7 +417,11 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         var timestamp = System.Threading.Interlocked.Increment(ref _activationCacheTimestamp);
         var entry = new ActivationCacheEntry(buffer, shape, timestamp);
-        _activationCache.TryAdd(resultData, entry);
+        if (!_activationCache.TryAdd(resultData, entry))
+        {
+            // Entry was not added (key already exists); dispose to avoid leaking the buffer.
+            entry.Dispose();
+        }
     }
 
     /// <summary>
@@ -481,10 +485,16 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
         else
         {
-            // Another thread cached it - use that one and dispose ours
-            gpuBuffer.Dispose();
+            // Another thread may have cached it; try to use that one
             var alreadyCached = TryGetCachedBuffer(data);
-            return new OwnedBuffer(alreadyCached!, ownsBuffer: false);
+            if (alreadyCached != null)
+            {
+                gpuBuffer.Dispose();
+                return new OwnedBuffer(alreadyCached, ownsBuffer: false);
+            }
+
+            // Entry was removed between TryAdd and lookup; fall back to our buffer
+            return new OwnedBuffer(gpuBuffer, ownsBuffer: true);
         }
     }
 
@@ -8485,6 +8495,9 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     public void Dispose()
     {
+        // Clear activation cache to free GPU memory from cached activations
+        ClearActivationCache();
+
         // Dispose all cached GPU buffers
         foreach (var entry in _persistentBufferCache.Values)
         {

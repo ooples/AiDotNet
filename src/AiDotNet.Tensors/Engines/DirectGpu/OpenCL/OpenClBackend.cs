@@ -388,6 +388,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     _kernelCache[name] = new DirectOpenClKernel(_context, randomProgram, name);
                 }
                 Console.WriteLine($"[OpenClBackend] Random number kernels compiled: 2 kernels");
+
+                // Compile specialized kernels (hyperbolic geometry, octonion algebra, quantum computing)
+                Console.WriteLine("[OpenClBackend] Compiling specialized kernels...");
+                var specializedProgram = new DirectOpenClProgram(_context, SpecializedKernels.GetSource());
+                specializedProgram.Build(optimizationFlags);
+                _programs.Add(specializedProgram);
+                foreach (var name in SpecializedKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, specializedProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] Specialized kernels compiled: {SpecializedKernels.GetKernelNames().Length} kernels");
             }
             catch (Exception ex)
             {
@@ -7484,6 +7495,224 @@ KERNEL VARIANTS (A/B testing):
             kernel.SetArg(11, numPost);
 
             kernel.Execute2D(numPre, numPost, Math.Min(16, numPre), Math.Min(16, numPost));
+        }
+
+        #endregion
+
+        #region Hyperbolic Geometry Operations
+
+        public void PoincareProject(IGpuBuffer input, IGpuBuffer output, int batchSize, int dim, float curvature, float epsilon = 1e-5f)
+        {
+            if (!_kernelCache.TryGetValue("poincare_project", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: poincare_project");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(batchSize);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(2u, batchSize);
+            kernel.SetArg(3u, dim);
+            kernel.SetArg(4u, curvature);
+            kernel.SetArg(5u, epsilon);
+            kernel.Execute1D(batchSize, localSize);
+        }
+
+        public void MobiusAdd(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature)
+        {
+            if (!_kernelCache.TryGetValue("mobius_add", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: mobius_add");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(batchSize);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)x).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)y).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(3u, batchSize);
+            kernel.SetArg(4u, dim);
+            kernel.SetArg(5u, curvature);
+            kernel.Execute1D(batchSize, localSize);
+        }
+
+        public void PoincareExpMap(IGpuBuffer basePoint, IGpuBuffer tangentVec, IGpuBuffer output, int batchSize, int dim, float curvature)
+        {
+            if (!_kernelCache.TryGetValue("poincare_exp_map", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: poincare_exp_map");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(batchSize);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)basePoint).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)tangentVec).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(3u, batchSize);
+            kernel.SetArg(4u, dim);
+            kernel.SetArg(5u, curvature);
+            kernel.Execute1D(batchSize, localSize);
+        }
+
+        public void PoincareDistance(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature)
+        {
+            if (!_kernelCache.TryGetValue("poincare_distance", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: poincare_distance");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(batchSize);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)x).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)y).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(3u, batchSize);
+            kernel.SetArg(4u, dim);
+            kernel.SetArg(5u, curvature);
+            kernel.Execute1D(batchSize, localSize);
+        }
+
+        public void HyperbolicLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+            int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon)
+        {
+            if (!_kernelCache.TryGetValue("hyperbolic_linear_forward", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: hyperbolic_linear_forward");
+
+            int totalThreads = batchSize * outputFeatures;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)weights).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)biases).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(4u, batchSize);
+            kernel.SetArg(5u, inputFeatures);
+            kernel.SetArg(6u, outputFeatures);
+            kernel.SetArg(7u, curvature);
+            kernel.SetArg(8u, epsilon);
+            kernel.Execute1D(totalThreads, localSize);
+        }
+
+        #endregion
+
+        #region Octonion Algebra Operations
+
+        public void OctonionMultiply(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count)
+        {
+            if (!_kernelCache.TryGetValue("octonion_multiply", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: octonion_multiply");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(count);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)a).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)b).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(3u, count);
+            kernel.Execute1D(count, localSize);
+        }
+
+        public void OctonionAdd(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count)
+        {
+            if (!_kernelCache.TryGetValue("octonion_add", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: octonion_add");
+
+            int totalElements = count * 8;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalElements);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)a).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)b).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(3u, count);
+            kernel.Execute1D(totalElements, localSize);
+        }
+
+        public void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+            int batchSize, int inputFeatures, int outputFeatures)
+        {
+            if (!_kernelCache.TryGetValue("octonion_linear_forward", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: octonion_linear_forward");
+
+            int totalThreads = batchSize * outputFeatures;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)weights).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)biases).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(4u, batchSize);
+            kernel.SetArg(5u, inputFeatures);
+            kernel.SetArg(6u, outputFeatures);
+            kernel.Execute1D(totalThreads, localSize);
+        }
+
+        #endregion
+
+        #region Quantum Computing Operations
+
+        public void QuantumMeasurement(IGpuBuffer realPart, IGpuBuffer imagPart, IGpuBuffer probabilities, int batchSize, int stateSize)
+        {
+            if (!_kernelCache.TryGetValue("quantum_measurement", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: quantum_measurement");
+
+            int totalElements = batchSize * stateSize;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalElements);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)realPart).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)imagPart).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)probabilities).Buffer.Handle);
+            kernel.SetArg(3u, batchSize);
+            kernel.SetArg(4u, stateSize);
+            kernel.Execute1D(totalElements, localSize);
+        }
+
+        public void NormalizeProbabilities(IGpuBuffer probabilities, int batchSize, int stateSize)
+        {
+            if (!_kernelCache.TryGetValue("normalize_probabilities", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: normalize_probabilities");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(batchSize);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)probabilities).Buffer.Handle);
+            kernel.SetLocalArg(1u, localSize * sizeof(float));
+            kernel.SetArg(2u, batchSize);
+            kernel.SetArg(3u, stateSize);
+            // Execute with batchSize work groups, each of localSize items
+            kernel.Execute1D(batchSize * localSize, localSize);
+        }
+
+        public void ComplexMatVec(IGpuBuffer matReal, IGpuBuffer matImag, IGpuBuffer vecReal, IGpuBuffer vecImag,
+            IGpuBuffer outReal, IGpuBuffer outImag, int batchSize, int dim)
+        {
+            if (!_kernelCache.TryGetValue("complex_matvec", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: complex_matvec");
+
+            int totalElements = batchSize * dim;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalElements);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)matReal).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)matImag).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)vecReal).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)vecImag).Buffer.Handle);
+            kernel.SetArg(4u, ((DirectOpenClGpuBuffer)outReal).Buffer.Handle);
+            kernel.SetArg(5u, ((DirectOpenClGpuBuffer)outImag).Buffer.Handle);
+            kernel.SetArg(6u, batchSize);
+            kernel.SetArg(7u, dim);
+            kernel.Execute1D(totalElements, localSize);
+        }
+
+        public void QuantumRotation(IGpuBuffer stateReal, IGpuBuffer stateImag, IGpuBuffer outReal, IGpuBuffer outImag,
+            IGpuBuffer angles, int numQubits, int batchSize)
+        {
+            if (!_kernelCache.TryGetValue("quantum_rotation", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: quantum_rotation");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(batchSize);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)stateReal).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)stateImag).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)outReal).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)outImag).Buffer.Handle);
+            kernel.SetArg(4u, ((DirectOpenClGpuBuffer)angles).Buffer.Handle);
+            kernel.SetArg(5u, numQubits);
+            kernel.SetArg(6u, batchSize);
+            // Execute with batchSize work groups, each of localSize items
+            kernel.Execute1D(batchSize * localSize, localSize);
+        }
+
+        public void MeasurementForward(IGpuBuffer input, IGpuBuffer output, int batchSize, int stateSize)
+        {
+            if (!_kernelCache.TryGetValue("measurement_forward", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: measurement_forward");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(batchSize);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetLocalArg(2u, localSize * sizeof(float));
+            kernel.SetArg(3u, batchSize);
+            kernel.SetArg(4u, stateSize);
+            // Execute with batchSize work groups, each of localSize items
+            kernel.Execute1D(batchSize * localSize, localSize);
         }
 
         #endregion
