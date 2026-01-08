@@ -1,8 +1,8 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -1123,18 +1123,18 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var shape = new[] { batch, channels, height, width };
         var f1Reshaped = engine.ReshapeGpu(f1, shape);
         var f2Reshaped = engine.ReshapeGpu(f2, shape);
-        
+
         f1.Dispose();
         f2.Dispose();
 
         return (f1Reshaped, f2Reshaped);
     }
 
-    private IGpuTensor<T> EstimateFlowGpu(IGpuTensor<T> frame1, IGpuTensor<T> frame2, int batch, int height, int width, 
+    private IGpuTensor<T> EstimateFlowGpu(IGpuTensor<T> frame1, IGpuTensor<T> frame2, int batch, int height, int width,
         DirectGpuTensorEngine engine, IDirectGpuBackend backend)
     {
         var cleanup = new List<IDisposable>();
-        try 
+        try
         {
             var pyramid1 = BuildPyramidGpu(frame1, engine);
             var pyramid2 = BuildPyramidGpu(frame2, engine);
@@ -1156,8 +1156,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 {
                     var upsampled = engine.UpsampleGpu(flow, 2);
                     var scaled = engine.ScaleGpu(upsampled, 2.0f);
-                    
-                    cleanup.Add(flow); 
+
+                    cleanup.Add(flow);
                     cleanup.Add(upsampled);
                     flow = scaled;
                 }
@@ -1165,7 +1165,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 var (warped2, grid) = WarpImageWithGridGpu(img2, flow, engine, backend);
                 cleanup.Add(warped2);
                 cleanup.Add(grid);
-                
+
                 var moduleInput = engine.ConcatGpu<T>([img1, warped2, flow], 1);
                 cleanup.Add(moduleInput);
 
@@ -1177,28 +1177,28 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 int chStride = levelH * levelW;
                 int batchStride = 32 * chStride;
                 int outBatchStride = 2 * chStride;
-                
+
                 System.Threading.Tasks.Parallel.For(0, batch, b =>
                 {
                     int srcBase = b * batchStride;
                     int dstBase = b * outBatchStride;
-                    for(int i=0; i<chStride; i++) sliceIndices[dstBase + i] = srcBase + i;
-                    for(int i=0; i<chStride; i++) sliceIndices[dstBase + chStride + i] = srcBase + chStride + i;
+                    for (int i = 0; i < chStride; i++) sliceIndices[dstBase + i] = srcBase + i;
+                    for (int i = 0; i < chStride; i++) sliceIndices[dstBase + chStride + i] = srcBase + chStride + i;
                 });
-                
+
                 using var idxBuffer = backend.AllocateIntBuffer(sliceIndices);
                 var slicedResidual = engine.GatherGpu(residualFlow, idxBuffer, sliceSize, 1);
                 var reshapedResidual = engine.ReshapeGpu(slicedResidual, [batch, 2, levelH, levelW]);
-                
+
                 var newFlow = engine.AddGpu(flow, reshapedResidual);
-                
+
                 cleanup.Add(slicedResidual);
                 cleanup.Add(reshapedResidual);
                 cleanup.Add(flow);
-                
+
                 flow = newFlow;
             }
-            
+
             return flow;
         }
         catch
@@ -1237,23 +1237,23 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
 
         var flowPermuted = engine.PermuteGpu(flow, [0, 2, 3, 1]);
-        
+
         float scaleX = 2.0f / (width - 1);
         float scaleY = 2.0f / (height - 1);
-        
+
         var scaleData = new float[] { scaleX, scaleY };
         using var scaleBuffer = backend.AllocateBuffer(scaleData);
         var scaleTensor = new GpuTensor<T>(backend, scaleBuffer, [1, 1, 1, 2], GpuTensorRole.Constant, ownsBuffer: false);
-        
+
         var scaledFlow = engine.BroadcastMultiplyRowGpu(flowPermuted, scaleTensor);
-        
+
         var grid = engine.AddGpu(identityGrid, scaledFlow);
-        
+
         flowPermuted.Dispose();
         scaledFlow.Dispose();
-        
+
         var warped = engine.GridSampleGpu(image, grid);
-        
+
         return (warped, grid);
     }
 

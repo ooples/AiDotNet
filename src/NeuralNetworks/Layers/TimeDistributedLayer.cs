@@ -1,5 +1,5 @@
-using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -141,7 +141,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         int batch = input.Shape[0];
         int time = input.Shape[1];
         int[] inputShape = input.Shape;
-        
+
         int[] flattenedShape = new int[inputShape.Length - 1];
         flattenedShape[0] = batch * time;
         Array.Copy(inputShape, 2, flattenedShape, 1, inputShape.Length - 2);

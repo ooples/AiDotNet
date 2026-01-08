@@ -1,7 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -125,7 +125,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // Initialize with Start Scores + First Emission
         // Start: [C]. Tile to [B, C].
         // Emission[0]: Slice [B, 1, C] -> [B, C].
-        
+
         // Helper to slice time step: [B, Seq, C] -> [B, C]
         // Use Reshape [B*Seq, C]. Indexing?
         // We can use SliceBatch? No.
@@ -135,9 +135,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // idx = b * batchStride + t * C + c.
         // This generates [B*C] indices.
         // Gather -> [B*C]. Reshape [B, C].
-        
+
         var backend = gpuEngine.GetBackend()!;
-        
+
         // Cache transition matrix on GPU (persistent?)
         // _transitionMatrix is CPU Tensor. Register/Upload.
         using var transGpu = gpuEngine.UploadToGpu(_transitionMatrix, GpuTensorRole.Constant);
@@ -147,10 +147,10 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // Pre-calculate indices for gathering emissions?
         // Generating indices on CPU for every step is overhead.
         // But acceptable for sequence length ~100.
-        
+
         // Viterbi variables
-        IGpuTensor<T> viterbi; 
-        
+        IGpuTensor<T> viterbi;
+
         // Step 0
         {
             // Gather emission[0]
@@ -158,7 +158,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             var emit0 = gpuEngine.GatherGpu(input3D, indices0, batchSize * numClasses, 1);
             var emit0Reshaped = gpuEngine.ReshapeGpu(emit0, [batchSize, numClasses]);
             emit0.Dispose();
-            
+
             // Start scores [C] -> Tile [B, C]
             // We need TileBatchGpu logic. 
             // _startScores is [C]. Reshape [1, C]. TileBatch -> [B, C].
@@ -166,11 +166,11 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             // TileBatchGpu assumes input [1, Inner]. 
             using var startReshaped = gpuEngine.ReshapeGpu(startGpu, [1, numClasses]);
             using var startTiled = gpuEngine.TileBatchGpu(startReshaped, batchSize);
-            
+
             // viterbi[0] = emit0 + start
             viterbi = gpuEngine.BroadcastAddGpu(emit0Reshaped, startTiled);
             // BroadcastAddGpu is AddGpu (element-wise) here. Sizes match [B, C].
-            
+
             emit0Reshaped.Dispose();
         }
 
@@ -194,37 +194,37 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             // We want score[b, prev, curr] = viterbi[b, prev] + trans[prev, curr]
             using var viterbiExpanded = gpuEngine.ReshapeGpu(viterbi, [batchSize, numClasses, 1]);
             using var viterbiTiled = gpuEngine.TileAxisGpu(viterbiExpanded, 2, numClasses); // [B, C, C]
-            
+
             // Add transitions
             using var scores = gpuEngine.BroadcastAddGpu(viterbiTiled, transTiled); // [B, C, C]
-            
+
             // Max over prev (axis 1) -> [B, 1, C]
             using var maxScores = gpuEngine.MaxAxisGpu(scores, 1);
-            
+
             // ArgMax over prev -> [B, 1, C] indices (float)
             using var argMaxScores = gpuEngine.ArgMaxAxisGpu(scores, 1);
-            
+
             // Update viterbi: maxScores + emission
             // maxScores is [B, 1, C]. Reshape [B, C].
             using var maxScoresFlat = gpuEngine.ReshapeGpu(maxScores, [batchSize, numClasses]);
-            
+
             var nextViterbi = gpuEngine.BroadcastAddGpu(maxScoresFlat, emitTReshaped);
-            
+
             // Download indices for backtracking
             // argMaxScores is [B, 1, C].
             var indicesFloat = new float[batchSize * numClasses];
             backend.DownloadBuffer(argMaxScores.Buffer, indicesFloat);
-            
+
             // Store as int
             // Parallel loop over batch? Small size.
-            for(int b=0; b<batchSize; b++)
+            for (int b = 0; b < batchSize; b++)
             {
-                for(int c=0; c<numClasses; c++)
+                for (int c = 0; c < numClasses; c++)
                 {
                     backpointers[t, b, c] = (int)indicesFloat[b * numClasses + c];
                 }
             }
-            
+
             viterbi.Dispose();
             viterbi = nextViterbi;
             emitTReshaped.Dispose();
@@ -234,7 +234,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // End [C] -> [1, C] -> Tile [B, C]
         using var endReshaped = gpuEngine.ReshapeGpu(endGpu, [1, numClasses]);
         using var endTiled = gpuEngine.TileBatchGpu(endReshaped, batchSize);
-        
+
         using var finalScores = gpuEngine.BroadcastAddGpu(viterbi, endTiled);
         viterbi.Dispose();
 
@@ -285,17 +285,17 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var indices = new int[batch * numClasses];
         int batchStride = seqLen * numClasses;
         int timeOffset = t * numClasses;
-        
+
         System.Threading.Tasks.Parallel.For(0, batch, b =>
         {
             int baseIdx = b * batchStride + timeOffset;
             int outBase = b * numClasses;
-            for(int c=0; c<numClasses; c++)
+            for (int c = 0; c < numClasses; c++)
             {
                 indices[outBase + c] = baseIdx + c;
             }
         });
-        
+
         return backend.AllocateIntBuffer(indices);
     }
 
