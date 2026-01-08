@@ -291,18 +291,17 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// <summary>
     /// Updates parameters using GPU-accelerated proximal gradient descent.
     /// </summary>
+    /// <remarks>
+    /// Proximal gradient descent requires applying proximal operators which vary by regularizer type.
+    /// GPU implementation is not yet available due to the variety of proximal operators
+    /// (soft-thresholding for L1, projection for constraints, etc.).
+    /// </remarks>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
-        float regularizationStrength = (float)((_options as ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>)?.RegularizationStrength ?? 0.01f);
-        
-        backend.ProximalGradientUpdate(
-            parameters,
-            gradients,
-            learningRate,
-            regularizationStrength,
-            parameterCount
-        );
+        throw new NotSupportedException(
+            "GPU-accelerated proximal gradient descent is not yet implemented. " +
+            "Proximal operators vary by regularizer type and require specialized kernels. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW with weight decay for GPU-resident training.");
     }
 
     /// <summary>

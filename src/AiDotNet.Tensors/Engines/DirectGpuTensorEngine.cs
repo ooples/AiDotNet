@@ -58,6 +58,11 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     public bool IsGpuAvailable => _directGpu?.IsAvailable == true;
 
+    /// <summary>
+    /// Gets the GPU backend if available.
+    /// </summary>
+    public IDirectGpuBackend? Backend => _directGpu?.Backend;
+
     public new string Name => IsGpuAvailable
         ? $"Direct GPU Engine ({_directGpu!.BackendName} {_directGpu.DeviceName})"
         : "CPU Engine (DirectGpu unavailable)";
@@ -4099,6 +4104,38 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// Adds a GPU-resident bias to a GPU-resident input tensor.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="bias">GPU-resident bias tensor (1D, length must match input's last dimension).</param>
+    /// <returns>GPU-resident output tensor with bias added.</returns>
+    public IGpuTensor<T> AddBiasGpu<T>(IGpuTensor<T> input, IGpuTensor<T> bias)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for AddBiasGpu");
+
+        if (bias.Shape.Length != 1)
+            throw new ArgumentException("Bias must be 1D tensor");
+
+        int lastDim = input.Shape[^1];
+        if (bias.ElementCount != lastDim)
+            throw new ArgumentException($"Bias length {bias.ElementCount} doesn't match input last dimension {lastDim}");
+
+        int totalElements = input.ElementCount;
+
+        // Allocate output
+        var outputBuffer = backend.AllocateBuffer(totalElements);
+
+        // Execute bias addition (broadcast along last dimension)
+        int numVectors = totalElements / lastDim;
+        backend.BiasAdd(input.Buffer, bias.Buffer, outputBuffer, numVectors, lastDim);
+
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(),
+            GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
     /// GPU-resident nearest-neighbor upsampling.
     /// Increases spatial dimensions (last two) by the specified scale factor.
     /// </summary>
@@ -5854,6 +5891,92 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         backend.Scale(input.Buffer, outputBuffer, scalar, size);
 
         return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident 2D matrix transpose.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor of shape [rows, cols].</param>
+    /// <returns>A GPU-resident transposed tensor of shape [cols, rows].</returns>
+    public IGpuTensor<T> TransposeGpu<T>(IGpuTensor<T> input)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for TransposeGpu");
+
+        if (input.Shape.Length != 2)
+            throw new ArgumentException("TransposeGpu requires a 2D tensor");
+
+        int rows = input.Shape[0];
+        int cols = input.Shape[1];
+
+        var outputBuffer = backend.AllocateBuffer(rows * cols);
+        backend.Transpose(input.Buffer, outputBuffer, rows, cols);
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { cols, rows }, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident matrix multiplication of two 2D tensors: C = A @ B
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="a">GPU-resident matrix A of shape [M, K].</param>
+    /// <param name="b">GPU-resident matrix B of shape [K, N].</param>
+    /// <returns>A GPU-resident output tensor of shape [M, N].</returns>
+    public IGpuTensor<T> MatMulGpu<T>(IGpuTensor<T> a, IGpuTensor<T> b)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for MatMulGpu");
+
+        if (a.Shape.Length != 2 || b.Shape.Length != 2)
+            throw new ArgumentException("MatMulGpu requires 2D tensors");
+
+        int m = a.Shape[0]; // rows of A
+        int k = a.Shape[1]; // cols of A / rows of B
+        int n = b.Shape[1]; // cols of B
+
+        if (k != b.Shape[0])
+            throw new ArgumentException($"Matrix dimensions don't match for multiplication: [{m}x{k}] @ [{b.Shape[0]}x{n}]");
+
+        var outputBuffer = backend.MatMul(a.Buffer, b.Buffer, m, n, k);
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { m, n }, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident sum reduction along axis 0 (sum over rows).
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor of shape [rows, cols].</param>
+    /// <returns>A GPU-resident output tensor of shape [cols] (or [1, cols]).</returns>
+    public IGpuTensor<T> SumAxis0Gpu<T>(IGpuTensor<T> input)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for SumAxis0Gpu");
+
+        if (input.Shape.Length < 1)
+            throw new ArgumentException("SumAxis0Gpu requires at least a 1D tensor");
+
+        int outerSize = input.Shape[0];
+        int innerSize = input.Shape.Length > 1 ? input.Shape[1] : 1;
+
+        var outputBuffer = backend.AllocateBuffer(innerSize);
+        backend.SumAxis(input.Buffer, outputBuffer, outerSize, innerSize);
+
+        // Return with shape [innerSize] to match bias gradient expectations
+        return new GpuTensor<T>(backend, outputBuffer, new[] { innerSize }, GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident element-wise multiplication (alias for MultiplyGpu).
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="a">First GPU-resident input tensor.</param>
+    /// <param name="b">Second GPU-resident input tensor.</param>
+    /// <returns>A GPU-resident output tensor with the element-wise product.</returns>
+    public IGpuTensor<T> ElementwiseMultiply<T>(IGpuTensor<T> a, IGpuTensor<T> b)
+    {
+        return MultiplyGpu(a, b);
     }
 
     /// <summary>

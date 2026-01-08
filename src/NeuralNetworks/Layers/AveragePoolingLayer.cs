@@ -153,7 +153,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The gradient of the output on GPU.</param>
     /// <returns>The gradient with respect to input as a GPU-resident tensor.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");

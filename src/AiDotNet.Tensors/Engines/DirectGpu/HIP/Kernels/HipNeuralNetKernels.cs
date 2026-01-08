@@ -1318,13 +1318,15 @@ extern ""C"" __global__ void scatter_mean_normalize(
 // ADDITIONAL NORMALIZATION BACKWARD KERNELS
 // ===========================================================================
 
-extern ""C"" __global__ void groupnorm_backward(
+// Group normalization backward - Pass 1: Compute group-wise sums
+extern ""C"" __global__ void groupnorm_backward_sums(
     const float* gradOutput,
     const float* input,
     const float* mean,
     const float* invStd,
     const float* gamma,
-    float* gradInput,
+    float* sumDy,
+    float* sumDyXhat,
     float* gradGamma,
     float* gradBeta,
     int N, int C, int H, int W, int G)
@@ -1333,8 +1335,6 @@ extern ""C"" __global__ void groupnorm_backward(
     int totalSize = N * C * H * W;
     if (idx >= totalSize) return;
 
-    int w = idx % W;
-    int h = (idx / W) % H;
     int c = (idx / (W * H)) % C;
     int n = idx / (W * H * C);
 
@@ -1348,20 +1348,65 @@ extern ""C"" __global__ void groupnorm_backward(
     float gam = gamma[c];
 
     float xHat = (x - m) * s;
+    float dyGam = dy * gam;
 
     atomicAdd(&gradGamma[c], dy * xHat);
     atomicAdd(&gradBeta[c], dy);
 
-    gradInput[idx] = dy * gam * s;
+    int groupIdx = n * G + g;
+    atomicAdd(&sumDy[groupIdx], dyGam);
+    atomicAdd(&sumDyXhat[groupIdx], dyGam * xHat);
 }
 
-extern ""C"" __global__ void instancenorm_backward(
+// Group normalization backward - Pass 2: Compute final input gradients
+extern ""C"" __global__ void groupnorm_backward(
     const float* gradOutput,
     const float* input,
     const float* mean,
     const float* invStd,
     const float* gamma,
+    const float* sumDy,
+    const float* sumDyXhat,
     float* gradInput,
+    int N, int C, int H, int W, int G)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    int c = (idx / (W * H)) % C;
+    int n = idx / (W * H * C);
+
+    int channelsPerGroup = C / G;
+    int g = c / channelsPerGroup;
+    int groupSize = channelsPerGroup * H * W;
+    float invN = 1.0f / (float)groupSize;
+
+    float dy = gradOutput[idx];
+    float x = input[idx];
+    float m = mean[n * G + g];
+    float s = invStd[n * G + g];
+    float gam = gamma[c];
+
+    float xHat = (x - m) * s;
+    float dyGam = dy * gam;
+
+    int groupIdx = n * G + g;
+    float sDy = sumDy[groupIdx];
+    float sDyXhat = sumDyXhat[groupIdx];
+
+    gradInput[idx] = s * (dyGam - invN * (sDy + xHat * sDyXhat));
+}
+
+// Instance normalization backward - Pass 1: Compute instance-wise sums
+extern ""C"" __global__ void instancenorm_backward_sums(
+    const float* gradOutput,
+    const float* input,
+    const float* mean,
+    const float* invStd,
+    const float* gamma,
+    float* sumDy,
+    float* sumDyXhat,
     float* gradGamma,
     float* gradBeta,
     int N, int C, int H, int W)
@@ -1370,8 +1415,6 @@ extern ""C"" __global__ void instancenorm_backward(
     int totalSize = N * C * H * W;
     if (idx >= totalSize) return;
 
-    int w = idx % W;
-    int h = (idx / W) % H;
     int c = (idx / (W * H)) % C;
     int n = idx / (W * H * C);
 
@@ -1382,11 +1425,52 @@ extern ""C"" __global__ void instancenorm_backward(
     float gam = gamma[c];
 
     float xHat = (x - m) * s;
+    float dyGam = dy * gam;
 
     atomicAdd(&gradGamma[c], dy * xHat);
     atomicAdd(&gradBeta[c], dy);
 
-    gradInput[idx] = dy * gam * s;
+    int instanceIdx = n * C + c;
+    atomicAdd(&sumDy[instanceIdx], dyGam);
+    atomicAdd(&sumDyXhat[instanceIdx], dyGam * xHat);
+}
+
+// Instance normalization backward - Pass 2: Compute final input gradients
+extern ""C"" __global__ void instancenorm_backward(
+    const float* gradOutput,
+    const float* input,
+    const float* mean,
+    const float* invStd,
+    const float* gamma,
+    const float* sumDy,
+    const float* sumDyXhat,
+    float* gradInput,
+    int N, int C, int H, int W)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    int c = (idx / (W * H)) % C;
+    int n = idx / (W * H * C);
+
+    int instanceSize = H * W;
+    float invN = 1.0f / (float)instanceSize;
+
+    float dy = gradOutput[idx];
+    float x = input[idx];
+    float m = mean[n * C + c];
+    float s = invStd[n * C + c];
+    float gam = gamma[c];
+
+    float xHat = (x - m) * s;
+    float dyGam = dy * gam;
+
+    int instanceIdx = n * C + c;
+    float sDy = sumDy[instanceIdx];
+    float sDyXhat = sumDyXhat[instanceIdx];
+
+    gradInput[idx] = s * (dyGam - invN * (sDy + xHat * sDyXhat));
 }
 
 // ===========================================================================
@@ -1590,7 +1674,8 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
             "scatter_add", "scatter_add_batched", "scatter_max",
             "scatter_mean_accumulate", "scatter_mean_normalize",
             // Additional normalization backward
-            "groupnorm_backward", "instancenorm_backward",
+            "groupnorm_backward_sums", "groupnorm_backward",
+            "instancenorm_backward_sums", "instancenorm_backward",
             // Conv3D backward
             "conv3d_backward_input", "conv3d_backward_weights",
             // Global pooling backward

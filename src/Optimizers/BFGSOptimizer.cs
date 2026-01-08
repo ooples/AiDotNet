@@ -265,16 +265,17 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Updates parameters using GPU-accelerated BFGS.
     /// </summary>
+    /// <remarks>
+    /// BFGS is a second-order quasi-Newton method that requires Hessian approximation.
+    /// GPU implementation is not yet available due to the complexity of maintaining
+    /// the inverse Hessian approximation across GPU memory.
+    /// </remarks>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
-        
-        backend.BFGSUpdate(
-            parameters,
-            gradients,
-            learningRate,
-            parameterCount
-        );
+        throw new NotSupportedException(
+            "GPU-accelerated BFGS is not yet implemented. BFGS requires maintaining an inverse Hessian " +
+            "approximation which is complex to implement efficiently on GPU. Use CPU-based UpdateParameters " +
+            "or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>

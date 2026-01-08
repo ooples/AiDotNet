@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -598,11 +599,11 @@ public class ActivationLayer<T> : LayerBase<T>
                 return false;
 
             // Check activation type name for known supported types
+            // Note: GELU is excluded because BackwardGpu doesn't have a GPU GELU backward kernel yet
             var typeName = activation.GetType().Name;
             return typeName.Contains("ReLU") ||
                    typeName.Contains("Sigmoid") ||
                    typeName.Contains("Tanh") ||
-                   typeName.Contains("GELU") ||
                    typeName.Contains("LeakyReLU");
         }
     }
@@ -633,7 +634,7 @@ public class ActivationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
         }
 
-        var backend = gpuEngine.Backend;
+        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
         int size = input.ElementCount;
 
         // Store GPU input for backward pass
@@ -656,7 +657,12 @@ public class ActivationLayer<T> : LayerBase<T>
             else if (typeName.Contains("LeakyReLU") || typeName.Contains("LeakyRelu"))
             {
                 outputBuffer = backend.AllocateBuffer(size);
-                float alpha = 0.01f;
+                // Get alpha from the LeakyReLU activation instance
+                float alpha = 0.01f; // default
+                if (ScalarActivation is LeakyReLUActivation<T> leakyRelu)
+                {
+                    alpha = (float)NumOps.ToDouble(leakyRelu.Alpha);
+                }
                 backend.LeakyRelu(input.Buffer, outputBuffer, alpha, size);
                 var gpuOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation);
                 _gpuLastOutput = gpuOutput;
@@ -741,7 +747,7 @@ public class ActivationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
         }
 
-        var backend = gpuEngine.Backend;
+        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
         int size = outputGradient.ElementCount;
 
         // Try GPU-native backward first
@@ -761,7 +767,12 @@ public class ActivationLayer<T> : LayerBase<T>
             {
                 // LeakyReLU backward needs input
                 gradInputBuffer = backend.AllocateBuffer(size);
-                float alpha = 0.01f;
+                // Get alpha from the LeakyReLU activation instance
+                float alpha = 0.01f; // default
+                if (ScalarActivation is LeakyReLUActivation<T> leakyRelu)
+                {
+                    alpha = (float)NumOps.ToDouble(leakyRelu.Alpha);
+                }
                 backend.LeakyReluBackward(outputGradient.Buffer, _gpuLastInput.Buffer, gradInputBuffer, alpha, size);
                 return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient);
             }

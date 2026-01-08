@@ -304,16 +304,17 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// <summary>
     /// Updates parameters using GPU-accelerated DFP.
     /// </summary>
+    /// <remarks>
+    /// DFP is a quasi-Newton method that approximates the inverse Hessian.
+    /// GPU implementation is not yet available due to the complexity of maintaining
+    /// the dense inverse Hessian approximation matrix across GPU memory.
+    /// </remarks>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
-        
-        backend.DFPUpdate(
-            parameters,
-            gradients,
-            learningRate,
-            parameterCount
-        );
+        throw new NotSupportedException(
+            "GPU-accelerated DFP is not yet implemented. DFP requires maintaining a dense inverse Hessian " +
+            "approximation which is memory-intensive and complex to update on GPU. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>

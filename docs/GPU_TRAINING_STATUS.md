@@ -104,26 +104,26 @@ CPU Tensor → Upload → ForwardGpu Layer 1 → ForwardGpu Layer 2 → ... → 
 
 | Kernel | Status | Unblocks | Complexity |
 |--------|--------|----------|------------|
-| **Recurrent Kernels** |
+| **Recurrent Kernels** | | | |
 | lstm_cell_forward | ✅ | LSTMLayer, ConvLSTMLayer, BidirectionalLayer | High |
 | lstm_cell_backward | ✅ | LSTMLayer training | High |
 | lstm_gates_precompute | ✅ | Fused gate computation | High |
 | gru_cell_forward | ✅ | GRULayer | High |
 | gru_cell_backward | ✅ | GRULayer training | High |
-| **Graph Neural Network Kernels** |
+| **Graph Neural Network Kernels** | | | |
 | scatter_add (CUDA/HIP) | ✅ | All GNN layers | Medium |
 | scatter_add_batched | ✅ | Multi-dim scatter | Medium |
 | scatter_max | ✅ | Graph pooling | Medium |
 | scatter_mean | ✅ | Message passing | Medium |
 | sparse_mm_backward | ❌ | GCN, GAT, GraphSAGE training | High |
 | message_passing_backward | ❌ | MessagePassingLayer | High |
-| **3D/Conv Kernels** |
+| **3D/Conv Kernels** | | | |
 | conv3d_backward_input | ✅ | Conv3DLayer | Medium |
 | conv3d_backward_weights | ✅ | Conv3DLayer training | Medium |
-| **Normalization Gaps** |
+| **Normalization Gaps** | | | |
 | groupnorm_backward | ✅ | GroupNormalizationLayer | Medium |
 | instancenorm_backward | ✅ | InstanceNormalizationLayer | Medium |
-| **Pooling Gaps** |
+| **Pooling Gaps** | | | |
 | global_avgpool_backward | ✅ | GlobalPoolingLayer | Low |
 | global_maxpool_backward | ✅ | GlobalPoolingLayer | Low |
 | adaptive_avgpool_backward | ✅ | AdaptiveAveragePoolingLayer | Low |

@@ -1021,6 +1021,74 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
         => Inner.AdamWUpdate(param, gradient, m, v, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
 
+    /// <inheritdoc/>
+    public virtual void RmspropUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer squaredAvg,
+        float learningRate, float rho, float epsilon, float weightDecay, int size)
+        => Inner.RmspropUpdate(param, gradient, squaredAvg, learningRate, rho, epsilon, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void AdagradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumulatedGrad,
+        float learningRate, float epsilon, float weightDecay, int size)
+        => Inner.AdagradUpdate(param, gradient, accumulatedGrad, learningRate, epsilon, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void NagUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, int size)
+        => Inner.NagUpdate(param, gradient, velocity, learningRate, momentum, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void LarsUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, float trustCoeff, int size)
+        => Inner.LarsUpdate(param, gradient, velocity, learningRate, momentum, weightDecay, trustCoeff, size);
+
+    /// <inheritdoc/>
+    public virtual void LambUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        => Inner.LambUpdate(param, gradient, m, v, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
+        float learningRate, float weightDecay, int size)
+        => Inner.SgdUpdate(param, gradient, learningRate, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
+        float rho, float epsilon, float weightDecay, int size)
+        => Inner.AdadeltaUpdate(param, gradient, accumGrad, accumUpdate, rho, epsilon, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        => Inner.AmsgradUpdate(param, gradient, m, v, vMax, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        => Inner.AdamaxUpdate(param, gradient, m, u, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
+        float learningRate, float beta1, float beta2, float weightDecay, int size)
+        => Inner.LionUpdate(param, gradient, m, learningRate, beta1, beta2, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        => Inner.NadamUpdate(param, gradient, m, v, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
+        float learningRate, float l1Reg, float l2Reg, float beta, int size)
+        => Inner.FtrlUpdate(param, gradient, z, n, learningRate, l1Reg, l2Reg, beta, size);
+
+    /// <inheritdoc/>
+    public virtual void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size)
+        => Inner.ConvertToFp16(input, output, size);
+
+    /// <inheritdoc/>
+    public virtual void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size)
+        => Inner.ConvertToFp32(input, output, size);
+
     #endregion
 
     #region FFT and Signal Processing

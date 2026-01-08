@@ -1469,7 +1469,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
 
-        var backend = gpuEngine.Backend;
+        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
 
         // Cache input for backward pass
         _gpuLastInput = input;
@@ -1544,6 +1544,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
 
+        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
+
         // 1. Calculate activation gradient (for now, download/upload)
         // TODO: Integrate GPU activation backward kernels
         var lastOutputCpu = _gpuLastOutput.ToTensor();
@@ -1557,7 +1559,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         else
             activationGradientCpu = gradOutputCpu;
 
-        var activationGradient = new GpuTensor<T>(gpuEngine.Backend, activationGradientCpu, GpuTensorRole.Gradient);
+        var activationGradient = new GpuTensor<T>(backend, activationGradientCpu, GpuTensorRole.Gradient);
 
         // Flatten to 2D for gradient computation
         int inputSize = _gpuLastInput.Shape[^1];

@@ -205,11 +205,14 @@ extern ""C"" __global__ void lars_update(
 
 // ---------------------------------------------------------------------------
 // LAMB optimizer update
+// Note: LAMB requires layer-wise trust ratio computation (||w|| / ||update||).
+// The trust ratio must be pre-computed externally and passed to this kernel.
+// Set trustRatio=1.0f to disable trust ratio scaling (degenerates to AdamW).
 // ---------------------------------------------------------------------------
 extern ""C"" __global__ void lamb_update(
     float* param, const float* gradient, float* m, float* v,
     float learningRate, float beta1, float beta2, float epsilon,
-    float weightDecay, int step, int size)
+    float weightDecay, float trustRatio, int step, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
@@ -228,7 +231,8 @@ extern ""C"" __global__ void lamb_update(
     float adamUpdate = mHat / (sqrtf(vHat) + epsilon);
     float update = adamUpdate + weightDecay * p;
 
-    param[idx] = p - learningRate * update;
+    // Apply trust ratio scaling (LAMB's layer-wise adaptive learning rate)
+    param[idx] = p - learningRate * trustRatio * update;
 }
 
 // ---------------------------------------------------------------------------

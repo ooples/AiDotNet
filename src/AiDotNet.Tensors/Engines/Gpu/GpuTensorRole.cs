@@ -64,5 +64,11 @@ public enum GpuTensorRole
     /// <summary>
     /// Constant tensor that doesn't change (e.g., lookup tables, fixed masks).
     /// </summary>
-    Constant = 10
+    Constant = 10,
+
+    /// <summary>
+    /// Optimizer state tensor (momentum, velocity, accumulated gradients, etc.).
+    /// These are persistent across training steps and should remain GPU-resident.
+    /// </summary>
+    OptimizerState = 11
 }

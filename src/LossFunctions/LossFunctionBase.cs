@@ -62,7 +62,8 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
         Array.Copy(gradientCpu.ToArray(), gradientTensor.Data, gradientCpu.Length);
         
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-        var gradientGpu = new GpuTensor<T>(engine!.Backend, gradientTensor, GpuTensorRole.Gradient);
+        var backend = engine?.Backend ?? throw new InvalidOperationException("GPU backend not available");
+        var gradientGpu = new GpuTensor<T>(backend, gradientTensor, GpuTensorRole.Gradient);
         
         return (loss, gradientGpu);
     }

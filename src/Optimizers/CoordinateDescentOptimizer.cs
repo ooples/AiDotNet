@@ -217,18 +217,17 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <summary>
     /// Updates parameters using GPU-accelerated coordinate descent.
     /// </summary>
+    /// <remarks>
+    /// Coordinate descent optimizes one coordinate at a time sequentially.
+    /// GPU implementation is not yet available because coordinate descent's sequential
+    /// nature doesn't parallelize well on GPU.
+    /// </remarks>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        // Coordinate descent typically uses coordinate-specific learning rates
-        // For GPU, we use an average learning rate
-        float avgLearningRate = (float)NumOps.ToDouble(_learningRates.Average());
-        
-        backend.CoordinateDescentUpdate(
-            parameters,
-            gradients,
-            avgLearningRate,
-            parameterCount
-        );
+        throw new NotSupportedException(
+            "GPU-accelerated coordinate descent is not yet implemented. " +
+            "Coordinate descent's sequential per-coordinate updates don't parallelize well on GPU. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>

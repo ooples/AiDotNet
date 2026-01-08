@@ -205,10 +205,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         get
         {
             if (Layers.Count == 0) return false;
-            
+
             // All layers must support GPU training
             foreach (var layer in Layers)
             {
+                // Non-LayerBase<T> layers don't support GPU training
+                if (layer is not LayerBase<T>)
+                    return false;
                 if (layer is LayerBase<T> layerBase && !layerBase.SupportsGpuTraining)
                     return false;
             }
@@ -598,13 +601,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         var gradientTensor = outputGradients;
-        
+
         // Backpropagate through layers in reverse order
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             if (Layers[i] is LayerBase<T> layerBase)
             {
                 gradientTensor = layerBase.BackwardGpu(gradientTensor);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Layer {Layers[i].GetType().Name} does not inherit from LayerBase<T> and cannot be used with GPU training.");
             }
         }
 
@@ -872,15 +880,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                 // Compute loss
                 var lossResult = LossFunction.CalculateLossAndGradientGpu(output, target);
-                lossValue = lossResult.Loss;
-
-                // Backward pass
-                BackpropagateGpu(lossResult.Gradient);
-
-                // Update parameters
-
-                // Compute loss
-                var lossResult = LossFunction.CalculateLossGpu(output, target);
                 lossValue = lossResult.Loss;
 
                 // Backward pass

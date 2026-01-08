@@ -847,59 +847,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public abstract Tensor<T> Forward(Tensor<T> input);
 
     /// <summary>
-    /// Gets whether this layer can execute on GPU.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// By default, layers do not support GPU execution. Derived classes should override this property
-    /// and return true when they have implemented <see cref="ForwardGpu"/>.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if this layer can run on a graphics card (GPU)
-    /// for faster processing. By default, layers run on the CPU, but some layers have been optimized
-    /// to run on GPUs for much better performance.
-    /// </para>
-    /// </remarks>
-    public virtual bool CanExecuteOnGpu => SupportsGpuExecution && Engine is DirectGpuTensorEngine;
-
-    /// <summary>
-    /// Gets whether this layer has a GPU implementation.
-    /// Override this to return true when the layer implements <see cref="ForwardGpu"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the derived class has implemented GPU execution.
-    /// The actual <see cref="CanExecuteOnGpu"/> property combines this with engine availability.
-    /// Default is false - layers must explicitly override to enable GPU support.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a simple flag that derived classes set to true
-    /// when they have implemented the ForwardGpu method. You don't need to check if the GPU
-    /// is available - that's handled automatically by CanExecuteOnGpu.
-    /// </para>
-    /// </remarks>
-    protected virtual bool SupportsGpuExecution => false;
-
-
-    /// <summary>
-    /// Executes the forward pass on GPU with multiple input tensors.
-    /// </summary>
-    /// <param name="inputs">The input tensors.</param>
-    /// <returns>The output tensor on GPU.</returns>
-    /// <remarks>
-    /// <para>
-    /// This overload is used for layers that require multiple inputs, such as cross-attention
-    /// where queries come from one source and keys/values from another.
-    /// </para>
-    /// <para>
-    /// The default implementation throws NotSupportedException. Layers that support GPU execution
-    /// should override this method and set SupportsGpuExecution to true.
-    /// </para>
-    /// </remarks>
-    public virtual IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
-    {
-        throw new NotSupportedException($"GPU execution is not supported by {GetType().Name}. Use Forward() instead.");
-    }
-
-    /// <summary>
     /// Maps the layer's activation function to a <see cref="FusedActivationType"/> for GPU-fused operations.
     /// </summary>
     /// <returns>

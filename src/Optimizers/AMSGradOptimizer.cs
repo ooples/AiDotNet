@@ -289,10 +289,11 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
     public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
     {
-        _gpuM = backend.AllocateBuffer(parameterCount * sizeof(float));
-        _gpuV = backend.AllocateBuffer(parameterCount * sizeof(float));
-        _gpuVMax = backend.AllocateBuffer(parameterCount * sizeof(float));
-        
+        var zeros = new float[parameterCount];
+        _gpuM = backend.AllocateBuffer(zeros);
+        _gpuV = backend.AllocateBuffer(zeros);
+        _gpuVMax = backend.AllocateBuffer(zeros);
+
         base.InitializeGpuState(parameterCount, backend);
     }
 

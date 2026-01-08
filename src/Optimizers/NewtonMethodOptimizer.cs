@@ -373,16 +373,18 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// Updates parameters using GPU-accelerated Newton's Method.
     /// </summary>
+    /// <remarks>
+    /// Newton's method requires computing the full Hessian matrix (second derivatives).
+    /// GPU implementation is not yet available due to the O(n^2) memory requirements
+    /// and matrix inversion needed for the Hessian.
+    /// </remarks>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
-        
-        backend.NewtonMethodUpdate(
-            parameters,
-            gradients,
-            learningRate,
-            parameterCount
-        );
+        throw new NotSupportedException(
+            "GPU-accelerated Newton's method is not yet implemented. " +
+            "Newton's method requires computing and inverting the Hessian matrix which is " +
+            "memory-intensive (O(n^2)) and complex on GPU. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>

@@ -267,8 +267,9 @@ __kernel void lars_update(
 
 // ---------------------------------------------------------------------------
 // LAMB (Layer-wise Adaptive Moments) optimizer update
-// Combines Adam moments with layer-wise trust ratio
-// Note: Full LAMB requires layer-wise norm computation before calling
+// Combines Adam moments with layer-wise trust ratio.
+// The trust ratio (||w|| / ||update||) must be pre-computed externally.
+// Set trustRatio=1.0f to disable trust ratio scaling (degenerates to AdamW).
 // ---------------------------------------------------------------------------
 __kernel void lamb_update(
     __global float* param,
@@ -280,6 +281,7 @@ __kernel void lamb_update(
     const float beta2,
     const float epsilon,
     const float weightDecay,
+    const float trustRatio,    // Pre-computed: ||param|| / ||update||, or 1.0 to disable
     const int step,
     const int size)
 {
@@ -303,8 +305,8 @@ __kernel void lamb_update(
     float adamUpdate = mHat / (sqrt(vHat) + epsilon);
     float update = adamUpdate + weightDecay * p;
 
-    // Update parameters
-    param[idx] = p - learningRate * update;
+    // Apply trust ratio scaling (LAMB's layer-wise adaptive learning rate)
+    param[idx] = p - learningRate * trustRatio * update;
 }
 
 // ---------------------------------------------------------------------------

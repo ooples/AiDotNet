@@ -16,6 +16,19 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
         {
             return @"
 // ===========================================================================
+// ATOMIC OPERATIONS FOR OPENCL 1.x COMPATIBILITY
+// ===========================================================================
+
+// Atomic float add using compare-and-swap loop (OpenCL 1.x compatible)
+inline void atomic_add_float(__global float *ptr, float val) {
+    union { float f; int i; } next, curr;
+    do {
+        curr.f = *ptr;
+        next.f = curr.f + val;
+    } while (atomic_cmpxchg((__global int *)ptr, curr.i, next.i) != curr.i);
+}
+
+// ===========================================================================
 // ACTIVATION GRADIENT KERNELS
 // ===========================================================================
 
@@ -630,6 +643,9 @@ __kernel void lars_update(
 }
 
 // LAMB (Layer-wise Adaptive Moments) optimizer update
+// Note: LAMB requires layer-wise trust ratio computation (||w|| / ||update||).
+// The trust ratio must be pre-computed externally and passed to this kernel.
+// Set trustRatio=1.0f to disable trust ratio scaling (degenerates to AdamW).
 __kernel void lamb_update(
     __global float* param,
     __global const float* gradient,
@@ -640,6 +656,7 @@ __kernel void lamb_update(
     const float beta2,
     const float epsilon,
     const float weightDecay,
+    const float trustRatio,    // Pre-computed: ||param|| / ||update||, or 1.0 to disable
     const int step,
     const int size)
 {
@@ -663,8 +680,9 @@ __kernel void lamb_update(
     float adamUpdate = mHat / (sqrt(vHat) + epsilon);
     float update = adamUpdate + weightDecay * p;
 
-    // Update parameters
-    param[idx] = p - learningRate * update;
+    // Apply trust ratio scaling (LAMB's layer-wise adaptive learning rate)
+    // Trust ratio = ||param|| / ||update||, pre-computed externally
+    param[idx] = p - learningRate * trustRatio * update;
 }
 
 // Vanilla SGD update (no momentum)
@@ -1482,8 +1500,8 @@ __kernel void scatter_add_batched(
     const int featIdx = idx % featureSize;
     const int dstIdx = indices[elemIdx];
 
-    // Note: Needs atomic add for correctness
-    dst[dstIdx * featureSize + featIdx] += src[idx];
+    // Use atomic float add for correctness when multiple elements map to same destination
+    atomic_add_float(&dst[dstIdx * featureSize + featIdx], src[idx]);
 }
 
 __kernel void scatter_mean_accumulate(
@@ -1501,11 +1519,12 @@ __kernel void scatter_mean_accumulate(
     const int featIdx = idx % featureSize;
     const int dstIdx = indices[elemIdx];
 
-    dst[dstIdx * featureSize + featIdx] += src[idx];
-    
+    // Use atomic float add for correctness
+    atomic_add_float(&dst[dstIdx * featureSize + featIdx], src[idx]);
+
     if (featIdx == 0) {
-        // Note: Needs atomic add
-        counts[dstIdx] += 1;
+        // Use atomic increment for counts
+        atomic_inc(&counts[dstIdx]);
     }
 }
 
@@ -1529,13 +1548,15 @@ __kernel void scatter_mean_normalize(
 // ADDITIONAL NORMALIZATION BACKWARD KERNELS
 // ===========================================================================
 
-__kernel void groupnorm_backward(
+// Group normalization backward - Pass 1: Compute group-wise sums
+__kernel void groupnorm_backward_sums(
     __global const float* gradOutput,
     __global const float* input,
     __global const float* mean,
     __global const float* invStd,
     __global const float* gamma,
-    __global float* gradInput,
+    __global float* sumDy,
+    __global float* sumDyXhat,
     __global float* gradGamma,
     __global float* gradBeta,
     const int N, const int C, const int H, const int W, const int G)
@@ -1544,8 +1565,6 @@ __kernel void groupnorm_backward(
     const int totalSize = N * C * H * W;
     if (idx >= totalSize) return;
 
-    const int w = idx % W;
-    const int h = (idx / W) % H;
     const int c = (idx / (W * H)) % C;
     const int n = idx / (W * H * C);
 
@@ -1559,21 +1578,67 @@ __kernel void groupnorm_backward(
     float gam = gamma[c];
 
     float xHat = (x - m) * s;
+    float dyGam = dy * gam;
 
-    // Note: Needs atomic add for gamma/beta gradients
-    gradGamma[c] += dy * xHat;
-    gradBeta[c] += dy;
+    // Use atomic operations for correct accumulation
+    atomic_add_float(&gradGamma[c], dy * xHat);
+    atomic_add_float(&gradBeta[c], dy);
 
-    gradInput[idx] = dy * gam * s;
+    int groupIdx = n * G + g;
+    atomic_add_float(&sumDy[groupIdx], dyGam);
+    atomic_add_float(&sumDyXhat[groupIdx], dyGam * xHat);
 }
 
-__kernel void instancenorm_backward(
+// Group normalization backward - Pass 2: Compute final input gradients
+__kernel void groupnorm_backward(
     __global const float* gradOutput,
     __global const float* input,
     __global const float* mean,
     __global const float* invStd,
     __global const float* gamma,
+    __global const float* sumDy,
+    __global const float* sumDyXhat,
     __global float* gradInput,
+    const int N, const int C, const int H, const int W, const int G)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    const int c = (idx / (W * H)) % C;
+    const int n = idx / (W * H * C);
+
+    const int channelsPerGroup = C / G;
+    const int g = c / channelsPerGroup;
+    const int groupSize = channelsPerGroup * H * W;
+    const float invN = 1.0f / (float)groupSize;
+
+    float dy = gradOutput[idx];
+    float x = input[idx];
+    float m = mean[n * G + g];
+    float s = invStd[n * G + g];
+    float gam = gamma[c];
+
+    float xHat = (x - m) * s;
+    float dyGam = dy * gam;
+
+    int groupIdx = n * G + g;
+    float sDy = sumDy[groupIdx];
+    float sDyXhat = sumDyXhat[groupIdx];
+
+    // Full group normalization backward formula
+    gradInput[idx] = s * (dyGam - invN * (sDy + xHat * sDyXhat));
+}
+
+// Instance normalization backward - Pass 1: Compute instance-wise sums
+__kernel void instancenorm_backward_sums(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global const float* mean,
+    __global const float* invStd,
+    __global const float* gamma,
+    __global float* sumDy,
+    __global float* sumDyXhat,
     __global float* gradGamma,
     __global float* gradBeta,
     const int N, const int C, const int H, const int W)
@@ -1582,8 +1647,6 @@ __kernel void instancenorm_backward(
     const int totalSize = N * C * H * W;
     if (idx >= totalSize) return;
 
-    const int w = idx % W;
-    const int h = (idx / W) % H;
     const int c = (idx / (W * H)) % C;
     const int n = idx / (W * H * C);
 
@@ -1594,12 +1657,53 @@ __kernel void instancenorm_backward(
     float gam = gamma[c];
 
     float xHat = (x - m) * s;
+    float dyGam = dy * gam;
 
-    // Note: Needs atomic add
-    gradGamma[c] += dy * xHat;
-    gradBeta[c] += dy;
+    atomic_add_float(&gradGamma[c], dy * xHat);
+    atomic_add_float(&gradBeta[c], dy);
 
-    gradInput[idx] = dy * gam * s;
+    int instanceIdx = n * C + c;
+    atomic_add_float(&sumDy[instanceIdx], dyGam);
+    atomic_add_float(&sumDyXhat[instanceIdx], dyGam * xHat);
+}
+
+// Instance normalization backward - Pass 2: Compute final input gradients
+__kernel void instancenorm_backward(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global const float* mean,
+    __global const float* invStd,
+    __global const float* gamma,
+    __global const float* sumDy,
+    __global const float* sumDyXhat,
+    __global float* gradInput,
+    const int N, const int C, const int H, const int W)
+{
+    const int idx = get_global_id(0);
+    const int totalSize = N * C * H * W;
+    if (idx >= totalSize) return;
+
+    const int c = (idx / (W * H)) % C;
+    const int n = idx / (W * H * C);
+
+    const int instanceSize = H * W;
+    const float invN = 1.0f / (float)instanceSize;
+
+    float dy = gradOutput[idx];
+    float x = input[idx];
+    float m = mean[n * C + c];
+    float s = invStd[n * C + c];
+    float gam = gamma[c];
+
+    float xHat = (x - m) * s;
+    float dyGam = dy * gam;
+
+    int instanceIdx = n * C + c;
+    float sDy = sumDy[instanceIdx];
+    float sDyXhat = sumDyXhat[instanceIdx];
+
+    // Full instance normalization backward formula
+    gradInput[idx] = s * (dyGam - invN * (sDy + xHat * sDyXhat));
 }
 
 // ===========================================================================
@@ -1816,7 +1920,8 @@ __kernel void adaptive_avgpool_backward(
                 // Additional scatter operations
                 "scatter_add_batched", "scatter_mean_accumulate", "scatter_mean_normalize",
                 // Additional normalization backward
-                "groupnorm_backward", "instancenorm_backward",
+                "groupnorm_backward_sums", "groupnorm_backward",
+                "instancenorm_backward_sums", "instancenorm_backward",
                 // Conv3D backward
                 "conv3d_backward_input", "conv3d_backward_weights",
                 // Global pooling backward

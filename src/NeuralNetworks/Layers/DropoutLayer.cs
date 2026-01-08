@@ -465,9 +465,9 @@ public class DropoutLayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
         }
 
-        // Apply the mask to the gradient: inputGrad = outputGrad * mask
-        // The mask already contains the scale factor from the forward pass
-        return gpuEngine.ElementwiseMultiply(outputGradient, _gpuMask);
+        // Use the existing DropoutBackwardGpu method which applies the mask to the gradient
+        var dropoutRate = (float)NumOps.ToDouble(_dropoutRate);
+        return gpuEngine.DropoutBackwardGpu(outputGradient, _gpuMask, dropoutRate);
     }
 
     /// <summary>
@@ -511,12 +511,18 @@ public class DropoutLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
         }
 
-        // Generate dropout mask on GPU with scaling already applied
-        // The mask contains: 0 for dropped neurons, scale for kept neurons
-        _gpuMask = gpuEngine.GenerateDropoutMask<T>(input.Shape, NumOps.ToDouble(_dropoutRate), NumOps.ToDouble(_scale));
+        // Generate a random seed for this dropout operation
+        // Using tick count for variety between forward passes
+        var seed = (ulong)Environment.TickCount;
 
-        // Apply mask: output = input * mask
-        return gpuEngine.ElementwiseMultiply(input, _gpuMask);
+        // Use the existing DropoutGpu method which generates mask and applies dropout
+        var dropoutRate = (float)NumOps.ToDouble(_dropoutRate);
+        var (output, mask) = gpuEngine.DropoutGpu(input, dropoutRate, isTraining: true, seed);
+
+        // Store the mask for backward pass
+        _gpuMask = mask;
+
+        return output;
     }
 
     /// <summary>

@@ -271,13 +271,21 @@ These must be implemented first to enable any GPU training:
 
 **Status: UNBLOCKED** - Transformer training kernels exist!
 
-### Tier 3: Recurrent Network Training (BLOCKERS)
-1. ❌ lstm_cell_forward
-2. ❌ lstm_cell_backward  
-3. ❌ gru_cell_forward
-4. ❌ gru_cell_backward
+### Tier 3: Recurrent Network Training (PARTIAL)
+**Cell-level kernels** (single timestep):
+1. ✅ lstm_cell_forward
+2. ✅ lstm_cell_backward
+3. ✅ gru_cell_forward
+4. ✅ gru_cell_backward
 
-**Status: BLOCKED** - Need LSTM/GRU kernels
+**Sequence-level kernels** (BPTT through time):
+1. ❌ lstm_forward (full sequence)
+2. ❌ lstm_backward (full sequence BPTT)
+3. ❌ gru_forward (full sequence)
+4. ❌ gru_backward (full sequence BPTT)
+5. ❌ convlstm_forward/backward
+
+**Status: PARTIAL** - Cell kernels exist, sequence-level BPTT kernels needed
 
 ### Tier 4: Graph Neural Network Training (BLOCKERS)
 1. ❌ sparse_mm_backward
@@ -286,12 +294,18 @@ These must be implemented first to enable any GPU training:
 
 **Status: BLOCKED** - Need sparse/scatter kernels
 
-### Tier 5: Missing Backward Kernels (Low Priority)
-1. ❌ conv3d_backward
-2. ❌ groupnorm_backward
-3. ❌ instancenorm_backward
-4. ❌ global_pool_backward
-5. ❌ mish_backward, softplus_backward, hardswish_backward
+### Tier 5: Remaining Backward Kernels
+**Implemented:**
+1. ✅ conv3d_backward_input, conv3d_backward_weights
+2. ✅ groupnorm_backward (simplified - see note)
+3. ✅ instancenorm_backward (simplified - see note)
+4. ✅ global_avgpool_backward, global_maxpool_backward
+
+**Note:** groupnorm_backward and instancenorm_backward use simplified per-element gradients.
+Full group-wise/instance-wise reduction terms are not yet implemented.
+
+**Still Missing:**
+1. ❌ mish_backward, softplus_backward, hardswish_backward
 
 ---
 
@@ -316,30 +330,31 @@ These must be implemented first to enable any GPU training:
 |----------|--------------|-------------|---------|------------|
 | Activation Forward | 11 | 11 | 0 | 100% |
 | Activation Backward | 11 | 8 | 3 | 73% |
-| Convolution | 14 | 8 | 6 | 57% |
-| Normalization | 12 | 9 | 3 | 75% |
-| Pooling | 12 | 6 | 6 | 50% |
+| Convolution | 14 | 10 | 4 | 71% |
+| Normalization | 12 | 11 | 1 | 92% |
+| Pooling | 12 | 10 | 2 | 83% |
 | Attention | 7 | 6 | 1 | 86% |
 | Loss Functions | 10 | 8 | 2 | 80% |
-| Optimizer | 11 | 4 | 7 | 36% |
-| Embedding | 4 | 3 | 1 | 75% |
-| Recurrent (LSTM/GRU) | 10 | 0 | 10 | 0% |
-| Graph Neural Networks | 10 | 1 | 9 | 10% |
-| 3D/Mesh | 6 | 0 | 6 | 0% |
-| **TOTAL** | **118** | **64** | **54** | **54%** |
+| Optimizer | 11 | 11 | 0 | 100% |
+| Embedding | 4 | 4 | 0 | 100% |
+| Recurrent (cell) | 4 | 4 | 0 | 100% |
+| Recurrent (sequence) | 6 | 0 | 6 | 0% |
+| Graph Neural Networks | 10 | 4 | 6 | 40% |
+| 3D/Mesh | 6 | 2 | 4 | 33% |
+| **TOTAL** | **118** | **89** | **29** | **75%** |
 
 ## Key Findings
 
 ### Good News
 1. **Basic training is UNBLOCKED**: Dense, Conv2D, BatchNorm, Attention, Loss functions all have backward kernels
-2. **Optimizer kernels exist**: SGD and Adam are implemented
+2. **All optimizer kernels implemented**: SGD, Adam, AdamW, RMSprop, Adagrad, and more
 3. **Good backend parity**: CUDA, HIP, OpenCL have similar coverage
+4. **Cell-level recurrent kernels complete**: lstm_cell_*, gru_cell_* all implemented
 
-### Blockers to Address
-1. **LSTM/GRU kernels**: 0% complete - blocks all recurrent layer training
-2. **GNN kernels**: 10% complete - blocks graph neural network training  
-3. **Conv3D backward**: Missing - blocks 3D CNN training
-4. **Some optimizers**: RMSprop, Adagrad, LARS, LAMB missing
+### Remaining Blockers
+1. **Sequence-level LSTM/GRU kernels**: Full BPTT kernels not yet implemented
+2. **GroupNorm/InstanceNorm backward**: Simplified implementation (missing group-wise reduction terms)
+3. **GNN sparse kernels**: sparse_mm_backward, message_passing_backward needed
 
 ### Recommended Implementation Order
 1. LSTM cell forward/backward (unblocks LSTMLayer, ConvLSTMLayer)

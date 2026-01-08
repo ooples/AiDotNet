@@ -435,18 +435,17 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <summary>
     /// Updates parameters using GPU-accelerated Levenberg-Marquardt.
     /// </summary>
+    /// <remarks>
+    /// Levenberg-Marquardt is a blend of gradient descent and Gauss-Newton optimization.
+    /// GPU implementation is not yet available due to the need for Jacobian computation
+    /// and solving (J^T J + lambda I)^-1 J^T r systems.
+    /// </remarks>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        float learningRate = (float)NumOps.ToDouble(CurrentLearningRate);
-        float damping = (_options as LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>)?.DampingParameter ?? 0.01f;
-        
-        backend.LevenbergMarquardtUpdate(
-            parameters,
-            gradients,
-            learningRate,
-            damping,
-            parameterCount
-        );
+        throw new NotSupportedException(
+            "GPU-accelerated Levenberg-Marquardt is not yet implemented. " +
+            "LM requires computing the Jacobian and solving linear systems which are complex on GPU. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>
