@@ -180,6 +180,37 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _biasesGradient;
 
+    #region GPU Training Fields
+
+    // GPU tensor caches for training
+    private IGpuTensor<T>? _gpuLastInput;
+    private IGpuTensor<T>? _gpuLastOutput;       // Activated output (needed for Sigmoid/Tanh backward)
+    private IGpuTensor<T>? _gpuPreActivation;    // Pre-activation output (needed for ReLU/GELU/Swish backward)
+    private IGpuTensor<T>? _gpuWeights;
+    private IGpuTensor<T>? _gpuBiases;
+    private IGpuTensor<T>? _gpuWeightsGradient;
+    private IGpuTensor<T>? _gpuBiasesGradient;
+
+    // SGD/NAG/LARS velocity buffers
+    private IGpuTensor<T>? _gpuWeightsVelocity;
+    private IGpuTensor<T>? _gpuBiasesVelocity;
+
+    // Adam/AdamW/LAMB moment buffers (m = first moment, v = second moment)
+    private IGpuTensor<T>? _gpuWeightsM;
+    private IGpuTensor<T>? _gpuWeightsV;
+    private IGpuTensor<T>? _gpuBiasesM;
+    private IGpuTensor<T>? _gpuBiasesV;
+
+    // RMSprop squared average buffers
+    private IGpuTensor<T>? _gpuWeightsSquaredAvg;
+    private IGpuTensor<T>? _gpuBiasesSquaredAvg;
+
+    // Adagrad accumulated gradient buffers
+    private IGpuTensor<T>? _gpuWeightsAccumulatedGrad;
+    private IGpuTensor<T>? _gpuBiasesAccumulatedGrad;
+
+    #endregion
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -858,6 +889,15 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         _lastOutput = null;
         _weightsGradient = null;
         _biasesGradient = null;
+
+        // Clear GPU cached values
+        _gpuLastInput = null;
+        _gpuLastOutput = null;
+        _gpuPreActivation = null;
+        _gpuWeightsGradient = null;
+        _gpuBiasesGradient = null;
+        // Note: _gpuWeights, _gpuBiases, and optimizer state buffers are intentionally NOT cleared
+        // as they should persist across batches during training
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
@@ -907,6 +947,11 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <summary>
+    /// Gets whether this layer supports full GPU-resident training (forward, backward, and parameter updates).
+    /// </summary>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
     /// Performs a GPU-resident forward pass, keeping tensors on GPU.
     /// Use this for chained layer execution to avoid CPU round-trips.
     /// </summary>
@@ -924,11 +969,12 @@ public class FullyConnectedLayer<T> : LayerBase<T>
                 "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
         }
 
+        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
         var input = inputs[0];
         int[] inputShape = input.Shape;
 
         // FullyConnectedLayer stores weights as [outputSize, inputSize]
-        // We need to transpose for FusedLinearGpu which expects [inputSize, outputSize]
+        // We need weights in [inputSize, outputSize] format for matmul
         int outputSize = _weights.Shape[0];
         int inputSize = _weights.Shape[1];
 
@@ -940,16 +986,21 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         if (inputFeatures != inputSize)
             throw new ArgumentException($"Input feature dimension {inputFeatures} does not match weights input dimension {inputSize}");
 
-        // Transpose weights from [outputSize, inputSize] to [inputSize, outputSize]
-        // This is needed because FusedLinearGpu expects weights in [inputSize, outputSize] format
-        var weightsT = Engine.TensorTranspose(_weights);
+        // Cache GPU weights and biases if not already cached
+        if (_gpuWeights == null)
+        {
+            // Store weights transposed to [inputSize, outputSize] for efficient matmul
+            var weightsT = Engine.TensorTranspose(_weights);
+            _gpuWeights = new GpuTensor<T>(backend, weightsT, GpuTensorRole.Weight);
+        }
+        if (_gpuBiases == null)
+            _gpuBiases = new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
 
         // Get the fused activation type using the base class method
         var fusedActivation = GetFusedActivationType();
 
-        // Handle input shape conversion for FusedLinearGpu
+        // Handle input shape conversion for matmul
         IGpuTensor<T> input2D = input;
-        bool needsReshape = inputShape.Length != 2;
 
         if (inputShape.Length == 1)
         {
@@ -962,25 +1013,44 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             input2D = input.CreateView(0, [batchSize, inputFeatures]);
         }
 
-        // Use GPU-resident FusedLinear - NO CPU round-trip
-        // Result is [batchDim, outputSize]
-        var result = gpuEngine.FusedLinearGpu(input2D, weightsT, _biases, fusedActivation);
-
-        // Cache state for backward pass only during training
+        // Cache GPU input for backward pass during training
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
+            _gpuLastInput = input2D;
+        }
 
-            // For fused activations, we need pre-activation for gradient computation
-            if (fusedActivation != FusedActivationType.None)
-            {
-                var preActivation = gpuEngine.FusedLinearGpu(input2D, weightsT, _biases, FusedActivationType.None);
-                _lastOutput = preActivation.ToTensor();
-            }
-            else
-            {
-                _lastOutput = result.ToTensor();
-            }
+        // Compute: output = input @ weights + biases
+        var matmulResult = gpuEngine.MatMulGpu(input2D, _gpuWeights);
+        var withBias = gpuEngine.AddBiasGpu(matmulResult, _gpuBiases);
+
+        // Cache pre-activation for backward pass
+        if (IsTrainingMode)
+        {
+            _gpuPreActivation = withBias;
+        }
+
+        // Apply activation
+        IGpuTensor<T> result;
+        if (ScalarActivation is { SupportsGpuTraining: true })
+        {
+            result = gpuEngine.ActivationGpu(withBias, fusedActivation);
+            if (IsTrainingMode)
+                _gpuLastOutput = result; // Cache activated output for Sigmoid/Tanh backward
+        }
+        else if (ScalarActivation != null)
+        {
+            // CPU fallback for unsupported activations
+            var cpuInput = withBias.ToTensor();
+            var cpuOutput = ApplyActivation(cpuInput);
+            result = new GpuTensor<T>(backend, cpuOutput, GpuTensorRole.Activation);
+            if (IsTrainingMode)
+                _gpuLastOutput = result;
+        }
+        else
+        {
+            result = withBias;
+            if (IsTrainingMode)
+                _gpuLastOutput = result;
         }
 
         // Reshape output back to original batch dimensions if needed
@@ -1004,4 +1074,236 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
         return result;
     }
+
+    #region GPU Training Methods
+
+    /// <summary>
+    /// Performs a GPU-resident backward pass, computing gradients on GPU.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient from the next layer.</param>
+    /// <returns>The GPU-resident gradient to pass to the previous layer.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuLastInput == null || _gpuLastOutput == null || _gpuWeights == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
+
+        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
+
+        // 1. Calculate activation gradient on GPU
+        int size = outputGradient.ElementCount;
+        IGpuTensor<T> activationGradient;
+
+        if (ScalarActivation is { SupportsGpuTraining: true })
+        {
+            // Use the activation function's GPU backward method directly
+            var gradInputBuffer = backend.AllocateBuffer(size);
+            ScalarActivation.BackwardGpu(
+                backend,
+                outputGradient.Buffer,
+                _gpuPreActivation?.Buffer,  // Input for ReLU, GELU, Swish, LeakyReLU
+                _gpuLastOutput?.Buffer,     // Output for Sigmoid, Tanh
+                gradInputBuffer,
+                size);
+            activationGradient = new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+        else if (VectorActivation != null && _gpuLastOutput is not null)
+        {
+            // Vector activations (Softmax, etc.) - use CPU for now
+            var lastOutputCpu = _gpuLastOutput.ToTensor();
+            var gradOutputCpu = outputGradient.ToTensor();
+            var activationGradientCpu = VectorActivation.Backward(lastOutputCpu, gradOutputCpu);
+            activationGradient = new GpuTensor<T>(backend, activationGradientCpu, GpuTensorRole.Gradient);
+        }
+        else if (ScalarActivation != null && _gpuLastOutput is not null)
+        {
+            // Unsupported scalar activation (no GPU support) - use CPU
+            var lastOutputCpu = _gpuLastOutput.ToTensor();
+            var gradOutputCpu = outputGradient.ToTensor();
+            var activationGradientCpu = ScalarActivation.Backward(lastOutputCpu, gradOutputCpu);
+            activationGradient = new GpuTensor<T>(backend, activationGradientCpu, GpuTensorRole.Gradient);
+        }
+        else
+        {
+            // No activation - gradient passes through unchanged
+            activationGradient = outputGradient;
+        }
+
+        // Flatten to 2D for gradient computation
+        int inputSize = _gpuLastInput.Shape[^1];
+        int batchDim = 1;
+        for (int i = 0; i < _gpuLastInput.Shape.Length - 1; i++)
+            batchDim *= _gpuLastInput.Shape[i];
+
+        var flattenedInput = _gpuLastInput.Shape.Length == 2 && _gpuLastInput.Shape[0] == batchDim
+            ? _gpuLastInput
+            : gpuEngine.ReshapeGpu(_gpuLastInput, new[] { batchDim, inputSize });
+
+        var flattenedGradient = activationGradient.Shape.Length == 2 && activationGradient.Shape[0] == batchDim
+            ? activationGradient
+            : gpuEngine.ReshapeGpu(activationGradient, new[] { batchDim, OutputShape[0] });
+
+        // 2. Compute weight gradients: dW = input.T @ dL/dz
+        var inputTransposed = gpuEngine.TransposeGpu(flattenedInput);
+        _gpuWeightsGradient = gpuEngine.MatMulGpu(inputTransposed, flattenedGradient);
+
+        // 3. Compute bias gradients: dB = sum(dL/dz, axis=0)
+        _gpuBiasesGradient = gpuEngine.SumAxis0Gpu(flattenedGradient);
+
+        // 4. Compute input gradient: dX = dL/dz @ W.T
+        var weightsTransposed = gpuEngine.TransposeGpu(_gpuWeights);
+        var inputGradient = gpuEngine.MatMulGpu(flattenedGradient, weightsTransposed);
+
+        // Reshape back to original input shape
+        if (_gpuLastInput.Shape.Length > 2)
+        {
+            return gpuEngine.ReshapeGpu(inputGradient, _gpuLastInput.Shape.ToArray());
+        }
+        else if (_gpuLastInput.Shape.Length == 1)
+        {
+            return gpuEngine.ReshapeGpu(inputGradient, new[] { inputSize });
+        }
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters on GPU using the specified optimizer configuration.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration specifying the update algorithm and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (_gpuWeightsGradient == null || _gpuBiasesGradient == null || _gpuWeights == null || _gpuBiases == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires a GPU engine to be active.");
+
+        var backend = gpuEngine.DirectGpu?.Backend;
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend is not available.");
+
+        // Get GPU buffers for weights and gradients
+        var weightsBuffer = _gpuWeights.Buffer;
+        var biasesBuffer = _gpuBiases.Buffer;
+        var weightsGradBuffer = _gpuWeightsGradient.Buffer;
+        var biasesGradBuffer = _gpuBiasesGradient.Buffer;
+
+        int weightsSize = _weights.Shape[0] * _weights.Shape[1];
+        int biasesSize = _biases.Shape[0];
+
+        // Ensure optimizer state buffers are allocated
+        EnsureGpuOptimizerState(backend, config.OptimizerType);
+
+        // Build state objects for weights and biases
+        var weightsState = BuildOptimizerState(config.OptimizerType, isWeights: true);
+        var biasesState = BuildOptimizerState(config.OptimizerType, isWeights: false);
+
+        // Apply optimizer update using polymorphic dispatch (follows Open/Closed Principle)
+        config.ApplyUpdate(backend, weightsBuffer, weightsGradBuffer, weightsState, weightsSize);
+        config.ApplyUpdate(backend, biasesBuffer, biasesGradBuffer, biasesState, biasesSize);
+
+        // Sync weights back to CPU for interoperability (can be skipped for full GPU training)
+        // Note: GPU weights are stored transposed, so we need to transpose back
+        var gpuWeightsTensor = _gpuWeights.ToTensor();
+        _weights = Engine.TensorTranspose(gpuWeightsTensor);
+        _biases = _gpuBiases.ToTensor();
+
+        // Notify engine that CPU tensors have changed
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <summary>
+    /// Builds the GPU optimizer state for weights or biases based on optimizer type.
+    /// </summary>
+    private GpuOptimizerState BuildOptimizerState(GpuOptimizerType optimizerType, bool isWeights)
+    {
+        return optimizerType switch
+        {
+            GpuOptimizerType.Sgd or GpuOptimizerType.Nag or GpuOptimizerType.Lars =>
+                new GpuOptimizerState { Velocity = isWeights ? _gpuWeightsVelocity?.Buffer : _gpuBiasesVelocity?.Buffer },
+
+            GpuOptimizerType.Adam or GpuOptimizerType.AdamW or GpuOptimizerType.Lamb =>
+                new GpuOptimizerState
+                {
+                    M = isWeights ? _gpuWeightsM?.Buffer : _gpuBiasesM?.Buffer,
+                    V = isWeights ? _gpuWeightsV?.Buffer : _gpuBiasesV?.Buffer
+                },
+
+            GpuOptimizerType.RmsProp =>
+                new GpuOptimizerState { SquaredAvg = isWeights ? _gpuWeightsSquaredAvg?.Buffer : _gpuBiasesSquaredAvg?.Buffer },
+
+            GpuOptimizerType.Adagrad =>
+                new GpuOptimizerState { AccumulatedGrad = isWeights ? _gpuWeightsAccumulatedGrad?.Buffer : _gpuBiasesAccumulatedGrad?.Buffer },
+
+            _ => throw new NotSupportedException($"GPU optimizer type {optimizerType} is not supported.")
+        };
+    }
+
+    /// <summary>
+    /// Ensures GPU optimizer state buffers are allocated for the specified optimizer type.
+    /// </summary>
+    private void EnsureGpuOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
+    {
+        // Weights are stored transposed on GPU [inputSize, outputSize]
+        int[] weightsGpuShape = [_weights.Shape[1], _weights.Shape[0]];
+
+        switch (optimizerType)
+        {
+            case GpuOptimizerType.Sgd:
+            case GpuOptimizerType.Nag:
+            case GpuOptimizerType.Lars:
+                // These use velocity buffers
+                if (_gpuWeightsVelocity == null)
+                {
+                    var weightsZeros = Tensor<T>.CreateDefault(weightsGpuShape, NumOps.Zero);
+                    var biasesZeros = Tensor<T>.CreateDefault(_biases.Shape, NumOps.Zero);
+                    _gpuWeightsVelocity = new GpuTensor<T>(backend, weightsZeros, GpuTensorRole.OptimizerState);
+                    _gpuBiasesVelocity = new GpuTensor<T>(backend, biasesZeros, GpuTensorRole.OptimizerState);
+                }
+                break;
+
+            case GpuOptimizerType.Adam:
+            case GpuOptimizerType.AdamW:
+            case GpuOptimizerType.Lamb:
+                // These use m (first moment) and v (second moment) buffers
+                if (_gpuWeightsM == null)
+                {
+                    var weightsZeros = Tensor<T>.CreateDefault(weightsGpuShape, NumOps.Zero);
+                    var biasesZeros = Tensor<T>.CreateDefault(_biases.Shape, NumOps.Zero);
+                    _gpuWeightsM = new GpuTensor<T>(backend, weightsZeros, GpuTensorRole.OptimizerState);
+                    _gpuWeightsV = new GpuTensor<T>(backend, weightsZeros, GpuTensorRole.OptimizerState);
+                    _gpuBiasesM = new GpuTensor<T>(backend, biasesZeros, GpuTensorRole.OptimizerState);
+                    _gpuBiasesV = new GpuTensor<T>(backend, biasesZeros, GpuTensorRole.OptimizerState);
+                }
+                break;
+
+            case GpuOptimizerType.RmsProp:
+                // Uses squared average buffer
+                if (_gpuWeightsSquaredAvg == null)
+                {
+                    var weightsZeros = Tensor<T>.CreateDefault(weightsGpuShape, NumOps.Zero);
+                    var biasesZeros = Tensor<T>.CreateDefault(_biases.Shape, NumOps.Zero);
+                    _gpuWeightsSquaredAvg = new GpuTensor<T>(backend, weightsZeros, GpuTensorRole.OptimizerState);
+                    _gpuBiasesSquaredAvg = new GpuTensor<T>(backend, biasesZeros, GpuTensorRole.OptimizerState);
+                }
+                break;
+
+            case GpuOptimizerType.Adagrad:
+                // Uses accumulated gradient buffer
+                if (_gpuWeightsAccumulatedGrad == null)
+                {
+                    var weightsZeros = Tensor<T>.CreateDefault(weightsGpuShape, NumOps.Zero);
+                    var biasesZeros = Tensor<T>.CreateDefault(_biases.Shape, NumOps.Zero);
+                    _gpuWeightsAccumulatedGrad = new GpuTensor<T>(backend, weightsZeros, GpuTensorRole.OptimizerState);
+                    _gpuBiasesAccumulatedGrad = new GpuTensor<T>(backend, biasesZeros, GpuTensorRole.OptimizerState);
+                }
+                break;
+        }
+    }
+
+    #endregion
 }
