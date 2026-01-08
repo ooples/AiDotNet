@@ -103,6 +103,15 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     private bool TryGetBackend(out IDirectGpuBackend backend)
     {
+        // Check if there's an active DeferredScope - use its RecordingBackend for deferred execution
+        var deferredScope = Gpu.DeferredScope.Current;
+        if (deferredScope != null && deferredScope.IsRecording)
+        {
+            backend = deferredScope.RecordingBackend;
+            return true;
+        }
+
+        // No deferred scope - use regular backend
         backend = _directGpu?.Backend!;
         return IsGpuAvailable && backend != null;
     }

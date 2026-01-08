@@ -11,6 +11,19 @@ namespace AiDotNet.Tensors.Engines.Gpu;
 /// </summary>
 public sealed class DeferredScope : IDeferredScope
 {
+    /// <summary>
+    /// Thread-local current deferred scope for ambient context pattern.
+    /// When a scope is active, GPU operations can use its RecordingBackend.
+    /// </summary>
+    [ThreadStatic]
+    private static DeferredScope? _current;
+
+    /// <summary>
+    /// Gets the current deferred scope for this thread, if any.
+    /// Use this to check if operations should record to a graph instead of executing immediately.
+    /// </summary>
+    public static DeferredScope? Current => _current;
+
     private readonly IAsyncGpuBackend _backend;
     private readonly RecordingGpuBackend _recordingBackend;
     private readonly GpuStreamPool? _streamPool;
@@ -19,6 +32,7 @@ public sealed class DeferredScope : IDeferredScope
     private ExecutionGraph? _compiledGraph;
     private OptimizationStatistics? _compiledStatistics;
     private DeferredScopeStatistics? _statistics;
+    private readonly DeferredScope? _parentScope;
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -56,6 +70,10 @@ public sealed class DeferredScope : IDeferredScope
         // Create the recording backend wrapper and start recording
         _recordingBackend = new RecordingGpuBackend(backend);
         _recordingBackend.BeginRecording(GraphBuilder);
+
+        // Set this scope as current (save parent for restore on dispose)
+        _parentScope = _current;
+        _current = this;
     }
 
     /// <summary>
@@ -249,6 +267,9 @@ public sealed class DeferredScope : IDeferredScope
         }
 
         _disposed = true;
+
+        // Restore parent scope (or null if no parent)
+        _current = _parentScope;
 
         // If not executed, execute on dispose
         if (!IsExecuted && GraphBuilder.NodeCount > 0)
