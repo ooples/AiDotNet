@@ -505,6 +505,9 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         // Detect input format: NCHW [B, C, H, W] vs NHWC [B, H, W, C]
         // NCHW has channels in dim 1, NHWC has channels in dim 3
+        // LIMITATION: This heuristic is ambiguous when spatial dimensions equal channel count
+        // (e.g., 32x32 image with 32 channels). In such cases, prefer NCHW format or use
+        // explicit format parameter in a future API enhancement.
         bool inputIsNCHW = input.Shape[1] == _inputChannels && input.Shape[3] != _inputChannels;
 
         // Get spatial dimensions based on format

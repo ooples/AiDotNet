@@ -379,6 +379,11 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         /// </summary>
         public IGpuBuffer Buffer => _buffer;
 
+        /// <summary>
+        /// Gets whether this wrapper owns the buffer (and should dispose it).
+        /// </summary>
+        public bool OwnsBuffer => _ownsBuffer;
+
         public OwnedBuffer(IGpuBuffer buffer, bool ownsBuffer)
         {
             _buffer = buffer;
@@ -1335,7 +1340,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// <typeparam name="T">The element type of the tensor.</typeparam>
     /// <param name="tensor">The CPU tensor containing weight/bias data.</param>
     /// <param name="role">The role indicating whether this is weights or biases.</param>
-    /// <returns>A GPU-resident tensor. The caller should NOT dispose this tensor as it's cache-managed.</returns>
+    /// <returns>A GPU-resident tensor. If cached, caller should NOT dispose; if not cached (race condition), caller owns it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
     public IGpuTensor<T> GetOrCacheWeightsGpu<T>(Tensor<T> tensor, GpuTensorRole role = GpuTensorRole.Weight)
     {
@@ -1343,10 +1348,11 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             throw new InvalidOperationException("No GPU backend available for GetOrCacheWeightsGpu");
 
         var persistentRole = role == GpuTensorRole.Weight ? PersistentTensorRole.Weights : PersistentTensorRole.Biases;
-        using var ownedBuffer = GetOrCacheWeightBuffer(backend, tensor.Data, persistentRole);
+        var ownedBuffer = GetOrCacheWeightBuffer(backend, tensor.Data, persistentRole);
 
-        // Create a GPU tensor that does NOT own the buffer (cache owns it)
-        return new GpuTensor<T>(backend, ownedBuffer.Buffer, tensor.Shape.ToArray(), role, ownsBuffer: false);
+        // Propagate ownership: if cache owns buffer, GpuTensor shouldn't dispose;
+        // if we own buffer (race condition fallback), GpuTensor should take ownership
+        return new GpuTensor<T>(backend, ownedBuffer.Buffer, tensor.Shape.ToArray(), role, ownsBuffer: ownedBuffer.OwnsBuffer);
     }
 
     /// <summary>

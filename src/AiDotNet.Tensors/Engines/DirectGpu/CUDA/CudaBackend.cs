@@ -5679,6 +5679,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
             _deformableConvModule = IntPtr.Zero;
         }
 
+        if (_capsuleModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_capsuleModule);
+            _capsuleModule = IntPtr.Zero;
+        }
+
         if (_specializedModule != IntPtr.Zero)
         {
             CudaNativeBindings.cuModuleUnload(_specializedModule);

@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -348,7 +349,11 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                 weightsFlat[o * InputFeatures + i] = _numOps.ToFloat(_weights[o, i]);
             }
         }
-        var weightsBuffer = backend.AllocateBuffer(weightsFlat);
+        IGpuBuffer? weightsBuffer = null;
+        IGpuBuffer? biasesBuffer = null;
+        try
+        {
+            weightsBuffer = backend.AllocateBuffer(weightsFlat);
 
         // Cache biases to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
         var biasesFlat = new float[OutputFeatures * InputFeatures];
@@ -359,7 +364,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                 biasesFlat[o * InputFeatures + i] = _numOps.ToFloat(_biases[o, i]);
             }
         }
-        var biasesBuffer = backend.AllocateBuffer(biasesFlat);
+        biasesBuffer = backend.AllocateBuffer(biasesFlat);
 
         // Allocate output buffer
         var outputBuffer = backend.AllocateBuffer(batchSize * OutputFeatures);
@@ -368,14 +373,15 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         float curvature = _numOps.ToFloat(_curvature);
         float epsilon = 1e-5f;
 
+        // Validate buffers are allocated (they should be at this point)
+        if (weightsBuffer is null || biasesBuffer is null)
+            throw new InvalidOperationException("GPU buffer allocation failed");
+
         // Call the GPU kernel for hyperbolic linear forward
         backend.HyperbolicLinearForward(
             input.Buffer, weightsBuffer, biasesBuffer, outputBuffer,
             batchSize, InputFeatures, OutputFeatures, curvature, epsilon);
 
-        // Clean up temp buffers
-        weightsBuffer.Dispose();
-        biasesBuffer.Dispose();
 
         // Determine output shape
         int[] outputShape;
@@ -395,7 +401,14 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             outputShape = newShape;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        // Note: GPU path does not apply activation function - consider CPU fallback for non-identity activations
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        finally
+        {
+            weightsBuffer?.Dispose();
+            biasesBuffer?.Dispose();
+        }
     }
 
     /// <summary>

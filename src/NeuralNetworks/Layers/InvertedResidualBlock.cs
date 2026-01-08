@@ -268,41 +268,53 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         {
             var expandOut = _expandConv.ForwardGpu(x);
             var expandBnOut = _expandBn.ForwardGpu(expandOut);
-            x = gpuEngine.ActivationGpu(expandBnOut, GetFusedActivationType());
+            expandOut.Dispose(); // Dispose intermediate tensor
+            var expandAct = gpuEngine.ActivationGpu(expandBnOut, GetFusedActivationType());
+            expandBnOut.Dispose(); // Dispose intermediate tensor
+            x = expandAct;
         }
 
         // Depthwise convolution phase
         var dwOut = _dwConv.ForwardGpu(x);
+        // Dispose expansion output if we had expansion phase
+        if (_hasExpansion && x != input)
+            x.Dispose();
         var dwBnOut = _dwBn.ForwardGpu(dwOut);
-        x = gpuEngine.ActivationGpu(dwBnOut, GetFusedActivationType());
+        dwOut.Dispose(); // Dispose intermediate tensor
+        var dwAct = gpuEngine.ActivationGpu(dwBnOut, GetFusedActivationType());
+        dwBnOut.Dispose(); // Dispose intermediate tensor
+        x = dwAct;
 
         // Squeeze-and-Excitation phase (optional)
         if (_useSE && _se is not null)
         {
             // Permute from NCHW [B, C, H, W] to NHWC [B, H, W, C] for SE layer
             var xNhwc = gpuEngine.PermuteGpu(x, [0, 2, 3, 1]);
+            x.Dispose(); // Dispose dwAct before SE
 
             // Apply SE layer (expects NHWC format)
             var seOut = _se.ForwardGpu(xNhwc);
+            xNhwc.Dispose(); // Dispose intermediate tensor
 
             // Permute back from NHWC [B, H, W, C] to NCHW [B, C, H, W]
             var seOutNchw = gpuEngine.PermuteGpu(seOut, [0, 3, 1, 2]);
-
-            // Dispose intermediate tensors
-            xNhwc.Dispose();
-            seOut.Dispose();
+            seOut.Dispose(); // Dispose intermediate tensor
 
             x = seOutNchw;
         }
 
         // Projection phase (LINEAR - no activation)
         var projectOut = _projectConv.ForwardGpu(x);
+        x.Dispose(); // Dispose SE output (or dwAct if no SE)
         var projectBnOut = _projectBn.ForwardGpu(projectOut);
+        projectOut.Dispose(); // Dispose intermediate tensor
 
         // Residual connection (only if dimensions match)
         if (_useResidual)
         {
-            return gpuEngine.AddGpu(projectBnOut, input);
+            var result = gpuEngine.AddGpu(projectBnOut, input);
+            projectBnOut.Dispose(); // Dispose intermediate tensor
+            return result;
         }
 
         return projectBnOut;

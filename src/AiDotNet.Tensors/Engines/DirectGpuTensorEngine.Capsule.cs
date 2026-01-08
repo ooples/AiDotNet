@@ -531,6 +531,9 @@ public partial class DirectGpuTensorEngine
         if (output is null)
             throw new InvalidOperationException("Capsule routing failed to produce output. This indicates numIterations was 0 or an internal error occurred.");
 
+        // Dispose the couplings tensor as it is only used internally for routing
+        couplings.Dispose();
+
         return output;
     }
 

@@ -287,7 +287,10 @@ public class QuantumLayer<T> : LayerBase<T>
         var circuitImagBuffer = backend.AllocateBuffer(circuitImagFlat);
 
         // Initialize state: Copy and pad/normalize input on CPU, then allocate with data
-        // (A full GPU implementation would do this with kernels)
+        // PERFORMANCE NOTE: This CPU round-trip (Download -> process -> Upload) is a performance
+        // bottleneck. A full GPU implementation would use dedicated kernels for state initialization
+        // (padding, normalization). Consider adding GPU kernels for these operations in performance-critical
+        // scenarios, especially for large batch sizes or when this layer is used frequently.
         var inputData = backend.DownloadBuffer(input.Buffer);
         var stateReal = new float[batchSize * dimension];
         var stateImag = new float[batchSize * dimension]; // Zeros for imaginary part

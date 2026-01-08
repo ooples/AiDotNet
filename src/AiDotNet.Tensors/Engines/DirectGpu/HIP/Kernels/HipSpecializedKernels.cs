@@ -5,6 +5,11 @@
 // - Quantum computing operations
 // - Measurement/probability operations
 // Note: HIP is source-compatible with CUDA device code.
+//
+// LIMITATION: Hyperbolic geometry kernels (poincare_exp_map, poincare_distance,
+// hyperbolic_linear_forward) use fixed-size arrays and are limited to dimensions <= 32.
+// If dim > 32, these kernels will output zeros for the affected elements.
+// For higher dimensions, use the CPU fallback implementation.
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.HIP.Kernels;
 

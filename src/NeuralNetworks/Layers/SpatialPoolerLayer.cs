@@ -341,13 +341,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         // Reshape to [1, InputSize] for matrix multiply (batch of 1)
         var inputReshaped = gpuEngine.ReshapeGpu(flatInput, [1, InputSize]);
 
-        // Connections is [InputSize, ColumnCount]
-        // We need W^T @ x which is [ColumnCount, InputSize] @ [InputSize, 1]
-        // Transpose connections: [InputSize, ColumnCount] -> [ColumnCount, InputSize]
-        var connectionsT = Connections.Transpose([1, 0]);
-
         // Matrix multiply: [1, InputSize] @ [InputSize, ColumnCount] = [1, ColumnCount]
-        // Using BatchedMatMulGpu: input is [batch=1, InputSize], weights is [InputSize, ColumnCount]
         var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
 
         // Apply threshold to get sparse binary output

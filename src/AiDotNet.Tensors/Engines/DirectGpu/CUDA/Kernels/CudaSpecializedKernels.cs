@@ -7,6 +7,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.CUDA.Kernels;
 /// - Quantum computing operations
 /// - Measurement/probability operations
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>LIMITATION:</b> Hyperbolic geometry kernels (poincare_exp_map, poincare_distance,
+/// hyperbolic_linear_forward) use fixed-size arrays and are limited to dimensions &lt;= 32.
+/// If dim &gt; 32, these kernels will output zeros for the affected elements.
+/// For higher dimensions, use the CPU fallback implementation.
+/// </para>
+/// </remarks>
 public static class CudaSpecializedKernels
 {
     public static string GetSource()
