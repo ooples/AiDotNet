@@ -2387,6 +2387,30 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             kernel.Execute1D(numCapsules, localSize);
         }
 
+        public void CapsulePredictions(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+            int batchSize, int inputCapsules, int inputDim, int outputCapsules, int outputDim)
+        {
+            throw new NotImplementedException("CapsulePredictions kernel not yet implemented for OpenCL backend");
+        }
+
+        public void CapsuleTransform(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+            int batchSize, int inputCapsules, int inputDim, int numCapsules, int capsuleDim)
+        {
+            throw new NotImplementedException("CapsuleTransform kernel not yet implemented for OpenCL backend");
+        }
+
+        public void CapsuleWeightedSum(IGpuBuffer coupling, IGpuBuffer predictions, IGpuBuffer output,
+            int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+        {
+            throw new NotImplementedException("CapsuleWeightedSum kernel not yet implemented for OpenCL backend");
+        }
+
+        public void CapsuleAgreement(IGpuBuffer predictions, IGpuBuffer output, IGpuBuffer agreement,
+            int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+        {
+            throw new NotImplementedException("CapsuleAgreement kernel not yet implemented for OpenCL backend");
+        }
+
         public void TileBatch(IGpuBuffer input, IGpuBuffer output, int repeats, int innerSize)
         {
             if (_context == null)

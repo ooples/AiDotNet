@@ -335,30 +335,36 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend is not available.");
 
-        // Download input from GPU for processing
-        var inputData = backend.DownloadBuffer(input.Buffer);
+        // Flatten to 1D if needed
+        var flatInput = input.Shape.Length == 1 ? input : gpuEngine.ReshapeGpu(input, [input.ElementCount]);
 
-        // Convert to Tensor<T>
-        var inputTensor = new Tensor<T>(input.Shape);
-        for (int i = 0; i < inputData.Length; i++)
-        {
-            inputTensor[i] = NumOps.FromDouble(inputData[i]);
-        }
+        // Reshape to [1, InputSize] for matrix multiply (batch of 1)
+        var inputReshaped = gpuEngine.ReshapeGpu(flatInput, [1, InputSize]);
 
-        // Process using existing Forward logic
-        var output = Forward(inputTensor);
+        // Connections is [InputSize, ColumnCount]
+        // We need W^T @ x which is [ColumnCount, InputSize] @ [InputSize, 1]
+        // Transpose connections: [InputSize, ColumnCount] -> [ColumnCount, InputSize]
+        var connectionsT = Connections.Transpose([1, 0]);
 
-        // Upload output to GPU
-        var outputData = new float[output.Length];
-        for (int i = 0; i < output.Length; i++)
-        {
-            outputData[i] = NumOps.ToFloat(output[i]);
-        }
+        // Matrix multiply: [1, InputSize] @ [InputSize, ColumnCount] = [1, ColumnCount]
+        // Using BatchedMatMulGpu: input is [batch=1, InputSize], weights is [InputSize, ColumnCount]
+        var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
 
-        var outputBuffer = backend.AllocateBuffer(outputData);
-        var outputShape = output.Shape;
+        // Apply threshold to get sparse binary output
+        var thresholdFloat = (float)SparsityThreshold;
+        var outputMask = gpuEngine.GreaterThanScalarGpu(activations, thresholdFloat);
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        // Reshape to [ColumnCount]
+        var output = gpuEngine.ReshapeGpu(outputMask, [ColumnCount]);
+
+        // Dispose intermediates (except output)
+        if (input.Shape.Length != 1)
+            flatInput.Dispose();
+        inputReshaped.Dispose();
+        activations.Dispose();
+        outputMask.Dispose();
+
+        return output;
     }
 
     /// <summary>

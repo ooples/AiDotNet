@@ -198,6 +198,26 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.SquashBackward(gradOutput, input, gradInput, numCapsules, capsuleDim, epsilon);
 
     /// <inheritdoc/>
+    public virtual void CapsulePredictions(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int outputCapsules, int outputDim)
+        => Inner.CapsulePredictions(input, weights, output, batchSize, inputCapsules, inputDim, outputCapsules, outputDim);
+
+    /// <inheritdoc/>
+    public virtual void CapsuleTransform(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int numCapsules, int capsuleDim)
+        => Inner.CapsuleTransform(input, weights, output, batchSize, inputCapsules, inputDim, numCapsules, capsuleDim);
+
+    /// <inheritdoc/>
+    public virtual void CapsuleWeightedSum(IGpuBuffer coupling, IGpuBuffer predictions, IGpuBuffer output,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+        => Inner.CapsuleWeightedSum(coupling, predictions, output, batchSize, inputCapsules, outputCapsules, capsuleDim);
+
+    /// <inheritdoc/>
+    public virtual void CapsuleAgreement(IGpuBuffer predictions, IGpuBuffer output, IGpuBuffer agreement,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+        => Inner.CapsuleAgreement(predictions, output, agreement, batchSize, inputCapsules, outputCapsules, capsuleDim);
+
+    /// <inheritdoc/>
     public virtual void TileBatch(IGpuBuffer input, IGpuBuffer output, int repeats, int innerSize)
         => Inner.TileBatch(input, output, repeats, innerSize);
 

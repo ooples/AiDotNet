@@ -598,9 +598,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>GPU-resident output tensor after capsule transformation.</returns>
     /// <remarks>
     /// <para>
-    /// This method implements the forward pass using GPU-resident operations where possible.
-    /// Due to complex per-capsule transforms and dynamic routing, the computation is
-    /// performed on CPU with GPU upload/download for integration.
+    /// This method implements the forward pass using dedicated GPU kernels for
+    /// capsule transformation and dynamic routing. All operations stay GPU-resident
+    /// for maximum performance.
     /// </para>
     /// </remarks>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
@@ -617,14 +617,34 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var input = inputs[0];
 
-        // Download input for CPU processing (complex per-capsule transforms)
-        var inputCpu = input.ToTensor();
+        // Validate input shape
+        if (input.Shape.Length != 3)
+            throw new ArgumentException($"CapsuleLayer.ForwardGpu requires 3D input [batch, inputCapsules, inputDim], got {input.Shape.Length}D");
 
-        // Use CPU Forward to compute the result
-        var outputCpu = Forward(inputCpu);
+        int batchSize = input.Shape[0];
+        int inputCapsules = input.Shape[1];
+        int inputDim = input.Shape[2];
 
-        // Upload result back to GPU
-        return gpuEngine.UploadToGpu<T>(outputCpu, GpuTensorRole.Activation);
+        // Validate dimensions match
+        if (inputCapsules != _transformationMatrix.Shape[0])
+            throw new ArgumentException($"Input capsules mismatch: input has {inputCapsules}, layer expects {_transformationMatrix.Shape[0]}");
+        if (inputDim != _transformationMatrix.Shape[1])
+            throw new ArgumentException($"Input dimension mismatch: input has {inputDim}, layer expects {_transformationMatrix.Shape[1]}");
+
+        // Step 1: Cache or upload weights to GPU
+        var weightsTensor = gpuEngine.GetOrCacheWeightsGpu<T>(_transformationMatrix);
+
+        // Step 2: GPU-resident capsule transform
+        // Uses dedicated CapsuleTransform kernel that parallelizes across all output elements
+        var transformed = gpuEngine.CapsuleTransformGpu<T>(input, weightsTensor.Buffer, _numCapsules, _capsuleDimension);
+
+        // Step 3: GPU-resident dynamic routing with bias
+        var output = gpuEngine.CapsuleRoutingGpu(transformed, _bias, _numRoutingIterations);
+
+        // Dispose intermediate tensor
+        transformed.Dispose();
+
+        return output;
     }
 
 

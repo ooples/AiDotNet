@@ -1302,6 +1302,55 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// Uploads weight/bias tensor to GPU with automatic caching. If the data is already cached,
+    /// returns the cached GPU tensor without re-uploading. This is the recommended method for
+    /// layer weights and biases that don't change between forward passes during inference.
+    /// </summary>
+    /// <typeparam name="T">The element type of the tensor.</typeparam>
+    /// <param name="tensor">The CPU tensor containing weight/bias data.</param>
+    /// <param name="role">The role indicating whether this is weights or biases.</param>
+    /// <returns>A GPU-resident tensor. The caller should NOT dispose this tensor as it's cache-managed.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    public IGpuTensor<T> GetOrCacheWeightsGpu<T>(Tensor<T> tensor, GpuTensorRole role = GpuTensorRole.Weight)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for GetOrCacheWeightsGpu");
+
+        var persistentRole = role == GpuTensorRole.Weight ? PersistentTensorRole.Weights : PersistentTensorRole.Biases;
+        using var ownedBuffer = GetOrCacheWeightBuffer(backend, tensor.Data, persistentRole);
+
+        // Create a GPU tensor that does NOT own the buffer (cache owns it)
+        return new GpuTensor<T>(backend, ownedBuffer.Buffer, tensor.Shape.ToArray(), role, ownsBuffer: false);
+    }
+
+    /// <summary>
+    /// Invalidates a cached weight buffer, forcing a re-upload on the next GetOrCacheWeightsGpu call.
+    /// </summary>
+    public bool InvalidateWeightCache<T>(T[] data)
+    {
+        if (_persistentBufferCache.TryRemove(data, out var entry))
+        {
+            entry.Dispose();
+            _tensorVersions.TryRemove(data, out _);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Invalidates all cached weight buffers.
+    /// </summary>
+    public void InvalidateAllWeightCaches()
+    {
+        foreach (var entry in _persistentBufferCache.Values)
+        {
+            entry.Dispose();
+        }
+        _persistentBufferCache.Clear();
+        _tensorVersions.Clear();
+    }
+
+    /// <summary>
     /// Applies an activation function to a GPU-resident tensor, returning a new GPU tensor.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>

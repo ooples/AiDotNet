@@ -1,5 +1,6 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Tensors.Engines;
 
@@ -221,7 +222,289 @@ public partial class DirectGpuTensorEngine
             summed.Dispose();
         }
 
-        return (output!, couplings);
+        if (output is null)
+            throw new InvalidOperationException("Dynamic routing failed to produce output. This indicates numIterations was 0 or an internal error occurred.");
+
+        return (output, couplings);
+    }
+
+    /// <summary>
+    /// GPU-resident capsule prediction computation.
+    /// Computes predictions from input capsules to output capsules using learned weight matrices.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor [batch, inputCapsules, inputDim].</param>
+    /// <param name="weights">Weight tensor [inputCapsules, outputCapsules, inputDim, outputDim].</param>
+    /// <returns>GPU-resident predictions tensor [batch, inputCapsules, outputCapsules, outputDim].</returns>
+    /// <remarks>
+    /// <para>
+    /// This computes: predictions[b,i,c,d] = sum_k(input[b,i,k] * weights[i,c,k,d])
+    /// Uses a dedicated GPU kernel for maximum parallelism.
+    /// </para>
+    /// </remarks>
+    public IGpuTensor<T> CapsulePredictionsGpu<T>(IGpuTensor<T> input, Tensor<T> weights)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for CapsulePredictionsGpu");
+
+        if (input.Shape.Length != 3)
+            throw new ArgumentException("Input must be 3D [batch, inputCapsules, inputDim]", nameof(input));
+
+        if (weights.Shape.Length != 4)
+            throw new ArgumentException("Weights must be 4D [inputCapsules, outputCapsules, inputDim, outputDim]", nameof(weights));
+
+        int batchSize = input.Shape[0];
+        int inputCapsules = input.Shape[1];
+        int inputDim = input.Shape[2];
+
+        int weightsInputCapsules = weights.Shape[0];
+        int outputCapsules = weights.Shape[1];
+        int weightsInputDim = weights.Shape[2];
+        int outputDim = weights.Shape[3];
+
+        if (inputCapsules != weightsInputCapsules)
+            throw new ArgumentException($"Input capsules mismatch: input has {inputCapsules}, weights has {weightsInputCapsules}");
+
+        if (inputDim != weightsInputDim)
+            throw new ArgumentException($"Input dim mismatch: input has {inputDim}, weights has {weightsInputDim}");
+
+        // Upload weights to GPU
+        var weightsData = new float[weights.Length];
+        for (int i = 0; i < weights.Length; i++)
+            weightsData[i] = Convert.ToSingle(weights.Data[i]);
+        using var weightsBuffer = backend.AllocateBuffer(weightsData);
+
+        // Allocate output: [batch, inputCapsules, outputCapsules, outputDim]
+        int outputSize = batchSize * inputCapsules * outputCapsules * outputDim;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Call the GPU kernel which parallelizes across all output elements
+        backend.CapsulePredictions(input.Buffer, weightsBuffer, outputBuffer,
+            batchSize, inputCapsules, inputDim, outputCapsules, outputDim);
+
+        return new GpuTensor<T>(backend, outputBuffer,
+            [batchSize, inputCapsules, outputCapsules, outputDim],
+            GpuTensorRole.Intermediate, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident capsule prediction computation with cached GPU weights.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor [batch, inputCapsules, inputDim].</param>
+    /// <param name="weightsBuffer">GPU buffer containing weights [inputCapsules, outputCapsules, inputDim, outputDim].</param>
+    /// <param name="outputCapsules">Number of output capsules.</param>
+    /// <param name="outputDim">Dimension of each output capsule.</param>
+    /// <returns>GPU-resident predictions tensor [batch, inputCapsules, outputCapsules, outputDim].</returns>
+    public IGpuTensor<T> CapsulePredictionsGpu<T>(IGpuTensor<T> input, IGpuBuffer weightsBuffer, int outputCapsules, int outputDim)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for CapsulePredictionsGpu");
+
+        if (input.Shape.Length != 3)
+            throw new ArgumentException("Input must be 3D [batch, inputCapsules, inputDim]", nameof(input));
+
+        int batchSize = input.Shape[0];
+        int inputCapsules = input.Shape[1];
+        int inputDim = input.Shape[2];
+
+        // Allocate output: [batch, inputCapsules, outputCapsules, outputDim]
+        int outputSize = batchSize * inputCapsules * outputCapsules * outputDim;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Call the GPU kernel which parallelizes across all output elements
+        backend.CapsulePredictions(input.Buffer, weightsBuffer, outputBuffer,
+            batchSize, inputCapsules, inputDim, outputCapsules, outputDim);
+
+        return new GpuTensor<T>(backend, outputBuffer,
+            [batchSize, inputCapsules, outputCapsules, outputDim],
+            GpuTensorRole.Intermediate, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident capsule transform for CapsuleLayer.
+    /// Transforms input capsules using per-capsule transformation matrices.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor [batch, inputCapsules, inputDim].</param>
+    /// <param name="weights">Weight tensor [inputCapsules, inputDim, numCapsules, capsuleDim].</param>
+    /// <returns>GPU-resident transformed tensor [batch, inputCapsules, numCapsules, capsuleDim].</returns>
+    /// <remarks>
+    /// <para>
+    /// This computes: transformed[b,i,j,d] = sum_k(input[b,i,k] * weights[i,k,j,d])
+    /// Uses a dedicated GPU kernel for maximum parallelism.
+    /// </para>
+    /// </remarks>
+    public IGpuTensor<T> CapsuleTransformGpu<T>(IGpuTensor<T> input, Tensor<T> weights)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for CapsuleTransformGpu");
+
+        if (input.Shape.Length != 3)
+            throw new ArgumentException("Input must be 3D [batch, inputCapsules, inputDim]", nameof(input));
+
+        if (weights.Shape.Length != 4)
+            throw new ArgumentException("Weights must be 4D [inputCapsules, inputDim, numCapsules, capsuleDim]", nameof(weights));
+
+        int batchSize = input.Shape[0];
+        int inputCapsules = input.Shape[1];
+        int inputDim = input.Shape[2];
+
+        int weightsInputCapsules = weights.Shape[0];
+        int weightsInputDim = weights.Shape[1];
+        int numCapsules = weights.Shape[2];
+        int capsuleDim = weights.Shape[3];
+
+        if (inputCapsules != weightsInputCapsules)
+            throw new ArgumentException($"Input capsules mismatch: input has {inputCapsules}, weights has {weightsInputCapsules}");
+
+        if (inputDim != weightsInputDim)
+            throw new ArgumentException($"Input dim mismatch: input has {inputDim}, weights has {weightsInputDim}");
+
+        // Upload weights to GPU
+        var weightsData = new float[weights.Length];
+        for (int i = 0; i < weights.Length; i++)
+            weightsData[i] = Convert.ToSingle(weights.Data[i]);
+        using var weightsBuffer = backend.AllocateBuffer(weightsData);
+
+        // Allocate output: [batch, inputCapsules, numCapsules, capsuleDim]
+        int outputSize = batchSize * inputCapsules * numCapsules * capsuleDim;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Call the GPU kernel which parallelizes across all output elements
+        backend.CapsuleTransform(input.Buffer, weightsBuffer, outputBuffer,
+            batchSize, inputCapsules, inputDim, numCapsules, capsuleDim);
+
+        return new GpuTensor<T>(backend, outputBuffer,
+            [batchSize, inputCapsules, numCapsules, capsuleDim],
+            GpuTensorRole.Intermediate, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident capsule transform with cached GPU weights.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor [batch, inputCapsules, inputDim].</param>
+    /// <param name="weightsBuffer">GPU buffer containing weights [inputCapsules, inputDim, numCapsules, capsuleDim].</param>
+    /// <param name="numCapsules">Number of output capsules.</param>
+    /// <param name="capsuleDim">Dimension of each output capsule.</param>
+    /// <returns>GPU-resident transformed tensor [batch, inputCapsules, numCapsules, capsuleDim].</returns>
+    public IGpuTensor<T> CapsuleTransformGpu<T>(IGpuTensor<T> input, IGpuBuffer weightsBuffer, int numCapsules, int capsuleDim)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for CapsuleTransformGpu");
+
+        if (input.Shape.Length != 3)
+            throw new ArgumentException("Input must be 3D [batch, inputCapsules, inputDim]", nameof(input));
+
+        int batchSize = input.Shape[0];
+        int inputCapsules = input.Shape[1];
+        int inputDim = input.Shape[2];
+
+        // Allocate output: [batch, inputCapsules, numCapsules, capsuleDim]
+        int outputSize = batchSize * inputCapsules * numCapsules * capsuleDim;
+        var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        // Call the GPU kernel which parallelizes across all output elements
+        backend.CapsuleTransform(input.Buffer, weightsBuffer, outputBuffer,
+            batchSize, inputCapsules, inputDim, numCapsules, capsuleDim);
+
+        return new GpuTensor<T>(backend, outputBuffer,
+            [batchSize, inputCapsules, numCapsules, capsuleDim],
+            GpuTensorRole.Intermediate, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident general capsule routing.
+    /// Performs dynamic routing with given transformed inputs and initial coupling coefficients.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="transformedInput">Transformed capsule predictions [batch, inputCapsules, numCapsules, capsuleDim].</param>
+    /// <param name="bias">Bias tensor [numCapsules * capsuleDim] to add after weighted sum.</param>
+    /// <param name="numIterations">Number of routing iterations.</param>
+    /// <param name="epsilon">Small value for numerical stability.</param>
+    /// <returns>Output capsules [batch, numCapsules, capsuleDim].</returns>
+    public IGpuTensor<T> CapsuleRoutingGpu<T>(
+        IGpuTensor<T> transformedInput,
+        Tensor<T> bias,
+        int numIterations = 3,
+        float epsilon = 1e-8f)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for CapsuleRoutingGpu");
+
+        if (transformedInput.Shape.Length != 4)
+            throw new ArgumentException("Transformed input must be 4D [batch, inputCapsules, numCapsules, capsuleDim]");
+
+        int batchSize = transformedInput.Shape[0];
+        int inputCapsules = transformedInput.Shape[1];
+        int numCapsules = transformedInput.Shape[2];
+        int capsuleDim = transformedInput.Shape[3];
+
+        // Initialize coupling coefficients to uniform: [batch, inputCapsules, numCapsules]
+        int couplingsSize = batchSize * inputCapsules * numCapsules;
+        var couplingsBuffer = backend.AllocateBuffer(couplingsSize);
+        float uniformCoeff = 1.0f / numCapsules;
+        backend.Fill(couplingsBuffer, uniformCoeff, couplingsSize);
+
+        IGpuTensor<T> couplings = new GpuTensor<T>(backend, couplingsBuffer,
+            [batchSize, inputCapsules, numCapsules], GpuTensorRole.Intermediate, ownsBuffer: true);
+
+        // Upload bias to GPU (reshape from [numCapsules*capsuleDim] to [1, numCapsules, capsuleDim])
+        var biasData = new float[bias.Length];
+        for (int i = 0; i < bias.Length; i++)
+            biasData[i] = Convert.ToSingle(bias.Data[i]);
+        using var biasBuffer = backend.AllocateBuffer(biasData);
+        var biasGpu = new GpuTensor<T>(backend, biasBuffer,
+            [1, numCapsules, capsuleDim], GpuTensorRole.Bias, ownsBuffer: false);
+
+        IGpuTensor<T>? output = null;
+
+        for (int iter = 0; iter < numIterations; iter++)
+        {
+            // Step 1: Softmax over numCapsules (axis 2) to normalize couplings
+            var routingWeights = SoftmaxAxisGpu(couplings, axis: 2);
+
+            // Step 2: Weighted sum of transformed inputs
+            // routingWeights: [B, I, J] -> expand to [B, I, J, 1]
+            // transformedInput: [B, I, J, D]
+            var routingExpanded = ReshapeGpu(routingWeights, [batchSize, inputCapsules, numCapsules, 1]);
+            var weightedPred = MultiplyGpu(transformedInput, routingExpanded);
+
+            // Step 3: Sum over input capsules (axis 1) to get s_j: [B, J, D]
+            var weightedSum = SumAxisGpu(weightedPred, axis: 1);
+
+            // Step 4: Add bias: [B, J, D] + [1, J, D]
+            var withBias = AddGpu(weightedSum, biasGpu);
+
+            // Step 5: Squash activation
+            output = SquashGpu(withBias, axis: -1, epsilon);
+
+            // Step 6: Update couplings (except on last iteration)
+            if (iter < numIterations - 1)
+            {
+                // Agreement = transformedInput dot output
+                // transformedInput: [B, I, J, D], output: [B, J, D] -> expand to [B, 1, J, D]
+                var outputExpanded = ReshapeGpu(output, [batchSize, 1, numCapsules, capsuleDim]);
+                var agreement = MultiplyGpu(transformedInput, outputExpanded);
+                var agreementSum = SumAxisGpu(agreement, axis: 3); // [B, I, J]
+
+                // couplings += agreement
+                couplings = AddGpu(couplings, agreementSum);
+            }
+
+            // Dispose intermediate tensors
+            routingWeights.Dispose();
+            routingExpanded.Dispose();
+            weightedPred.Dispose();
+            weightedSum.Dispose();
+            withBias.Dispose();
+        }
+
+        if (output is null)
+            throw new InvalidOperationException("Capsule routing failed to produce output. This indicates numIterations was 0 or an internal error occurred.");
+
+        return output;
     }
 
     /// <summary>

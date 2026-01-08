@@ -503,14 +503,62 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
-        // Download input for CPU processing (complex transpose/reshape operations)
-        var inputCpu = input.ToTensor();
+        // Detect input format: NCHW [B, C, H, W] vs NHWC [B, H, W, C]
+        // NCHW has channels in dim 1, NHWC has channels in dim 3
+        bool inputIsNCHW = input.Shape[1] == _inputChannels && input.Shape[3] != _inputChannels;
 
-        // Use CPU Forward to compute the result
-        var outputCpu = Forward(inputCpu);
+        // Get spatial dimensions based on format
+        int batchSize, inputHeight, inputWidth;
+        IGpuTensor<T> inputNCHW;
 
-        // Upload result back to GPU
-        return gpuEngine.UploadToGpu<T>(outputCpu, GpuTensorRole.Activation);
+        if (inputIsNCHW)
+        {
+            batchSize = input.Shape[0];
+            inputHeight = input.Shape[2];
+            inputWidth = input.Shape[3];
+            inputNCHW = input;
+        }
+        else
+        {
+            // NHWC [B, H, W, C] -> NCHW [B, C, H, W]
+            batchSize = input.Shape[0];
+            inputHeight = input.Shape[1];
+            inputWidth = input.Shape[2];
+            inputNCHW = gpuEngine.PermuteGpu(input, [0, 3, 1, 2]);
+        }
+
+        int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
+        int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
+
+        // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW]
+        int outputChannels = _capsuleChannels * _capsuleDimension;
+        var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
+
+        // GPU Convolution + Bias (FusedActivationType.None since we apply Squash separately)
+        var convOutput = gpuEngine.FusedConv2DGpu<T>(
+            inputNCHW, kernelNCHW, _convBias,
+            strideH: _stride, strideW: _stride,
+            padH: 0, padW: 0,
+            dilationH: 1, dilationW: 1,
+            FusedActivationType.None);
+
+        // Dispose intermediate if we created it
+        if (!inputIsNCHW)
+            inputNCHW.Dispose();
+
+        // Convert back to NHWC: [B, outC, OH, OW] -> [B, OH, OW, outC]
+        var convNHWC = gpuEngine.PermuteGpu(convOutput, [0, 2, 3, 1]);
+        convOutput.Dispose();
+
+        // Reshape to capsule layout: [B, OH, OW, capsuleChannels * capsuleDim] -> [B, OH, OW, capsuleChannels, capsuleDim]
+        var capsuleLayout = gpuEngine.ReshapeGpu(convNHWC, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+        convNHWC.Dispose();
+
+        // Apply Squash activation to the last axis (capsule dimension)
+        var output = gpuEngine.SquashGpu(capsuleLayout, axis: -1);
+        capsuleLayout.Dispose();
+
+        return output;
     }
 
 

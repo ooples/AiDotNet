@@ -32,6 +32,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
     private IntPtr _sparseModule;
     private IntPtr _locallyConnectedModule;
     private IntPtr _deformableConvModule;
+    private IntPtr _capsuleModule;
     private bool _disposed;
 
     public bool IsAvailable { get; }
@@ -286,6 +287,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         // Compile Deformable Convolution kernels (DCNv2 with learnable offsets and masks)
         _deformableConvModule = CompileKernelModule(device, CudaDeformableConvolutionKernels.GetSource(), "deformable_conv_kernels", CudaDeformableConvolutionKernels.GetKernelNames());
+
+        // Compile Capsule Network kernels (prediction transform, routing)
+        _capsuleModule = CompileKernelModule(device, CudaCapsuleKernels.GetSource(), "capsule_kernels", CudaCapsuleKernels.GetKernelNames());
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -693,6 +697,118 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[3] = &numCaps;
         args[4] = &capDim;
         args[5] = &eps;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void CapsulePredictions(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int outputCapsules, int outputDim)
+    {
+        if (!_kernelCache.TryGetValue("capsule_predictions", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: capsule_predictions");
+
+        using var _ = PushContext();
+        int totalOutputs = batchSize * inputCapsules * outputCapsules * outputDim;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr outputPtr = output.Handle;
+        int bs = batchSize;
+        int inCaps = inputCapsules;
+        int inDim = inputDim;
+        int outCaps = outputCapsules;
+        int outDim = outputDim;
+        void** args = stackalloc void*[8];
+        args[0] = &inputPtr;
+        args[1] = &weightsPtr;
+        args[2] = &outputPtr;
+        args[3] = &bs;
+        args[4] = &inCaps;
+        args[5] = &inDim;
+        args[6] = &outCaps;
+        args[7] = &outDim;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void CapsuleTransform(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int numCapsules, int capsuleDim)
+    {
+        if (!_kernelCache.TryGetValue("capsule_transform", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: capsule_transform");
+
+        using var _ = PushContext();
+        int totalOutputs = batchSize * inputCapsules * numCapsules * capsuleDim;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr outputPtr = output.Handle;
+        int bs = batchSize;
+        int inCaps = inputCapsules;
+        int inDim = inputDim;
+        int nCaps = numCapsules;
+        int capDim = capsuleDim;
+        void** args = stackalloc void*[8];
+        args[0] = &inputPtr;
+        args[1] = &weightsPtr;
+        args[2] = &outputPtr;
+        args[3] = &bs;
+        args[4] = &inCaps;
+        args[5] = &inDim;
+        args[6] = &nCaps;
+        args[7] = &capDim;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void CapsuleWeightedSum(IGpuBuffer coupling, IGpuBuffer predictions, IGpuBuffer output,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+    {
+        if (!_kernelCache.TryGetValue("capsule_weighted_sum", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: capsule_weighted_sum");
+
+        using var _ = PushContext();
+        int totalOutputs = batchSize * outputCapsules * capsuleDim;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr couplingPtr = coupling.Handle;
+        IntPtr predsPtr = predictions.Handle;
+        IntPtr outputPtr = output.Handle;
+        int bs = batchSize;
+        int inCaps = inputCapsules;
+        int outCaps = outputCapsules;
+        int capDim = capsuleDim;
+        void** args = stackalloc void*[7];
+        args[0] = &couplingPtr;
+        args[1] = &predsPtr;
+        args[2] = &outputPtr;
+        args[3] = &bs;
+        args[4] = &inCaps;
+        args[5] = &outCaps;
+        args[6] = &capDim;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void CapsuleAgreement(IGpuBuffer predictions, IGpuBuffer output, IGpuBuffer agreement,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+    {
+        if (!_kernelCache.TryGetValue("capsule_agreement", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: capsule_agreement");
+
+        using var _ = PushContext();
+        int totalOutputs = batchSize * inputCapsules * outputCapsules;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predsPtr = predictions.Handle;
+        IntPtr outputPtr = output.Handle;
+        IntPtr agreementPtr = agreement.Handle;
+        int bs = batchSize;
+        int inCaps = inputCapsules;
+        int outCaps = outputCapsules;
+        int capDim = capsuleDim;
+        void** args = stackalloc void*[7];
+        args[0] = &predsPtr;
+        args[1] = &outputPtr;
+        args[2] = &agreementPtr;
+        args[3] = &bs;
+        args[4] = &inCaps;
+        args[5] = &outCaps;
+        args[6] = &capDim;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 

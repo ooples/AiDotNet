@@ -362,6 +362,64 @@ public interface IDirectGpuBackend : IDisposable
     void SquashBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int numCapsules, int capsuleDim, float epsilon);
 
     /// <summary>
+    /// Capsule prediction transform for DigitCapsuleLayer.
+    /// Computes: pred[b,i,c,d] = sum_k(input[b,i,k] * weights[i,c,k,d])
+    /// </summary>
+    /// <param name="input">Input [batchSize, inputCapsules, inputDim].</param>
+    /// <param name="weights">Weights [inputCapsules, outputCapsules, inputDim, outputDim].</param>
+    /// <param name="output">Output [batchSize, inputCapsules, outputCapsules, outputDim].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputCapsules">Number of input capsules.</param>
+    /// <param name="inputDim">Dimension of each input capsule.</param>
+    /// <param name="outputCapsules">Number of output capsules.</param>
+    /// <param name="outputDim">Dimension of each output capsule.</param>
+    void CapsulePredictions(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int outputCapsules, int outputDim);
+
+    /// <summary>
+    /// Capsule transform for CapsuleLayer.
+    /// Computes: transformed[b,i,j,d] = sum_k(input[b,i,k] * weights[i,k,j,d])
+    /// </summary>
+    /// <param name="input">Input [batchSize, inputCapsules, inputDim].</param>
+    /// <param name="weights">Weights [inputCapsules, inputDim, numCapsules, capsuleDim].</param>
+    /// <param name="output">Output [batchSize, inputCapsules, numCapsules, capsuleDim].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputCapsules">Number of input capsules.</param>
+    /// <param name="inputDim">Dimension of each input capsule.</param>
+    /// <param name="numCapsules">Number of output capsules.</param>
+    /// <param name="capsuleDim">Dimension of each output capsule.</param>
+    void CapsuleTransform(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int numCapsules, int capsuleDim);
+
+    /// <summary>
+    /// Dynamic routing weighted sum for capsule networks.
+    /// Computes: output[b,c,d] = sum_i(coupling[b,i,c] * predictions[b,i,c,d])
+    /// </summary>
+    /// <param name="coupling">Coupling coefficients [batchSize, inputCapsules, outputCapsules].</param>
+    /// <param name="predictions">Predictions [batchSize, inputCapsules, outputCapsules, capsuleDim].</param>
+    /// <param name="output">Output [batchSize, outputCapsules, capsuleDim].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputCapsules">Number of input capsules.</param>
+    /// <param name="outputCapsules">Number of output capsules.</param>
+    /// <param name="capsuleDim">Dimension of each capsule.</param>
+    void CapsuleWeightedSum(IGpuBuffer coupling, IGpuBuffer predictions, IGpuBuffer output,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim);
+
+    /// <summary>
+    /// Dynamic routing agreement computation for capsule networks.
+    /// Computes: agreement[b,i,c] = sum_d(predictions[b,i,c,d] * output[b,c,d])
+    /// </summary>
+    /// <param name="predictions">Predictions [batchSize, inputCapsules, outputCapsules, capsuleDim].</param>
+    /// <param name="output">Current output [batchSize, outputCapsules, capsuleDim].</param>
+    /// <param name="agreement">Agreement scores [batchSize, inputCapsules, outputCapsules].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputCapsules">Number of input capsules.</param>
+    /// <param name="outputCapsules">Number of output capsules.</param>
+    /// <param name="capsuleDim">Dimension of each capsule.</param>
+    void CapsuleAgreement(IGpuBuffer predictions, IGpuBuffer output, IGpuBuffer agreement,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim);
+
+    /// <summary>
     /// Tile tensor along batch dimension (axis 0).
     /// Input: [1, innerSize], Output: [repeats, innerSize]
     /// </summary>
