@@ -3223,7 +3223,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outputSize = batch * outChannels * outHeight * outWidth;
 
         using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
-        OwnedBuffer? biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : null;
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default(OwnedBuffer?);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
         try
@@ -3246,10 +3246,6 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             outputBuffer.Dispose();
             throw;
-        }
-        finally
-        {
-            biasBuffer?.Dispose();
         }
     }
 
@@ -3686,8 +3682,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
         using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.Data);
-        OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.Data) : null;
-        OwnedBuffer? biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : null;
+        using var maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.Data) : default(OwnedBuffer?);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default(OwnedBuffer?);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
         try
@@ -3719,11 +3715,6 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             outputBuffer.Dispose();
             throw;
-        }
-        finally
-        {
-            maskBuffer?.Dispose();
-            biasBuffer?.Dispose();
         }
     }
 

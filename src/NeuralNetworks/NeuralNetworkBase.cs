@@ -952,7 +952,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
                 // Fall back to non-deferred GPU execution if deferred fails
                 System.Diagnostics.Debug.WriteLine($"Deferred execution failed, falling back: {ex.Message}");
@@ -1068,7 +1068,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
                 // Fall back to non-deferred execution
                 System.Diagnostics.Debug.WriteLine($"Async deferred execution failed, falling back: {ex.Message}");
