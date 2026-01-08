@@ -245,77 +245,102 @@ public class LogVarianceLayer<T> : LayerBase<T>
 
         var input = inputs[0];
         int[] shape = input.Shape;
+        int inputRank = shape.Length;
 
         // Calculate output shape by removing the axis dimension
         int[] outputShape = CalculateOutputShape(shape, Axis);
         int axisSize = shape[Axis];
-
-        // Calculate strides for the reduction
-        int outerSize = 1;
-        for (int i = 0; i < Axis; i++)
-            outerSize *= shape[i];
-
-        int innerSize = 1;
-        for (int i = Axis + 1; i < shape.Length; i++)
-            innerSize *= shape[i];
-
-        int outputSize = outerSize * innerSize;
+        float scale = 1.0f / axisSize;
         const float epsilon = 1e-8f;
 
-        // Download input for reduction
-        var inputData = backend.DownloadBuffer(input.Buffer);
+        // GPU-resident variance calculation using computational formula:
+        // variance = E[X^2] - E[X]^2 = mean(x*x) - mean(x)^2
+        // This avoids the need for broadcast subtraction
 
-        // Cache input for backward pass
-        _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
+        // If axis is not last, permute to move it to the last position
+        IGpuTensor<T> processedInput = input;
+        bool needsPermute = Axis != inputRank - 1;
 
-        // Compute mean values for caching (keepDims=true)
-        int[] meanShape = (int[])shape.Clone();
-        meanShape[Axis] = 1;
-        var meanData = new float[outputSize];
-
-        for (int outer = 0; outer < outerSize; outer++)
+        if (needsPermute)
         {
-            for (int inner = 0; inner < innerSize; inner++)
-            {
-                float sum = 0;
-                for (int a = 0; a < axisSize; a++)
-                {
-                    int idx = outer * axisSize * innerSize + a * innerSize + inner;
-                    sum += inputData[idx];
-                }
-                int outIdx = outer * innerSize + inner;
-                meanData[outIdx] = sum / axisSize;
-            }
-        }
-        _meanValues = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), meanShape);
-
-        // Compute variance and log-variance
-        var outputData = new float[outputSize];
-
-        for (int outer = 0; outer < outerSize; outer++)
-        {
-            for (int inner = 0; inner < innerSize; inner++)
-            {
-                int outIdx = outer * innerSize + inner;
-                float mean = meanData[outIdx];
-                float variance = 0;
-
-                for (int a = 0; a < axisSize; a++)
-                {
-                    int idx = outer * axisSize * innerSize + a * innerSize + inner;
-                    float diff = inputData[idx] - mean;
-                    variance += diff * diff;
-                }
-                variance /= axisSize;
-                outputData[outIdx] = (float)Math.Log(variance + epsilon);
-            }
+            var perm = new int[inputRank];
+            int j = 0;
+            for (int i = 0; i < inputRank; i++)
+                if (i != Axis) perm[j++] = i;
+            perm[inputRank - 1] = Axis;
+            processedInput = gpuEngine.PermuteGpu(input, perm);
         }
 
-        // Cache output for backward pass
-        _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
+        int outerSize = processedInput.ElementCount / axisSize;
 
-        // Upload result to GPU
-        var outputBuffer = backend.AllocateBuffer(outputData);
+        // Step 1: Compute mean = sum(x) / n
+        var sumBuffer = backend.AllocateBuffer(outerSize);
+        backend.SumAxis(processedInput.Buffer, sumBuffer, outerSize, axisSize);
+
+        var meanBuffer = backend.AllocateBuffer(outerSize);
+        backend.Scale(sumBuffer, meanBuffer, scale, outerSize);
+        sumBuffer.Dispose();
+
+        // Step 2: Compute x^2 element-wise
+        int totalSize = processedInput.ElementCount;
+        var xSquaredBuffer = backend.AllocateBuffer(totalSize);
+        backend.Multiply(processedInput.Buffer, processedInput.Buffer, xSquaredBuffer, totalSize);
+
+        // Step 3: Compute mean(x^2) = sum(x^2) / n
+        var sumXSquaredBuffer = backend.AllocateBuffer(outerSize);
+        backend.SumAxis(xSquaredBuffer, sumXSquaredBuffer, outerSize, axisSize);
+        xSquaredBuffer.Dispose();
+
+        var meanXSquaredBuffer = backend.AllocateBuffer(outerSize);
+        backend.Scale(sumXSquaredBuffer, meanXSquaredBuffer, scale, outerSize);
+        sumXSquaredBuffer.Dispose();
+
+        // Step 4: Compute mean^2
+        var meanSquaredBuffer = backend.AllocateBuffer(outerSize);
+        backend.Multiply(meanBuffer, meanBuffer, meanSquaredBuffer, outerSize);
+
+        // Step 5: Compute variance = mean(x^2) - mean^2
+        var varianceBuffer = backend.AllocateBuffer(outerSize);
+        backend.Subtract(meanXSquaredBuffer, meanSquaredBuffer, varianceBuffer, outerSize);
+        meanXSquaredBuffer.Dispose();
+        meanSquaredBuffer.Dispose();
+
+        // Step 6: Add epsilon to variance for numerical stability
+        // Create buffer with epsilon values
+        var epsilonData = new float[outerSize];
+        Array.Fill(epsilonData, epsilon);
+        using var epsilonBuffer = backend.AllocateBuffer(epsilonData);
+
+        var variancePlusEpsilonBuffer = backend.AllocateBuffer(outerSize);
+        backend.Add(varianceBuffer, epsilonBuffer, variancePlusEpsilonBuffer, outerSize);
+        varianceBuffer.Dispose();
+
+        // Step 7: Compute log(variance + epsilon)
+        var outputBuffer = backend.AllocateBuffer(outerSize);
+        backend.Log(variancePlusEpsilonBuffer, outputBuffer, outerSize);
+        variancePlusEpsilonBuffer.Dispose();
+
+        // Dispose permuted tensor if we created one
+        if (needsPermute)
+            processedInput.Dispose();
+
+        // Cache for backward pass (only download if training)
+        if (IsTrainingMode)
+        {
+            var inputData = backend.DownloadBuffer(input.Buffer);
+            _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
+
+            int[] meanShape = (int[])shape.Clone();
+            meanShape[Axis] = 1;
+            var meanData = backend.DownloadBuffer(meanBuffer);
+            _meanValues = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), meanShape);
+
+            var outputData = backend.DownloadBuffer(outputBuffer);
+            _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
+        }
+
+        meanBuffer.Dispose();
+
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
