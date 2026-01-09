@@ -796,30 +796,145 @@ extern ""C"" __global__ void conjugate_gradient_step(
 }
 
 // ---------------------------------------------------------------------------
-// L-BFGS two-loop recursion initialization (GPU initialization step only)
+// L-BFGS Two-Loop Recursion GPU Kernels
 // ---------------------------------------------------------------------------
-// NOTE: This kernel ONLY initializes q with the gradient. The full L-BFGS
-// two-loop recursion algorithm requires sequential host-side computation
-// because each iteration depends on the previous iteration's results.
+// These kernels provide GPU-accelerated primitives for L-BFGS optimization.
+// The host orchestrates the sequential two-loop algorithm by calling these
+// kernels in order. Each kernel is fully parallelized on GPU.
 //
-// The complete L-BFGS update should be computed on the host using:
-// 1. This kernel to initialize q = gradient on GPU
-// 2. Host-side backward loop: alpha[i] = rho[i] * s[i]'*q; q = q - alpha[i]*y[i]
-// 3. Host-side forward loop: beta = rho[i] * y[i]'*r; r = r + (alpha[i]-beta)*s[i]
-// 4. Final GPU kernel to apply the computed direction: param -= lr * r
-//
-// For a fully GPU-accelerated quasi-Newton method, consider using a diagonal
-// approximation (like the bfgs_step kernel below) which can be parallelized.
+// Algorithm (host orchestration):
+// 1. lbfgs_copy_vector: q = gradient
+// 2. Backward loop (i = m-1 down to 0):
+//    a. lbfgs_dot_product_reduce: compute s[i]·q, store in partial sums
+//    b. Host: alpha[i] = rho[i] * dot_result
+//    c. lbfgs_axpy: q = q - alpha[i] * y[i]
+// 3. lbfgs_scale_vector: r = gamma * q (initial Hessian scaling)
+// 4. Forward loop (i = 0 to m-1):
+//    a. lbfgs_dot_product_reduce: compute y[i]·r
+//    b. Host: beta = rho[i] * dot_result
+//    c. lbfgs_axpy: r = r + (alpha[i] - beta) * s[i]
+// 5. lbfgs_apply_direction: param = param - lr * r
 // ---------------------------------------------------------------------------
-extern ""C"" __global__ void lbfgs_init_q(
-    const float* gradient, float* q, int size)
+
+// Copy vector: dst = src (used for q = gradient initialization)
+extern ""C"" __global__ void lbfgs_copy_vector(
+    const float* src, float* dst, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
+    dst[idx] = src[idx];
+}
 
-    // Initialize q with gradient for L-BFGS two-loop recursion
-    // Host-side code must complete the two-loop recursion algorithm
-    q[idx] = gradient[idx];
+// Parallel reduction for dot product
+// Computes partial sums that must be summed on host or with another kernel
+// blockPartials[blockIdx.x] = sum of a[i]*b[i] for this block's elements
+extern ""C"" __global__ void lbfgs_dot_product_reduce(
+    const float* a, const float* b, float* blockPartials, int size)
+{
+    extern __shared__ float sdata[];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Load and compute product, or 0 if out of bounds
+    sdata[tid] = (idx < size) ? (a[idx] * b[idx]) : 0.0f;
+    __syncthreads();
+
+    // Parallel reduction in shared memory
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] += sdata[tid + s];
+        }
+        __syncthreads();
+    }
+
+    // Write this block's partial sum
+    if (tid == 0) {
+        blockPartials[blockIdx.x] = sdata[0];
+    }
+}
+
+// Final reduction of block partial sums to single value
+// Call with 1 block, numBlocks threads (or loop if numBlocks > 1024)
+extern ""C"" __global__ void lbfgs_reduce_partials(
+    const float* blockPartials, float* result, int numBlocks)
+{
+    extern __shared__ float sdata[];
+
+    unsigned int tid = threadIdx.x;
+
+    // Load partial sums
+    sdata[tid] = (tid < numBlocks) ? blockPartials[tid] : 0.0f;
+    __syncthreads();
+
+    // Parallel reduction
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] += sdata[tid + s];
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        result[0] = sdata[0];
+    }
+}
+
+// AXPY operation: y = y + alpha * x
+// Used for q = q - alpha[i] * y[i] (with negative alpha)
+// and r = r + (alpha[i] - beta) * s[i]
+extern ""C"" __global__ void lbfgs_axpy(
+    float* y, const float* x, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    y[idx] = y[idx] + alpha * x[idx];
+}
+
+// Scale and copy: dst = gamma * src
+// Used for initial Hessian scaling: r = gamma * q
+// where gamma = (s·y)/(y·y) for scaled identity initial Hessian
+extern ""C"" __global__ void lbfgs_scale_vector(
+    const float* src, float* dst, float gamma, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    dst[idx] = gamma * src[idx];
+}
+
+// Apply final L-BFGS direction to parameters
+// param = param - learningRate * direction
+extern ""C"" __global__ void lbfgs_apply_direction(
+    float* param, const float* direction, float learningRate, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    param[idx] = param[idx] - learningRate * direction[idx];
+}
+
+// Compute rho[i] = 1 / (y[i]·s[i]) for history storage
+// This is computed once when adding to history
+extern ""C"" __global__ void lbfgs_compute_rho(
+    const float* dotProduct, float* rho)
+{
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        float dot = dotProduct[0];
+        // Guard against division by zero
+        rho[0] = (fabsf(dot) > 1e-10f) ? (1.0f / dot) : 0.0f;
+    }
+}
+
+// Update history buffers s[newest] = x_new - x_old, y[newest] = g_new - g_old
+extern ""C"" __global__ void lbfgs_update_history(
+    float* s_newest, float* y_newest,
+    const float* x_new, const float* x_old,
+    const float* g_new, const float* g_old,
+    int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    s_newest[idx] = x_new[idx] - x_old[idx];
+    y_newest[idx] = g_new[idx] - g_old[idx];
 }
 
 // BFGS update (simplified - full version requires matrix operations)
