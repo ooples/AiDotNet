@@ -65,7 +65,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     private readonly bool _ownsDirectGpu;
 
     // GPU buffer cache for persistent tensors - keyed by tensor data array reference
+    // Thread-safety: Invalidation methods use _persistentBufferLock to prevent disposing
+    // buffers while they're being used in active GPU operations.
     private readonly ConcurrentDictionary<object, GpuBufferCacheEntry> _persistentBufferCache = new();
+    private readonly object _persistentBufferLock = new();
 
     // Version tracking for invalidation
     private readonly ConcurrentDictionary<object, int> _tensorVersions = new();
@@ -73,7 +76,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     // Activation cache for intermediate tensors - enables GPU-resident layer chaining
     // Key: tensor data array reference, Value: (buffer, shape, timestamp)
     // This cache holds the last N activation buffers to avoid re-uploading layer outputs
+    // Thread-safety: All cache access is synchronized via _activationCacheLock to prevent
+    // use-after-dispose when one thread evicts/clears while another uses cached buffers.
     private readonly ConcurrentDictionary<object, ActivationCacheEntry> _activationCache = new();
+    private readonly object _activationCacheLock = new();
     private const int DefaultActivationCacheSize = 16;
     private int _maxActivationCacheSize = DefaultActivationCacheSize;
     private long _activationCacheTimestamp = 0;
@@ -401,6 +407,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// Gets a GPU buffer for the tensor data, using cache if available.
     /// Returns an OwnedBuffer that only disposes if we allocated it (not cached).
     /// Checks both persistent tensor cache (weights/biases) and activation cache (layer outputs).
+    /// Thread-safe: uses lock to prevent use-after-dispose during cache eviction.
     /// </summary>
     private OwnedBuffer GetOrAllocateBuffer<T>(IDirectGpuBackend backend, T[] data)
     {
@@ -411,12 +418,16 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         // Check activation cache (for intermediate layer outputs)
         // Only reuse if the cached buffer was created by the same backend to avoid cross-backend issues
-        if (_activationCache.TryGetValue(data, out var activationEntry) &&
-            ReferenceEquals(activationEntry.Backend, backend))
+        // Use lock to prevent eviction/clear while we're using the cached buffer
+        lock (_activationCacheLock)
         {
-            // Found in activation cache with matching backend - reuse buffer without re-uploading
-            // Return with ownsBuffer=false so we don't dispose the cached buffer
-            return new OwnedBuffer(activationEntry.Buffer, ownsBuffer: false);
+            if (_activationCache.TryGetValue(data, out var activationEntry) &&
+                ReferenceEquals(activationEntry.Backend, backend))
+            {
+                // Found in activation cache with matching backend - reuse buffer without re-uploading
+                // Return with ownsBuffer=false so we don't dispose the cached buffer
+                return new OwnedBuffer(activationEntry.Buffer, ownsBuffer: false);
+            }
         }
 
         // Not cached - need to upload
@@ -427,28 +438,33 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// <summary>
     /// Caches the result buffer for potential reuse by the next layer.
     /// The result data array serves as the cache key.
+    /// Thread-safe: uses lock to coordinate with cache lookups.
     /// </summary>
     private void CacheActivation<T>(T[] resultData, IGpuBuffer buffer, int[] shape, IDirectGpuBackend backend)
     {
-        // Evict old entries if cache is full
-        if (_activationCache.Count >= _maxActivationCacheSize)
+        lock (_activationCacheLock)
         {
-            EvictOldestActivations();
-        }
+            // Evict old entries if cache is full
+            if (_activationCache.Count >= _maxActivationCacheSize)
+            {
+                EvictOldestActivationsUnsafe();
+            }
 
-        var timestamp = System.Threading.Interlocked.Increment(ref _activationCacheTimestamp);
-        var entry = new ActivationCacheEntry(buffer, shape, timestamp, backend);
-        if (!_activationCache.TryAdd(resultData, entry))
-        {
-            // Entry was not added (key already exists); dispose to avoid leaking the buffer.
-            entry.Dispose();
+            var timestamp = System.Threading.Interlocked.Increment(ref _activationCacheTimestamp);
+            var entry = new ActivationCacheEntry(buffer, shape, timestamp, backend);
+            if (!_activationCache.TryAdd(resultData, entry))
+            {
+                // Entry was not added (key already exists); dispose to avoid leaking the buffer.
+                entry.Dispose();
+            }
         }
     }
 
     /// <summary>
     /// Evicts the oldest half of the activation cache entries.
+    /// Must be called while holding _activationCacheLock.
     /// </summary>
-    private void EvictOldestActivations()
+    private void EvictOldestActivationsUnsafe()
     {
         var entries = _activationCache.ToArray();
         if (entries.Length == 0) return;
@@ -470,52 +486,60 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// <summary>
     /// Clears the activation cache to free GPU memory.
     /// Call this between inference batches if memory is tight.
+    /// Thread-safe: uses lock to prevent clearing while buffers are in use.
     /// </summary>
     public void ClearActivationCache()
     {
-        foreach (var entry in _activationCache.Values)
+        lock (_activationCacheLock)
         {
-            entry.Dispose();
+            foreach (var entry in _activationCache.Values)
+            {
+                entry.Dispose();
+            }
+            _activationCache.Clear();
         }
-        _activationCache.Clear();
     }
 
     /// <summary>
     /// Gets a GPU buffer for weight/bias tensor, auto-caching if not already persistent.
     /// Unlike GetOrAllocateBuffer, this caches the buffer in the persistent cache
     /// so subsequent calls reuse the same GPU buffer without re-uploading.
+    /// Thread-safe: uses lock to coordinate with cache invalidation.
     /// </summary>
     private OwnedBuffer GetOrCacheWeightBuffer<T>(IDirectGpuBackend backend, T[] data, PersistentTensorRole role)
     {
-        // First check persistent tensor cache
-        var cached = TryGetCachedBuffer(data);
-        if (cached != null)
-            return new OwnedBuffer(cached, ownsBuffer: false);
-
-        // Not cached - upload and cache for future use
-        float[] floatData = DirectGpuEngine.ToFloatArray(data);
-        IGpuBuffer gpuBuffer = backend.AllocateBuffer(floatData);
-
-        // Add to persistent cache so future calls don't re-upload
-        var entry = new GpuBufferCacheEntry(gpuBuffer, role);
-        if (_persistentBufferCache.TryAdd(data, entry))
+        lock (_persistentBufferLock)
         {
-            _tensorVersions.TryAdd(data, 0);
-            // Return with ownsBuffer=false since cache now owns it
-            return new OwnedBuffer(gpuBuffer, ownsBuffer: false);
-        }
-        else
-        {
-            // Another thread may have cached it; try to use that one
-            var alreadyCached = TryGetCachedBuffer(data);
-            if (alreadyCached != null)
+            // First check persistent tensor cache
+            var cached = TryGetCachedBuffer(data);
+            if (cached != null)
+                return new OwnedBuffer(cached, ownsBuffer: false);
+
+            // Not cached - upload and cache for future use
+            float[] floatData = DirectGpuEngine.ToFloatArray(data);
+            IGpuBuffer gpuBuffer = backend.AllocateBuffer(floatData);
+
+            // Add to persistent cache so future calls don't re-upload
+            var entry = new GpuBufferCacheEntry(gpuBuffer, role);
+            if (_persistentBufferCache.TryAdd(data, entry))
             {
-                gpuBuffer.Dispose();
-                return new OwnedBuffer(alreadyCached, ownsBuffer: false);
+                _tensorVersions.TryAdd(data, 0);
+                // Return with ownsBuffer=false since cache now owns it
+                return new OwnedBuffer(gpuBuffer, ownsBuffer: false);
             }
+            else
+            {
+                // Another thread may have cached it; try to use that one
+                var alreadyCached = TryGetCachedBuffer(data);
+                if (alreadyCached != null)
+                {
+                    gpuBuffer.Dispose();
+                    return new OwnedBuffer(alreadyCached, ownsBuffer: false);
+                }
 
-            // Entry was removed between TryAdd and lookup; fall back to our buffer
-            return new OwnedBuffer(gpuBuffer, ownsBuffer: true);
+                // Entry was removed between TryAdd and lookup; fall back to our buffer
+                return new OwnedBuffer(gpuBuffer, ownsBuffer: true);
+            }
         }
     }
 
@@ -1357,29 +1381,37 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     /// <summary>
     /// Invalidates a cached weight buffer, forcing a re-upload on the next GetOrCacheWeightsGpu call.
+    /// Thread-safe: Uses _persistentBufferLock to synchronize with GetOrCacheWeightBuffer.
     /// </summary>
     public bool InvalidateWeightCache<T>(T[] data)
     {
-        if (_persistentBufferCache.TryRemove(data, out var entry))
+        lock (_persistentBufferLock)
         {
-            entry.Dispose();
-            _tensorVersions.TryRemove(data, out _);
-            return true;
+            if (_persistentBufferCache.TryRemove(data, out var entry))
+            {
+                entry.Dispose();
+                _tensorVersions.TryRemove(data, out _);
+                return true;
+            }
+            return false;
         }
-        return false;
     }
 
     /// <summary>
     /// Invalidates all cached weight buffers.
+    /// Thread-safe: Uses _persistentBufferLock to synchronize with GetOrCacheWeightBuffer.
     /// </summary>
     public void InvalidateAllWeightCaches()
     {
-        foreach (var entry in _persistentBufferCache.Values)
+        lock (_persistentBufferLock)
         {
-            entry.Dispose();
+            foreach (var entry in _persistentBufferCache.Values)
+            {
+                entry.Dispose();
+            }
+            _persistentBufferCache.Clear();
+            _tensorVersions.Clear();
         }
-        _persistentBufferCache.Clear();
-        _tensorVersions.Clear();
     }
 
     /// <summary>
