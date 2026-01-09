@@ -5643,6 +5643,91 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-resident backward pass for global mean pooling.
+    /// Broadcasts gradient to all spatial positions and divides by count.
+    /// </summary>
+    /// <typeparam name="T">Element type.</typeparam>
+    /// <param name="gradOutput">GPU-resident gradient of shape [batch, 1, 1, channels] or [batch, channels].</param>
+    /// <param name="inputShape">Original input shape to broadcast to.</param>
+    /// <returns>GPU-resident gradient of same shape as original input.</returns>
+    public IGpuTensor<T> GlobalMeanPoolBackwardGpu<T>(IGpuTensor<T> gradOutput, int[] inputShape)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for GlobalMeanPoolBackwardGpu");
+
+        int rank = inputShape.Length;
+
+        // Get reduction axes (same as forward pass)
+        int[] axes = rank switch
+        {
+            4 => [1, 2],  // [batch, height, width, channels]
+            3 => [1],     // [batch, seq_len, features]
+            2 => [],      // Nothing to reduce
+            1 => [0],     // Reduce all
+            _ when rank > 4 => Enumerable.Range(1, rank - 2).ToArray(),
+            _ => []
+        };
+
+        if (axes.Length == 0)
+        {
+            // No reduction was done - return gradient as-is
+            return new GpuTensor<T>(backend, gradOutput.Buffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: false);
+        }
+
+        // Calculate sizes
+        int reduceSize = 1;
+        foreach (int axis in axes) reduceSize *= inputShape[axis];
+        int totalSize = inputShape.Aggregate(1, (a, b) => a * b);
+        int outerSize = gradOutput.ElementCount;
+
+        // Allocate output buffer
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+
+        // For mean pooling backward: broadcast and scale by 1/reduceSize
+        // grad_input = grad_output tiled reduceSize times, then scaled
+        float scale = 1.0f / reduceSize;
+
+        // Use TileBatch to repeat gradient values
+        // TileBatch(input, output, repeats, innerSize) tiles input[i] to output[i*repeats:(i+1)*repeats]
+        backend.TileBatch(gradOutput.Buffer, outputBuffer, reduceSize, 1);
+
+        // Scale the output by 1/reduceSize
+        backend.Scale(outputBuffer, outputBuffer, scale, totalSize);
+
+        return new GpuTensor<T>(backend, outputBuffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident backward pass for global max pooling.
+    /// Scatters gradient to the positions that had maximum values.
+    /// </summary>
+    /// <typeparam name="T">Element type.</typeparam>
+    /// <param name="gradOutput">GPU-resident gradient of shape [batch, 1, 1, channels] or [batch, channels].</param>
+    /// <param name="maxIndices">CPU indices of max positions from forward pass.</param>
+    /// <param name="inputShape">Original input shape.</param>
+    /// <returns>GPU-resident gradient of same shape as original input.</returns>
+    public IGpuTensor<T> GlobalMaxPoolBackwardGpu<T>(IGpuTensor<T> gradOutput, int[] maxIndices, int[] inputShape)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for GlobalMaxPoolBackwardGpu");
+
+        int totalSize = inputShape.Aggregate(1, (a, b) => a * b);
+
+        // Allocate and zero-initialize output buffer
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+        backend.Fill(outputBuffer, 0f, totalSize);
+
+        // Upload indices
+        using var indicesBuffer = backend.AllocateIntBuffer(maxIndices);
+
+        // Scatter-add gradient to max positions: destination[indices[i]] += source[i]
+        // sourceSize = number of gradients, destSize = total output size
+        backend.ScatterAdd(gradOutput.Buffer, indicesBuffer, outputBuffer, maxIndices.Length, totalSize);
+
+        return new GpuTensor<T>(backend, outputBuffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
     /// GPU-resident ArgMax operation. Returns indices of maximum values along an axis.
     /// Indices are returned as floats on GPU (cast to int when downloading).
     /// </summary>
