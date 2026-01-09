@@ -247,9 +247,16 @@ public class LogVarianceLayer<T> : LayerBase<T>
         int[] shape = input.Shape;
         int inputRank = shape.Length;
 
+        // Validate Axis is within bounds
+        if (Axis < 0 || Axis >= inputRank)
+            throw new ArgumentOutOfRangeException(nameof(Axis), $"Axis {Axis} is out of range for input with rank {inputRank}.");
+
         // Calculate output shape by removing the axis dimension
         int[] outputShape = CalculateOutputShape(shape, Axis);
         int axisSize = shape[Axis];
+
+        // Note: GPU backend operates on float internally regardless of generic type T.
+        // The conversion to/from T occurs at the boundaries (input upload, output download).
         float scale = 1.0f / axisSize;
         const float epsilon = 1e-8f;
 

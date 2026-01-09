@@ -59,14 +59,29 @@ internal sealed class ActivationCacheEntry : IDisposable
 /// <summary>
 /// IEngine implementation that routes supported ops to DirectGpuEngine and falls back to CPU.
 /// </summary>
+/// <remarks>
+/// <para><b>Threading Model:</b> This engine uses buffer caching for GPU memory efficiency.
+/// Cache operations are thread-safe for concurrent reads, but cache invalidation/clearing
+/// (InvalidateWeightCache, InvalidateAllWeightCaches, ClearActivationCache) should NOT be
+/// called while GPU operations are in-flight using cached buffers.</para>
+/// <para><b>Safe usage patterns:</b></para>
+/// <list type="bullet">
+/// <item>Single-threaded inference: fully safe</item>
+/// <item>Multi-threaded inference with stable weights: safe (no invalidation during inference)</item>
+/// <item>Weight updates during inference: call invalidation only between inference batches</item>
+/// </list>
+/// <para>For concurrent weight updates during inference, consider using separate engine instances
+/// or implementing external synchronization around weight update + invalidation sequences.</para>
+/// </remarks>
 public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 {
     private readonly DirectGpuEngine? _directGpu;
     private readonly bool _ownsDirectGpu;
 
     // GPU buffer cache for persistent tensors - keyed by tensor data array reference
-    // Thread-safety: Invalidation methods use _persistentBufferLock to prevent disposing
-    // buffers while they're being used in active GPU operations.
+    // Thread-safety: ConcurrentDictionary provides atomic operations. Invalidation uses
+    // _persistentBufferLock for dispose safety. CAUTION: Callers must not invalidate/clear
+    // while GPU operations are actively using cached buffers.
     private readonly ConcurrentDictionary<object, GpuBufferCacheEntry> _persistentBufferCache = new();
     private readonly object _persistentBufferLock = new();
 
@@ -76,8 +91,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     // Activation cache for intermediate tensors - enables GPU-resident layer chaining
     // Key: tensor data array reference, Value: (buffer, shape, timestamp)
     // This cache holds the last N activation buffers to avoid re-uploading layer outputs
-    // Thread-safety: All cache access is synchronized via _activationCacheLock to prevent
-    // use-after-dispose when one thread evicts/clears while another uses cached buffers.
+    // Thread-safety: ConcurrentDictionary + _activationCacheLock for atomic compound operations.
+    // CAUTION: ClearActivationCache should not be called during active GPU operations.
     private readonly ConcurrentDictionary<object, ActivationCacheEntry> _activationCache = new();
     private readonly object _activationCacheLock = new();
     private const int DefaultActivationCacheSize = 16;
@@ -1371,8 +1386,13 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// </summary>
     /// <typeparam name="T">The element type of the tensor.</typeparam>
     /// <param name="tensor">The CPU tensor containing weight/bias data.</param>
-    /// <param name="role">The role indicating whether this is weights or biases.</param>
-    /// <returns>A GPU-resident tensor. If cached, caller should NOT dispose; if not cached (race condition), caller owns it.</returns>
+    /// <param name="role">The role indicating whether this is weights or biases (maps to PersistentTensorRole).</param>
+    /// <returns>
+    /// A GPU-resident tensor with ownership semantics determined by cache state:
+    /// - If cached: ownsBuffer=false, disposing the tensor is safe (no-op, cache retains buffer).
+    /// - If not cached (rare race condition): ownsBuffer=true, caller owns the buffer and disposal will free it.
+    /// In both cases, disposing the returned tensor is safe and recommended.
+    /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
     public IGpuTensor<T> GetOrCacheWeightsGpu<T>(Tensor<T> tensor, GpuTensorRole role = GpuTensorRole.Weight)
     {
