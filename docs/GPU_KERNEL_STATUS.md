@@ -145,14 +145,14 @@ This document tracks all GPU kernels needed for full GPU-resident training acros
 | Kernel | CUDA | HIP | OpenCL | Unblocks |
 |--------|------|-----|--------|----------|
 | sgd_step | ✅ | ✅ | ✅ | SGDOptimizer |
-| sgd_momentum_update | ❌ | ❌ | ✅ | MomentumOptimizer |
+| sgd_momentum_update | ✅ | ✅ | ✅ | MomentumOptimizer |
 | adam_step | ✅ | ✅ | ✅ | AdamOptimizer |
 | adamw_step | ✅ | ✅ | ✅ | AdamWOptimizer |
-| rmsprop_step | ❌ | ❌ | ❌ | RMSpropOptimizer |
-| adagrad_step | ❌ | ❌ | ❌ | AdagradOptimizer |
-| nag_step | ❌ | ❌ | ❌ | NesterovOptimizer |
-| lars_step | ❌ | ❌ | ❌ | LARSOptimizer |
-| lamb_step | ❌ | ❌ | ❌ | LAMBOptimizer |
+| rmsprop_update | ✅ | ✅ | ✅ | RMSpropOptimizer |
+| adagrad_update | ✅ | ✅ | ✅ | AdagradOptimizer |
+| nag_update | ✅ | ✅ | ✅ | NesterovOptimizer |
+| lars_update | ✅ | ✅ | ✅ | LARSOptimizer |
+| lamb_update | ✅ | ✅ | ✅ | LAMBOptimizer |
 | gradient_clip_norm | ❌ | ❌ | ❌ | All optimizers |
 | gradient_clip_value | ❌ | ❌ | ❌ | All optimizers |
 
@@ -335,7 +335,7 @@ Full group-wise/instance-wise reduction terms are not yet implemented.
 | Pooling | 12 | 10 | 2 | 83% |
 | Attention | 7 | 6 | 1 | 86% |
 | Loss Functions | 10 | 8 | 2 | 80% |
-| Optimizer | 11 | 11 | 0 | 100% |
+| Optimizer | 11 | 9 | 2 | 82% |
 | Embedding | 4 | 4 | 0 | 100% |
 | Recurrent (cell) | 4 | 4 | 0 | 100% |
 | Recurrent (sequence) | 6 | 0 | 6 | 0% |

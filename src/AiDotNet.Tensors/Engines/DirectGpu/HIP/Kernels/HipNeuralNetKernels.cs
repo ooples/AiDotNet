@@ -553,7 +553,7 @@ extern ""C"" __global__ void lars_step(
 extern ""C"" __global__ void lamb_step(
     float* param, const float* gradient, float* m, float* v,
     float learningRate, float beta1, float beta2, float epsilon,
-    float weightDecay, int t, int size)
+    float weightDecay, float trustRatio, int t, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
@@ -575,9 +575,8 @@ extern ""C"" __global__ void lamb_step(
     float adamUpdate = mHat / (sqrtf(vHat) + epsilon);
     float update = adamUpdate + weightDecay * p;
 
-    // Note: Full LAMB requires layer-wise trust ratio computation
-    // This simplified version applies the update directly
-    param[idx] = p - learningRate * update;
+    // Apply LAMB trust ratio to scale the update
+    param[idx] = p - learningRate * trustRatio * update;
 }
 
 // Vanilla SGD update (no momentum)
@@ -796,16 +795,31 @@ extern ""C"" __global__ void conjugate_gradient_step(
     prevGradient[idx] = gradient[idx];
 }
 
-// L-BFGS two-loop recursion helper
-extern ""C"" __global__ void lbfgs_two_loop(
-    const float* gradient, const float* sHistory, const float* yHistory,
-    const float* rhoHistory, float* q, int size, int historySize, int m)
+// ---------------------------------------------------------------------------
+// L-BFGS two-loop recursion initialization (GPU initialization step only)
+// ---------------------------------------------------------------------------
+// NOTE: This kernel ONLY initializes q with the gradient. The full L-BFGS
+// two-loop recursion algorithm requires sequential host-side computation
+// because each iteration depends on the previous iteration's results.
+//
+// The complete L-BFGS update should be computed on the host using:
+// 1. This kernel to initialize q = gradient on GPU
+// 2. Host-side backward loop: alpha[i] = rho[i] * s[i]'*q; q = q - alpha[i]*y[i]
+// 3. Host-side forward loop: beta = rho[i] * y[i]'*r; r = r + (alpha[i]-beta)*s[i]
+// 4. Final GPU kernel to apply the computed direction: param -= lr * r
+//
+// For a fully GPU-accelerated quasi-Newton method, consider using a diagonal
+// approximation (like the bfgs_step kernel below) which can be parallelized.
+// ---------------------------------------------------------------------------
+extern ""C"" __global__ void lbfgs_init_q(
+    const float* gradient, float* q, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    
+
+    // Initialize q with gradient for L-BFGS two-loop recursion
+    // Host-side code must complete the two-loop recursion algorithm
     q[idx] = gradient[idx];
-    // Full L-BFGS two-loop requires sequential computation on host
 }
 
 // BFGS update (simplified - full version requires matrix operations)
@@ -1662,7 +1676,7 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
             "compute_mean_var", "argmax_axis", "argmin_axis",
             "sgd_step", "adam_step", "adamw_step", "rmsprop_step", "adagrad_step", "nag_step", "lars_step", "lamb_step",
             "sgd_update", "adadelta_update", "amsgrad_update", "adamax_update", "lion_update", "nadam_update", "ftrl_update",
-            "proximal_gradient_step", "conjugate_gradient_step", "lbfgs_two_loop", "bfgs_step",
+            "proximal_gradient_step", "conjugate_gradient_step", "lbfgs_init_q", "bfgs_step",
             "levenberg_marquardt_step", "trust_region_step", "admm_step", "newton_method_step", "dfp_step", "coordinate_descent_step",
             "dropout_forward", "dropout_backward", "embedding_forward", "embedding_backward",
             "transpose_2d", "batched_transpose", "permute_general",

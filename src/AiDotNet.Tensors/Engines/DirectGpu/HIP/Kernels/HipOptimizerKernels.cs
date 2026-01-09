@@ -182,6 +182,9 @@ extern ""C"" __global__ void nag_update(
 
 // ---------------------------------------------------------------------------
 // LARS optimizer update
+// Note: LARS applies trustCoeff to scale the learning rate adaptively per layer.
+// The trustCoeff should be pre-computed as: trustCoeff * ||w|| / (||grad|| + ||w|| * weightDecay)
+// Set trustCoeff=1.0f to disable trust coefficient scaling.
 // ---------------------------------------------------------------------------
 extern ""C"" __global__ void lars_update(
     float* param, const float* gradient, float* velocity,
@@ -200,7 +203,8 @@ extern ""C"" __global__ void lars_update(
     float v = momentum * velocity[idx] + grad;
     velocity[idx] = v;
 
-    param[idx] = p - learningRate * v;
+    // Apply trust coefficient to scale learning rate (LARS adaptive LR)
+    param[idx] = p - learningRate * trustCoeff * v;
 }
 
 // ---------------------------------------------------------------------------

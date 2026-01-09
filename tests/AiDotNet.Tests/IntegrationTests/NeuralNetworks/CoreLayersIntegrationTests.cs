@@ -261,7 +261,7 @@ public class CoreLayersIntegrationTests
         var layer = new DenseLayer<float>(inputSize, outputSize)
         {
             UseAuxiliaryLoss = true,
-            Regularization = RegularizationType.L2,
+            Regularization = DenseLayer<float>.RegularizationType.L2,
             L2Strength = 0.01f
         };
 

@@ -553,7 +553,7 @@ extern ""C"" __global__ void lars_step(
 extern ""C"" __global__ void lamb_step(
     float* param, const float* gradient, float* m, float* v,
     float learningRate, float beta1, float beta2, float epsilon,
-    float weightDecay, int t, int size)
+    float weightDecay, float trustRatio, int t, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
@@ -575,9 +575,8 @@ extern ""C"" __global__ void lamb_step(
     float adamUpdate = mHat / (sqrtf(vHat) + epsilon);
     float update = adamUpdate + weightDecay * p;
 
-    // Note: Full LAMB requires layer-wise trust ratio computation
-    // This simplified version applies the update directly
-    param[idx] = p - learningRate * update;
+    // Apply LAMB trust ratio to scale the update
+    param[idx] = p - learningRate * trustRatio * update;
 }
 
 // Vanilla SGD update (no momentum)
@@ -796,16 +795,31 @@ extern ""C"" __global__ void conjugate_gradient_step(
     prevGradient[idx] = gradient[idx];
 }
 
-// L-BFGS two-loop recursion helper
-extern ""C"" __global__ void lbfgs_two_loop(
-    const float* gradient, const float* sHistory, const float* yHistory,
-    const float* rhoHistory, float* q, int size, int historySize, int m)
+// ---------------------------------------------------------------------------
+// L-BFGS two-loop recursion initialization (GPU initialization step only)
+// ---------------------------------------------------------------------------
+// NOTE: This kernel ONLY initializes q with the gradient. The full L-BFGS
+// two-loop recursion algorithm requires sequential host-side computation
+// because each iteration depends on the previous iteration's results.
+//
+// The complete L-BFGS update should be computed on the host using:
+// 1. This kernel to initialize q = gradient on GPU
+// 2. Host-side backward loop: alpha[i] = rho[i] * s[i]'*q; q = q - alpha[i]*y[i]
+// 3. Host-side forward loop: beta = rho[i] * y[i]'*r; r = r + (alpha[i]-beta)*s[i]
+// 4. Final GPU kernel to apply the computed direction: param -= lr * r
+//
+// For a fully GPU-accelerated quasi-Newton method, consider using a diagonal
+// approximation (like the bfgs_step kernel below) which can be parallelized.
+// ---------------------------------------------------------------------------
+extern ""C"" __global__ void lbfgs_init_q(
+    const float* gradient, float* q, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    
+
+    // Initialize q with gradient for L-BFGS two-loop recursion
+    // Host-side code must complete the two-loop recursion algorithm
     q[idx] = gradient[idx];
-    // Full L-BFGS two-loop requires sequential computation on host
 }
 
 // BFGS update (simplified - full version requires matrix operations)
@@ -1319,6 +1333,7 @@ extern ""C"" __global__ void scatter_add_batched(
 }
 
 // Scatter max for graph pooling
+// Uses 64-bit atomicCAS to update value and argmax atomically together
 extern ""C"" __global__ void scatter_max(
     const float* src,
     const int* indices,
@@ -1335,18 +1350,38 @@ extern ""C"" __global__ void scatter_max(
     int dstOffset = dstIdx * featureSize + featIdx;
 
     float val = src[idx];
-    
-    // Atomic max comparison (float atomicMax requires CUDA compute capability 2.0+)
-    // Using atomic compare-and-swap pattern for float max
-    float old = dst[dstOffset];
-    while (val > old) {
-        float assumed = old;
-        old = atomicCAS((unsigned int*)&dst[dstOffset], 
-                        __float_as_uint(assumed),
-                        __float_as_uint(val));
-        if (old == assumed) {
-            if (argmax != NULL) argmax[dstOffset] = elemIdx;
-            break;
+
+    if (argmax == NULL) {
+        // Simple case: just update the max value without argmax tracking
+        float old = dst[dstOffset];
+        while (val > old) {
+            float assumed = old;
+            old = __uint_as_float(atomicCAS((unsigned int*)&dst[dstOffset],
+                            __float_as_uint(assumed),
+                            __float_as_uint(val)));
+            if (old == assumed) break;
+        }
+    } else {
+        // Pack value and index into 64-bit word for atomic update
+        // High 32 bits: float value (as uint), Low 32 bits: element index
+        unsigned long long newPacked = ((unsigned long long)__float_as_uint(val) << 32) | (unsigned int)elemIdx;
+        unsigned long long* dstPacked = (unsigned long long*)dst;  // Interpret as 64-bit pairs
+
+        // Atomic compare-and-swap on packed value+index
+        unsigned long long oldPacked = dstPacked[dstOffset];
+        while (true) {
+            float oldVal = __uint_as_float((unsigned int)(oldPacked >> 32));
+            if (val <= oldVal) break;  // Our value is not greater, exit
+
+            unsigned long long assumedPacked = oldPacked;
+            oldPacked = atomicCAS(&dstPacked[dstOffset], assumedPacked, newPacked);
+
+            if (oldPacked == assumedPacked) {
+                // Successfully updated, decode and store to separate arrays
+                dst[dstOffset] = val;
+                argmax[dstOffset] = elemIdx;
+                break;
+            }
         }
     }
 }
@@ -1798,7 +1833,7 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
                 // Additional optimizers
                 "proximal_gradient_step",
                 "conjugate_gradient_step",
-                "lbfgs_two_loop",
+                "lbfgs_init_q",
                 "bfgs_step",
                 "levenberg_marquardt_step",
                 "trust_region_step",

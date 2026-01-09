@@ -676,7 +676,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Convert to new config-based API
         var config = new SgdGpuConfig(
             NumOps.ToFloat(learningRate),
-            momentum: momentum != null ? NumOps.ToFloat(momentum) : 0.9f,
+            momentum: momentum != null ? NumOps.ToFloat(momentum) : 0.0f,
             weightDecay: weightDecay != null ? NumOps.ToFloat(weightDecay) : 0f);
         UpdateParametersGpu(config);
     }

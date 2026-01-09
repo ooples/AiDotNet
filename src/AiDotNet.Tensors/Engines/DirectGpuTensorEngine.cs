@@ -41,8 +41,32 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     // GPU buffer cache for persistent tensors - keyed by tensor data array reference
     private readonly ConcurrentDictionary<object, GpuBufferCacheEntry> _persistentBufferCache = new();
 
+    // Dedicated cache for gradient checkpoints - keyed by checkpoint name
+    // Kept separate from _persistentBufferCache to avoid type confusion and maintain clear semantics
+    private readonly ConcurrentDictionary<string, CheckpointEntry> _checkpointCache = new();
+
     // Version tracking for invalidation
     private readonly ConcurrentDictionary<object, int> _tensorVersions = new();
+
+    /// <summary>
+    /// Entry for storing checkpointed activations with shape information.
+    /// </summary>
+    private sealed class CheckpointEntry : IDisposable
+    {
+        public IGpuBuffer Buffer { get; }
+        public int[] Shape { get; }
+
+        public CheckpointEntry(IGpuBuffer buffer, int[] shape)
+        {
+            Buffer = buffer;
+            Shape = shape;
+        }
+
+        public void Dispose()
+        {
+            Buffer.Dispose();
+        }
+    }
 
     public DirectGpuTensorEngine()
     {
@@ -4097,6 +4121,66 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-resident backward pass for scaled dot-product attention.
+    /// Computes gradients for query, key, and value tensors.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">Gradient of loss w.r.t. attention output [batch, heads, seqQ, headDim].</param>
+    /// <param name="query">Query tensor from forward pass [batch, heads, seqQ, headDim].</param>
+    /// <param name="key">Key tensor from forward pass [batch, heads, seqK, headDim].</param>
+    /// <param name="value">Value tensor from forward pass [batch, heads, seqK, headDim].</param>
+    /// <param name="attentionWeights">Attention weights from forward pass [batch, heads, seqQ, seqK].</param>
+    /// <param name="scale">Scale factor (typically 1/sqrt(headDim)).</param>
+    /// <param name="gradQuery">Output: gradient w.r.t. query [batch, heads, seqQ, headDim].</param>
+    /// <param name="gradKey">Output: gradient w.r.t. key [batch, heads, seqK, headDim].</param>
+    /// <param name="gradValue">Output: gradient w.r.t. value [batch, heads, seqK, headDim].</param>
+    /// <param name="isCausal">Whether causal masking was applied in forward pass.</param>
+    public void ScaledDotProductAttentionBackwardGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuTensor<T> query,
+        IGpuTensor<T> key,
+        IGpuTensor<T> value,
+        IGpuTensor<T> attentionWeights,
+        double scale,
+        out IGpuTensor<T> gradQuery,
+        out IGpuTensor<T> gradKey,
+        out IGpuTensor<T> gradValue,
+        bool isCausal = false)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for ScaledDotProductAttentionBackwardGpu");
+
+        // Validate 4D tensor shapes
+        if (gradOutput.Shape.Length != 4 || query.Shape.Length != 4 || key.Shape.Length != 4 || value.Shape.Length != 4)
+            throw new ArgumentException("All tensors must be 4D [batch, heads, seq, headDim]");
+
+        int batch = query.Shape[0];
+        int heads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int seqK = key.Shape[2];
+
+        // Allocate gradient buffers
+        var gradQueryBuffer = backend.AllocateBuffer(batch * heads * seqQ * headDim);
+        var gradKeyBuffer = backend.AllocateBuffer(batch * heads * seqK * headDim);
+        var gradValueBuffer = backend.AllocateBuffer(batch * heads * seqK * headDim);
+
+        // Execute backward kernel
+        backend.ScaledDotProductAttentionBackward(
+            gradOutput.Buffer, query.Buffer, key.Buffer, value.Buffer,
+            attentionWeights.Buffer, gradQueryBuffer, gradKeyBuffer, gradValueBuffer,
+            batch, heads, seqQ, headDim, (float)scale, isCausal);
+
+        // Return GPU-resident gradient tensors
+        gradQuery = new GpuTensor<T>(backend, gradQueryBuffer, new[] { batch, heads, seqQ, headDim },
+            GpuTensorRole.Gradient, ownsBuffer: true);
+        gradKey = new GpuTensor<T>(backend, gradKeyBuffer, new[] { batch, heads, seqK, headDim },
+            GpuTensorRole.Gradient, ownsBuffer: true);
+        gradValue = new GpuTensor<T>(backend, gradValueBuffer, new[] { batch, heads, seqK, headDim },
+            GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
     /// GPU-resident tensor permutation (transpose with arbitrary dimension reordering).
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
@@ -6237,11 +6321,21 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
-    /// GPU-resident sum reduction along axis 0 (sum over rows).
+    /// GPU-resident sum reduction along axis 0 (sum over rows) for 2D tensors.
+    /// For a [rows, cols] tensor, computes output[c] = sum over r of input[r, c].
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     /// <param name="input">GPU-resident input tensor of shape [rows, cols].</param>
-    /// <returns>A GPU-resident output tensor of shape [cols] (or [1, cols]).</returns>
+    /// <returns>A GPU-resident output tensor of shape [cols].</returns>
+    /// <remarks>
+    /// This implements axis 0 reduction using transpose + axis 1 sum:
+    /// 1. Transpose input from [rows, cols] to [cols, rows]
+    /// 2. Sum over axis 1 (the rows dimension in transposed tensor)
+    /// 3. Result is [cols] - the sum of each column
+    ///
+    /// For bias gradient computation where you need sum over batch dimension,
+    /// this correctly produces [cols] output from [batch, cols] input.
+    /// </remarks>
     public IGpuTensor<T> SumAxis0Gpu<T>(IGpuTensor<T> input)
     {
         if (!TryGetBackend(out var backend))
@@ -6250,14 +6344,23 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (input.Shape.Length < 1)
             throw new ArgumentException("SumAxis0Gpu requires at least a 1D tensor");
 
-        int outerSize = input.Shape[0];
-        int innerSize = input.Shape.Length > 1 ? input.Shape[1] : 1;
+        int rows = input.Shape[0];
+        int cols = input.Shape.Length > 1 ? input.Shape[1] : 1;
 
-        var outputBuffer = backend.AllocateBuffer(innerSize);
-        backend.SumAxis(input.Buffer, outputBuffer, outerSize, innerSize);
+        // For axis 0 reduction of row-major [rows, cols] data, we need to sum
+        // over the rows dimension. The sum_axis kernel sums over the inner
+        // (contiguous) dimension, which for row-major is columns.
+        // To sum over rows, we transpose first so rows become the inner dimension.
+        var transposedBuffer = backend.AllocateBuffer(rows * cols);
+        backend.Transpose(input.Buffer, transposedBuffer, rows, cols);
 
-        // Return with shape [innerSize] to match bias gradient expectations
-        return new GpuTensor<T>(backend, outputBuffer, new[] { innerSize }, GpuTensorRole.Gradient, ownsBuffer: true);
+        // Now transposed is [cols, rows], summing over axis 1 (rows) gives [cols]
+        var outputBuffer = backend.AllocateBuffer(cols);
+        backend.SumAxis(transposedBuffer, outputBuffer, cols, rows);
+
+        transposedBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, outputBuffer, new[] { cols }, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>
@@ -6640,40 +6743,99 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
-    /// GPU-resident sum reduction along a specified axis.
+    /// GPU-resident sum reduction along a specified axis for 2D tensors.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
-    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="input">GPU-resident input tensor of shape [rows, cols].</param>
     /// <param name="axis">Axis to reduce (0 for sum over rows, 1 for sum over columns).</param>
     /// <returns>A GPU-resident output tensor with reduced dimensions.</returns>
+    /// <remarks>
+    /// For axis=0: Computes output[c] = sum over r of input[r, c]. Returns [1, cols].
+    /// For axis=1: Computes output[r] = sum over c of input[r, c]. Returns [rows, 1].
+    /// </remarks>
     public IGpuTensor<T> SumAxisGpu<T>(IGpuTensor<T> input, int axis)
     {
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for SumAxisGpu");
 
-        int outerSize = input.Shape[0];
-        int innerSize = input.Shape.Length > 1 ? input.Shape[1] : 1;
+        int rows = input.Shape[0];
+        int cols = input.Shape.Length > 1 ? input.Shape[1] : 1;
 
         int outputSize;
         int[] outputShape;
 
         if (axis == 0)
         {
-            // Sum over rows -> output shape [1, innerSize]
-            outputSize = innerSize;
-            outputShape = [1, innerSize];
+            // Sum over rows -> output shape [1, cols]
+            // Requires transpose + sum since sum_axis sums over inner (last) dimension
+            var transposedBuffer = backend.AllocateBuffer(rows * cols);
+            backend.Transpose(input.Buffer, transposedBuffer, rows, cols);
+
+            outputSize = cols;
+            outputShape = [1, cols];
+            var outputBuffer = backend.AllocateBuffer(outputSize);
+            backend.SumAxis(transposedBuffer, outputBuffer, cols, rows);
+
+            transposedBuffer.Dispose();
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
         else
         {
-            // Sum over columns -> output shape [outerSize, 1]
-            outputSize = outerSize;
-            outputShape = [outerSize, 1];
+            // Sum over columns -> output shape [rows, 1]
+            // sum_axis kernel natively sums over inner dimension (columns)
+            outputSize = rows;
+            outputShape = [rows, 1];
+            var outputBuffer = backend.AllocateBuffer(outputSize);
+            backend.SumAxis(input.Buffer, outputBuffer, rows, cols);
+
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident sum reduction along multiple specified axes.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="axes">Axes to reduce (summed over).</param>
+    /// <returns>A GPU-resident output tensor with reduced dimensions.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method reduces a GPU tensor by summing over the specified axes. The output
+    /// tensor has dimensions equal to the remaining (non-reduced) axes.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of reducing as collapsing dimensions. If you have
+    /// a 3D tensor [batch, seq, features] and reduce over axes [0, 1], you're summing across
+    /// all batches and all sequence positions, leaving just [features].
+    /// </para>
+    /// </remarks>
+    public IGpuTensor<T> ReduceSumGpu<T>(IGpuTensor<T> input, int[] axes)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for ReduceSumGpu");
+
+        // Download to CPU for multi-axis reduction (can be optimized with GPU kernels later)
+        var cpuTensor = input.ToTensor();
+
+        // Normalize negative axes
+        var normalizedAxes = new int[axes.Length];
+        for (int i = 0; i < axes.Length; i++)
+        {
+            normalizedAxes[i] = axes[i] < 0 ? cpuTensor.Shape.Length + axes[i] : axes[i];
         }
 
-        var outputBuffer = backend.AllocateBuffer(outputSize);
-        backend.SumAxis(input.Buffer, outputBuffer, outerSize, innerSize);
+        // Sort axes in descending order to avoid index shifting issues during reduction
+        Array.Sort(normalizedAxes, (a, b) => b.CompareTo(a));
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        // Reduce along each axis
+        var result = cpuTensor;
+        foreach (var axis in normalizedAxes)
+        {
+            result = result.Sum(new[] { axis });
+        }
+
+        // Upload back to GPU
+        return new GpuTensor<T>(backend, result, GpuTensorRole.Gradient);
     }
 
     /// <summary>
@@ -8707,43 +8869,97 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     #region Gradient Checkpointing
 
+    /// <summary>
+    /// Checkpoints a GPU activation tensor for later recomputation during backpropagation.
+    /// The tensor's buffer and shape are stored in a dedicated checkpoint cache.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="activation">The GPU-resident activation tensor to checkpoint.</param>
+    /// <param name="checkpointKey">Unique key to identify this checkpoint.</param>
+    /// <remarks>
+    /// Gradient checkpointing trades compute for memory: instead of storing all activations,
+    /// we only store "checkpoints" at certain layers and recompute intermediate activations
+    /// during the backward pass. This reduces peak memory usage significantly.
+    ///
+    /// Note: The checkpoint does NOT own the buffer - it assumes the caller manages the
+    /// original tensor's lifetime. Use ClearCheckpointGpu to remove checkpoint entries.
+    /// </remarks>
     public void CheckpointActivationGpu<T>(IGpuTensor<T> activation, string checkpointKey)
     {
-        if (!TryGetBackend(out var backend))
+        if (!TryGetBackend(out _))
             throw new InvalidOperationException("GPU backend not available");
 
-        // Store the activation buffer in persistent cache with Activation role
-        var entry = new GpuBufferCacheEntry(activation.Buffer, PersistentTensorRole.Other);
-        _persistentBufferCache[checkpointKey] = entry;
+        // Store the activation buffer and shape in dedicated checkpoint cache
+        // Note: We store a reference to the buffer - caller is responsible for keeping it alive
+        var entry = new CheckpointEntry(activation.Buffer, activation.Shape.ToArray());
+        _checkpointCache[checkpointKey] = entry;
     }
 
+    /// <summary>
+    /// Retrieves a checkpointed activation and optionally recomputes forward from that point.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="checkpointKey">The checkpoint key used when storing the activation.</param>
+    /// <param name="recomputeFunc">Function to recompute forward pass from the checkpoint.</param>
+    /// <returns>The recomputed GPU tensor.</returns>
     public IGpuTensor<T> RecomputeFromCheckpointGpu<T>(string checkpointKey, Func<IGpuTensor<T>, IGpuTensor<T>> recomputeFunc)
     {
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("GPU backend not available");
 
-        if (!_persistentBufferCache.TryGetValue(checkpointKey, out var entry))
+        if (!_checkpointCache.TryGetValue(checkpointKey, out var entry))
             throw new InvalidOperationException($"Checkpoint '{checkpointKey}' not found");
 
-        // Retrieve the checkpointed activation
-        var checkpointTensor = new GpuTensor<T>(backend, entry.Buffer, Array.Empty<int>(), GpuTensorRole.Activation);
+        // Retrieve the checkpointed activation with its original shape
+        // Note: ownsBuffer=false because the checkpoint cache owns the buffer reference
+        var checkpointTensor = new GpuTensor<T>(backend, entry.Buffer, entry.Shape, GpuTensorRole.Activation, ownsBuffer: false);
 
         // Recompute forward pass from checkpoint
         return recomputeFunc(checkpointTensor);
     }
 
+    /// <summary>
+    /// Clears a checkpoint entry from the cache.
+    /// Note: This does NOT dispose the underlying buffer as the checkpoint does not own it.
+    /// </summary>
+    /// <param name="checkpointKey">The checkpoint key to clear.</param>
     public void ClearCheckpointGpu(string checkpointKey)
     {
-        if (_persistentBufferCache.TryRemove(checkpointKey, out var entry))
-        {
-            entry.Dispose();
-        }
+        _checkpointCache.TryRemove(checkpointKey, out _);
+        // Note: We don't dispose the buffer here as the original tensor still owns it
+    }
+
+    /// <summary>
+    /// Gets the number of active checkpoints.
+    /// </summary>
+    public int CheckpointCount => _checkpointCache.Count;
+
+    /// <summary>
+    /// Clears all checkpoint entries.
+    /// </summary>
+    public void ClearAllCheckpointsGpu()
+    {
+        _checkpointCache.Clear();
+        // Note: Buffers are not disposed as they belong to their original tensors
     }
 
     #endregion
 
     #region Mixed Precision Training
 
+    /// <summary>
+    /// Converts a GPU tensor from FP32 to FP16 (half precision) format.
+    /// </summary>
+    /// <typeparam name="T">The element type (conversion is done in GPU kernel).</typeparam>
+    /// <param name="input">The FP32 input tensor.</param>
+    /// <returns>
+    /// A new GPU tensor containing the FP16 representation.
+    /// The caller owns this tensor and must dispose it when done.
+    /// </returns>
+    /// <remarks>
+    /// This allocates a new GPU buffer for the output. The input tensor is not modified.
+    /// Caller is responsible for disposing the returned tensor to prevent memory leaks.
+    /// </remarks>
     public IGpuTensor<T> ConvertToFp16Gpu<T>(IGpuTensor<T> input)
     {
         if (!TryGetBackend(out var backend))
@@ -8755,9 +8971,22 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // Use conversion kernel
         backend.ConvertToFp16(input.Buffer, outputBuffer, size);
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate);
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate, ownsBuffer: true);
     }
 
+    /// <summary>
+    /// Converts a GPU tensor from FP16 (half precision) to FP32 format.
+    /// </summary>
+    /// <typeparam name="T">The element type (conversion is done in GPU kernel).</typeparam>
+    /// <param name="input">The FP16 input tensor.</param>
+    /// <returns>
+    /// A new GPU tensor containing the FP32 representation.
+    /// The caller owns this tensor and must dispose it when done.
+    /// </returns>
+    /// <remarks>
+    /// This allocates a new GPU buffer for the output. The input tensor is not modified.
+    /// Caller is responsible for disposing the returned tensor to prevent memory leaks.
+    /// </remarks>
     public IGpuTensor<T> ConvertToFp32Gpu<T>(IGpuTensor<T> input)
     {
         if (!TryGetBackend(out var backend))
@@ -8769,22 +8998,49 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // Use conversion kernel
         backend.ConvertToFp32(input.Buffer, outputBuffer, size);
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate);
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate, ownsBuffer: true);
     }
 
+    /// <summary>
+    /// Executes a forward pass operation in mixed precision (FP16) for memory efficiency.
+    /// Converts input to FP16, runs the operation, and converts output back to FP32.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">The FP32 GPU-resident input tensor.</param>
+    /// <param name="operation">The operation to execute in FP16 precision.</param>
+    /// <returns>The FP32 output tensor.</returns>
+    /// <remarks>
+    /// This method handles disposal of intermediate FP16 tensors to prevent memory leaks.
+    /// The returned tensor is owned by the caller and must be disposed when no longer needed.
+    ///
+    /// Typical use case: memory-intensive layers like attention where FP16 reduces memory
+    /// usage by 50% with minimal accuracy impact.
+    /// </remarks>
     public IGpuTensor<T> MixedPrecisionForwardGpu<T>(IGpuTensor<T> input, Func<IGpuTensor<T>, IGpuTensor<T>> operation)
     {
-        if (!TryGetBackend(out var backend))
+        if (!TryGetBackend(out _))
             throw new InvalidOperationException("GPU backend not available");
 
         // Convert to FP16 for forward pass
         var fp16Input = ConvertToFp16Gpu(input);
 
-        // Run operation in FP16
-        var fp16Output = operation(fp16Input);
+        IGpuTensor<T>? fp16Output = null;
+        try
+        {
+            // Run operation in FP16
+            fp16Output = operation(fp16Input);
 
-        // Convert back to FP32 for accumulation
-        return ConvertToFp32Gpu(fp16Output);
+            // Convert back to FP32 for accumulation
+            var fp32Output = ConvertToFp32Gpu(fp16Output);
+
+            return fp32Output;
+        }
+        finally
+        {
+            // Dispose intermediate FP16 tensors to prevent memory leaks
+            fp16Input.Dispose();
+            fp16Output?.Dispose();
+        }
     }
 
     #endregion
@@ -8798,6 +9054,9 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
         _persistentBufferCache.Clear();
         _tensorVersions.Clear();
+
+        // Clear checkpoint cache (buffers not owned, so just clear references)
+        _checkpointCache.Clear();
 
         if (_ownsDirectGpu)
             _directGpu?.Dispose();

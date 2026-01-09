@@ -1271,6 +1271,8 @@ public interface IDirectGpuBackend : IDisposable
     /// </summary>
     void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size);
 
+    #endregion
+
     /// <summary>
     /// Computes the backward pass for scatter-add operation.
     /// The gradient of scatter-add is a gather operation that collects gradients from destination
@@ -1285,8 +1287,6 @@ public interface IDirectGpuBackend : IDisposable
         int numIndices, int featureSize);
 
     void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize);
-
-    #endregion
 
     #region Comparison Operations
 

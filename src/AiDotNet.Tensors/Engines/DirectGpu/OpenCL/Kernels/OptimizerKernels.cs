@@ -223,18 +223,21 @@ __kernel void nag_update(
         grad += weightDecay * param[idx];
     }
 
-    // Nesterov momentum
+    // Nesterov momentum (Sutskever-style NAG)
+    // Note: Caller should compute gradient at lookahead position (theta + mu * v) for true NAG
     float v = velocity[idx];
     float vNew = momentum * v - learningRate * grad;
     velocity[idx] = vNew;
 
-    // NAG update with lookahead
-    param[idx] += momentum * vNew - learningRate * grad;
+    // NAG update - apply velocity directly
+    param[idx] += vNew;
 }
 
 // ---------------------------------------------------------------------------
 // LARS (Layer-wise Adaptive Rate Scaling) optimizer update
-// Note: Full LARS requires layer-wise norm computation before calling
+// Note: LARS applies trustCoeff to scale the learning rate adaptively per layer.
+// The trustCoeff should be pre-computed as: trustCoeff * ||w|| / (||grad|| + ||w|| * weightDecay)
+// Set trustCoeff=1.0f to disable trust coefficient scaling.
 // ---------------------------------------------------------------------------
 __kernel void lars_update(
     __global float* param,
@@ -261,8 +264,8 @@ __kernel void lars_update(
     float v = momentum * velocity[idx] + grad;
     velocity[idx] = v;
 
-    // Update parameters
-    param[idx] = p - learningRate * v;
+    // Update parameters with trust coefficient scaling
+    param[idx] = p - learningRate * trustCoeff * v;
 }
 
 // ---------------------------------------------------------------------------

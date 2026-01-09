@@ -559,7 +559,9 @@ public class ActivationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+        _gpuLastInput?.Dispose();
         _gpuLastInput = null;
+        _gpuLastOutput?.Dispose();
         _gpuLastOutput = null;
     }
 

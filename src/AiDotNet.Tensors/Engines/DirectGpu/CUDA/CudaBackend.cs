@@ -5150,7 +5150,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("convert_fp32_to_fp16", out var kernel))
         {
             // Fallback: just copy the data as-is
-            Copy(input, 0, output, 0, size);
+            Copy(input, output, size);
             return;
         }
 
@@ -5173,7 +5173,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("convert_fp16_to_fp32", out var kernel))
         {
             // Fallback: just copy the data as-is
-            Copy(input, 0, output, 0, size);
+            Copy(input, output, size);
             return;
         }
 

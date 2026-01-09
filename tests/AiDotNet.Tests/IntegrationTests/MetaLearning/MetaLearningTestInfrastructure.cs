@@ -12,6 +12,8 @@ using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
@@ -324,6 +326,23 @@ internal sealed class ResetTrackingOptimizer : IGradientBasedOptimizer<double, M
     public void LoadModel(string filePath)
     {
         throw new NotSupportedException();
+    }
+
+    public bool SupportsGpuUpdate => false;
+
+    public void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException("GPU operations are not supported in ResetTrackingOptimizer.");
+    }
+
+    public void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException("GPU operations are not supported in ResetTrackingOptimizer.");
+    }
+
+    public void DisposeGpuState()
+    {
+        // No GPU state to dispose
     }
 }
 

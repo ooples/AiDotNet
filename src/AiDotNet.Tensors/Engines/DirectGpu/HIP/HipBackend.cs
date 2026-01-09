@@ -6834,6 +6834,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -6862,6 +6863,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -6896,6 +6898,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -6930,6 +6933,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -6961,6 +6965,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -6991,6 +6996,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7021,6 +7027,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7052,6 +7059,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7086,6 +7094,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7117,6 +7126,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7152,6 +7162,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7186,6 +7197,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7217,6 +7229,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7251,6 +7264,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7283,6 +7297,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
         }
         finally
         {
@@ -7299,7 +7314,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("convert_fp32_to_fp16", out var krnl))
         {
             // Fallback: just copy the data as-is (both buffers are float, this is a no-op placeholder)
-            Copy(input, 0, output, 0, size);
+            Copy(input, output, size);
             return;
         }
 
@@ -7330,7 +7345,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("convert_fp16_to_fp32", out var krnl))
         {
             // Fallback: just copy the data as-is (both buffers are float, this is a no-op placeholder)
-            Copy(input, 0, output, 0, size);
+            Copy(input, output, size);
             return;
         }
 

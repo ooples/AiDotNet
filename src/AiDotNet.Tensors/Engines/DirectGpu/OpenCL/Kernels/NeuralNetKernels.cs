@@ -613,6 +613,9 @@ __kernel void nag_update(
 }
 
 // LARS (Layer-wise Adaptive Rate Scaling) optimizer update
+// Note: LARS applies trustCoeff to scale the learning rate adaptively per layer.
+// The trustCoeff should be pre-computed as: trustCoeff * ||w|| / (||grad|| + ||w|| * weightDecay)
+// Set trustCoeff=1.0f to disable trust coefficient scaling.
 __kernel void lars_update(
     __global float* param,
     __global const float* gradient,
@@ -638,8 +641,8 @@ __kernel void lars_update(
     float v = momentum * velocity[idx] + grad;
     velocity[idx] = v;
 
-    // Update parameters
-    param[idx] = p - learningRate * v;
+    // Update parameters with trust coefficient scaling
+    param[idx] = p - learningRate * trustCoeff * v;
 }
 
 // LAMB (Layer-wise Adaptive Moments) optimizer update

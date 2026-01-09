@@ -219,60 +219,19 @@ All loss function GPU kernels have been implemented in `src/Gpu/LossKernels.cs`.
 | FocalLoss | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Complete |
 | DiceLoss | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Complete |
 
-**Status:** ✅ Phase 3b Loss Functions - 13/13 Core losses complete!
-1. `CalculateLoss(Vector<T>, Vector<T>)` - CPU version
-2. `CalculateDerivative(Vector<T>, Vector<T>)` - CPU gradient **MISSING in 8 losses!**
-3. `CalculateLossGpu(Tensor<T>, Tensor<T>)` - GPU loss
-4. `CalculateDerivativeGpu(Tensor<T>, Tensor<T>)` - GPU gradient
+### Extended Loss Functions (Low Priority)
 
-| Loss Function | Kernel Loss | Kernel Gradient | CPU Derivative | GPU Loss | GPU Gradient | Notes |
-|---------------|-------------|-----------------|----------------|----------|--------------|-------|
-| **Fully Implemented ✅** |
-| MeanSquaredErrorLoss | ✅ | ✅ | ✅ | ✅ | ✅ | Complete |
-| CrossEntropyLoss | ✅ | ✅ | ✅ | ✅ | ✅ | Complete |
-| BinaryCrossEntropyLoss | ✅ | ✅ | ✅ | ✅ | ✅ | Complete |
-| CategoricalCrossEntropyLoss | ✅ | ✅ | ✅ | ✅ | ✅ | Complete |
-| MeanAbsoluteErrorLoss | ✅ | ✅ | ✅ | ✅ | ✅ | Complete |
-| **Need CPU Derivative + GPU Methods** |
-| RootMeanSquaredErrorLoss | ✅ | ✅ | ❌ Missing | ❌ | ❌ | Need all 3 methods |
-| HuberLoss | ✅ | ✅ | ❌ Missing | ❌ | ❌ | Need all 3 methods |
-| LogCoshLoss | ✅ | ✅ | ❌ Missing | ❌ | ❌ | Need all 3 methods |
-| QuantileLoss | ✅ | ✅ | ❌ Missing | ❌ | ❌ | Need all 3 methods |
-| HingeLoss | ✅ | ✅ | ❌ Missing | ❌ | ❌ | Need all 3 methods |
-| SquaredHingeLoss | ✅ | ✅ | ❌ Missing | ❌ | ❌ | Need all 3 methods |
-| FocalLoss | ✅ | ✅ | ❌ Missing | ❌ | ❌ | Need all 3 methods |
-| DiceLoss | ✅ | ✅ | ❌ Missing | ❌ | ❌ | Need all 3 methods |
+Additional loss functions that could be added in the future:
 
-**Status:** 5/13 core losses complete. 8 need CalculateDerivative + GPU methods implemented.
-
-**Next Steps:**
-1. Add missing CalculateDerivative methods to 8 loss functions
-2. Add CalculateLossGpu and CalculateDerivativeGpu to those 8 losses
-3. Test GPU loss computation matches CPU
-| JaccardLoss | ✅ jaccard_loss | ✅ jaccard_gradient | ❌ | ❌ | Need implementation |
-| PoissonLoss | ✅ poisson_loss | ✅ poisson_gradient | ❌ | ❌ | Need implementation |
-| ExponentialLoss | ✅ exponential_loss | ✅ exponential_gradient | ❌ | ❌ | Need implementation |
-| ModifiedHuberLoss | ✅ modified_huber_loss | ✅ modified_huber_gradient | ❌ | ❌ | Need implementation |
-| CategoricalCrossEntropyLoss | ✅ categorical_cross_entropy_loss | ✅ categorical_cross_entropy_gradient | ❌ | ❌ | Need implementation |
-| WeightedCrossEntropyLoss | ✅ weighted_cross_entropy_loss | ✅ weighted_cross_entropy_gradient | ❌ | ❌ | Need implementation |
-| SparseCategoricalCrossEntropyLoss | ✅ sparse_categorical_cross_entropy_loss | ✅ sparse_categorical_cross_entropy_gradient | ❌ | ❌ | Need implementation |
-| CharbonnierLoss | ✅ charbonnier_loss | ✅ charbonnier_gradient | ❌ | ❌ | Need implementation |
-| ElasticNetLoss | ✅ elastic_net_loss | ✅ elastic_net_gradient | ❌ | ❌ | Need implementation |
-| **Complex / Special** |
-| CTCLoss | ❌ | ❌ | ❌ | ❌ | Complex temporal alignment |
-| MarginLoss | ❌ | ❌ | ❌ | ❌ | Capsule networks |
-| NoiseContrastiveEstimationLoss | ❌ | ❌ | ❌ | ❌ | Sampling-based |
-| PerceptualLoss | ❌ | ❌ | ❌ | ❌ | Requires pre-trained model |
-| WassersteinLoss | ❌ | ❌ | ❌ | ❌ | GANs |
-| DistillationLoss | ❌ | ❌ | ❌ | ❌ | Knowledge distillation |
-| PhysicsInformedLoss | ❌ | ❌ | ❌ | ❌ | PDE constraints |
-
-**Status:** 3/30 losses fully implemented. 19 have kernels ready and need wiring. 8 are complex and low priority.
-
-**Next Steps:**
-1. Wire up the 19 losses that have kernels (implement CalculateLossGpu/CalculateDerivativeGpu)
-2. Add gradient kernels for TripletLoss and ContrastiveLoss  
-3. Complex losses can wait for later phases
+| Loss Function | Status | Notes |
+|---------------|--------|-------|
+| CTCLoss | ❌ | Complex temporal alignment |
+| MarginLoss | ❌ | Capsule networks |
+| NoiseContrastiveEstimationLoss | ❌ | Sampling-based |
+| PerceptualLoss | ❌ | Requires pre-trained model |
+| WassersteinLoss | ❌ | GANs |
+| DistillationLoss | ❌ | Knowledge distillation |
+| PhysicsInformedLoss | ❌ | PDE constraints |
 
 ### Phase 4: Deferred Execution for Training ✅ COMPLETE
 | Component | Status | Description |

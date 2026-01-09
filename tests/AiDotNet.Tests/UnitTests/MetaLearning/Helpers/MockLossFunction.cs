@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -63,5 +64,13 @@ public class MockLossFunction<T> : ILossFunction<T>
         }
 
         return derivative;
+    }
+
+    /// <summary>
+    /// GPU loss and gradient calculation - not supported in mock.
+    /// </summary>
+    public (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        throw new NotSupportedException("GPU operations are not supported in MockLossFunction.");
     }
 }
