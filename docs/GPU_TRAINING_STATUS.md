@@ -254,27 +254,27 @@ Additional loss functions that could be added in the future:
 | Layer | ForwardGpu | BackwardGpu | Notes |
 |-------|------------|-------------|-------|
 | ActivationLayer | ✅ | ✅ | CPU fallback for now, native GPU TODO |
-| AddLayer | ✅ | ❌ | Sum gradients to both inputs |
-| ConcatenateLayer | ✅ | ❌ | Split gradients |
-| CroppingLayer | ✅ | ❌ | Pad gradients with zeros |
+| AddLayer | ✅ | ✅ | Sum gradients to both inputs |
+| ConcatenateLayer | ✅ | ✅ | Split gradients |
+| CroppingLayer | ✅ | ✅ | Pad gradients with zeros |
 | DropoutLayer | ✅ | ✅ | GPU mask generation and application |
 | FlattenLayer | ✅ | ✅ | GPU reshape (metadata only) |
-| GaussianNoiseLayer | ✅ | ❌ | Pass through gradient |
+| GaussianNoiseLayer | ✅ | ✅ | Pass through gradient |
 | InputLayer | ✅ | ➖ | No backward needed |
-| MaskingLayer | ✅ | ❌ | Mask gradient |
-| MeanLayer | ✅ | ❌ | Broadcast gradient |
-| MultiplyLayer | ✅ | ❌ | Element-wise gradient |
-| PaddingLayer | ✅ | ❌ | Crop gradient |
+| MaskingLayer | ✅ | ✅ | Mask gradient |
+| MeanLayer | ✅ | ✅ | Broadcast gradient |
+| MultiplyLayer | ✅ | ✅ | Element-wise gradient |
+| PaddingLayer | ✅ | ✅ | Crop gradient |
 | ReshapeLayer | ✅ | ✅ | GPU reshape (metadata only) |
-| SequenceLastLayer | ✅ | ❌ | Scatter gradient to last position |
-| SplitLayer | ✅ | ❌ | Concatenate gradients |
+| SequenceLastLayer | ✅ | ✅ | Scatter gradient to last position |
+| SplitLayer | ✅ | ✅ | Concatenate gradients |
 
 ### Pooling Layers (No Trainable Parameters)
 | Layer | ForwardGpu | BackwardGpu | Notes |
 |-------|------------|-------------|-------|
-| AdaptiveAveragePoolingLayer | ✅ | ❌ | Distribute gradient evenly |
+| AdaptiveAveragePoolingLayer | ✅ | ✅ | Distribute gradient evenly |
 | AveragePoolingLayer | ✅ | ✅ | Already implemented |
-| GlobalPoolingLayer | ✅ | ❌ | Broadcast gradient |
+| GlobalPoolingLayer | ✅ | ✅ | Broadcast gradient |
 | MaxPool3DLayer | ✅ | ✅ | Already implemented |
 | MaxPoolingLayer | ✅ | ✅ | Already implemented |
 | MeshPoolLayer | ✅ | ❌ | Graph pooling backward |
@@ -300,44 +300,44 @@ Additional loss functions that could be added in the future:
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
 | ConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
-| Conv3DLayer | ✅ | ❌ | ❌ | ❌ | 3D convolution |
-| DeconvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Transposed conv |
+| Conv3DLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** 3D convolution |
+| DeconvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Transposed conv |
 | DeformableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Learned offsets |
-| DepthwiseSeparableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | MobileNet style |
-| DilatedConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Atrous convolution |
-| SeparableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Xception style |
+| DepthwiseSeparableConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** MobileNet style |
+| DilatedConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Atrous convolution |
+| SeparableConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Xception style |
 
 ### Normalization Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
 | BatchNormalizationLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
-| GroupNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Group-wise normalization |
-| InstanceNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Per-instance normalization |
+| GroupNormalizationLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Group-wise normalization |
+| InstanceNormalizationLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Per-instance normalization |
 | LayerNormalizationLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
-| SpectralNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Weight normalization |
+| SpectralNormalizationLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Weight normalization |
 
 ### Recurrent Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
-| BidirectionalLayer | ✅ | ❌ | ❌ | ❌ | Wraps recurrent layers |
+| BidirectionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Wraps recurrent layers |
 | ConvLSTMLayer | ✅ | ❌ | ❌ | ❌ | Issue #700 - Spatiotemporal |
-| GRULayer | ✅ | ❌ | ❌ | ❌ | BPTT through gates |
-| LSTMLayer | ✅ | ❌ | ❌ | ❌ | **NEXT PRIORITY** BPTT through gates |
-| RecurrentLayer | ✅ | ❌ | ❌ | ❌ | Simple RNN |
+| GRULayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** BPTT through gates |
+| LSTMLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** BPTT through gates |
+| RecurrentLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Simple RNN |
 
 ### Attention Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
-| AttentionLayer | ✅ | ❌ | ❌ | ❌ | Basic attention |
-| CrossAttentionLayer | ✅ | ❌ | ❌ | ❌ | Encoder-decoder attention |
+| AttentionLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Basic attention |
+| CrossAttentionLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Encoder-decoder attention |
 | MultiHeadAttentionLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
-| SelfAttentionLayer | ✅ | ❌ | ❌ | ❌ | Self-attention |
+| SelfAttentionLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Self-attention |
 
 ### Transformer Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
 | DecoderLayer | ✅ | ❌ | ❌ | ❌ | Decoder block |
-| FeedForwardLayer | ✅ | ❌ | ❌ | ❌ | FFN in transformer |
+| FeedForwardLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** FFN in transformer |
 | PatchEmbeddingLayer | ✅ | ❌ | ❌ | ❌ | ViT patches |
 | PositionalEncodingLayer | ✅ | ❌ | ➖ | ➖ | Fixed encodings |
 | TransformerDecoderLayer | ✅ | ❌ | ❌ | ❌ | Full decoder |

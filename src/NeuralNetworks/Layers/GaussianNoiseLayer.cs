@@ -1,4 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
@@ -135,6 +137,9 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
+
+    /// <inheritdoc/>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("GaussianNoiseLayer requires an input tensor.");
@@ -163,6 +168,29 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
         }
 
         return input;
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+        {
+            throw new InvalidOperationException("GPU backend unavailable.");
+        }
+
+        // For Gaussian noise, gradient flows through unchanged (noise is independent of input)
+        // CPU fallback: download gradient, compute via CPU Backward, upload result
+        var outputGradCpu = outputGradient.ToTensor();
+        var inputGradCpu = Backward(outputGradCpu);
+
+        // Return the input gradient as GPU tensor
+        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
     }
 
     /// <summary>

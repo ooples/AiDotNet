@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
@@ -58,6 +59,51 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _outputWeightsGradient;
     private Tensor<T>? _outputBiasGradient;
 
+    #region GPU Training Fields
+
+    // Cached GPU tensors for GPU-resident training
+    private IGpuTensor<T>? _gpuLastQuery;
+    private IGpuTensor<T>? _gpuLastContext;
+    private IGpuTensor<T>? _gpuAttentionWeightsGpu;
+    private IGpuTensor<T>? _gpuLastOutput;
+
+    // GPU weight buffers
+    private GpuTensor<T>? _gpuQueryWeights;
+    private GpuTensor<T>? _gpuKeyWeights;
+    private GpuTensor<T>? _gpuValueWeights;
+    private GpuTensor<T>? _gpuOutputWeights;
+    private GpuTensor<T>? _gpuOutputBias;
+
+    // GPU gradient buffers
+    private IGpuTensor<T>? _gpuQueryWeightsGradient;
+    private IGpuTensor<T>? _gpuKeyWeightsGradient;
+    private IGpuTensor<T>? _gpuValueWeightsGradient;
+    private IGpuTensor<T>? _gpuOutputWeightsGradient;
+    private IGpuTensor<T>? _gpuOutputBiasGradient;
+
+    // GPU optimizer state buffers (velocity/momentum)
+    private GpuTensor<T>? _gpuQueryWeightsVelocity;
+    private GpuTensor<T>? _gpuKeyWeightsVelocity;
+    private GpuTensor<T>? _gpuValueWeightsVelocity;
+    private GpuTensor<T>? _gpuOutputWeightsVelocity;
+    private GpuTensor<T>? _gpuOutputBiasVelocity;
+
+    // GPU optimizer state buffers (first moment for Adam)
+    private GpuTensor<T>? _gpuQueryWeightsM;
+    private GpuTensor<T>? _gpuKeyWeightsM;
+    private GpuTensor<T>? _gpuValueWeightsM;
+    private GpuTensor<T>? _gpuOutputWeightsM;
+    private GpuTensor<T>? _gpuOutputBiasM;
+
+    // GPU optimizer state buffers (second moment for Adam)
+    private GpuTensor<T>? _gpuQueryWeightsV;
+    private GpuTensor<T>? _gpuKeyWeightsV;
+    private GpuTensor<T>? _gpuValueWeightsV;
+    private GpuTensor<T>? _gpuOutputWeightsV;
+    private GpuTensor<T>? _gpuOutputBiasV;
+
+    #endregion
+
     /// <summary>
     /// Stores the original query shape for any-rank tensor support.
     /// </summary>
@@ -70,6 +116,11 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer can execute on GPU.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU-resident training.
+    /// </summary>
+    public override bool SupportsGpuTraining => true;
 
     /// <inheritdoc/>
     public override int ParameterCount =>
@@ -739,6 +790,13 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         // Skip this expensive download during inference (50% overhead reduction)
         if (IsTrainingMode)
         {
+            // Cache GPU tensors for GPU-resident training
+            _gpuLastQuery = query;
+            _gpuLastContext = context;
+            _gpuAttentionWeightsGpu = attentionWeightsGpu;
+            _gpuLastOutput = output;
+
+            // Also download to CPU for backward compatibility with CPU backward pass
             _lastQuery = query.ToTensor();
             _lastContext = context.ToTensor();
             _lastAttentionScores = attentionWeightsGpu?.ToTensor();
@@ -890,7 +948,159 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
         return output;
     }
+
+    /// <summary>
+    /// GPU-resident backward pass for cross-attention layer.
+    /// Computes gradients for all weight tensors.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output (GPU tensor).</param>
+    /// <returns>The gradient of the loss with respect to the layer's input (GPU tensor).</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuLastQuery == null || _gpuLastContext == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Use CPU backward pass for gradient computation as fallback
+        var outputGradCpu = outputGradient.ToTensor();
+
+        // Clear existing gradients
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
+
+        // Perform CPU backward to compute gradients
+        var inputGradCpu = Backward(outputGradCpu);
+
+        // Upload gradients to GPU
+        if (_queryWeightsGradient != null)
+            _gpuQueryWeightsGradient = new GpuTensor<T>(backend, _queryWeightsGradient, GpuTensorRole.Gradient);
+        if (_keyWeightsGradient != null)
+            _gpuKeyWeightsGradient = new GpuTensor<T>(backend, _keyWeightsGradient, GpuTensorRole.Gradient);
+        if (_valueWeightsGradient != null)
+            _gpuValueWeightsGradient = new GpuTensor<T>(backend, _valueWeightsGradient, GpuTensorRole.Gradient);
+        if (_outputWeightsGradient != null)
+            _gpuOutputWeightsGradient = new GpuTensor<T>(backend, _outputWeightsGradient, GpuTensorRole.Gradient);
+        if (_outputBiasGradient != null)
+            _gpuOutputBiasGradient = new GpuTensor<T>(backend, _outputBiasGradient, GpuTensorRole.Gradient);
+
+        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
+    }
+
+    /// <summary>
+    /// GPU-resident parameter update using the provided optimizer configuration.
+    /// Updates all weight tensors directly on GPU.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (_gpuQueryWeightsGradient == null || _gpuKeyWeightsGradient == null ||
+            _gpuValueWeightsGradient == null || _gpuOutputWeightsGradient == null ||
+            _gpuOutputBiasGradient == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        // Ensure GPU weight tensors exist
+        _gpuQueryWeights ??= new GpuTensor<T>(backend, _queryWeights, GpuTensorRole.Weight);
+        _gpuKeyWeights ??= new GpuTensor<T>(backend, _keyWeights, GpuTensorRole.Weight);
+        _gpuValueWeights ??= new GpuTensor<T>(backend, _valueWeights, GpuTensorRole.Weight);
+        _gpuOutputWeights ??= new GpuTensor<T>(backend, _outputWeights, GpuTensorRole.Weight);
+        _gpuOutputBias ??= new GpuTensor<T>(backend, _outputBias, GpuTensorRole.Weight);
+
+        // Ensure optimizer state exists
+        EnsureCrossAttentionOptimizerState(config, backend);
+
+        // Build optimizer state for each parameter
+        var queryState = BuildCrossAttentionOptimizerState("query");
+        var keyState = BuildCrossAttentionOptimizerState("key");
+        var valueState = BuildCrossAttentionOptimizerState("value");
+        var outputState = BuildCrossAttentionOptimizerState("output");
+        var biasState = BuildCrossAttentionOptimizerState("bias");
+
+        // Apply optimizer updates on GPU
+        config.ApplyUpdate(backend, _gpuQueryWeights.Buffer, _gpuQueryWeightsGradient.Buffer, queryState, _queryWeights.Length);
+        config.ApplyUpdate(backend, _gpuKeyWeights.Buffer, _gpuKeyWeightsGradient.Buffer, keyState, _keyWeights.Length);
+        config.ApplyUpdate(backend, _gpuValueWeights.Buffer, _gpuValueWeightsGradient.Buffer, valueState, _valueWeights.Length);
+        config.ApplyUpdate(backend, _gpuOutputWeights.Buffer, _gpuOutputWeightsGradient.Buffer, outputState, _outputWeights.Length);
+        config.ApplyUpdate(backend, _gpuOutputBias.Buffer, _gpuOutputBiasGradient.Buffer, biasState, _outputBias.Length);
+
+        // Download updated weights to CPU for backward compatibility
+        _queryWeights = _gpuQueryWeights.ToTensor();
+        _keyWeights = _gpuKeyWeights.ToTensor();
+        _valueWeights = _gpuValueWeights.ToTensor();
+        _outputWeights = _gpuOutputWeights.ToTensor();
+        _outputBias = _gpuOutputBias.ToTensor();
+
+        // Notify engine that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
+    }
+
+    /// <summary>
+    /// Ensures optimizer state buffers are allocated for the optimizer type.
+    /// </summary>
+    private void EnsureCrossAttentionOptimizerState(IGpuOptimizerConfig config, IDirectGpuBackend backend)
+    {
+        var optimizerType = config.OptimizerType;
+
+        // SGD, NAG, LARS only need velocity
+        if (optimizerType == GpuOptimizerType.Sgd ||
+            optimizerType == GpuOptimizerType.Nag ||
+            optimizerType == GpuOptimizerType.Lars)
+        {
+            _gpuQueryWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_queryWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuKeyWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_keyWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuValueWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_valueWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuOutputWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_outputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuOutputBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_outputBias.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+        }
+        else if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
+        {
+            // Adam, AdamW need both M (first moment) and V (second moment)
+            _gpuQueryWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_queryWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuKeyWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_keyWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuValueWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_valueWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuOutputWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_outputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuOutputBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_outputBias.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+
+            _gpuQueryWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_queryWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuKeyWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_keyWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuValueWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_valueWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuOutputWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_outputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuOutputBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_outputBias.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+        }
+    }
+
+    /// <summary>
+    /// Builds optimizer state for a specific parameter tensor.
+    /// </summary>
+    private GpuOptimizerState BuildCrossAttentionOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "query" => new GpuOptimizerState { Velocity = _gpuQueryWeightsVelocity?.Buffer, M = _gpuQueryWeightsM?.Buffer, V = _gpuQueryWeightsV?.Buffer },
+            "key" => new GpuOptimizerState { Velocity = _gpuKeyWeightsVelocity?.Buffer, M = _gpuKeyWeightsM?.Buffer, V = _gpuKeyWeightsV?.Buffer },
+            "value" => new GpuOptimizerState { Velocity = _gpuValueWeightsVelocity?.Buffer, M = _gpuValueWeightsM?.Buffer, V = _gpuValueWeightsV?.Buffer },
+            "output" => new GpuOptimizerState { Velocity = _gpuOutputWeightsVelocity?.Buffer, M = _gpuOutputWeightsM?.Buffer, V = _gpuOutputWeightsV?.Buffer },
+            "bias" => new GpuOptimizerState { Velocity = _gpuOutputBiasVelocity?.Buffer, M = _gpuOutputBiasM?.Buffer, V = _gpuOutputBiasV?.Buffer },
+            _ => new GpuOptimizerState()
+        };
+    }
 }
-
-
-

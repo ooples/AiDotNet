@@ -1,4 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -42,6 +44,9 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// Initializes a new SequenceLastLayer.
@@ -167,6 +172,28 @@ public class SequenceLastLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"SequenceLastLayer expects 1D, 2D, or 3D input, got {rank}D.");
         }
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+        {
+            throw new InvalidOperationException("GPU backend unavailable.");
+        }
+
+        // CPU fallback: download gradient, compute via CPU Backward, upload result
+        var outputGradCpu = outputGradient.ToTensor();
+        var inputGradCpu = Backward(outputGradCpu);
+
+        // Return the input gradient as GPU tensor
+        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
     }
 
     /// <summary>

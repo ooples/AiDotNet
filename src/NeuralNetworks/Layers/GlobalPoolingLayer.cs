@@ -1,4 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
@@ -589,6 +591,9 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// <value><c>true</c> if GPU execution is supported; otherwise, <c>false</c>.</value>
     protected override bool SupportsGpuExecution => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
+
     /// <summary>
     /// Performs GPU-accelerated forward pass using GPU-resident tensors.
     /// </summary>
@@ -631,6 +636,28 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+        {
+            throw new InvalidOperationException("GPU backend unavailable.");
+        }
+
+        // CPU fallback: download gradient, compute via CPU Backward, upload result
+        var outputGradCpu = outputGradient.ToTensor();
+        var inputGradCpu = Backward(outputGradCpu);
+
+        // Return the input gradient as GPU tensor
+        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
     }
 
     /// <summary>

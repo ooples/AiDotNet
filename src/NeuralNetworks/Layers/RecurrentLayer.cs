@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -541,7 +542,16 @@ public class RecurrentLayer<T> : LayerBase<T>
             newHBuffer.Dispose();
             currentHBuffer.Dispose();
 
-            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            var outputTensor = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+
+            // Cache for GPU-resident training
+            if (IsTrainingMode)
+            {
+                _gpuLastInput = input;
+                _gpuLastOutput = outputTensor;
+            }
+
+            return outputTensor;
         }
         catch
         {
@@ -905,6 +915,41 @@ public class RecurrentLayer<T> : LayerBase<T>
     private Tensor<T>? _hiddenWeightsVelocity;
     private Tensor<T>? _biasesVelocity;
 
+    #region GPU Training Fields
+    private IGpuTensor<T>? _gpuLastInput;
+    private IGpuTensor<T>? _gpuLastOutput;
+
+    // GPU weight buffers
+    private GpuTensor<T>? _gpuInputWeights;
+    private GpuTensor<T>? _gpuHiddenWeights;
+    private GpuTensor<T>? _gpuBiases;
+
+    // GPU gradient buffers
+    private GpuTensor<T>? _gpuInputWeightsGradient;
+    private GpuTensor<T>? _gpuHiddenWeightsGradient;
+    private GpuTensor<T>? _gpuBiasesGradient;
+
+    // GPU velocity buffers (SGD momentum)
+    private GpuTensor<T>? _gpuInputWeightsVelocity;
+    private GpuTensor<T>? _gpuHiddenWeightsVelocity;
+    private GpuTensor<T>? _gpuBiasesVelocity;
+
+    // GPU Adam first moment buffers
+    private GpuTensor<T>? _gpuInputWeightsM;
+    private GpuTensor<T>? _gpuHiddenWeightsM;
+    private GpuTensor<T>? _gpuBiasesM;
+
+    // GPU Adam second moment buffers
+    private GpuTensor<T>? _gpuInputWeightsV;
+    private GpuTensor<T>? _gpuHiddenWeightsV;
+    private GpuTensor<T>? _gpuBiasesV;
+    #endregion
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU-resident training.
+    /// </summary>
+    public override bool SupportsGpuTraining => true;
+
     /// <summary>
     /// Updates the parameters of the recurrent layer using the calculated gradients.
     /// </summary>
@@ -1244,5 +1289,148 @@ public class RecurrentLayer<T> : LayerBase<T>
 
         // Initialize biases to zero
         _biases.Fill(NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>GPU tensor containing the gradient of the loss with respect to the input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // CPU fallback: download gradient, run Backward(), upload result
+        var outputGradCpu = outputGradient.ToTensor();
+        var inputGradCpu = Backward(outputGradCpu);
+
+        // Upload gradient buffers to GPU for UpdateParametersGpu
+        if (_inputWeightsGradient is not null)
+        {
+            _gpuInputWeightsGradient?.Dispose();
+            _gpuInputWeightsGradient = new GpuTensor<T>(backend, _inputWeightsGradient, GpuTensorRole.Gradient);
+        }
+
+        if (_hiddenWeightsGradient is not null)
+        {
+            _gpuHiddenWeightsGradient?.Dispose();
+            _gpuHiddenWeightsGradient = new GpuTensor<T>(backend, _hiddenWeightsGradient, GpuTensorRole.Gradient);
+        }
+
+        if (_biasesGradient is not null)
+        {
+            _gpuBiasesGradient?.Dispose();
+            _gpuBiasesGradient = new GpuTensor<T>(backend, _biasesGradient, GpuTensorRole.Gradient);
+        }
+
+        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
+    }
+
+    /// <summary>
+    /// Updates parameters on GPU using the configured optimizer.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Ensure GPU weight buffers exist
+        _gpuInputWeights ??= new GpuTensor<T>(backend, _inputWeights, GpuTensorRole.Weight);
+        _gpuHiddenWeights ??= new GpuTensor<T>(backend, _hiddenWeights, GpuTensorRole.Weight);
+        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Weight);
+
+        // Ensure optimizer state exists
+        EnsureRecurrentOptimizerState(config, backend);
+
+        // Apply updates for input weights
+        if (_gpuInputWeightsGradient is not null)
+        {
+            var inputWeightsState = BuildRecurrentOptimizerState("inputWeights");
+            config.ApplyUpdate(backend, _gpuInputWeights.Buffer, _gpuInputWeightsGradient.Buffer, inputWeightsState, _inputWeights.Length);
+        }
+
+        // Apply updates for hidden weights
+        if (_gpuHiddenWeightsGradient is not null)
+        {
+            var hiddenWeightsState = BuildRecurrentOptimizerState("hiddenWeights");
+            config.ApplyUpdate(backend, _gpuHiddenWeights.Buffer, _gpuHiddenWeightsGradient.Buffer, hiddenWeightsState, _hiddenWeights.Length);
+        }
+
+        // Apply updates for biases
+        if (_gpuBiasesGradient is not null)
+        {
+            var biasesState = BuildRecurrentOptimizerState("biases");
+            config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasesGradient.Buffer, biasesState, _biases.Length);
+        }
+
+        // Download updated weights back to CPU tensors
+        _inputWeights = _gpuInputWeights.ToTensor();
+        _hiddenWeights = _gpuHiddenWeights.ToTensor();
+        _biases = _gpuBiases.ToTensor();
+
+        // Notify engine that tensor data has changed
+        Engine.InvalidatePersistentTensor(_inputWeights);
+        Engine.InvalidatePersistentTensor(_hiddenWeights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    private void EnsureRecurrentOptimizerState(IGpuOptimizerConfig config, IDirectGpuBackend backend)
+    {
+        var optimizerType = config.OptimizerType;
+
+        // Ensure velocity buffers for SGD momentum, NAG, LARS
+        if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
+        {
+            _gpuInputWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuHiddenWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+        }
+
+        // Ensure Adam moment buffers
+        if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
+        {
+            _gpuInputWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuInputWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuHiddenWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuHiddenWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+        }
+    }
+
+    private GpuOptimizerState BuildRecurrentOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "inputWeights" => new GpuOptimizerState
+            {
+                Velocity = _gpuInputWeightsVelocity?.Buffer,
+                M = _gpuInputWeightsM?.Buffer,
+                V = _gpuInputWeightsV?.Buffer
+            },
+            "hiddenWeights" => new GpuOptimizerState
+            {
+                Velocity = _gpuHiddenWeightsVelocity?.Buffer,
+                M = _gpuHiddenWeightsM?.Buffer,
+                V = _gpuHiddenWeightsV?.Buffer
+            },
+            "biases" => new GpuOptimizerState
+            {
+                Velocity = _gpuBiasesVelocity?.Buffer,
+                M = _gpuBiasesM?.Buffer,
+                V = _gpuBiasesV?.Buffer
+            },
+            _ => new GpuOptimizerState()
+        };
     }
 }

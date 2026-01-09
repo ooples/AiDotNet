@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -97,6 +98,13 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU-resident training.
+    /// Delegates to the inner layer's capability.
+    /// </summary>
+    public override bool SupportsGpuTraining =>
+        _innerLayer is LayerBase<T> innerBase && innerBase.SupportsGpuTraining;
 
     /// <summary>
     /// GPU-resident power iteration vectors.
@@ -601,6 +609,62 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         {
             // Always restore original weights after export
             _innerLayer.SetParameters(originalParams);
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident backward pass for spectral normalization layer.
+    /// Delegates to the inner layer's BackwardGpu method.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output (GPU tensor).</param>
+    /// <returns>The gradient of the loss with respect to the layer's input (GPU tensor).</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        try
+        {
+            // Backpropagate through inner layer using normalized weights
+            if (_innerLayer is LayerBase<T> innerBase && innerBase.SupportsGpuTraining)
+            {
+                return innerBase.BackwardGpu(outputGradient);
+            }
+
+            // Fall back to CPU backward if inner layer doesn't support GPU training
+            if (Engine is not DirectGpuTensorEngine gpuEngine)
+                throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+            var backend = gpuEngine.GetBackend();
+            if (backend == null)
+                throw new InvalidOperationException("GPU backend unavailable.");
+
+            var outputGradCpu = outputGradient.ToTensor();
+            var inputGradCpu = Backward(outputGradCpu);
+            return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
+        }
+        finally
+        {
+            // Always restore original weights after Backward
+            RestoreOriginalWeights();
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident parameter update using the provided optimizer configuration.
+    /// Delegates to the inner layer's UpdateParametersGpu method.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        // Delegate to inner layer's GPU parameter update
+        if (_innerLayer is LayerBase<T> innerBase && innerBase.SupportsGpuTraining)
+        {
+            innerBase.UpdateParametersGpu(config);
+        }
+        else
+        {
+            // Fall back to CPU parameter update if inner layer doesn't support GPU training
+            throw new InvalidOperationException(
+                $"Inner layer ({_innerLayer.GetType().Name}) does not support GPU-resident training. " +
+                "Use UpdateParameters() for CPU-based parameter updates.");
         }
     }
 }

@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -130,6 +131,9 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MaskingLayer{T}"/> class.
     /// </summary>
@@ -235,6 +239,28 @@ public class MaskingLayer<T> : LayerBase<T>
         }
 
         return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+        {
+            throw new InvalidOperationException("GPU backend unavailable.");
+        }
+
+        // CPU fallback: download gradient, compute via CPU Backward, upload result
+        var outputGradCpu = outputGradient.ToTensor();
+        var inputGradCpu = Backward(outputGradCpu);
+
+        // Return the input gradient as GPU tensor
+        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
     }
 
     /// <summary>

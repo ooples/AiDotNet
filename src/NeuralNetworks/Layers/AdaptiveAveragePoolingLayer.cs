@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -49,6 +51,9 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AdaptiveAveragePoolingLayer{T}"/> class.
@@ -265,6 +270,28 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         }
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <inheritdoc/>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+        {
+            throw new InvalidOperationException("GPU backend unavailable.");
+        }
+
+        // CPU fallback: download gradient, compute via CPU Backward, upload result
+        var outputGradCpu = outputGradient.ToTensor();
+        var inputGradCpu = Backward(outputGradCpu);
+
+        // Return the input gradient as GPU tensor
+        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
     }
 
     /// <summary>
