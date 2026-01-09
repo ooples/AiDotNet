@@ -452,10 +452,18 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
             var timestamp = System.Threading.Interlocked.Increment(ref _activationCacheTimestamp);
             var entry = new ActivationCacheEntry(buffer, shape, timestamp, backend);
-            if (!_activationCache.TryAdd(resultData, entry))
+            bool added = false;
+            try
             {
-                // Entry was not added (key already exists); dispose to avoid leaking the buffer.
-                entry.Dispose();
+                added = _activationCache.TryAdd(resultData, entry);
+            }
+            finally
+            {
+                if (!added)
+                {
+                    // Entry was not added (key already exists or exception occurred); dispose to avoid leaking the buffer.
+                    entry.Dispose();
+                }
             }
         }
     }
