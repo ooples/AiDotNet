@@ -3986,6 +3986,97 @@ public sealed class CudaBackend : IAsyncGpuBackend
         }
     }
 
+    /// <inheritdoc/>
+    public unsafe void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        // First zero out the gradient input
+        int inputSize = batchChannels * height * width;
+        Fill(gradInput, 0f, inputSize);
+
+        if (!_kernelCache.TryGetValue("nearest_neighbor_upsample_backward", out var kernel))
+        {
+            // Fallback: CPU implementation
+            NearestNeighborUpsampleBackwardFallback(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
+            return;
+        }
+
+        using var _ = PushContext();
+
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        uint grid = (uint)((outputSize + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutPtr;
+        args[1] = &gradInPtr;
+        args[2] = &batchChannels;
+        args[3] = &height;
+        args[4] = &width;
+        args[5] = &scaleFactor;
+        args[6] = &outputSize;
+
+        CuBlasNative.CheckCudaResult(
+            CudaNativeBindings.cuLaunchKernel(
+                kernel,
+                grid, 1, 1,
+                (uint)DefaultBlockSize, 1, 1,
+                0,
+                _stream,
+                (IntPtr)args,
+                IntPtr.Zero),
+            "cuLaunchKernel (nearest_neighbor_upsample_backward)");
+    }
+
+    /// <summary>
+    /// CPU fallback for nearest-neighbor upsampling backward when kernel is not available.
+    /// </summary>
+    private unsafe void NearestNeighborUpsampleBackwardFallback(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+    {
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+        int inputSize = batchChannels * height * width;
+
+        // Download gradOutput
+        var gradOutData = new float[outputSize];
+        DownloadBuffer(gradOutput, gradOutData);
+
+        // Accumulate gradients on CPU
+        var gradInData = new float[inputSize];
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int ih = oh / scaleFactor;
+                    int iw = ow / scaleFactor;
+                    int inputIdx = bc * height * width + ih * width + iw;
+                    int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                    gradInData[inputIdx] += gradOutData[outputIdx];
+                }
+            }
+        }
+
+        // Upload gradInput
+        using var _ = PushContext();
+        ulong byteSize = (ulong)inputSize * sizeof(float);
+        fixed (float* src = gradInData)
+        {
+            CuBlasNative.CheckCudaResult(
+                CuBlasNative.cuMemcpyHtoD(gradInput.Handle, (IntPtr)src, byteSize),
+                "cuMemcpyHtoD (upsample backward fallback)");
+        }
+    }
+
     #endregion
 
 

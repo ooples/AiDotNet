@@ -801,6 +801,10 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.NearestNeighborUpsample(input, output, batchChannels, height, width, scaleFactor);
 
     /// <inheritdoc/>
+    public virtual void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+        => Inner.NearestNeighborUpsampleBackward(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
+
+    /// <inheritdoc/>
     public virtual void Fill(IGpuBuffer buffer, float value, int size) => Inner.Fill(buffer, value, size);
 
     #endregion

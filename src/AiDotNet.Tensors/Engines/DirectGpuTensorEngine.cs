@@ -4434,6 +4434,53 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             GpuTensorRole.Activation, ownsBuffer: true);
     }
 
+    /// <summary>
+    /// Performs GPU-accelerated backward pass for nearest-neighbor upsampling (2D).
+    /// </summary>
+    /// <typeparam name="T">Element type.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with upsampled shape.</param>
+    /// <param name="inputHeight">Original input height before upsampling.</param>
+    /// <param name="inputWidth">Original input width before upsampling.</param>
+    /// <param name="scaleFactor">Scale factor used during forward pass.</param>
+    /// <returns>GPU-resident gradient input tensor with original input shape.</returns>
+    public IGpuTensor<T> UpsampleBackwardGpu<T>(IGpuTensor<T> gradOutput, int inputHeight, int inputWidth, int scaleFactor)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for UpsampleBackwardGpu");
+
+        if (gradOutput.Shape.Length < 2)
+            throw new ArgumentException("Gradient output must have at least 2 dimensions for upsampling backward");
+
+        // Compute input shape (original shape before upsampling)
+        int[] inputShape = new int[gradOutput.Shape.Length];
+        for (int i = 0; i < gradOutput.Shape.Length - 2; i++)
+            inputShape[i] = gradOutput.Shape[i];
+
+        inputShape[^2] = inputHeight;
+        inputShape[^1] = inputWidth;
+
+        // Compute total elements
+        int batchChannels = 1;
+        for (int i = 0; i < gradOutput.Shape.Length - 2; i++)
+            batchChannels *= gradOutput.Shape[i];
+
+        int inputSize = batchChannels * inputHeight * inputWidth;
+
+        var gradInputBuffer = backend.AllocateBuffer(inputSize);
+
+        // Zero initialize the gradient input buffer for accumulation
+        backend.Fill(gradInputBuffer, 0.0f, inputSize);
+
+        // Use NearestNeighborUpsampleBackward for gradient propagation
+        backend.NearestNeighborUpsampleBackward(
+            gradOutput.Buffer, gradInputBuffer,
+            batchChannels, inputHeight, inputWidth,
+            scaleFactor);
+
+        return new GpuTensor<T>(backend, gradInputBuffer, inputShape,
+            GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
     #endregion
 
     #region Persistent Tensor Management

@@ -1238,6 +1238,18 @@ public interface IDirectGpuBackend : IDisposable
     void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor);
 
     /// <summary>
+    /// Backward pass for 2D nearest neighbor upsampling.
+    /// Accumulates gradients from each output pixel in a scale block back to the corresponding input pixel.
+    /// </summary>
+    /// <param name="gradOutput">Gradient w.r.t. output [batchChannels x (height*scaleFactor) x (width*scaleFactor)].</param>
+    /// <param name="gradInput">Gradient w.r.t. input (output) [batchChannels x height x width].</param>
+    /// <param name="batchChannels">Combined batch and channel dimensions.</param>
+    /// <param name="height">Input height.</param>
+    /// <param name="width">Input width.</param>
+    /// <param name="scaleFactor">Upsampling scale factor (applied to both height and width).</param>
+    void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor);
+
+    /// <summary>
     /// Performs 3D nearest-neighbor upsampling on volumetric data.
     /// Each voxel is replicated to fill a [scaleD x scaleH x scaleW] block.
     /// </summary>

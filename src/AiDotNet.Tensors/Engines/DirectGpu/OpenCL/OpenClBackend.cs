@@ -6287,6 +6287,73 @@ KERNEL VARIANTS (A/B testing):
             bufferOut.CopyFromHost(outputData);
         }
 
+        /// <inheritdoc/>
+        public void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            if (!_kernelCache.TryGetValue("nearest_neighbor_upsample_backward", out var kernel))
+            {
+                NearestNeighborUpsampleBackwardFallback(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
+                return;
+            }
+
+            var bufferIn = ((DirectOpenClGpuBuffer)gradOutput).Buffer;
+            var bufferOut = ((DirectOpenClGpuBuffer)gradInput).Buffer;
+
+            int outHeight = height * scaleFactor;
+            int outWidth = width * scaleFactor;
+            int outputSize = batchChannels * outHeight * outWidth;
+
+            kernel.SetArg(0, bufferIn.Handle);
+            kernel.SetArg(1, bufferOut.Handle);
+            kernel.SetArg(2, batchChannels);
+            kernel.SetArg(3, height);
+            kernel.SetArg(4, width);
+            kernel.SetArg(5, scaleFactor);
+            kernel.SetArg(6, outputSize);
+
+            kernel.Execute1D(outputSize, Math.Min(256, outputSize));
+        }
+
+        /// <summary>
+        /// CPU fallback for nearest-neighbor upsampling backward when kernel is not available.
+        /// </summary>
+        private void NearestNeighborUpsampleBackwardFallback(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+        {
+            int inputSize = batchChannels * height * width;
+            int outHeight = height * scaleFactor;
+            int outWidth = width * scaleFactor;
+            int outputSize = batchChannels * outHeight * outWidth;
+
+            // Download gradient output
+            var gradOutputData = new float[outputSize];
+            var bufferIn = ((DirectOpenClGpuBuffer)gradOutput).Buffer;
+            bufferIn.CopyToHost(gradOutputData);
+
+            // Perform CPU backward (accumulate gradients)
+            var gradInputData = new float[inputSize];
+            for (int bc = 0; bc < batchChannels; bc++)
+            {
+                for (int oh = 0; oh < outHeight; oh++)
+                {
+                    for (int ow = 0; ow < outWidth; ow++)
+                    {
+                        int ih = oh / scaleFactor;
+                        int iw = ow / scaleFactor;
+                        int inputIdx = bc * height * width + ih * width + iw;
+                        int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                        gradInputData[inputIdx] += gradOutputData[outputIdx];
+                    }
+                }
+            }
+
+            // Upload gradient input
+            var bufferOut = ((DirectOpenClGpuBuffer)gradInput).Buffer;
+            bufferOut.CopyFromHost(gradInputData);
+        }
+
         #endregion
 
         #region Activation Gradient Operations

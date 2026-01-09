@@ -4762,6 +4762,92 @@ public sealed class HipBackend : IAsyncGpuBackend
         UploadToBuffer(output, outputData);
     }
 
+    /// <inheritdoc/>
+    public unsafe void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        // First zero out the gradient input
+        int inputSize = batchChannels * height * width;
+        Fill(gradInput, 0f, inputSize);
+
+        if (!_kernelCache.TryGetValue("nearest_neighbor_upsample_backward", out var kernel))
+        {
+            NearestNeighborUpsampleBackwardFallback(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
+            return;
+        }
+
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        int grid = (outputSize + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var gradOutHandle = ((HipGpuBuffer)gradOutput).Handle;
+        var gradInHandle = ((HipGpuBuffer)gradInput).Handle;
+
+        void*[] args = new void*[7];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [gradOutHandle, gradInHandle];
+            int[] ints = [batchChannels, height, width, scaleFactor, outputSize];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &i[0];
+                argsPtr[3] = &i[1];
+                argsPtr[4] = &i[2];
+                argsPtr[5] = &i[3];
+                argsPtr[6] = &i[4];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)grid, 1, 1,
+                    (uint)DefaultBlockSize, 1, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (nearest_neighbor_upsample_backward)");
+            }
+        }
+    }
+
+    /// <summary>
+    /// CPU fallback for nearest-neighbor upsampling backward when kernel is not available.
+    /// </summary>
+    private void NearestNeighborUpsampleBackwardFallback(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+    {
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+        int inputSize = batchChannels * height * width;
+
+        // Download gradOutput
+        var gradOutData = DownloadBuffer(gradOutput);
+
+        // Accumulate gradients on CPU
+        var gradInData = new float[inputSize];
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int ih = oh / scaleFactor;
+                    int iw = ow / scaleFactor;
+                    int inputIdx = bc * height * width + ih * width + iw;
+                    int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                    gradInData[inputIdx] += gradOutData[outputIdx];
+                }
+            }
+        }
+
+        // Upload gradInput
+        UploadToBuffer(gradInput, gradInData);
+    }
+
     #endregion
 
     #region Activation Gradient Operations

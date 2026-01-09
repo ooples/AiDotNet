@@ -377,6 +377,68 @@ extern ""C"" __global__ void maxpool3d_backward(
     atomicAdd(&gradInput[inputIdx], grad);
 }
 
+// ===========================================================================
+// 2D UPSAMPLING KERNELS
+// ===========================================================================
+
+// Nearest Neighbor Upsample 2D
+// Each thread handles one output element
+extern ""C"" __global__ void nearest_neighbor_upsample(
+    const float* input, float* output,
+    int batchChannels, int height, int width,
+    int scaleFactor, int totalOutputSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalOutputSize) return;
+
+    int outHeight = height * scaleFactor;
+    int outWidth = width * scaleFactor;
+    int spatialOut = outHeight * outWidth;
+
+    int bc = idx / spatialOut;
+    int spatial = idx % spatialOut;
+    int oh = spatial / outWidth;
+    int ow = spatial % outWidth;
+
+    // Map output coord to input coord (nearest neighbor)
+    int ih = oh / scaleFactor;
+    int iw = ow / scaleFactor;
+
+    int inputIdx = bc * height * width + ih * width + iw;
+    output[idx] = input[inputIdx];
+}
+
+// Nearest Neighbor Upsample 2D backward pass
+// Each thread handles one output gradient element, accumulating to input gradient
+extern ""C"" __global__ void nearest_neighbor_upsample_backward(
+    const float* gradOutput, float* gradInput,
+    int batchChannels, int height, int width,
+    int scaleFactor, int totalOutputSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalOutputSize) return;
+
+    int outHeight = height * scaleFactor;
+    int outWidth = width * scaleFactor;
+    int spatialOut = outHeight * outWidth;
+
+    int bc = idx / spatialOut;
+    int spatial = idx % spatialOut;
+    int oh = spatial / outWidth;
+    int ow = spatial % outWidth;
+
+    // Map output coord to input coord
+    int ih = oh / scaleFactor;
+    int iw = ow / scaleFactor;
+
+    int inputIdx = bc * height * width + ih * width + iw;
+    atomicAdd(&gradInput[inputIdx], gradOutput[idx]);
+}
+
+// ===========================================================================
+// 3D UPSAMPLING KERNELS
+// ===========================================================================
+
 // Nearest Neighbor Upsample 3D
 // Upsamples each spatial dimension by integer scale factors
 extern ""C"" __global__ void nearest_upsample3d(
@@ -463,6 +525,8 @@ extern ""C"" __global__ void nearest_upsample3d_backward(
                 "adaptive_avgpool2d",
                 "maxpool3d",
                 "maxpool3d_backward",
+                "nearest_neighbor_upsample",
+                "nearest_neighbor_upsample_backward",
                 "nearest_upsample3d",
                 "nearest_upsample3d_backward"
             };

@@ -63,17 +63,22 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// pass to compute gradients.
     /// </para>
     /// <para><b>For Beginners:</b> This is the layer's memory of what it last processed.
-    /// 
+    ///
     /// Storing the input is necessary because:
     /// - During training, the layer needs to remember what input it processed
     /// - This helps calculate the correct gradients during the backward pass
     /// - It's part of the layer's "working memory" for the learning process
-    /// 
+    ///
     /// This cached input helps the layer understand how to adjust the network's behavior
     /// to improve its performance on future inputs.
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Cached input shape from GPU forward pass for backward pass.
+    /// </summary>
+    private int[]? _gpuCachedInputShape;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -224,7 +229,37 @@ public class UpsamplingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Cache input shape for backward pass during training
+        if (IsTrainingMode)
+        {
+            _gpuCachedInputShape = (int[])input.Shape.Clone();
+        }
+
         return gpuEngine.UpsampleGpu(input, _scaleFactor);
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU tensors.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when GPU backend is unavailable or forward pass was not called.
+    /// </exception>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> gradOutput)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        if (_gpuCachedInputShape == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Get original input dimensions
+        int inputHeight = _gpuCachedInputShape[^2];
+        int inputWidth = _gpuCachedInputShape[^1];
+
+        return gpuEngine.UpsampleBackwardGpu(gradOutput, inputHeight, inputWidth, _scaleFactor);
     }
 
     /// <summary>
@@ -470,5 +505,6 @@ public class UpsamplingLayer<T> : LayerBase<T>
     {
         // Clear the cached input
         _lastInput = null;
+        _gpuCachedInputShape = null;
     }
 }
