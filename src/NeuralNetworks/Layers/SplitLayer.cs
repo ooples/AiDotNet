@@ -326,6 +326,26 @@ public class SplitLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// Since split is a reshape operation, backward is also just a reshape to restore the original shape.
+    /// </remarks>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_originalInputShape == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Split is a reshape, so backward is just reshaping gradient to original input shape
+        return gpuEngine.ReshapeGpu(outputGradient, _originalInputShape);
+    }
+
+    /// <summary>
     /// Performs the backward pass of the split layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
