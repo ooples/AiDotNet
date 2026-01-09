@@ -63,6 +63,11 @@ public class ReshapeLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Cached GPU input shape for backward pass.
+    /// </summary>
+    private int[]? _gpuCachedInputShape;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -371,6 +376,7 @@ public class ReshapeLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
+        _gpuCachedInputShape = null;
     }
 
     /// <summary>
@@ -415,6 +421,12 @@ public class ReshapeLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
+        // Cache input shape for backward pass
+        if (IsTrainingMode)
+        {
+            _gpuCachedInputShape = (int[])input.Shape.Clone();
+        }
+
         // Calculate full target shape including batch dimension
         int batchSize = input.Shape[0];
         int[] targetShape = new int[_outputShape.Length + 1];
@@ -422,6 +434,25 @@ public class ReshapeLayer<T> : LayerBase<T>
         Array.Copy(_outputShape, 0, targetShape, 1, _outputShape.Length);
 
         return input.CreateView(0, targetShape);
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU using a zero-copy view reshape.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient tensor.</param>
+    /// <returns>A GPU tensor view with the original input shape.</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass simply reshapes the gradient back to the original input shape.
+    /// This is also a zero-copy view operation.
+    /// </para>
+    /// </remarks>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuCachedInputShape == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        return outputGradient.CreateView(0, _gpuCachedInputShape);
     }
 
     /// <summary>
