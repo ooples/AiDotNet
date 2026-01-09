@@ -290,8 +290,8 @@ Additional loss functions that could be added in the future:
 ### Dense/Linear Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
-| DenseLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** - All 9 optimizers |
-| FullyConnectedLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** |
+| DenseLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
+| FullyConnectedLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | LocallyConnectedLayer | ✅ | ❌ | ❌ | ❌ | Per-position weights |
 | HyperbolicLinearLayer | ✅ | ❌ | ❌ | ❌ | Hyperbolic geometry |
 | OctonionLinearLayer | ✅ | ❌ | ❌ | ❌ | Octonion algebra |
@@ -299,7 +299,7 @@ Additional loss functions that could be added in the future:
 ### Convolutional Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
-| ConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** |
+| ConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | Conv3DLayer | ✅ | ❌ | ❌ | ❌ | 3D convolution |
 | DeconvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Transposed conv |
 | DeformableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Learned offsets |
@@ -310,10 +310,10 @@ Additional loss functions that could be added in the future:
 ### Normalization Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
-| BatchNormalizationLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** gamma/beta + running stats |
+| BatchNormalizationLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | GroupNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Group-wise normalization |
 | InstanceNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Per-instance normalization |
-| LayerNormalizationLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** Transformer standard |
+| LayerNormalizationLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | SpectralNormalizationLayer | ✅ | ❌ | ❌ | ❌ | Weight normalization |
 
 ### Recurrent Layers
@@ -322,7 +322,7 @@ Additional loss functions that could be added in the future:
 | BidirectionalLayer | ✅ | ❌ | ❌ | ❌ | Wraps recurrent layers |
 | ConvLSTMLayer | ✅ | ❌ | ❌ | ❌ | Issue #700 - Spatiotemporal |
 | GRULayer | ✅ | ❌ | ❌ | ❌ | BPTT through gates |
-| LSTMLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** BPTT through gates |
+| LSTMLayer | ✅ | ❌ | ❌ | ❌ | **NEXT PRIORITY** BPTT through gates |
 | RecurrentLayer | ✅ | ❌ | ❌ | ❌ | Simple RNN |
 
 ### Attention Layers
@@ -330,7 +330,7 @@ Additional loss functions that could be added in the future:
 |-------|------------|-------------|-----------|-------------|-------|
 | AttentionLayer | ✅ | ❌ | ❌ | ❌ | Basic attention |
 | CrossAttentionLayer | ✅ | ❌ | ❌ | ❌ | Encoder-decoder attention |
-| MultiHeadAttentionLayer | ✅ | ❌ | ❌ | ❌ | **HIGH PRIORITY** QKV projections |
+| MultiHeadAttentionLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | SelfAttentionLayer | ✅ | ❌ | ❌ | ❌ | Self-attention |
 
 ### Transformer Layers
@@ -344,6 +344,9 @@ Additional loss functions that could be added in the future:
 | TransformerEncoderLayer | ✅ | ❌ | ❌ | ❌ | Full encoder |
 
 ### Embedding Layers
+| Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
+|-------|------------|-------------|-----------|-------------|-------|
+| EmbeddingLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 
 ### Phase 3: Optimizer & Loss Function GPU Integration ✅ COMPLETE
 
