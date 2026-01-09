@@ -619,6 +619,32 @@ public class DropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Performs GPU-resident backward pass for the dropout layer.
+    /// Applies the same mask and scaling used in forward pass to gradients.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        // During inference mode, gradient passes through unchanged
+        if (!IsTrainingMode || _gpuDropoutMask == null)
+        {
+            return outputGradient;
+        }
+
+        // Apply the same mask and scaling as in forward pass
+        // gradInput = gradOutput * mask * scale
+        float rate = (float)NumOps.ToDouble(_dropoutRate);
+        float scale = (float)NumOps.ToDouble(_scale);
+
+        return gpuEngine.DropoutBackwardGpu<T>(outputGradient, _gpuDropoutMask, rate);
+    }
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>

@@ -8811,6 +8811,75 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     #endregion
 
+    #region GPU-Resident BatchNorm Backward Operations
+
+    /// <summary>
+    /// GPU-resident batch normalization backward pass.
+    /// Computes gradients for input, gamma (scale), and beta (shift).
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">GPU-resident output gradient [B, C, H, W] or [B, C].</param>
+    /// <param name="input">GPU-resident input from forward pass.</param>
+    /// <param name="gamma">Scale parameter [C].</param>
+    /// <param name="saveMean">Running mean saved from forward pass [C].</param>
+    /// <param name="saveInvVar">Running inverse variance saved from forward pass [C].</param>
+    /// <param name="epsilon">Epsilon for numerical stability.</param>
+    /// <returns>Tuple of (gradInput, gradGamma, gradBeta).</returns>
+    public (IGpuTensor<T> gradInput, IGpuTensor<T> gradGamma, IGpuTensor<T> gradBeta) BatchNormBackwardGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuTensor<T> input,
+        Tensor<T> gamma,
+        IGpuTensor<T> saveMean,
+        IGpuTensor<T> saveInvVar,
+        float epsilon)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for BatchNormBackwardGpu");
+
+        // Determine dimensions
+        int batch, channels, spatialSize;
+        if (gradOutput.Shape.Length == 2)
+        {
+            // [B, C] - fully connected
+            batch = gradOutput.Shape[0];
+            channels = gradOutput.Shape[1];
+            spatialSize = 1;
+        }
+        else if (gradOutput.Shape.Length == 4)
+        {
+            // [B, C, H, W] - convolutional
+            batch = gradOutput.Shape[0];
+            channels = gradOutput.Shape[1];
+            spatialSize = gradOutput.Shape[2] * gradOutput.Shape[3];
+        }
+        else
+        {
+            throw new ArgumentException($"BatchNormBackwardGpu expects 2D [B, C] or 4D [B, C, H, W] tensor, got {gradOutput.Shape.Length}D");
+        }
+
+        // Allocate output buffers
+        var gradInputBuffer = backend.AllocateBuffer(gradOutput.ElementCount);
+        var gradGammaBuffer = backend.AllocateBuffer(channels);
+        var gradBetaBuffer = backend.AllocateBuffer(channels);
+
+        // Upload gamma
+        using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.Data, PersistentTensorRole.Weights);
+
+        backend.BatchNormBackward(
+            gradOutput.Buffer, input.Buffer, gammaBuffer.Buffer,
+            saveMean.Buffer, saveInvVar.Buffer,
+            gradInputBuffer, gradGammaBuffer, gradBetaBuffer,
+            batch, channels, spatialSize, epsilon);
+
+        return (
+            new GpuTensor<T>(backend, gradInputBuffer, gradOutput.Shape, GpuTensorRole.Gradient, ownsBuffer: true),
+            new GpuTensor<T>(backend, gradGammaBuffer, [channels], GpuTensorRole.Gradient, ownsBuffer: true),
+            new GpuTensor<T>(backend, gradBetaBuffer, [channels], GpuTensorRole.Gradient, ownsBuffer: true)
+        );
+    }
+
+    #endregion
+
     #region GPU-Resident Conv2D Backward Operations
 
     /// <summary>
