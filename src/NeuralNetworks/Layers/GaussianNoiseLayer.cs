@@ -166,6 +166,20 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The same output gradient, unchanged.</returns>
+    /// <remarks>
+    /// Since noise is added independently and doesn't depend on the input,
+    /// the gradient flows through unchanged during backpropagation.
+    /// </remarks>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        return outputGradient;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GaussianNoiseLayer{T}"/> class.
     /// </summary>
     /// <param name="inputShape">The shape of the input data (e.g., [height, width, channels]).</param>

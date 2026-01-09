@@ -320,6 +320,69 @@ public class MultiplyLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the gradients of the loss with respect to the inputs on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>Array of gradients for each input tensor.</returns>
+    /// <remarks>
+    /// For element-wise multiplication z = x * y, the gradient with respect to each input
+    /// is the product of the output gradient and all other inputs.
+    /// </remarks>
+    public IGpuTensor<T>[] BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_lastInputs == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        int size = outputGradient.ElementCount;
+        int numInputs = _lastInputs.Length;
+
+        // Upload cached inputs to GPU
+        var gpuInputBuffers = new IGpuBuffer[numInputs];
+        for (int i = 0; i < numInputs; i++)
+        {
+            float[] floatData = DirectGpuEngine.ToFloatArray(_lastInputs[i].Data);
+            gpuInputBuffers[i] = backend.AllocateBuffer(floatData);
+        }
+
+        // Compute gradient for each input
+        // Gradient for input i = outputGradient * product(inputs[j] for j != i)
+        var inputGradients = new IGpuTensor<T>[numInputs];
+        for (int i = 0; i < numInputs; i++)
+        {
+            // Start with output gradient
+            var gradBuffer = backend.AllocateBuffer(size);
+            backend.Copy(outputGradient.Buffer, gradBuffer, size);
+
+            // Multiply by all other inputs
+            for (int j = 0; j < numInputs; j++)
+            {
+                if (i != j)
+                {
+                    var tempBuffer = backend.AllocateBuffer(size);
+                    backend.Multiply(gradBuffer, gpuInputBuffers[j], tempBuffer, size);
+                    gradBuffer.Dispose();
+                    gradBuffer = tempBuffer;
+                }
+            }
+
+            inputGradients[i] = new GpuTensor<T>(backend, gradBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+
+        // Dispose uploaded input buffers
+        foreach (var buffer in gpuInputBuffers)
+        {
+            buffer.Dispose();
+        }
+
+        return inputGradients;
+    }
+
+    /// <summary>
     /// Performs the backward pass of the multiply layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
