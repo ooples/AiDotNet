@@ -233,52 +233,57 @@ public class MeanLayer<T> : LayerBase<T>
 
         var input = inputs[0];
         int[] shape = input.Shape;
+        int inputRank = shape.Length;
 
         // Calculate output shape by removing the axis dimension
         int[] outputShape = CalculateOutputShape(shape, Axis);
         int axisSize = shape[Axis];
-
-        // Calculate strides for the reduction
-        int outerSize = 1;
-        for (int i = 0; i < Axis; i++)
-            outerSize *= shape[i];
-
-        int innerSize = 1;
-        for (int i = Axis + 1; i < shape.Length; i++)
-            innerSize *= shape[i];
-
-        int outputSize = outerSize * innerSize;
-
-        // Download input for reduction (GPU reduce operations may not be available)
-        var inputData = backend.DownloadBuffer(input.Buffer);
-
-        // Cache input for backward pass
-        _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
-
-        // Perform mean reduction on CPU (single pass)
-        var outputData = new float[outputSize];
         float scale = 1.0f / axisSize;
 
-        for (int outer = 0; outer < outerSize; outer++)
+        // GPU-resident mean reduction using permutation pattern from MaxAxisGpu
+        // If axis is not last, permute to move it to the last position
+        IGpuTensor<T> processedInput = input;
+        bool needsPermute = Axis != inputRank - 1;
+
+        if (needsPermute)
         {
-            for (int inner = 0; inner < innerSize; inner++)
-            {
-                float sum = 0;
-                for (int a = 0; a < axisSize; a++)
-                {
-                    int idx = outer * axisSize * innerSize + a * innerSize + inner;
-                    sum += inputData[idx];
-                }
-                int outIdx = outer * innerSize + inner;
-                outputData[outIdx] = sum * scale;
-            }
+            // Build permutation: move reduction axis to last position
+            var perm = new int[inputRank];
+            int j = 0;
+            for (int i = 0; i < inputRank; i++)
+                if (i != Axis) perm[j++] = i;
+            perm[inputRank - 1] = Axis;
+            processedInput = gpuEngine.PermuteGpu(input, perm);
         }
 
-        // Cache output for backward pass
-        _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
+        // Calculate outer size (product of all dims except reduction axis)
+        int outerSize = processedInput.ElementCount / axisSize;
 
-        // Upload result to GPU
-        var outputBuffer = backend.AllocateBuffer(outputData);
+        // Allocate output buffer and perform GPU sum reduction
+        var sumBuffer = backend.AllocateBuffer(outerSize);
+        backend.SumAxis(processedInput.Buffer, sumBuffer, outerSize, axisSize);
+
+        // Dispose permuted tensor if we created one
+        if (needsPermute)
+            processedInput.Dispose();
+
+        // Scale to get mean (sum / axisSize)
+        var outputBuffer = backend.AllocateBuffer(outerSize);
+        backend.Scale(sumBuffer, outputBuffer, scale, outerSize);
+        sumBuffer.Dispose();
+
+        // Cache for backward pass (only download if training)
+        if (IsTrainingMode)
+        {
+            // For backward pass, we need the input cached
+            // Download only when in training mode to minimize overhead during inference
+            var inputData = backend.DownloadBuffer(input.Buffer);
+            _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
+
+            var outputData = backend.DownloadBuffer(outputBuffer);
+            _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
+        }
+
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 

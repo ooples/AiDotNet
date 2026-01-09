@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -293,31 +294,26 @@ public class RepParameterizationLayer<T> : LayerBase<T>
 
         int totalElements = batchSize * latentSize;
 
-        // Download input to split into mean and logvar
-        var inputData = backend.DownloadBuffer(input.Buffer);
+        // Allocate GPU buffers for mean and logvar
+        var meanBuffer = backend.AllocateBuffer(totalElements);
+        var logvarBuffer = backend.AllocateBuffer(totalElements);
 
-        // Split into mean and logvar (first half = mean, second half = logvar)
-        var meanData = new float[totalElements];
-        var logvarData = new float[totalElements];
-
+        // Extract mean and logvar using GPU strided copy (no download for inference)
+        // Input layout: [batch, totalFeatures] where totalFeatures = 2 * latentSize
+        // Mean: input[b, 0:latentSize], Logvar: input[b, latentSize:2*latentSize]
         for (int b = 0; b < batchSize; b++)
         {
-            int srcOffset = b * totalFeatures;
-            int dstOffset = b * latentSize;
-            for (int i = 0; i < latentSize; i++)
-            {
-                meanData[dstOffset + i] = inputData[srcOffset + i];
-                logvarData[dstOffset + i] = inputData[srcOffset + latentSize + i];
-            }
+            int srcBatchOffset = b * totalFeatures;
+            int dstBatchOffset = b * latentSize;
+            // Copy mean for this batch
+            backend.Copy(input.Buffer, srcBatchOffset, meanBuffer, dstBatchOffset, latentSize);
+            // Copy logvar for this batch
+            backend.Copy(input.Buffer, srcBatchOffset + latentSize, logvarBuffer, dstBatchOffset, latentSize);
         }
 
-        // Cache mean and logvar for backward pass
-        _lastMean = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), [batchSize, latentSize]);
-        _lastLogVar = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(logvarData), [batchSize, latentSize]);
-
-        // Generate random epsilon on CPU (no GPU RNG available)
+        // Generate random epsilon on CPU (no GPU RNG available) and upload
         var epsilonData = new float[totalElements];
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < totalElements; i++)
         {
             // Box-Muller transform for standard normal distribution
@@ -326,13 +322,6 @@ public class RepParameterizationLayer<T> : LayerBase<T>
             double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
             epsilonData[i] = (float)z;
         }
-
-        // Cache epsilon for backward pass
-        _lastEpsilon = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(epsilonData), [batchSize, latentSize]);
-
-        // Upload tensors to GPU
-        using var meanBuffer = backend.AllocateBuffer(meanData);
-        using var logvarBuffer = backend.AllocateBuffer(logvarData);
         using var epsilonBuffer = backend.AllocateBuffer(epsilonData);
 
         // Compute stdDev = exp(logvar * 0.5) on GPU
@@ -349,6 +338,20 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         // Compute output = mean + scaledEpsilon on GPU
         var outputBuffer = backend.AllocateBuffer(totalElements);
         backend.Add(meanBuffer, scaledEpsilonBuffer, outputBuffer, totalElements);
+
+        // Cache mean, logvar, and epsilon for backward pass (only download in training mode)
+        if (IsTrainingMode)
+        {
+            var meanData = backend.DownloadBuffer(meanBuffer);
+            var logvarData = backend.DownloadBuffer(logvarBuffer);
+            _lastMean = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), [batchSize, latentSize]);
+            _lastLogVar = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(logvarData), [batchSize, latentSize]);
+            _lastEpsilon = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(epsilonData), [batchSize, latentSize]);
+        }
+
+        // Dispose intermediate buffers that are no longer needed
+        meanBuffer.Dispose();
+        logvarBuffer.Dispose();
 
         // Determine output shape (half the input size in feature dimension)
         int[] outputShape;

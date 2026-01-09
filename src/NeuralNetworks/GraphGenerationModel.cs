@@ -855,6 +855,10 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // For generation models, input can be noise or conditioning features
         // Return generated node features
         return Generate(input.Shape[0], MaxNodes, input);

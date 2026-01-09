@@ -772,6 +772,10 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         if (_cachedAdjacencyMatrix == null)
         {
             throw new InvalidOperationException(

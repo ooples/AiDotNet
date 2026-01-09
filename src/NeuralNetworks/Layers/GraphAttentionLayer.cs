@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 

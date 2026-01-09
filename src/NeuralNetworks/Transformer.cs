@@ -447,6 +447,10 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         Tensor<T> output = input;
         Tensor<T>? encoderOutput = null;
         Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input.Shape, NumOps.One); // Default to all ones if no mask is provided

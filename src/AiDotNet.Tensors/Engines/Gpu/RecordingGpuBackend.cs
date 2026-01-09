@@ -134,7 +134,11 @@ public class RecordingGpuBackend : DelegatingGpuBackend
             () => Inner.Gemm(A, B, C, M, N, K, alpha, beta),
             new Dictionary<string, object>
             {
-                ["M"] = M, ["N"] = N, ["K"] = K, ["alpha"] = alpha, ["beta"] = beta
+                ["M"] = M,
+                ["N"] = N,
+                ["K"] = K,
+                ["alpha"] = alpha,
+                ["beta"] = beta
             });
     }
 
@@ -169,7 +173,12 @@ public class RecordingGpuBackend : DelegatingGpuBackend
             () => Inner.BatchedGemm(A, B, C, M, N, K, batchCount, alpha, beta),
             new Dictionary<string, object>
             {
-                ["M"] = M, ["N"] = N, ["K"] = K, ["batchCount"] = batchCount, ["alpha"] = alpha, ["beta"] = beta
+                ["M"] = M,
+                ["N"] = N,
+                ["K"] = K,
+                ["batchCount"] = batchCount,
+                ["alpha"] = alpha,
+                ["beta"] = beta
             });
     }
 
@@ -519,11 +528,21 @@ public class RecordingGpuBackend : DelegatingGpuBackend
                 outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW, dilationH, dilationW),
             new Dictionary<string, object>
             {
-                ["batch"] = batch, ["inChannels"] = inChannels, ["inHeight"] = inHeight, ["inWidth"] = inWidth,
-                ["outChannels"] = outChannels, ["outHeight"] = outHeight, ["outWidth"] = outWidth,
-                ["kernelH"] = kernelH, ["kernelW"] = kernelW,
-                ["strideH"] = strideH, ["strideW"] = strideW, ["padH"] = padH, ["padW"] = padW,
-                ["dilationH"] = dilationH, ["dilationW"] = dilationW
+                ["batch"] = batch,
+                ["inChannels"] = inChannels,
+                ["inHeight"] = inHeight,
+                ["inWidth"] = inWidth,
+                ["outChannels"] = outChannels,
+                ["outHeight"] = outHeight,
+                ["outWidth"] = outWidth,
+                ["kernelH"] = kernelH,
+                ["kernelW"] = kernelW,
+                ["strideH"] = strideH,
+                ["strideW"] = strideW,
+                ["padH"] = padH,
+                ["padW"] = padW,
+                ["dilationH"] = dilationH,
+                ["dilationW"] = dilationW
             });
     }
 
@@ -544,8 +563,12 @@ public class RecordingGpuBackend : DelegatingGpuBackend
                 batch, channels, spatialSize, epsilon, momentum, training),
             new Dictionary<string, object>
             {
-                ["batch"] = batch, ["channels"] = channels, ["spatialSize"] = spatialSize,
-                ["epsilon"] = epsilon, ["momentum"] = momentum, ["training"] = training
+                ["batch"] = batch,
+                ["channels"] = channels,
+                ["spatialSize"] = spatialSize,
+                ["epsilon"] = epsilon,
+                ["momentum"] = momentum,
+                ["training"] = training
             });
     }
 
@@ -560,7 +583,9 @@ public class RecordingGpuBackend : DelegatingGpuBackend
             () => Inner.LayerNorm(input, output, gamma, beta, saveMean, saveInvVar, batchSize, normalizedSize, epsilon),
             new Dictionary<string, object>
             {
-                ["batchSize"] = batchSize, ["normalizedSize"] = normalizedSize, ["epsilon"] = epsilon
+                ["batchSize"] = batchSize,
+                ["normalizedSize"] = normalizedSize,
+                ["epsilon"] = epsilon
             });
     }
 
@@ -583,8 +608,12 @@ public class RecordingGpuBackend : DelegatingGpuBackend
             () => Inner.FlashAttention(query, key, value, output, mask, batch, numHeads, seqLen, headDim, scale, isCausal),
             new Dictionary<string, object>
             {
-                ["batch"] = batch, ["numHeads"] = numHeads, ["seqLen"] = seqLen,
-                ["headDim"] = headDim, ["scale"] = scale, ["isCausal"] = isCausal
+                ["batch"] = batch,
+                ["numHeads"] = numHeads,
+                ["seqLen"] = seqLen,
+                ["headDim"] = headDim,
+                ["scale"] = scale,
+                ["isCausal"] = isCausal
             });
     }
 
@@ -607,8 +636,12 @@ public class RecordingGpuBackend : DelegatingGpuBackend
                 batch, numHeads, seqLen, headDim, scale, isCausal),
             new Dictionary<string, object>
             {
-                ["batch"] = batch, ["numHeads"] = numHeads, ["seqLen"] = seqLen,
-                ["headDim"] = headDim, ["scale"] = scale, ["isCausal"] = isCausal
+                ["batch"] = batch,
+                ["numHeads"] = numHeads,
+                ["seqLen"] = seqLen,
+                ["headDim"] = headDim,
+                ["scale"] = scale,
+                ["isCausal"] = isCausal
             });
     }
 

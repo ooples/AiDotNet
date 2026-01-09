@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Feed-Forward Neural Network (FFNN) for processing data in a forward path.
@@ -168,6 +168,11 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(FeedForwardNeuralNetwork<T>), "forward pass");
 
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        // CPU path: each layer processes input and may download results
         Tensor<T> output = input;
         foreach (var layer in Layers)
         {

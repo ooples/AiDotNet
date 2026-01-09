@@ -266,7 +266,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// <returns>A GPU tensor containing the octonion transformation output.</returns>
     /// <remarks>
     /// The octonion layer performs matrix-vector multiplication in 8-dimensional octonion algebra.
-    /// This method downloads input, processes through octonion operations on CPU, and uploads output to GPU.
+    /// This method uses a specialized CUDA kernel to perform octonion operations entirely on GPU.
     /// </remarks>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
@@ -283,28 +283,95 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend is not available.");
 
-        // Download input from GPU for processing
-        var inputData = backend.DownloadBuffer(input.Buffer);
-
-        // Convert to Tensor<T>
-        var inputTensor = new Tensor<T>(input.Shape);
-        for (int i = 0; i < inputData.Length; i++)
+        // Determine batch size from input shape
+        int batchSize;
+        if (input.Shape.Length == 1)
         {
-            inputTensor[i] = _numOps.FromDouble(inputData[i]);
+            batchSize = 1;
+        }
+        else if (input.Shape.Length == 2)
+        {
+            batchSize = input.Shape[0];
+        }
+        else
+        {
+            // Flatten higher-rank tensors to batch
+            batchSize = 1;
+            for (int d = 0; d < input.Shape.Length - 1; d++)
+            {
+                batchSize *= input.Shape[d];
+            }
         }
 
-        // Process using existing Forward logic (handles octonion matrix multiplication)
-        var output = Forward(inputTensor);
-
-        // Upload output to GPU
-        var outputData = new float[output.Length];
-        for (int i = 0; i < output.Length; i++)
+        // Flatten weights to GPU buffer: [outputFeatures * inputFeatures * 8]
+        var weightsFlat = new float[OutputFeatures * InputFeatures * 8];
+        int wIdx = 0;
+        for (int o = 0; o < OutputFeatures; o++)
         {
-            outputData[i] = _numOps.ToFloat(output[i]);
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                var oct = _weights[o, i];
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.Scalar);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E1);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E2);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E3);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E4);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E5);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E6);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E7);
+            }
         }
+        var weightsBuffer = backend.AllocateBuffer(weightsFlat);
 
-        var outputBuffer = backend.AllocateBuffer(outputData);
-        var outputShape = output.Shape;
+        // Flatten biases to GPU buffer: [outputFeatures * 8]
+        var biasesFlat = new float[OutputFeatures * 8];
+        int bIdx = 0;
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            var oct = _biases[o];
+            biasesFlat[bIdx++] = _numOps.ToFloat(oct.Scalar);
+            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E1);
+            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E2);
+            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E3);
+            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E4);
+            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E5);
+            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E6);
+            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E7);
+        }
+        var biasesBuffer = backend.AllocateBuffer(biasesFlat);
+
+        // Allocate output buffer: [batchSize * outputFeatures * 8]
+        var outputBuffer = backend.AllocateBuffer(batchSize * OutputFeatures * 8);
+
+        // Call the GPU kernel for octonion linear forward
+        backend.OctonionLinearForward(
+            input.Buffer, weightsBuffer, biasesBuffer, outputBuffer,
+            batchSize, InputFeatures, OutputFeatures);
+
+        // Clean up temporary GPU buffers
+        weightsBuffer.Dispose();
+        biasesBuffer.Dispose();
+
+        // Determine output shape
+        int[] outputShape;
+        if (input.Shape.Length == 1)
+        {
+            outputShape = [OutputFeatures * 8];
+        }
+        else if (input.Shape.Length == 2)
+        {
+            outputShape = [batchSize, OutputFeatures * 8];
+        }
+        else
+        {
+            // Restore higher-rank shape
+            outputShape = new int[input.Shape.Length];
+            for (int d = 0; d < input.Shape.Length - 1; d++)
+            {
+                outputShape[d] = input.Shape[d];
+            }
+            outputShape[input.Shape.Length - 1] = OutputFeatures * 8;
+        }
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }

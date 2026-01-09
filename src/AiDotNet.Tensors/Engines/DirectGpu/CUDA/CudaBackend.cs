@@ -32,6 +32,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
     private IntPtr _sparseModule;
     private IntPtr _locallyConnectedModule;
     private IntPtr _deformableConvModule;
+    private IntPtr _capsuleModule;
+    private IntPtr _specializedModule;
     private bool _disposed;
 
     public bool IsAvailable { get; }
@@ -286,6 +288,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         // Compile Deformable Convolution kernels (DCNv2 with learnable offsets and masks)
         _deformableConvModule = CompileKernelModule(device, CudaDeformableConvolutionKernels.GetSource(), "deformable_conv_kernels", CudaDeformableConvolutionKernels.GetKernelNames());
+
+        // Compile Capsule Network kernels (prediction transform, routing)
+        _capsuleModule = CompileKernelModule(device, CudaCapsuleKernels.GetSource(), "capsule_kernels", CudaCapsuleKernels.GetKernelNames());
+
+        // Compile Specialized kernels (hyperbolic geometry, octonion algebra, quantum computing)
+        _specializedModule = CompileKernelModule(device, CudaSpecializedKernels.GetSource(), "specialized_kernels", CudaSpecializedKernels.GetKernelNames());
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -693,6 +701,118 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[3] = &numCaps;
         args[4] = &capDim;
         args[5] = &eps;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void CapsulePredictions(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int outputCapsules, int outputDim)
+    {
+        if (!_kernelCache.TryGetValue("capsule_predictions", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: capsule_predictions");
+
+        using var _ = PushContext();
+        int totalOutputs = batchSize * inputCapsules * outputCapsules * outputDim;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr outputPtr = output.Handle;
+        int bs = batchSize;
+        int inCaps = inputCapsules;
+        int inDim = inputDim;
+        int outCaps = outputCapsules;
+        int outDim = outputDim;
+        void** args = stackalloc void*[8];
+        args[0] = &inputPtr;
+        args[1] = &weightsPtr;
+        args[2] = &outputPtr;
+        args[3] = &bs;
+        args[4] = &inCaps;
+        args[5] = &inDim;
+        args[6] = &outCaps;
+        args[7] = &outDim;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void CapsuleTransform(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int numCapsules, int capsuleDim)
+    {
+        if (!_kernelCache.TryGetValue("capsule_transform", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: capsule_transform");
+
+        using var _ = PushContext();
+        int totalOutputs = batchSize * inputCapsules * numCapsules * capsuleDim;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr outputPtr = output.Handle;
+        int bs = batchSize;
+        int inCaps = inputCapsules;
+        int inDim = inputDim;
+        int nCaps = numCapsules;
+        int capDim = capsuleDim;
+        void** args = stackalloc void*[8];
+        args[0] = &inputPtr;
+        args[1] = &weightsPtr;
+        args[2] = &outputPtr;
+        args[3] = &bs;
+        args[4] = &inCaps;
+        args[5] = &inDim;
+        args[6] = &nCaps;
+        args[7] = &capDim;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void CapsuleWeightedSum(IGpuBuffer coupling, IGpuBuffer predictions, IGpuBuffer output,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+    {
+        if (!_kernelCache.TryGetValue("capsule_weighted_sum", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: capsule_weighted_sum");
+
+        using var _ = PushContext();
+        int totalOutputs = batchSize * outputCapsules * capsuleDim;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr couplingPtr = coupling.Handle;
+        IntPtr predsPtr = predictions.Handle;
+        IntPtr outputPtr = output.Handle;
+        int bs = batchSize;
+        int inCaps = inputCapsules;
+        int outCaps = outputCapsules;
+        int capDim = capsuleDim;
+        void** args = stackalloc void*[7];
+        args[0] = &couplingPtr;
+        args[1] = &predsPtr;
+        args[2] = &outputPtr;
+        args[3] = &bs;
+        args[4] = &inCaps;
+        args[5] = &outCaps;
+        args[6] = &capDim;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void CapsuleAgreement(IGpuBuffer predictions, IGpuBuffer output, IGpuBuffer agreement,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+    {
+        if (!_kernelCache.TryGetValue("capsule_agreement", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: capsule_agreement");
+
+        using var _ = PushContext();
+        int totalOutputs = batchSize * inputCapsules * outputCapsules;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predsPtr = predictions.Handle;
+        IntPtr outputPtr = output.Handle;
+        IntPtr agreementPtr = agreement.Handle;
+        int bs = batchSize;
+        int inCaps = inputCapsules;
+        int outCaps = outputCapsules;
+        int capDim = capsuleDim;
+        void** args = stackalloc void*[7];
+        args[0] = &predsPtr;
+        args[1] = &outputPtr;
+        args[2] = &agreementPtr;
+        args[3] = &bs;
+        args[4] = &inCaps;
+        args[5] = &outCaps;
+        args[6] = &capDim;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
@@ -1753,6 +1873,26 @@ public sealed class CudaBackend : IAsyncGpuBackend
             throw new ArgumentOutOfRangeException(nameof(n), "N must be positive.");
         if (bias.Size < n)
             throw new ArgumentException("Bias buffer size must be at least N.", nameof(bias));
+    }
+
+    /// <summary>
+    /// Checks if a value is a power of two. Required for CUDA shared-memory reductions
+    /// that use the standard tree-reduction pattern.
+    /// </summary>
+    private static bool IsPowerOfTwo(int value) => value > 0 && (value & (value - 1)) == 0;
+
+    /// <summary>
+    /// Validates that the state size is a power of two, as required by quantum kernel
+    /// shared-memory reductions.
+    /// </summary>
+    private static void ValidateQuantumStateSize(int stateSize, string paramName)
+    {
+        if (stateSize <= 0)
+            throw new ArgumentOutOfRangeException(paramName, stateSize, "State size must be positive.");
+        if (!IsPowerOfTwo(stateSize))
+            throw new ArgumentException(
+                $"Quantum kernels require state size to be a power of two for shared-memory reductions. Got: {stateSize}",
+                paramName);
     }
 
     private unsafe void ExecuteFusedGemm(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output, int M, int N, int K)
@@ -5657,6 +5797,319 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
     #endregion
 
+    #region Hyperbolic Geometry Operations
+
+    public unsafe void PoincareProject(IGpuBuffer input, IGpuBuffer output, int batchSize, int dim, float curvature, float epsilon = 1e-5f)
+    {
+        if (!_kernelCache.TryGetValue("poincare_project", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: poincare_project");
+
+        using var _ = PushContext();
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[6];
+        args[0] = &inputPtr;
+        args[1] = &outputPtr;
+        args[2] = &batchSize;
+        args[3] = &dim;
+        args[4] = &curvature;
+        args[5] = &epsilon;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void MobiusAdd(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("mobius_add", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: mobius_add");
+
+        using var _ = PushContext();
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr xPtr = x.Handle;
+        IntPtr yPtr = y.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[6];
+        args[0] = &xPtr;
+        args[1] = &yPtr;
+        args[2] = &outputPtr;
+        args[3] = &batchSize;
+        args[4] = &dim;
+        args[5] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void PoincareExpMap(IGpuBuffer basePoint, IGpuBuffer tangentVec, IGpuBuffer output, int batchSize, int dim, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("poincare_exp_map", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: poincare_exp_map");
+
+        using var _ = PushContext();
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr basePtr = basePoint.Handle;
+        IntPtr tangentPtr = tangentVec.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[6];
+        args[0] = &basePtr;
+        args[1] = &tangentPtr;
+        args[2] = &outputPtr;
+        args[3] = &batchSize;
+        args[4] = &dim;
+        args[5] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void PoincareDistance(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("poincare_distance", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: poincare_distance");
+
+        using var _ = PushContext();
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr xPtr = x.Handle;
+        IntPtr yPtr = y.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[6];
+        args[0] = &xPtr;
+        args[1] = &yPtr;
+        args[2] = &outputPtr;
+        args[3] = &batchSize;
+        args[4] = &dim;
+        args[5] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void HyperbolicLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_forward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hyperbolic_linear_forward");
+
+        using var _ = PushContext();
+        int totalThreads = batchSize * outputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr biasesPtr = biases.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[9];
+        args[0] = &inputPtr;
+        args[1] = &weightsPtr;
+        args[2] = &biasesPtr;
+        args[3] = &outputPtr;
+        args[4] = &batchSize;
+        args[5] = &inputFeatures;
+        args[6] = &outputFeatures;
+        args[7] = &curvature;
+        args[8] = &epsilon;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    #endregion
+
+    #region Octonion Algebra Operations
+
+    public unsafe void OctonionMultiply(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count)
+    {
+        if (!_kernelCache.TryGetValue("octonion_multiply", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_multiply");
+
+        using var _ = PushContext();
+        uint grid = (uint)((count + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr aPtr = a.Handle;
+        IntPtr bPtr = b.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[4];
+        args[0] = &aPtr;
+        args[1] = &bPtr;
+        args[2] = &outputPtr;
+        args[3] = &count;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void OctonionAdd(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count)
+    {
+        if (!_kernelCache.TryGetValue("octonion_add", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_add");
+
+        using var _ = PushContext();
+        int totalElements = count * 8;
+        uint grid = (uint)((totalElements + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr aPtr = a.Handle;
+        IntPtr bPtr = b.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[4];
+        args[0] = &aPtr;
+        args[1] = &bPtr;
+        args[2] = &outputPtr;
+        args[3] = &count;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+        int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_forward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_linear_forward");
+
+        using var _ = PushContext();
+        int totalThreads = batchSize * outputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr biasesPtr = biases.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &inputPtr;
+        args[1] = &weightsPtr;
+        args[2] = &biasesPtr;
+        args[3] = &outputPtr;
+        args[4] = &batchSize;
+        args[5] = &inputFeatures;
+        args[6] = &outputFeatures;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    #endregion
+
+    #region Quantum Computing Operations
+
+    public unsafe void QuantumMeasurement(IGpuBuffer realPart, IGpuBuffer imagPart, IGpuBuffer probabilities, int batchSize, int stateSize)
+    {
+        if (!_kernelCache.TryGetValue("quantum_measurement", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: quantum_measurement");
+
+        using var _ = PushContext();
+        int totalThreads = batchSize * stateSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr realPtr = realPart.Handle;
+        IntPtr imagPtr = imagPart.Handle;
+        IntPtr probPtr = probabilities.Handle;
+
+        void** args = stackalloc void*[5];
+        args[0] = &realPtr;
+        args[1] = &imagPtr;
+        args[2] = &probPtr;
+        args[3] = &batchSize;
+        args[4] = &stateSize;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void NormalizeProbabilities(IGpuBuffer probabilities, int batchSize, int stateSize)
+    {
+        if (!_kernelCache.TryGetValue("normalize_probabilities", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: normalize_probabilities");
+
+        // Validate state size is power of two for shared-memory reduction
+        ValidateQuantumStateSize(stateSize, nameof(stateSize));
+
+        using var _ = PushContext();
+        // One block per batch element
+        uint grid = (uint)batchSize;
+        uint blockDim = (uint)Math.Min(DefaultBlockSize, stateSize);
+        uint sharedMemBytes = blockDim * sizeof(float);
+        IntPtr probPtr = probabilities.Handle;
+
+        void** args = stackalloc void*[3];
+        args[0] = &probPtr;
+        args[1] = &batchSize;
+        args[2] = &stateSize;
+        LaunchKernelWithSharedMem(kernel, grid, blockDim, sharedMemBytes, args);
+    }
+
+    public unsafe void ComplexMatVec(IGpuBuffer matReal, IGpuBuffer matImag, IGpuBuffer vecReal, IGpuBuffer vecImag,
+        IGpuBuffer outReal, IGpuBuffer outImag, int batchSize, int dim)
+    {
+        if (!_kernelCache.TryGetValue("complex_matvec", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: complex_matvec");
+
+        using var _ = PushContext();
+        int totalThreads = batchSize * dim;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr matRealPtr = matReal.Handle;
+        IntPtr matImagPtr = matImag.Handle;
+        IntPtr vecRealPtr = vecReal.Handle;
+        IntPtr vecImagPtr = vecImag.Handle;
+        IntPtr outRealPtr = outReal.Handle;
+        IntPtr outImagPtr = outImag.Handle;
+
+        void** args = stackalloc void*[8];
+        args[0] = &matRealPtr;
+        args[1] = &matImagPtr;
+        args[2] = &vecRealPtr;
+        args[3] = &vecImagPtr;
+        args[4] = &outRealPtr;
+        args[5] = &outImagPtr;
+        args[6] = &batchSize;
+        args[7] = &dim;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void QuantumRotation(IGpuBuffer stateReal, IGpuBuffer stateImag, IGpuBuffer outReal, IGpuBuffer outImag,
+        IGpuBuffer angles, int numQubits, int batchSize)
+    {
+        if (!_kernelCache.TryGetValue("quantum_rotation", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: quantum_rotation");
+
+        // Validate numQubits is in a reasonable range (1-30 to avoid overflow)
+        if (numQubits <= 0 || numQubits > 30)
+            throw new ArgumentOutOfRangeException(nameof(numQubits), numQubits,
+                "Number of qubits must be between 1 and 30 to avoid integer overflow.");
+
+        using var _ = PushContext();
+        int dim = 1 << numQubits;
+        // dim is guaranteed to be power of two since it's 2^numQubits
+        uint blockDim = (uint)Math.Min(DefaultBlockSize, dim);
+        IntPtr stateRealPtr = stateReal.Handle;
+        IntPtr stateImagPtr = stateImag.Handle;
+        IntPtr outRealPtr = outReal.Handle;
+        IntPtr outImagPtr = outImag.Handle;
+        IntPtr anglesPtr = angles.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &stateRealPtr;
+        args[1] = &stateImagPtr;
+        args[2] = &outRealPtr;
+        args[3] = &outImagPtr;
+        args[4] = &anglesPtr;
+        args[5] = &numQubits;
+        args[6] = &batchSize;
+        LaunchKernel(kernel, (uint)batchSize, blockDim, args);
+    }
+
+    public unsafe void MeasurementForward(IGpuBuffer input, IGpuBuffer output, int batchSize, int stateSize)
+    {
+        if (!_kernelCache.TryGetValue("measurement_forward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: measurement_forward");
+
+        // Validate state size is power of two for shared-memory reduction
+        ValidateQuantumStateSize(stateSize, nameof(stateSize));
+
+        using var _ = PushContext();
+        // One block per batch element, uses shared memory for reduction
+        uint grid = (uint)batchSize;
+        uint blockDim = (uint)Math.Min(DefaultBlockSize, stateSize);
+        uint sharedMemBytes = blockDim * sizeof(float);
+        IntPtr inputPtr = input.Handle;
+        IntPtr outputPtr = output.Handle;
+
+        void** args = stackalloc void*[4];
+        args[0] = &inputPtr;
+        args[1] = &outputPtr;
+        args[2] = &batchSize;
+        args[3] = &stateSize;
+        LaunchKernelWithSharedMem(kernel, grid, blockDim, sharedMemBytes, args);
+    }
+
+    #endregion
+
 
     public void Dispose()
     {
@@ -5729,6 +6182,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
         {
             CudaNativeBindings.cuModuleUnload(_deformableConvModule);
             _deformableConvModule = IntPtr.Zero;
+        }
+
+        if (_capsuleModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_capsuleModule);
+            _capsuleModule = IntPtr.Zero;
+        }
+
+        if (_specializedModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_specializedModule);
+            _specializedModule = IntPtr.Zero;
         }
 
         if (_cudaContext != IntPtr.Zero)

@@ -1330,6 +1330,10 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         var audioFeatures = EncodeAudio(input);
         return Tensor<T>.FromVector(audioFeatures);
     }

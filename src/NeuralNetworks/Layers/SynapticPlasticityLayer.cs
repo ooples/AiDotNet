@@ -348,7 +348,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
         var input = inputs[0];
-        
+
         // Pass-through layer
         // Cache GPU input/output for UpdateParameters
         if (IsTrainingMode)
@@ -359,9 +359,9 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
             // However, input might be reused/overwritten.
             // Safer to create a view or rely on upstream not modifying it.
             // Let's keep it. If we need persistent storage we might need Copy.
-            _lastInputGpu = input; 
+            _lastInputGpu = input;
             _lastOutputGpu = input; // Pass-through
-            
+
             // Also update CPU cache for compatibility if needed, or skip if fully GPU
             // _lastInput = input.ToTensor(); 
         }
@@ -388,7 +388,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
             // Update traces and detect spikes directly on GPU
             gpuEngine.UpdateTracesGpu(_presynapticTracesGpu!, _presynapticSpikesGpu!, _lastInputGpu, decay, threshold);
             gpuEngine.UpdateTracesGpu(_postsynapticTracesGpu!, _postsynapticSpikesGpu!, _lastOutputGpu!, decay, threshold);
-            
+
             // Execute STDP update kernel
             gpuEngine.StdpUpdateGpu(
                 _weights,

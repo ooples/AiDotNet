@@ -256,6 +256,10 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Support any sequence length by dynamically adapting
         // Attention mechanisms naturally handle variable-length sequences
         // If input sequence is longer than configured, layers will handle it internally

@@ -270,6 +270,10 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         Tensor<T> input4D;
 
         // Support both 3D [C, H, W] and 4D [B, C, H, W] input

@@ -746,6 +746,10 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // For a GAN, prediction means generating data using the generator
         // Determine if input is a single sample or batch based on the generator's expected input type
         var expectedInputRank = Architecture.InputType switch

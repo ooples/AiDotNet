@@ -447,6 +447,10 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor containing the network's prediction.</returns>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Ensure the input is a vector or can be converted to one
         Vector<T> inputVector;
         if (input.Rank == 1)

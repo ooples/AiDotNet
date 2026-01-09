@@ -270,6 +270,11 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(MixtureOfExpertsNeuralNetwork<T>), "forward pass");
 
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        // CPU path: each layer processes input and may download results
         Tensor<T> output = input;
         foreach (var layer in Layers)
         {

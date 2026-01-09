@@ -244,7 +244,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// DigitCapsuleLayer requires per-capsule routing with complex tensor indexing patterns.
     /// Without specialized GPU kernels, true GPU-resident execution isn't possible - CPU fallback is used.
     /// </remarks>
-    protected override bool SupportsGpuExecution => false;
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DigitCapsuleLayer{T}"/> class.
@@ -483,6 +483,132 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         }
 
         // Standard 2D output [batch, numClasses * outputCapsuleDimension]
+        return flattenedOutput;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass through the digit capsule layer.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensors.</param>
+    /// <returns>GPU-resident output tensor after capsule routing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass using GPU-resident operations for the dynamic
+    /// routing iterations. Uses CapsulePredictionsGpu for the prediction transform and
+    /// DynamicRoutingGpu for the routing iterations, keeping all data on GPU.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        var inputShape = input.Shape;
+        int rank = inputShape.Length;
+
+        // Determine batch size and reshape to [B, I, D_in] for capsule processing
+        int batchSize;
+        IGpuTensor<T> input3D;
+
+        if (rank == 1)
+        {
+            // 1D: [I*D_in] -> [1, I, D_in]
+            batchSize = 1;
+            input3D = gpuEngine.ReshapeGpu(input, [1, _inputCapsules, _inputCapsuleDimension]);
+        }
+        else if (rank == 2)
+        {
+            // 2D: could be [I, D_in] or [B, I*D_in]
+            if (inputShape[0] == _inputCapsules && inputShape[1] == _inputCapsuleDimension)
+            {
+                // [I, D_in] -> [1, I, D_in]
+                batchSize = 1;
+                input3D = gpuEngine.ReshapeGpu(input, [1, _inputCapsules, _inputCapsuleDimension]);
+            }
+            else
+            {
+                // [B, I*D_in] -> [B, I, D_in]
+                batchSize = inputShape[0];
+                input3D = gpuEngine.ReshapeGpu(input, [batchSize, _inputCapsules, _inputCapsuleDimension]);
+            }
+        }
+        else if (rank == 3)
+        {
+            // 3D: [B, I, D_in]
+            batchSize = inputShape[0];
+            input3D = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims to batch
+            int totalElements = 1;
+            for (int d = 0; d < rank; d++)
+                totalElements *= inputShape[d];
+
+            if (totalElements == _inputCapsules * _inputCapsuleDimension)
+            {
+                batchSize = 1;
+                input3D = gpuEngine.ReshapeGpu(input, [1, _inputCapsules, _inputCapsuleDimension]);
+            }
+            else
+            {
+                batchSize = inputShape[0];
+                int restElements = totalElements / batchSize;
+                if (restElements != _inputCapsules * _inputCapsuleDimension)
+                {
+                    throw new ArgumentException(
+                        $"Input shape [{string.Join(",", inputShape)}] cannot be reshaped to [B, {_inputCapsules}, {_inputCapsuleDimension}]");
+                }
+                input3D = gpuEngine.ReshapeGpu(input, [batchSize, _inputCapsules, _inputCapsuleDimension]);
+            }
+        }
+
+        // Store original shape for backward pass compatibility
+        _originalInputShape = inputShape;
+
+        // Cache input on CPU for backward pass (training mode only)
+        if (IsTrainingMode)
+        {
+            _lastInput = input3D.ToTensor();
+        }
+
+        // Compute predictions on GPU: [B, I, D_in] -> [B, I, C, D_out]
+        // predictions[b,i,c,d] = sum_k(input[b,i,k] * weights[i,c,k,d])
+        var predictions = gpuEngine.CapsulePredictionsGpu(input3D, _weights);
+
+        // Perform dynamic routing on GPU
+        // Returns output [B, C, D_out] and coupling coefficients [B, I, C]
+        var (routedOutput, couplings) = gpuEngine.DynamicRoutingGpu(predictions, _routingIterations);
+
+        // Cache output and couplings on CPU for backward pass (training mode only)
+        if (IsTrainingMode)
+        {
+            _lastOutput = routedOutput.ToTensor();
+            _lastCouplings = couplings.ToTensor();
+        }
+
+        // Dispose intermediate tensors
+        predictions.Dispose();
+        couplings.Dispose();
+
+        // Flatten output for compatibility with downstream layers
+        // [B, C, D_out] -> [B, C*D_out]
+        var flattenedOutput = gpuEngine.ReshapeGpu(routedOutput, [batchSize, _numClasses * _outputCapsuleDimension]);
+
+        // For single-sample with low-rank input, return 1D output
+        if (batchSize == 1 && _originalInputShape != null && _originalInputShape.Length < 3)
+        {
+            return gpuEngine.ReshapeGpu(flattenedOutput, [_numClasses * _outputCapsuleDimension]);
+        }
+
         return flattenedOutput;
     }
 

@@ -187,22 +187,31 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Set network to inference mode (not training)
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
 
-        // Forward pass through all layers
-        Tensor<T> current = input;
-
-        foreach (var layer in Layers)
+        try
         {
-            current = layer.Forward(current);
+            // CPU path: forward pass through all layers
+            Tensor<T> current = input;
+
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
         }
-
-        // Restore original training mode
-        SetTrainingMode(originalTrainingMode);
-
-        return current;
+        finally
+        {
+            // Restore original training mode
+            SetTrainingMode(originalTrainingMode);
+        }
     }
 
     /// <summary>
@@ -261,12 +270,9 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         // Step 4: Update parameters using gradients and learning rate
         T learningRate = NumOps.FromDouble(0.01);
 
-        foreach (var layer in Layers)
+        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(learningRate);
-            }
+            layer.UpdateParameters(learningRate);
         }
     }
 

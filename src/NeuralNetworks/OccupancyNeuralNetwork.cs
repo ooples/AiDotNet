@@ -275,6 +275,10 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         // Set network to inference mode
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);

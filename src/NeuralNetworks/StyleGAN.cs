@@ -809,7 +809,14 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
     protected override void InitializeLayers() { }
 
-    public override Tensor<T> Predict(Tensor<T> input) => Generate(input);
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        return Generate(input);
+    }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

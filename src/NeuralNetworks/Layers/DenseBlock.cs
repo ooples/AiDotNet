@@ -1,6 +1,8 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -56,6 +58,11 @@ public class DenseBlock<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer has a GPU implementation.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the number of layers in this dense block.
@@ -133,6 +140,33 @@ public class DenseBlock<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Performs the forward pass on GPU, keeping data GPU-resident.
+    /// </summary>
+    /// <param name="inputs">The input tensors (expects single input).</param>
+    /// <returns>The output tensor on GPU.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var currentFeatures = inputs[0];
+
+        foreach (var layer in _layers)
+        {
+            // Each layer takes ALL previous features as input
+            var layerOutput = layer.ForwardGpu(currentFeatures);
+
+            // Concatenate new features with existing features along channel dimension (axis 1)
+            currentFeatures = gpuEngine.ConcatGpu(new[] { currentFeatures, layerOutput }, 1);
+        }
+
+        return currentFeatures;
+    }
+
+    /// <summary>
     /// Performs the backward pass of the Dense Block.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
@@ -184,12 +218,7 @@ public class DenseBlock<T> : LayerBase<T>
     /// </summary>
     public override Vector<T> GetParameters()
     {
-        var parameters = new List<T>();
-        foreach (var layer in _layers)
-        {
-            parameters.AddRange(layer.GetParameters().ToArray());
-        }
-        return new Vector<T>(parameters.ToArray());
+        return new Vector<T>(_layers.SelectMany(l => l.GetParameters().ToArray()).ToArray());
     }
 
     /// <summary>
