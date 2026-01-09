@@ -155,7 +155,7 @@ public class RBFLayer<T> : LayerBase<T>
         // Input: [batch, inputSize] (ensure 2D)
         int batch = input.Shape[0];
         var input2D = input.Shape.Length == 1 ? gpuEngine.ReshapeGpu(input, [1, input.Shape[0]]) : input;
-        
+
         // Use custom RBF kernel on GPU
         // Weights are persistent tensors, handled by engine
         var output = gpuEngine.RbfKernelGpu(input2D, _centers, _widths);

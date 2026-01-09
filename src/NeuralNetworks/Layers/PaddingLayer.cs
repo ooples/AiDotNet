@@ -88,7 +88,7 @@ public class PaddingLayer<T> : LayerBase<T>
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-        
+
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
         if (_padding.Length != input.Shape.Length)

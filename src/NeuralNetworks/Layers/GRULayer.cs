@@ -749,11 +749,11 @@ public class GRULayer<T> : LayerBase<T>
         int inputSliceSize = batchSize * _inputSize;
         int outputSize = sequenceLength * batchSize * _hiddenSize;
         int[] outputShape = [batchSize, sequenceLength, _hiddenSize]; // Default for rank 3
-        
+
         // Fix output shape logic to match existing ForwardGpu
         if (_returnSequences)
         {
-             // Already set above
+            // Already set above
         }
         else
         {
@@ -820,7 +820,7 @@ public class GRULayer<T> : LayerBase<T>
             cachedR = new List<float[]>(sequenceLength);
             cachedHCan = new List<float[]>(sequenceLength);
             cachedH = new List<float[]>(sequenceLength);
-            
+
             // Allocate snapshot buffers to store intermediate states on GPU
             zBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
             rBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
@@ -884,12 +884,12 @@ public class GRULayer<T> : LayerBase<T>
                     var rSnapshot = backend.AllocateBuffer(hiddenBufferSize);
                     var hCanSnapshot = backend.AllocateBuffer(hiddenBufferSize);
                     var hSnapshot = backend.AllocateBuffer(hiddenBufferSize);
-                    
+
                     backend.Copy(zGateBuffer, zSnapshot, hiddenBufferSize);
                     backend.Copy(rGateBuffer, rSnapshot, hiddenBufferSize);
                     backend.Copy(hCandidateBuffer, hCanSnapshot, hiddenBufferSize);
                     backend.Copy(newHBuffer, hSnapshot, hiddenBufferSize);
-                    
+
                     zBufferSnapshots.Add(zSnapshot);
                     rBufferSnapshots!.Add(rSnapshot);
                     hCanBufferSnapshots!.Add(hCanSnapshot);
@@ -919,7 +919,7 @@ public class GRULayer<T> : LayerBase<T>
                     cachedR!.Add(backend.DownloadBuffer(rBufferSnapshots![t]));
                     cachedHCan!.Add(backend.DownloadBuffer(hCanBufferSnapshots![t]));
                     cachedH!.Add(backend.DownloadBuffer(hBufferSnapshots![t]));
-                    
+
                     // Dispose snapshot buffers after download
                     zBufferSnapshots[t].Dispose();
                     rBufferSnapshots[t].Dispose();
@@ -961,7 +961,7 @@ public class GRULayer<T> : LayerBase<T>
             outputBuffer.Dispose();
             currentHBuffer.Dispose();
             newHBuffer.Dispose();
-            
+
             // Clean up snapshot buffers on error
             if (zBufferSnapshots != null)
             {

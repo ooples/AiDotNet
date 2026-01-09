@@ -1386,7 +1386,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// </summary>
     /// <typeparam name="T">The element type of the tensor.</typeparam>
     /// <param name="tensor">The CPU tensor containing weight/bias data.</param>
-    /// <param name="role">The role indicating whether this is weights or biases (maps to PersistentTensorRole).</param>
+    /// <param name="role">The role indicating the type of persistent tensor (Weight, Bias, Statistics, AttentionCache, or Constant).</param>
     /// <returns>
     /// A GPU-resident tensor with ownership semantics determined by cache state:
     /// - If cached: ownsBuffer=false, disposing the tensor is safe (no-op, cache retains buffer).
@@ -1394,12 +1394,23 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     /// In both cases, disposing the returned tensor is safe and recommended.
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when no GPU backend is available.</exception>
+    /// <exception cref="ArgumentException">Thrown when an unsupported role is passed (e.g., General, Activation, Gradient).</exception>
     public IGpuTensor<T> GetOrCacheWeightsGpu<T>(Tensor<T> tensor, GpuTensorRole role = GpuTensorRole.Weight)
     {
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for GetOrCacheWeightsGpu");
 
-        var persistentRole = role == GpuTensorRole.Weight ? PersistentTensorRole.Weights : PersistentTensorRole.Biases;
+        var persistentRole = role switch
+        {
+            GpuTensorRole.Weight => PersistentTensorRole.Weights,
+            GpuTensorRole.Bias => PersistentTensorRole.Biases,
+            GpuTensorRole.Statistics => PersistentTensorRole.NormalizationParams,
+            GpuTensorRole.AttentionCache => PersistentTensorRole.AttentionCache,
+            GpuTensorRole.Constant => PersistentTensorRole.Constant,
+            _ => throw new ArgumentException(
+                $"GetOrCacheWeightsGpu only supports Weight, Bias, Statistics, AttentionCache, or Constant roles. " +
+                $"Got: {role}. Use UploadToGpu for other tensor types.", nameof(role))
+        };
         var ownedBuffer = GetOrCacheWeightBuffer(backend, tensor.Data, persistentRole);
 
         // Propagate ownership: if cache owns buffer, GpuTensor shouldn't dispose;
@@ -8142,7 +8153,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int size = input.ElementCount;
         var outputBuffer = backend.AllocateBuffer(size);
-        
+
         using var scalarBuffer = backend.AllocateBuffer(size);
         backend.Fill(scalarBuffer, scalar, size);
 
@@ -8196,7 +8207,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         // 2. Flatten to 2D [Outer, AxisDim] for strided copy
         long outerSize = 1;
-        for (int i = 0; i < rank - 1; i++) 
+        for (int i = 0; i < rank - 1; i++)
             outerSize *= (needsPermute ? inputs[0].Shape[permutation![i]] : inputs[0].Shape[i]);
 
         int totalAxisDim = outputShape[actualAxis];
@@ -8216,12 +8227,12 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int[] tempShape = new int[rank];
         if (needsPermute)
         {
-             for(int i=0; i<rank-1; i++) tempShape[i] = outputShape[permutation![i]];
-             tempShape[rank-1] = totalAxisDim;
+            for (int i = 0; i < rank - 1; i++) tempShape[i] = outputShape[permutation![i]];
+            tempShape[rank - 1] = totalAxisDim;
         }
         else
         {
-             Array.Copy(outputShape, tempShape, rank);
+            Array.Copy(outputShape, tempShape, rank);
         }
 
         var result = new GpuTensor<T>(backend, outputBuffer, tempShape, GpuTensorRole.Activation, ownsBuffer: true);
@@ -8231,7 +8242,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             var permutedResult = PermuteGpu(result, invPermutation!);
             result.Dispose();
             result = (GpuTensor<T>)permutedResult;
-            
+
             foreach (var pInput in processedInputs) pInput.Dispose();
         }
 
@@ -8248,17 +8259,17 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // Similar logic to ReduceAxisGpu for arbitrary axis
         // For CRF, axis is usually 1 (after reshape).
         // Let's implement generic axis handling via Permute if needed.
-        
+
         var inputShape = input.Shape;
         int inputRank = inputShape.Length;
         int outerSize = 1;
         int reduceSize = inputShape[axis];
-        
+
         // If axis is last, optimal.
         // If not, Permute.
         IGpuTensor<T> processedInput = input;
         bool needsPermute = axis != inputRank - 1;
-        
+
         if (needsPermute)
         {
             var perm = new int[inputRank];
@@ -8268,18 +8279,18 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             perm[inputRank - 1] = axis;
             processedInput = PermuteGpu(input, perm);
         }
-        
+
         // Calculate outer size (product of all dims except axis)
         outerSize = processedInput.ElementCount / reduceSize;
-        
+
         var outputBuffer = backend.AllocateBuffer(outerSize);
         backend.ArgMaxAxis(processedInput.Buffer, outputBuffer, outerSize, reduceSize);
-        
+
         if (needsPermute)
         {
             processedInput.Dispose();
         }
-        
+
         // Output shape is input shape with axis removed (or set to 1? ArgMax usually reduces rank).
         // Let's keep rank for compatibility with Torch-like ArgMax, or reduce.
         // ReduceAxisGpu kept dims optionally.
@@ -8291,7 +8302,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (i != axis) outputShapeList.Add(inputShape[i]);
         }
         if (outputShapeList.Count == 0) outputShapeList.Add(1);
-        
+
         return new GpuTensor<T>(backend, outputBuffer, outputShapeList.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
@@ -8304,10 +8315,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int inputRank = inputShape.Length;
         int outerSize = 1;
         int reduceSize = inputShape[axis];
-        
+
         IGpuTensor<T> processedInput = input;
         bool needsPermute = axis != inputRank - 1;
-        
+
         if (needsPermute)
         {
             var perm = new int[inputRank];
@@ -8317,18 +8328,18 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             perm[inputRank - 1] = axis;
             processedInput = PermuteGpu(input, perm);
         }
-        
+
         outerSize = processedInput.ElementCount / reduceSize;
         var outputBuffer = backend.AllocateBuffer(outerSize);
         backend.MaxAxis(processedInput.Buffer, outputBuffer, outerSize, reduceSize);
-        
+
         if (needsPermute) processedInput.Dispose();
-        
+
         var outputShapeList = new List<int>();
         for (int i = 0; i < inputRank; i++)
             if (i != axis) outputShapeList.Add(inputShape[i]);
         if (outputShapeList.Count == 0) outputShapeList.Add(1);
-        
+
         return new GpuTensor<T>(backend, outputBuffer, outputShapeList.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
@@ -8349,16 +8360,16 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // It's more predictable.
         // So I will just implement AddGpu (which I assume exists? No, I saw 'Add' in backend).
         // I need to expose AddGpu (element-wise).
-        
+
         // Wait, AddGpu probably exists?
         // I'll check "Element-wise Operations (GPU)" region.
         // I see SinGpu, CosGpu... AddGpu might be missing from public API in this file?
         // I will add AddGpu just in case.
-        
+
         int size = a.ElementCount;
         if (size != b.ElementCount)
             throw new ArgumentException($"AddGpu requires matching sizes: {size} vs {b.ElementCount}");
-            
+
         var outputBuffer = backend.AllocateBuffer(size);
         backend.Add(a.Buffer, b.Buffer, outputBuffer, size);
         return new GpuTensor<T>(backend, outputBuffer, a.Shape, GpuTensorRole.Activation, ownsBuffer: true);
@@ -8424,16 +8435,16 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // Validate size
         int newSize = 1;
         foreach (var dim in newShape) newSize *= dim;
-        
+
         if (newSize != input.ElementCount)
             throw new ArgumentException($"Reshape total size mismatch: {input.ElementCount} vs {newSize}");
 
         // Check input type
         if (input is GpuTensor<T> gpuTensor)
         {
-             return gpuTensor.CreateView(0, newShape);
+            return gpuTensor.CreateView(0, newShape);
         }
-        
+
         // Fallback: create wrapper
         return new GpuTensor<T>(backend, input.Buffer, newShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
@@ -8520,25 +8531,24 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int numPre = weights.Shape[0];
         int numPost = weights.Shape[1]; // Correct shape for fully connected?
-        // SynapticPlasticityLayer weights are [size, size] so Pre x Post.
+                                        // SynapticPlasticityLayer weights are [size, size] so Pre x Post.
 
         // Weights are modified in-place on GPU, then need to be invalidating CPU cache or vice-versa.
         // We assume weights are persistent GPU tensors.
         // But here we accept Tensor<T> weights.
         // We should check if it's cached.
-        
+
         // This operation modifies weights in-place on GPU.
         // If we only have CPU weights, we must upload, modify, download.
         // But for training loop, weights should stay on GPU.
         // We use RegisterPersistentTensor mechanism.
-        
+
         // Get buffer without allocating new one if possible, but we need writable access.
         // GetOrAllocateBuffer returns OwnedBuffer which might be cached.
         // If cached, we modify it in place.
         // We must ensure CPU side knows it's dirty if we download later.
-        
+
         using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
-        
         backend.StdpUpdate(
             weightsBuffer.Buffer,
             preTrace.Buffer,
@@ -8548,7 +8558,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             (float)ltpRate, (float)ltdRate, (float)homeostasisRate,
             (float)minWeight, (float)maxWeight,
             numPre, numPost);
-            
+
         // Mark as modified on GPU so next Download syncs it
         // BUT our current system doesn't track dirty state for download.
         // We assume explicit download or automatic handling.
@@ -8560,7 +8570,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // DirectGpuTensorEngine doesn't have "MarkDirty".
         // We will download to keep consistency for now, or assume layer manages it.
         // Given UpdateParameters returns void, we should update the CPU tensor too.
-        
+
         backend.DownloadBuffer(weightsBuffer.Buffer, DirectGpuEngine.ToFloatArray(weights.Data));
     }
 

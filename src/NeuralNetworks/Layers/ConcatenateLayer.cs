@@ -88,7 +88,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
         // 1. Handle Axis Permutation (Move concatenation axis to last dimension)
         int rank = inputs[0].Shape.Length;
         int axis = _axis < 0 ? rank + _axis : _axis;
-        
+
         IGpuTensor<T>[] processedInputs = inputs;
         bool needsPermute = axis != rank - 1;
         int[]? permutation = null;
@@ -117,7 +117,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
         // 2. Flatten to 2D [Outer, AxisDim]
         // Since axis is now last, Outer = product of all other dims
         long outerSize = 1;
-        for (int i = 0; i < rank - 1; i++) 
+        for (int i = 0; i < rank - 1; i++)
             outerSize *= (needsPermute ? inputs[0].Shape[permutation![i]] : inputs[0].Shape[i]);
         // For inputs[0], dimension at axis index is Shape[axis]. After permute it is Shape[rank-1].
         // But outer dimensions must match across all inputs.
@@ -148,8 +148,8 @@ public class ConcatenateLayer<T> : LayerBase<T>
         int[] permutedOutputShape = new int[rank];
         if (needsPermute)
         {
-            for(int i=0; i<rank-1; i++) permutedOutputShape[i] = inputs[0].Shape[permutation![i]];
-            permutedOutputShape[rank-1] = totalAxisDim;
+            for (int i = 0; i < rank - 1; i++) permutedOutputShape[i] = inputs[0].Shape[permutation![i]];
+            permutedOutputShape[rank - 1] = totalAxisDim;
         }
         else
         {

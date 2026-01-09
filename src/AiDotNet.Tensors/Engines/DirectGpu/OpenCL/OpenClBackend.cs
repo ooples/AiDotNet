@@ -666,7 +666,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 destOffsetBytes,
                 sizeBytes,
                 0, IntPtr.Zero, IntPtr.Zero);
-                
+
             if (err != OpenClNativeBindings.CL_SUCCESS)
                 throw new InvalidOperationException($"OpenCL copy failed: {err}");
         }
