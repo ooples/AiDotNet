@@ -26,6 +26,11 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _bn2Out;
     private Tensor<T>? _relu2Out;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuBn1Out;
+    private IGpuTensor<T>? _gpuConv1Out;
+    private IGpuTensor<T>? _gpuBn2Out;
+
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -111,7 +116,94 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var relu2Output = gpuEngine.ActivationGpu(bn2Output, FusedActivationType.ReLU);
         var output = _conv3x3.ForwardGpu(relu2Output);
 
+        // Cache tensors for backward pass (need BN outputs for ReLU backward)
+        if (IsTrainingMode)
+        {
+            _gpuBn1Out = bn1Output;
+            _gpuConv1Out = conv1Output;
+            _gpuBn2Out = bn2Output;
+        }
+
         return output;
+    }
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuBn1Out == null || _gpuConv1Out == null || _gpuBn2Out == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Backward through Conv3x3
+        var conv3x3Type = _conv3x3.GetType();
+        var conv3x3BackwardGpu = conv3x3Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+        IGpuTensor<T> grad;
+        if (conv3x3BackwardGpu != null)
+        {
+            grad = (IGpuTensor<T>)conv3x3BackwardGpu.Invoke(_conv3x3, new object[] { outputGradient })!;
+        }
+        else
+        {
+            var cpuGrad = outputGradient.ToTensor();
+            var cpuResult = _conv3x3.Backward(cpuGrad);
+            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+        }
+
+        // Backward through ReLU2 - uses BN2 output as input
+        grad = gpuEngine.ReluBackwardGpu<T>(grad, _gpuBn2Out);
+
+        // Backward through BN2
+        var bn2Type = _bn2.GetType();
+        var bn2BackwardGpu = bn2Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+        if (bn2BackwardGpu != null)
+        {
+            grad = (IGpuTensor<T>)bn2BackwardGpu.Invoke(_bn2, new object[] { grad })!;
+        }
+        else
+        {
+            var cpuGrad = grad.ToTensor();
+            var cpuResult = _bn2.Backward(cpuGrad);
+            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+        }
+
+        // Backward through Conv1x1
+        var conv1x1Type = _conv1x1.GetType();
+        var conv1x1BackwardGpu = conv1x1Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+        if (conv1x1BackwardGpu != null)
+        {
+            grad = (IGpuTensor<T>)conv1x1BackwardGpu.Invoke(_conv1x1, new object[] { grad })!;
+        }
+        else
+        {
+            var cpuGrad = grad.ToTensor();
+            var cpuResult = _conv1x1.Backward(cpuGrad);
+            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+        }
+
+        // Backward through ReLU1 - uses BN1 output as input
+        grad = gpuEngine.ReluBackwardGpu<T>(grad, _gpuBn1Out);
+
+        // Backward through BN1
+        var bn1Type = _bn1.GetType();
+        var bn1BackwardGpu = bn1Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+        if (bn1BackwardGpu != null)
+        {
+            grad = (IGpuTensor<T>)bn1BackwardGpu.Invoke(_bn1, new object[] { grad })!;
+        }
+        else
+        {
+            var cpuGrad = grad.ToTensor();
+            var cpuResult = _bn1.Backward(cpuGrad);
+            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+        }
+
+        return grad;
     }
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
@@ -200,6 +292,10 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _conv1Out = null;
         _bn2Out = null;
         _relu2Out = null;
+
+        _gpuBn1Out = null;
+        _gpuConv1Out = null;
+        _gpuBn2Out = null;
 
         _bn1.ResetState();
         _conv1x1.ResetState();

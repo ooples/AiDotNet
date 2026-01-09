@@ -68,6 +68,14 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T>? _lastEncoderOutput;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuDecoderInput;
+    private IGpuTensor<T>? _gpuEncoderOutput;
+    private IGpuTensor<T>? _gpuNormalized1;
+    private IGpuTensor<T>? _gpuNormalized2;
+    private IGpuTensor<T>? _gpuResidual1;
+    private IGpuTensor<T>? _gpuResidual2;
+
     /// <summary>
     /// Gets the size of the input features for this layer.
     /// </summary>
@@ -355,11 +363,89 @@ public class DecoderLayer<T> : LayerBase<T>
         // Cache state for backward pass only during training
         if (IsTrainingMode)
         {
+            _gpuDecoderInput = decoderInput;
+            _gpuEncoderOutput = encoderOutput;
+            _gpuNormalized1 = normalized1;
+            _gpuNormalized2 = normalized2;
+            _gpuResidual1 = residual1;
+            _gpuResidual2 = residual2;
             _lastInput = decoderInput.ToTensor();
             _lastEncoderOutput = encoderOutput.ToTensor();
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the inputs on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the decoder input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuNormalized1 == null || _gpuNormalized2 == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Backward through norm3
+        IGpuTensor<T> grad = InvokeBackwardGpu(_norm3, outputGradient, gpuEngine);
+
+        // Gradient through residual3: add to both branches
+        // Backward through FFN2
+        IGpuTensor<T> ffOutputGrad = InvokeBackwardGpu(_feedForward2, grad, gpuEngine);
+
+        // Backward through FFN1
+        IGpuTensor<T> ffHiddenGrad = InvokeBackwardGpu(_feedForward1, ffOutputGrad, gpuEngine);
+
+        // Add residual gradient from norm3
+        var norm2Grad = gpuEngine.AddGpu(ffHiddenGrad, grad);
+
+        // Backward through norm2
+        grad = InvokeBackwardGpu(_norm2, norm2Grad, gpuEngine);
+
+        // Gradient through residual2: add to both branches
+        // Backward through cross-attention
+        IGpuTensor<T> crossAttnGrad = InvokeBackwardGpu(_crossAttention, grad, gpuEngine);
+
+        // Add residual gradient from norm2
+        var norm1Grad = gpuEngine.AddGpu(crossAttnGrad, grad);
+
+        // Backward through norm1
+        grad = InvokeBackwardGpu(_norm1, norm1Grad, gpuEngine);
+
+        // Gradient through residual1: add to both branches
+        // Backward through self-attention
+        IGpuTensor<T> selfAttnGrad = InvokeBackwardGpu(_selfAttention, grad, gpuEngine);
+
+        // Add residual gradient to get final input gradient
+        var inputGrad = gpuEngine.AddGpu(selfAttnGrad, grad);
+
+        return inputGrad;
+    }
+
+    /// <summary>
+    /// Helper method to invoke BackwardGpu on a sublayer using reflection.
+    /// </summary>
+    private static IGpuTensor<T> InvokeBackwardGpu(LayerBase<T> layer, IGpuTensor<T> grad, DirectGpuTensorEngine gpuEngine)
+    {
+        var layerType = layer.GetType();
+        var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+
+        if (backwardGpuMethod != null)
+        {
+            return (IGpuTensor<T>)backwardGpuMethod.Invoke(layer, new object[] { grad })!;
+        }
+        else
+        {
+            // Fallback to CPU backward
+            var cpuGrad = grad.ToTensor();
+            var cpuResult = layer.Backward(cpuGrad);
+            return gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+        }
     }
 
     /// <summary>
@@ -610,6 +696,12 @@ public class DecoderLayer<T> : LayerBase<T>
     {
         _lastInput = null;
         _lastEncoderOutput = null;
+        _gpuDecoderInput = null;
+        _gpuEncoderOutput = null;
+        _gpuNormalized1 = null;
+        _gpuNormalized2 = null;
+        _gpuResidual1 = null;
+        _gpuResidual2 = null;
         _selfAttention.ResetState();
         _crossAttention.ResetState();
         _feedForward1.ResetState();

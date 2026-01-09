@@ -217,6 +217,81 @@ public class ResidualLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// For residual connection: output = activation(input + innerLayer(input))
+    /// Gradient flows to both the input directly and through the inner layer.
+    /// </remarks>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Apply activation backward if needed
+        IGpuTensor<T> gradAfterActivation = outputGradient;
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None && _lastInnerOutput != null)
+        {
+            // Need the sum (input + innerOutput) for activation backward
+            var lastInputGpu = gpuEngine.UploadToGpu<T>(_lastInput, GpuTensorRole.Activation);
+            var lastInnerGpu = gpuEngine.UploadToGpu<T>(_lastInnerOutput, GpuTensorRole.Activation);
+            var sumGpu = gpuEngine.AddGpu(lastInputGpu, lastInnerGpu);
+
+            gradAfterActivation = fusedOp switch
+            {
+                FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, sumGpu),
+                FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, sumGpu),
+                FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, sumGpu),
+                FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, sumGpu),
+                FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, sumGpu),
+                _ => outputGradient
+            };
+            lastInputGpu.Dispose();
+            lastInnerGpu.Dispose();
+            sumGpu.Dispose();
+        }
+
+        // For addition, gradient flows equally to both inputs
+        // inputGradient = gradAfterActivation (direct path) + innerLayer.BackwardGpu(gradAfterActivation)
+
+        if (_innerLayer != null)
+        {
+            // Try to call inner layer's BackwardGpu if available
+            var innerLayerType = _innerLayer.GetType();
+            var backwardGpuMethod = innerLayerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+            if (backwardGpuMethod != null)
+            {
+                var innerGrad = (IGpuTensor<T>)backwardGpuMethod.Invoke(_innerLayer, new object[] { gradAfterActivation })!;
+                // Total gradient = direct gradient + inner layer gradient
+                var result = gpuEngine.AddGpu(gradAfterActivation, innerGrad);
+                innerGrad.Dispose();
+                return result;
+            }
+            else
+            {
+                // Fallback to CPU backward
+                var cpuGrad = gradAfterActivation.ToTensor();
+                var cpuInnerGrad = _innerLayer.Backward(cpuGrad);
+                var innerGradGpu = gpuEngine.UploadToGpu<T>(cpuInnerGrad, GpuTensorRole.Gradient);
+                var result = gpuEngine.AddGpu(gradAfterActivation, innerGradGpu);
+                innerGradGpu.Dispose();
+                return result;
+            }
+        }
+
+        // No inner layer - gradient passes through directly
+        return gradAfterActivation;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ResidualLayer{T}"/> class with the specified input shape,
     /// inner layer, and scalar activation function.
     /// </summary>
