@@ -1,8 +1,8 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Engines.DirectGpu; // For IGpuBuffer
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -114,14 +114,14 @@ public class SpiralConvLayer<T> : LayerBase<T>
 
         int numVertices = _spiralIndices!.GetLength(0);
         int inputChannels = InputChannels;
-        
+
         bool hasBatch = input.Shape.Length == 3;
         int batchSize = hasBatch ? input.Shape[0] : 1;
-        
+
         // Input validation
         int actualVertices = hasBatch ? input.Shape[1] : input.Shape[0];
         int actualChannels = hasBatch ? input.Shape[2] : input.Shape[1];
-        
+
         if (actualVertices != numVertices)
             throw new ArgumentException($"Input vertices ({actualVertices}) does not match spiral indices ({numVertices}).");
         if (actualChannels != inputChannels)
@@ -144,14 +144,14 @@ public class SpiralConvLayer<T> : LayerBase<T>
             // Or use element-wise multiply if we can replicate mask.
             // Let's assume we can wrap buffer.
             using var maskTensor = new GpuTensor<T>(backend, _spiralMaskGpu!, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
-            
+
             // Broadcast multiply: gatheredRaw * mask
             var gatheredMasked = gpuEngine.BroadcastMultiplyColumnGpu(gatheredRaw, maskTensor);
             gatheredRaw.Dispose();
 
             // Reshape to [V, S*C]
             var gathered = gpuEngine.ReshapeGpu(gatheredMasked, [numVertices, SpiralLength * inputChannels]);
-            
+
             // MatMul: [V, S*C] @ [S*C, OutC] -> [V, OutC]
             // Weights are [OutC, S*C]. Need Transpose.
             // Cache transposed weights?
@@ -159,11 +159,11 @@ public class SpiralConvLayer<T> : LayerBase<T>
             // Actually, FusedLinearGpu takes weights as [In, Out].
             // Our weights are [Out, In]. So we need Transpose.
             var wT = _weights.Transpose(); // CPU transpose
-            // TODO: Optimize by storing transposed weights for GPU.
-            
+                                           // TODO: Optimize by storing transposed weights for GPU.
+
             var output = gpuEngine.FusedLinearGpu(gathered, wT, _biases, MapActivationToFused());
             gathered.Dispose();
-            
+
             return output;
         }
 
@@ -188,29 +188,29 @@ public class SpiralConvLayer<T> : LayerBase<T>
                 // Or: Implement a batch loop where we offset the input pointer?
                 // GpuTensor has Buffer and Offset? No, just Buffer.
                 // I can use `CreateView` if GpuTensor supported offsets, but it doesn't seem to.
-                
+
                 // Fallback for batch: 
                 // 1. Reshape input to [1, B*V, C] -> NO.
                 // 2. Use a kernel that handles batch?
                 // 3. Just loop?
                 // If I can't slice, I can't loop.
-                
+
                 // Let's assume input is contiguous.
                 // I can create a new GpuTensor for each slice using shared buffer?
                 // IDirectGpuBackend buffers are handles. OpenCL sub-buffers?
                 // Not exposed.
-                
+
                 // OK, strategy shift: Flatten Batch and Vertices.
                 // Treat [B, V, C] as [B*V, C].
                 // We need indices for [B*V] vertices.
                 // Indices are [V*S]. They need to be repeated B times, with offset V added to each block.
                 // i.e. indices[b, v, s] = indices[v, s] + b*V.
-                
+
                 // I can generate this extended index array on CPU and upload.
                 // Since V and S are fixed, and B varies, maybe generate dynamically?
                 // Or just generate on CPU every time?
                 // Generating indices on CPU for B*V*S size is fast enough.
-                
+
                 // 1. Reshape input to [B*V, C]
                 // 2. Generate full indices [B*V*S]
                 // 3. Gather -> [B*V*S, C]
@@ -218,24 +218,24 @@ public class SpiralConvLayer<T> : LayerBase<T>
                 // 5. Reshape to [B*V, S*C]
                 // 6. MatMul
                 // 7. Reshape to [B, V, OutC]
-                
+
                 // This seems best.
             }
-            
+
             // For now, let's implement the "Flatten Batch" strategy properly.
-            
+
             int totalVertices = batchSize * numVertices;
             var flatInput = gpuEngine.ReshapeGpu(input, [totalVertices, inputChannels]);
-            
+
             // Generate extended indices
             var flatIndices = new int[totalVertices * SpiralLength];
             var flatMask = new float[totalVertices * SpiralLength];
-            
+
             // This loop might be slow for huge batches, but it's CPU side.
             // Parallelize?
             int[] baseIndices = new int[numVertices * SpiralLength];
             float[] baseMask = new float[numVertices * SpiralLength];
-            
+
             // Prepare base
             for (int v = 0; v < numVertices; v++)
             {
@@ -255,7 +255,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
                     }
                 }
             }
-            
+
             System.Threading.Tasks.Parallel.For(0, batchSize, b =>
             {
                 int offset = b * numVertices * SpiralLength;
@@ -266,23 +266,23 @@ public class SpiralConvLayer<T> : LayerBase<T>
                     flatMask[offset + i] = baseMask[i];
                 }
             });
-            
+
             using var indicesBuffer = backend.AllocateIntBuffer(flatIndices);
             using var maskBuffer = backend.AllocateBuffer(flatMask);
-            
+
             int numGather = totalVertices * SpiralLength;
             var gatheredRaw = gpuEngine.GatherGpu(flatInput, indicesBuffer, numGather, inputChannels);
-            
+
             using var maskTensor = new GpuTensor<T>(backend, maskBuffer, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
             var gatheredMasked = gpuEngine.BroadcastMultiplyColumnGpu(gatheredRaw, maskTensor);
             gatheredRaw.Dispose();
-            
+
             var gathered = gpuEngine.ReshapeGpu(gatheredMasked, [totalVertices, SpiralLength * inputChannels]);
-            
+
             var wT = _weights.Transpose();
             var outputFlat = gpuEngine.FusedLinearGpu(gathered, wT, _biases, MapActivationToFused());
             gathered.Dispose();
-            
+
             result = gpuEngine.ReshapeGpu(outputFlat, [batchSize, numVertices, OutputChannels]);
         }
         else
@@ -320,7 +320,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
             {
                 int idx = v * SpiralLength + s;
                 int neighbor = _spiralIndices[v, s];
-                
+
                 if (neighbor >= 0 && neighbor < numVertices)
                 {
                     indices[idx] = neighbor;

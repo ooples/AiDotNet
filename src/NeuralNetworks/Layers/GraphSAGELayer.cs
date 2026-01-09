@@ -1198,7 +1198,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             case FusedActivationType.GELU:
                 backend.Gelu(buffer, buffer, size);
                 break;
-            // None/Identity does nothing
+                // None/Identity does nothing
         }
     }
 

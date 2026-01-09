@@ -129,12 +129,12 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         }
 
         int batch = input.Shape[0];
-        IGpuTensor<T> timesteps = input.Shape.Length == 1 
-            ? gpuEngine.ReshapeGpu(input, [batch, 1]) 
+        IGpuTensor<T> timesteps = input.Shape.Length == 1
+            ? gpuEngine.ReshapeGpu(input, [batch, 1])
             : input;
 
         // Compute sinusoidal embedding args: timesteps @ frequencies^T
-        var freqsT = _frequencies.Transpose(); 
+        var freqsT = _frequencies.Transpose();
         var args = gpuEngine.FusedLinearGpu(timesteps, freqsT, null, FusedActivationType.None);
 
         var sinPart = gpuEngine.SinGpu(args);

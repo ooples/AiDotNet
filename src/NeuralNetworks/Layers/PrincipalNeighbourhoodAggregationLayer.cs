@@ -733,7 +733,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             case FusedActivationType.GELU:
                 backend.Gelu(buffer, buffer, size);
                 break;
-            // Identity does nothing
+                // Identity does nothing
         }
     }
 
