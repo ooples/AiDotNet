@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -324,10 +325,9 @@ public class LogVarianceLayer<T> : LayerBase<T>
             backend.Subtract(meanXSquaredBuffer, meanSquaredBuffer, varianceBuffer, outerSize);
 
             // Step 6: Add epsilon to variance for numerical stability
-            // Create buffer with epsilon values
-            var epsilonData = new float[outerSize];
-            Array.Fill(epsilonData, epsilon);
-            epsilonBuffer = backend.AllocateBuffer(epsilonData);
+            // Create buffer filled with epsilon value on GPU
+            epsilonBuffer = backend.AllocateBuffer(outerSize);
+            backend.Fill(epsilonBuffer, epsilon, outerSize);
 
             variancePlusEpsilonBuffer = backend.AllocateBuffer(outerSize);
             backend.Add(varianceBuffer, epsilonBuffer, variancePlusEpsilonBuffer, outerSize);
