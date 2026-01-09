@@ -6259,6 +6259,70 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-resident slice operation along a specified axis.
+    /// Extracts a contiguous slice from the input tensor.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="input">GPU-resident input tensor.</param>
+    /// <param name="axis">The axis to slice along.</param>
+    /// <param name="start">Starting index (inclusive).</param>
+    /// <param name="end">Ending index (exclusive).</param>
+    /// <returns>A GPU-resident sliced tensor.</returns>
+    public IGpuTensor<T> SliceGpu<T>(IGpuTensor<T> input, int axis, int start, int end)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for SliceGpu");
+
+        int rank = input.Shape.Length;
+        if (axis < 0) axis += rank;
+        if (axis < 0 || axis >= rank)
+            throw new ArgumentOutOfRangeException(nameof(axis));
+
+        int sliceSize = end - start;
+        if (sliceSize <= 0)
+            throw new ArgumentException("End must be greater than start");
+
+        // Calculate output shape
+        int[] outputShape = new int[rank];
+        Array.Copy(input.Shape, outputShape, rank);
+        outputShape[axis] = sliceSize;
+
+        int totalOutputSize = outputShape.Aggregate(1, (a, b) => a * b);
+        var outputBuffer = backend.AllocateBuffer(totalOutputSize);
+
+        // Use general gather approach for all axes
+        // Calculate the stride pattern for the axis
+        int beforeAxisSize = 1;
+        for (int i = 0; i < axis; i++)
+            beforeAxisSize *= input.Shape[i];
+
+        int afterAxisSize = 1;
+        for (int i = axis + 1; i < rank; i++)
+            afterAxisSize *= input.Shape[i];
+
+        int srcAxisSize = input.Shape[axis];
+
+        // Build indices for gathering
+        var indices = new int[totalOutputSize];
+        int idx = 0;
+        for (int b = 0; b < beforeAxisSize; b++)
+        {
+            for (int a = start; a < end; a++)
+            {
+                for (int s = 0; s < afterAxisSize; s++)
+                {
+                    indices[idx++] = b * srcAxisSize * afterAxisSize + a * afterAxisSize + s;
+                }
+            }
+        }
+
+        using var indicesBuffer = backend.AllocateIntBuffer(indices);
+        backend.Gather(input.Buffer, indicesBuffer, outputBuffer, totalOutputSize, 1);
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
     /// GPU-accelerated power iteration for computing spectral norm (largest singular value).
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
