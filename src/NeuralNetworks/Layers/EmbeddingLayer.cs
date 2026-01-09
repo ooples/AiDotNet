@@ -92,6 +92,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private bool _lastInputWasContinuous;
     private bool? _autoDetectedContinuous;
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastInputGpu;
+    private int[]? _lastInputGpuShape;
+    private Tensor<int>? _lastIndicesForGpu;
+
     /// <summary>
     /// The gradients for the embedding tensor, computed during backpropagation.
     /// </summary>
@@ -535,6 +540,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             int totalSamples = inputTensor.Length / inputFeatures;
             var input2D = inputTensor.Reshape([totalSamples, inputFeatures]);
 
+            // Cache GPU input tensor for backward pass
+            if (IsTrainingMode)
+            {
+                _lastInputGpu = gpuEngine.UploadToGpu(input2D, GpuTensorRole.Intermediate);
+                _lastInputGpuShape = inputTensor.Shape;
+            }
+
             // Perform GPU matrix multiplication: [totalSamples, inputFeatures] @ [inputFeatures, embeddingDim]
             var gpuProjectionOutput = gpuEngine.FusedLinearGpu(input2D, _projectionWeights, null, FusedActivationType.None);
 
@@ -561,6 +573,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         for (int i = 0; i < totalIndices; i++)
         {
             flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(inputTensor.Data[i]));
+        }
+
+        // Cache indices for backward pass
+        if (IsTrainingMode)
+        {
+            _lastIndicesForGpu = flatIndices;
+            _lastInputGpuShape = inputTensor.Shape;
         }
 
         // Perform GPU embedding lookup - keeps result on GPU
@@ -721,6 +740,95 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Return zero gradient for input (indices are not differentiable)
         return new Tensor<T>(_lastInput.Shape);
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the embedding layer.
+    /// Computes gradients for embeddings or projection weights entirely on GPU.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer (zero for discrete embeddings).</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        int embeddingDim = _embeddingTensor.Shape[1];
+        int vocabSize = _embeddingTensor.Shape[0];
+
+        if (_lastInputWasContinuous)
+        {
+            // Continuous input mode: linear projection backward
+            if (_lastInputGpu == null || _projectionWeights == null || _lastInputGpuShape == null)
+                throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu (continuous mode).");
+
+            int inputFeatures = _projectionWeights.Shape[0];
+            int totalSamples = _lastInputGpu.Shape[0];
+
+            // Reshape gradient to 2D: [totalSamples, embeddingDim]
+            IGpuTensor<T> grad2D;
+            if (outputGradient.Shape.Length != 2)
+            {
+                grad2D = gpuEngine.ReshapeGpu(outputGradient, [totalSamples, embeddingDim]);
+            }
+            else
+            {
+                grad2D = outputGradient;
+            }
+
+            // Compute projection weight gradient: dW = input^T @ grad2D
+            // _lastInputGpu shape: [totalSamples, inputFeatures]
+            var inputTransposed = gpuEngine.TransposeGpu<T>(_lastInputGpu);
+            var projectionGradGpu = gpuEngine.MatMulGpuTensors<T>(inputTransposed, grad2D);
+            _projectionWeightsGradient = projectionGradGpu.ToTensor();
+
+            // Compute input gradient: dInput = grad2D @ projectionWeights^T
+            var weightsGpu = gpuEngine.UploadToGpu(_projectionWeights, GpuTensorRole.Weight);
+            var weightsTransposed = gpuEngine.TransposeGpu<T>(weightsGpu);
+            var inputGrad2D = gpuEngine.MatMulGpuTensors<T>(grad2D, weightsTransposed);
+
+            // Clear embedding gradient (not used in continuous mode)
+            _embeddingGradient = null;
+
+            // Reshape to original input shape if needed
+            if (_lastInputGpuShape.Length != 2)
+            {
+                return gpuEngine.ReshapeGpu(inputGrad2D, _lastInputGpuShape);
+            }
+
+            return inputGrad2D;
+        }
+        else
+        {
+            // Discrete embedding mode: scatter-add gradient to embedding table
+            if (_lastIndicesForGpu == null || _lastInputGpuShape == null)
+                throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu (embedding mode).");
+
+            int numIndices = _lastIndicesForGpu.Length;
+
+            // Flatten gradient to 2D: [numIndices, embeddingDim]
+            IGpuTensor<T> flatGrad;
+            if (outputGradient.ElementCount != numIndices * embeddingDim)
+            {
+                flatGrad = gpuEngine.ReshapeGpu(outputGradient, [numIndices, embeddingDim]);
+            }
+            else
+            {
+                flatGrad = outputGradient.CreateView(0, [numIndices, embeddingDim]);
+            }
+
+            // Use GPU scatter-add for embedding gradient computation
+            var embeddingGradGpu = gpuEngine.EmbeddingBackwardGpu<T>(flatGrad, _lastIndicesForGpu, vocabSize, embeddingDim);
+
+            // Store gradient for UpdateParameters
+            _embeddingGradient = embeddingGradGpu.ToTensor();
+
+            // For discrete embeddings, input gradient is zero (indices not differentiable)
+            // Return a zero-filled GPU tensor with the original input shape
+            var zeroGrad = gpuEngine.ZerosGpu<T>(_lastInputGpuShape);
+            return zeroGrad;
+        }
     }
 
     /// <summary>
@@ -1052,6 +1160,12 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _projectionWeightsGradient = null;
         _lastInputWasContinuous = false;
         _autoDetectedContinuous = null;
+
+        // Clear GPU-related cached data
+        _lastInputGpu?.Dispose();
+        _lastInputGpu = null;
+        _lastInputGpuShape = null;
+        _lastIndicesForGpu = null;
     }
 
     /// <summary>
