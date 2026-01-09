@@ -170,6 +170,55 @@ public class SequenceLastLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input (zeros except at last timestep).</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_originalShape == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        int inputSize = 1;
+        foreach (var dim in _originalShape) inputSize *= dim;
+
+        // Create zero-initialized buffer for input gradient
+        var gradInputBuffer = backend.AllocateBuffer(inputSize);
+        backend.Fill(gradInputBuffer, 0.0f, inputSize);
+
+        int rank = _originalShape.Length;
+
+        if (rank == 1)
+        {
+            // Pass through
+            backend.Copy(outputGradient.Buffer, gradInputBuffer, outputGradient.ElementCount);
+        }
+        else if (rank == 2)
+        {
+            // Shape: [seqLen, features] - copy gradient to last row
+            int features = _originalShape[1];
+            int offset = (_lastSequenceLength - 1) * features;
+            backend.Copy(outputGradient.Buffer, 0, gradInputBuffer, offset, features);
+        }
+        else if (rank == 3)
+        {
+            // Shape: [seqLen, batch, features] - copy gradient to last slice
+            int batch = _originalShape[1];
+            int features = _originalShape[2];
+            int offset = (_lastSequenceLength - 1) * batch * features;
+            int copySize = batch * features;
+            backend.Copy(outputGradient.Buffer, 0, gradInputBuffer, offset, copySize);
+        }
+
+        return new GpuTensor<T>(backend, gradInputBuffer, _originalShape, GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
     /// Backward pass: distributes gradient to the last timestep only.
     /// </summary>
     /// <param name="outputGradient">Gradient from the next layer.</param>
