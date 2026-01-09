@@ -2754,6 +2754,51 @@ public sealed class CudaBackend : IAsyncGpuBackend
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
+    public unsafe void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+    {
+        if (!_kernelCache.TryGetValue("global_avgpool2d_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: global_avgpool2d_backward");
+
+        using var _ = PushContext();
+        int totalElements = batch * channels * height * width;
+        uint grid = (uint)((totalElements + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        void** args = stackalloc void*[6];
+        args[0] = &gradOutPtr;
+        args[1] = &gradInPtr;
+        args[2] = &batch;
+        args[3] = &channels;
+        args[4] = &height;
+        args[5] = &width;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+    {
+        if (!_kernelCache.TryGetValue("global_maxpool2d_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: global_maxpool2d_backward");
+
+        using var _ = PushContext();
+        // First zero out the gradient input
+        Fill(gradInput, 0f, batch * channels * height * width);
+
+        int totalOutputs = batch * channels;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr indicesPtr = indices.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutPtr;
+        args[1] = &indicesPtr;
+        args[2] = &gradInPtr;
+        args[3] = &batch;
+        args[4] = &channels;
+        args[5] = &height;
+        args[6] = &width;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
     public unsafe void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
     {
         if (!_kernelCache.TryGetValue("adaptive_avgpool2d", out var kernel))

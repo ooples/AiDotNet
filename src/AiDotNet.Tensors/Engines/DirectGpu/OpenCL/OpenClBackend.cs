@@ -5378,6 +5378,40 @@ KERNEL VARIANTS (A/B testing):
             k.Execute1D(batch * channels, Math.Min(64, batch * channels));
         }
 
+        public void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+        {
+            var k = _kernelCache["global_avgpool2d_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, height);
+            k.SetArg(arg++, width);
+
+            int totalElements = batch * channels * height * width;
+            k.Execute1D(totalElements, Math.Min(64, totalElements));
+        }
+
+        public void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+        {
+            // First zero out the gradient input
+            Fill(gradInput, 0f, batch * channels * height * width);
+
+            var k = _kernelCache["global_maxpool2d_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, height);
+            k.SetArg(arg++, width);
+
+            int totalOutputs = batch * channels;
+            k.Execute1D(totalOutputs, Math.Min(64, totalOutputs));
+        }
+
         public void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
         {
             var k = _kernelCache["adaptive_avgpool2d"];

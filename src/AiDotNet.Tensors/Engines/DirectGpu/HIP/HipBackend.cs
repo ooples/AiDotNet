@@ -2952,6 +2952,68 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    public unsafe void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+    {
+        if (!_kernelCache.TryGetValue("global_avgpool2d_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: global_avgpool2d_backward");
+
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(height, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(width, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalElements = batch * channels * height * width;
+            uint grid = (uint)((totalElements + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+    {
+        if (!_kernelCache.TryGetValue("global_maxpool2d_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: global_maxpool2d_backward");
+
+        // First zero out the gradient input
+        Fill(gradInput, 0f, batch * channels * height * width);
+
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(indices.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(height, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(width, GCHandleType.Pinned);
+
+            var args = new IntPtr[7];
+            for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalOutputs = batch * channels;
+            uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
     public unsafe void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
     {
         if (!_kernelCache.TryGetValue("adaptive_avgpool2d", out var krnl))

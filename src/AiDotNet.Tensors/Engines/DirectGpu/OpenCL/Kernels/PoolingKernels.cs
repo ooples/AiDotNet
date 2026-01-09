@@ -261,6 +261,64 @@ __kernel void global_maxpool2d(
     output[b * channels + c] = maxVal;
 }
 
+// Global Average Pooling 2D Backward
+// Each work-item handles one element of the gradient input
+__kernel void global_avgpool2d_backward(
+    __global const float* gradOutput,
+    __global float* gradInput,
+    const int batch,
+    const int channels,
+    const int height,
+    const int width)
+{
+    const int idx = get_global_id(0);
+    const int spatialSize = height * width;
+    const int totalElements = batch * channels * spatialSize;
+
+    if (idx >= totalElements) return;
+
+    const int w = idx % width;
+    const int h = (idx / width) % height;
+    const int c = (idx / (width * height)) % channels;
+    const int b = idx / (channels * height * width);
+
+    // Gradient is divided equally among all spatial positions
+    float scale = 1.0f / (float)spatialSize;
+    gradInput[idx] = gradOutput[b * channels + c] * scale;
+}
+
+// Global Max Pooling 2D Backward with indices
+// Each work-item handles one output gradient, scattering it to the max input position
+__kernel void global_maxpool2d_backward(
+    __global const float* gradOutput,
+    __global const int* indices,
+    __global float* gradInput,
+    const int batch,
+    const int channels,
+    const int height,
+    const int width)
+{
+    const int idx = get_global_id(0);
+    const int totalOutputs = batch * channels;
+
+    if (idx >= totalOutputs) return;
+
+    const int c = idx % channels;
+    const int b = idx / channels;
+    const int spatialSize = height * width;
+
+    // Get the gradient value and the index of the max element
+    float grad = gradOutput[idx];
+    int maxIdx = indices[idx];
+
+    // Convert local spatial index to global input index
+    int inputOffset = (b * channels + c) * spatialSize;
+    // Use atomic add since multiple threads could write to same position
+    // Note: OpenCL 1.x doesn't have atomic float add, so we use a workaround
+    // For now, we assume the gradient input is zeroed and this is the only write
+    gradInput[inputOffset + maxIdx] = grad;
+}
+
 // Adaptive Average Pooling 2D
 __kernel void adaptive_avgpool2d(
     __global const float* input,
@@ -514,6 +572,8 @@ __kernel void nearest_upsample3d_backward(
                 "avgpool2d_backward",
                 "global_avgpool2d",
                 "global_maxpool2d",
+                "global_avgpool2d_backward",
+                "global_maxpool2d_backward",
                 "adaptive_avgpool2d",
                 "maxpool3d",
                 "maxpool3d_backward",

@@ -953,6 +953,20 @@ public interface IDirectGpuBackend : IDisposable
 
     void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
     void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Backward pass for global average pooling.
+    /// Broadcasts gradient to all spatial positions and scales by 1/(height*width).
+    /// gradInput[b,c,h,w] = gradOutput[b,c] / (height * width)
+    /// </summary>
+    void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Backward pass for global max pooling.
+    /// Scatters gradient to the positions that had maximum values.
+    /// gradInput[b,c,h,w] = gradOutput[b,c] if (h,w) was max position, else 0
+    /// </summary>
+    void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width);
     void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth);
 
     /// <summary>
