@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -94,6 +95,53 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _gammaVelocity;
     private Tensor<T>? _betaVelocity;
 
+    #region GPU Training Fields
+
+    /// <summary>
+    /// GPU-resident input tensor cached during training for backward pass.
+    /// </summary>
+    private IGpuTensor<T>? _gpuLastInput;
+
+    /// <summary>
+    /// GPU-resident gamma (scale) tensor for GPU training.
+    /// </summary>
+    private IGpuTensor<T>? _gpuGamma;
+
+    /// <summary>
+    /// GPU-resident beta (shift) tensor for GPU training.
+    /// </summary>
+    private IGpuTensor<T>? _gpuBeta;
+
+    /// <summary>
+    /// GPU-resident gamma gradient tensor for GPU training.
+    /// </summary>
+    private IGpuTensor<T>? _gpuGammaGradient;
+
+    /// <summary>
+    /// GPU-resident beta gradient tensor for GPU training.
+    /// </summary>
+    private IGpuTensor<T>? _gpuBetaGradient;
+
+    // GPU optimizer state buffers for SGD momentum, NAG, LARS
+    private IGpuTensor<T>? _gpuGammaVelocity;
+    private IGpuTensor<T>? _gpuBetaVelocity;
+
+    // GPU optimizer state buffers for Adam, AdamW, LAMB
+    private IGpuTensor<T>? _gpuGammaM;
+    private IGpuTensor<T>? _gpuGammaV;
+    private IGpuTensor<T>? _gpuBetaM;
+    private IGpuTensor<T>? _gpuBetaV;
+
+    // GPU optimizer state buffers for RMSprop
+    private IGpuTensor<T>? _gpuGammaSquaredAvg;
+    private IGpuTensor<T>? _gpuBetaSquaredAvg;
+
+    // Adagrad accumulated gradient buffers
+    private IGpuTensor<T>? _gpuGammaAccumulatedGrad;
+    private IGpuTensor<T>? _gpuBetaAccumulatedGrad;
+
+    #endregion
+
     /// <summary>
     /// Returns layer-specific metadata required for cloning/serialization.
     /// </summary>
@@ -137,6 +185,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports GPU-resident execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU-resident training.
+    /// </summary>
+    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// Gets the gamma (scale) parameters of the layer normalization layer.
@@ -279,17 +332,24 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
+        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
         var input = inputs[0];
+
+        // Cache GPU gamma and beta if not already cached
+        _gpuGamma ??= new GpuTensor<T>(backend, _gamma, GpuTensorRole.Weight);
+        _gpuBeta ??= new GpuTensor<T>(backend, _beta, GpuTensorRole.Bias);
+
         double epsilonDouble = NumOps.ToDouble(_epsilon);
 
         var (output, saveMean, saveInvVar) = gpuEngine.LayerNormGpu(
             input, _gamma, _beta, epsilonDouble);
 
         // Cache state for backward pass only during training
-        // Skip this expensive download during inference (50% overhead reduction)
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
+            // Cache GPU tensor directly (avoid expensive download to CPU)
+            _gpuLastInput = input;
+            // LayerNormGpu returns CPU tensors for mean/variance
             _lastMean = saveMean;
             _lastVariance = saveInvVar;
         }
@@ -447,6 +507,44 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// GPU-resident backward pass for layer normalization.
+    /// Computes gradients entirely on GPU without CPU transfers.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient with respect to the input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuLastInput == null || _lastMean == null || _lastVariance == null)
+            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
+
+        double epsilonDouble = NumOps.ToDouble(_epsilon);
+
+        // LayerNormBackwardGpu returns (GradInput: GPU tensor, GradGamma: CPU tensor, GradBeta: CPU tensor)
+        var (gradInput, gradGamma, gradBeta) = gpuEngine.LayerNormBackwardGpu(
+            outputGradient,
+            _gpuLastInput,
+            _gamma,
+            _lastMean,
+            _lastVariance,
+            epsilonDouble);
+
+        // Store CPU gradients for parameter updates
+        _gammaGradient = gradGamma;
+        _betaGradient = gradBeta;
+
+        // Also create GPU gradient tensors for UpdateParametersGpu
+        _gpuGammaGradient = new GpuTensor<T>(backend, gradGamma, GpuTensorRole.Gradient);
+        _gpuBetaGradient = new GpuTensor<T>(backend, gradBeta, GpuTensorRole.Gradient);
+
+        return gradInput;
+    }
+
+    /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -502,6 +600,138 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
 
             Engine.InvalidatePersistentTensor(_gamma);
             Engine.InvalidatePersistentTensor(_beta);
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident parameter update using polymorphic optimizer dispatch.
+    /// Supports SGD, Adam, AdamW, RMSprop, and other optimizers via IGpuOptimizerConfig.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration containing type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (_gpuGammaGradient == null || _gpuBetaGradient == null || _gpuGamma == null || _gpuBeta == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires a GPU engine to be active.");
+
+        var backend = gpuEngine.DirectGpu?.Backend;
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend is not available.");
+
+        // Get GPU buffers for parameters and gradients
+        var gammaBuffer = _gpuGamma.Buffer;
+        var betaBuffer = _gpuBeta.Buffer;
+        var gammaGradBuffer = _gpuGammaGradient.Buffer;
+        var betaGradBuffer = _gpuBetaGradient.Buffer;
+
+        int gammaSize = _gamma.Length;
+        int betaSize = _beta.Length;
+
+        // Ensure optimizer state buffers are allocated
+        EnsureGpuOptimizerState(backend, config.OptimizerType);
+
+        // Build state objects for gamma and beta
+        var gammaState = BuildOptimizerState(config.OptimizerType, isGamma: true);
+        var betaState = BuildOptimizerState(config.OptimizerType, isGamma: false);
+
+        // Apply optimizer update using polymorphic dispatch
+        config.ApplyUpdate(backend, gammaBuffer, gammaGradBuffer, gammaState, gammaSize);
+        config.ApplyUpdate(backend, betaBuffer, betaGradBuffer, betaState, betaSize);
+
+        // Sync weights back to CPU for interoperability
+        _gamma = _gpuGamma.ToTensor();
+        _beta = _gpuBeta.ToTensor();
+
+        // Notify engine that CPU tensors have changed
+        Engine.InvalidatePersistentTensor(_gamma);
+        Engine.InvalidatePersistentTensor(_beta);
+    }
+
+    /// <summary>
+    /// Builds the GPU optimizer state for gamma or beta based on optimizer type.
+    /// </summary>
+    private GpuOptimizerState BuildOptimizerState(GpuOptimizerType optimizerType, bool isGamma)
+    {
+        return optimizerType switch
+        {
+            GpuOptimizerType.Sgd or GpuOptimizerType.Nag or GpuOptimizerType.Lars =>
+                new GpuOptimizerState { Velocity = isGamma ? _gpuGammaVelocity?.Buffer : _gpuBetaVelocity?.Buffer },
+
+            GpuOptimizerType.Adam or GpuOptimizerType.AdamW or GpuOptimizerType.Lamb =>
+                new GpuOptimizerState
+                {
+                    M = isGamma ? _gpuGammaM?.Buffer : _gpuBetaM?.Buffer,
+                    V = isGamma ? _gpuGammaV?.Buffer : _gpuBetaV?.Buffer
+                },
+
+            GpuOptimizerType.RmsProp =>
+                new GpuOptimizerState { SquaredAvg = isGamma ? _gpuGammaSquaredAvg?.Buffer : _gpuBetaSquaredAvg?.Buffer },
+
+            GpuOptimizerType.Adagrad =>
+                new GpuOptimizerState { AccumulatedGrad = isGamma ? _gpuGammaAccumulatedGrad?.Buffer : _gpuBetaAccumulatedGrad?.Buffer },
+
+            _ => throw new NotSupportedException($"GPU optimizer type {optimizerType} is not supported.")
+        };
+    }
+
+    /// <summary>
+    /// Ensures GPU optimizer state buffers are allocated for the specified optimizer type.
+    /// </summary>
+    private void EnsureGpuOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
+    {
+        switch (optimizerType)
+        {
+            case GpuOptimizerType.Sgd:
+            case GpuOptimizerType.Nag:
+            case GpuOptimizerType.Lars:
+                // These use velocity buffers
+                if (_gpuGammaVelocity == null)
+                {
+                    var gammaZeros = Tensor<T>.CreateDefault(_gamma.Shape, NumOps.Zero);
+                    var betaZeros = Tensor<T>.CreateDefault(_beta.Shape, NumOps.Zero);
+                    _gpuGammaVelocity = new GpuTensor<T>(backend, gammaZeros, GpuTensorRole.OptimizerState);
+                    _gpuBetaVelocity = new GpuTensor<T>(backend, betaZeros, GpuTensorRole.OptimizerState);
+                }
+                break;
+
+            case GpuOptimizerType.Adam:
+            case GpuOptimizerType.AdamW:
+            case GpuOptimizerType.Lamb:
+                // These use m (first moment) and v (second moment) buffers
+                if (_gpuGammaM == null)
+                {
+                    var gammaZeros = Tensor<T>.CreateDefault(_gamma.Shape, NumOps.Zero);
+                    var betaZeros = Tensor<T>.CreateDefault(_beta.Shape, NumOps.Zero);
+                    _gpuGammaM = new GpuTensor<T>(backend, gammaZeros, GpuTensorRole.OptimizerState);
+                    _gpuGammaV = new GpuTensor<T>(backend, gammaZeros, GpuTensorRole.OptimizerState);
+                    _gpuBetaM = new GpuTensor<T>(backend, betaZeros, GpuTensorRole.OptimizerState);
+                    _gpuBetaV = new GpuTensor<T>(backend, betaZeros, GpuTensorRole.OptimizerState);
+                }
+                break;
+
+            case GpuOptimizerType.RmsProp:
+                // Uses squared average buffer
+                if (_gpuGammaSquaredAvg == null)
+                {
+                    var gammaZeros = Tensor<T>.CreateDefault(_gamma.Shape, NumOps.Zero);
+                    var betaZeros = Tensor<T>.CreateDefault(_beta.Shape, NumOps.Zero);
+                    _gpuGammaSquaredAvg = new GpuTensor<T>(backend, gammaZeros, GpuTensorRole.OptimizerState);
+                    _gpuBetaSquaredAvg = new GpuTensor<T>(backend, betaZeros, GpuTensorRole.OptimizerState);
+                }
+                break;
+
+            case GpuOptimizerType.Adagrad:
+                // Uses accumulated gradient buffer
+                if (_gpuGammaAccumulatedGrad == null)
+                {
+                    var gammaZeros = Tensor<T>.CreateDefault(_gamma.Shape, NumOps.Zero);
+                    var betaZeros = Tensor<T>.CreateDefault(_beta.Shape, NumOps.Zero);
+                    _gpuGammaAccumulatedGrad = new GpuTensor<T>(backend, gammaZeros, GpuTensorRole.OptimizerState);
+                    _gpuBetaAccumulatedGrad = new GpuTensor<T>(backend, betaZeros, GpuTensorRole.OptimizerState);
+                }
+                break;
         }
     }
 
@@ -586,6 +816,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
+
+        // Clear GPU cached values
+        _gpuLastInput = null;
+        _gpuGammaGradient = null;
+        _gpuBetaGradient = null;
     }
 
     /// <summary>

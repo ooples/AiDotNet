@@ -6052,6 +6052,81 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-resident Layer Normalization backward pass.
+    /// Computes gradients for input, gamma, and beta entirely on GPU.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">GPU-resident gradient from the next layer.</param>
+    /// <param name="input">GPU-resident input from the forward pass.</param>
+    /// <param name="gamma">Scale parameters [normalizedSize].</param>
+    /// <param name="saveMean">Saved mean from forward pass [batchSize].</param>
+    /// <param name="saveInvVar">Saved inverse variance from forward pass [batchSize].</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <returns>
+    /// A tuple containing:
+    /// - GradInput: GPU-resident input gradient
+    /// - GradGamma: CPU tensor for gamma gradient [normalizedSize]
+    /// - GradBeta: CPU tensor for beta gradient [normalizedSize]
+    /// </returns>
+    public (IGpuTensor<T> GradInput, Tensor<T> GradGamma, Tensor<T> GradBeta) LayerNormBackwardGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuTensor<T> input,
+        Tensor<T> gamma,
+        Tensor<T> saveMean,
+        Tensor<T> saveInvVar,
+        double epsilon)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for LayerNormBackwardGpu");
+
+        int[] shape = gradOutput.Shape;
+        int batchSize = shape[0];
+        int normalizedSize = shape.Length > 1 ? shape[1] : shape[0];
+
+        // For higher-rank tensors, flatten the normalized dimensions
+        for (int i = 2; i < shape.Length; i++)
+        {
+            normalizedSize *= shape[i];
+        }
+
+        // Upload gamma, saveMean, saveInvVar to GPU
+        using var gammaBuffer = GetOrAllocateBuffer(backend, gamma.Data);
+        using var saveMeanBuffer = GetOrAllocateBuffer(backend, saveMean.Data);
+        using var saveInvVarBuffer = GetOrAllocateBuffer(backend, saveInvVar.Data);
+
+        // Allocate output buffers
+        int inputSize = gradOutput.ElementCount;
+        var gradInputBuffer = backend.AllocateBuffer(inputSize);
+        using var gradGammaBuffer = AllocateOutputBuffer(backend, normalizedSize);
+        using var gradBetaBuffer = AllocateOutputBuffer(backend, normalizedSize);
+
+        try
+        {
+            // Execute LayerNormBackward on GPU
+            backend.LayerNormBackward(
+                gradOutput.Buffer, input.Buffer, gammaBuffer.Buffer,
+                saveMeanBuffer.Buffer, saveInvVarBuffer.Buffer,
+                gradInputBuffer, gradGammaBuffer.Buffer, gradBetaBuffer.Buffer,
+                batchSize, normalizedSize, (float)epsilon);
+
+            // Download gamma and beta gradients (need these for optimizer)
+            float[] gradGammaFloat = backend.DownloadBuffer(gradGammaBuffer.Buffer);
+            float[] gradBetaFloat = backend.DownloadBuffer(gradBetaBuffer.Buffer);
+            var gradGamma = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradGammaFloat), new[] { normalizedSize });
+            var gradBeta = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBetaFloat), new[] { normalizedSize });
+
+            // Return GPU-resident input gradient tensor
+            var gradInputTensor = new GpuTensor<T>(backend, gradInputBuffer, shape, GpuTensorRole.Gradient, ownsBuffer: true);
+            return (gradInputTensor, gradGamma, gradBeta);
+        }
+        catch
+        {
+            gradInputBuffer.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// GPU-resident element-wise addition: C = A + B
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
