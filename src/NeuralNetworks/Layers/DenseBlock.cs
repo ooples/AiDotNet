@@ -218,12 +218,7 @@ public class DenseBlock<T> : LayerBase<T>
     /// </summary>
     public override Vector<T> GetParameters()
     {
-        var parameters = new List<T>();
-        foreach (var layer in _layers)
-        {
-            parameters.AddRange(layer.GetParameters().ToArray());
-        }
-        return new Vector<T>(parameters.ToArray());
+        return new Vector<T>(_layers.SelectMany(l => l.GetParameters().ToArray()).ToArray());
     }
 
     /// <summary>

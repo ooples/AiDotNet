@@ -370,19 +370,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var parameters = new Vector<T>(totalParameterCount);
 
         int currentIndex = 0;
-        foreach (var layer in Layers)
+        foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
             int layerParameterCount = layer.ParameterCount;
-            if (layerParameterCount > 0)
+            var layerParameters = layer.GetParameters();
+            for (int i = 0; i < layerParameterCount; i++)
             {
-                var layerParameters = layer.GetParameters();
-                for (int i = 0; i < layerParameterCount; i++)
-                {
-                    parameters[currentIndex + i] = layerParameters[i];
-                }
-
-                currentIndex += layerParameterCount;
+                parameters[currentIndex + i] = layerParameters[i];
             }
+
+            currentIndex += layerParameterCount;
         }
 
         return parameters;
@@ -753,7 +750,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             return current;
         }
-        catch
+        catch (Exception)
         {
             // Clean up on error
             if (ownsCurrentTensor && current is not null)
@@ -829,7 +826,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             return current;
         }
-        catch
+        catch (Exception)
         {
             if (ownsCurrentTensor)
             {
@@ -942,7 +939,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                         return result;
                     }
-                    catch
+                    catch (Exception)
                     {
                         if (ownsCurrentTensor && current is not null)
                         {
@@ -1054,7 +1051,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                         return result;
                     }
-                    catch
+                    catch (Exception)
                     {
                         if (ownsCurrentTensor && current is not null)
                         {
@@ -1209,7 +1206,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             return current;
         }
-        catch
+        catch (Exception)
         {
             // On error, tensors are cleaned up when context is disposed
             throw;
@@ -1667,12 +1664,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Collect gradients from all layers
         List<Vector<T>> allGradients = new List<Vector<T>>();
 
-        foreach (var layer in Layers)
+        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                allGradients.Add(layer.GetParameterGradients());
-            }
+            allGradients.Add(layer.GetParameterGradients());
         }
 
         // Concatenate all gradients into a single vector
@@ -3045,22 +3039,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         int currentIndex = 0;
-        foreach (var layer in Layers)
+        foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
             int layerParameterCount = layer.ParameterCount;
-            if (layerParameterCount > 0)
+            // Extract parameters for this layer
+            var layerParameters = new Vector<T>(layerParameterCount);
+            for (int i = 0; i < layerParameterCount; i++)
             {
-                // Extract parameters for this layer
-                var layerParameters = new Vector<T>(layerParameterCount);
-                for (int i = 0; i < layerParameterCount; i++)
-                {
-                    layerParameters[i] = parameters[currentIndex + i];
-                }
-
-                // Set the layer's parameters
-                layer.SetParameters(layerParameters);
-                currentIndex += layerParameterCount;
+                layerParameters[i] = parameters[currentIndex + i];
             }
+
+            // Set the layer's parameters
+            layer.SetParameters(layerParameters);
+            currentIndex += layerParameterCount;
         }
     }
 
