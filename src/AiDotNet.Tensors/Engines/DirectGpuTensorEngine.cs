@@ -1818,6 +1818,150 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-resident Conv2D backward pass for input gradients.
+    /// Computes: gradInput = conv2d_backward_input(gradOutput, kernel)
+    /// </summary>
+    public IGpuTensor<T> Conv2DBackwardInputGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuTensor<T> kernel,
+        int[] inputShape,
+        int strideH, int strideW,
+        int padH, int padW,
+        int dilationH = 1, int dilationW = 1)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for Conv2DBackwardInputGpu");
+
+        if (gradOutput.Shape.Length != 4 || kernel.Shape.Length != 4)
+            throw new ArgumentException("Conv2DBackwardInputGpu requires 4D gradOutput and kernel tensors");
+
+        int batch = inputShape[0];
+        int inChannels = inputShape[1];
+        int inHeight = inputShape[2];
+        int inWidth = inputShape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelH = kernel.Shape[2];
+        int kernelW = kernel.Shape[3];
+
+        int outputSize = batch * inChannels * inHeight * inWidth;
+        var gradInputBuffer = backend.AllocateBuffer(outputSize);
+
+        try
+        {
+            backend.Conv2DBackwardInput(
+                gradOutput.Buffer, kernel.Buffer, gradInputBuffer,
+                batch, inChannels, inHeight, inWidth,
+                outChannels, gradOutput.Shape[2], gradOutput.Shape[3],
+                kernelH, kernelW,
+                strideH, strideW,
+                padH, padW,
+                dilationH, dilationW);
+
+            return new GpuTensor<T>(backend, gradInputBuffer, inputShape.ToArray(),
+                GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+        catch
+        {
+            gradInputBuffer.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident Conv2D backward pass for kernel gradients.
+    /// Computes: gradKernel = conv2d_backward_kernel(input, gradOutput)
+    /// </summary>
+    public IGpuTensor<T> Conv2DBackwardKernelGpu<T>(
+        IGpuTensor<T> input,
+        IGpuTensor<T> gradOutput,
+        int[] kernelShape,
+        int strideH, int strideW,
+        int padH, int padW,
+        int dilationH = 1, int dilationW = 1)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for Conv2DBackwardKernelGpu");
+
+        if (input.Shape.Length != 4 || gradOutput.Shape.Length != 4)
+            throw new ArgumentException("Conv2DBackwardKernelGpu requires 4D input and gradOutput tensors");
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        int outChannels = kernelShape[0];
+        int kernelH = kernelShape[2];
+        int kernelW = kernelShape[3];
+
+        int outputSize = outChannels * inChannels * kernelH * kernelW;
+        var gradKernelBuffer = backend.AllocateBuffer(outputSize);
+
+        try
+        {
+            backend.Conv2DBackwardKernel(
+                input.Buffer, gradOutput.Buffer, gradKernelBuffer,
+                batch, inChannels, inHeight, inWidth,
+                outChannels, gradOutput.Shape[2], gradOutput.Shape[3],
+                kernelH, kernelW,
+                strideH, strideW,
+                padH, padW,
+                dilationH, dilationW);
+
+            return new GpuTensor<T>(backend, gradKernelBuffer, kernelShape.ToArray(),
+                GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+        catch
+        {
+            gradKernelBuffer.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident bias gradient computation for Conv2D.
+    /// Computes: gradBias = sum(gradOutput, dims=[0,2,3])
+    /// </summary>
+    public IGpuTensor<T> Conv2DBackwardBiasGpu<T>(IGpuTensor<T> gradOutput)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for Conv2DBackwardBiasGpu");
+
+        if (gradOutput.Shape.Length != 4)
+            throw new ArgumentException("Conv2DBackwardBiasGpu requires 4D gradOutput tensor");
+
+        int batch = gradOutput.Shape[0];
+        int outChannels = gradOutput.Shape[1];
+        int outHeight = gradOutput.Shape[2];
+        int outWidth = gradOutput.Shape[3];
+        int spatialSize = outHeight * outWidth;
+
+        // Download gradOutput, compute bias gradient on CPU, then allocate GPU buffer with data
+        int totalSize = batch * outChannels * spatialSize;
+        float[] gradData = new float[totalSize];
+        backend.DownloadBuffer(gradOutput.Buffer, gradData);
+
+        float[] gradBias = new float[outChannels];
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < outChannels; c++)
+            {
+                int baseIdx = (b * outChannels + c) * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    gradBias[c] += gradData[baseIdx + s];
+                }
+            }
+        }
+
+        // Allocate buffer with data (uploads during allocation)
+        var gradBiasBuffer = backend.AllocateBuffer(gradBias);
+        return new GpuTensor<T>(backend, gradBiasBuffer, new[] { outChannels },
+            GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
     /// GPU-accelerated fused 3D convolution with activation.
     /// Uses cached GPU buffers for registered persistent tensors (kernel/bias) to avoid
     /// redundant CPU→GPU transfers on every forward pass.
