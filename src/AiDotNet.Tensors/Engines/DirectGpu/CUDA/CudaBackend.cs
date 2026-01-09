@@ -1875,6 +1875,26 @@ public sealed class CudaBackend : IAsyncGpuBackend
             throw new ArgumentException("Bias buffer size must be at least N.", nameof(bias));
     }
 
+    /// <summary>
+    /// Checks if a value is a power of two. Required for CUDA shared-memory reductions
+    /// that use the standard tree-reduction pattern.
+    /// </summary>
+    private static bool IsPowerOfTwo(int value) => value > 0 && (value & (value - 1)) == 0;
+
+    /// <summary>
+    /// Validates that the state size is a power of two, as required by quantum kernel
+    /// shared-memory reductions.
+    /// </summary>
+    private static void ValidateQuantumStateSize(int stateSize, string paramName)
+    {
+        if (stateSize <= 0)
+            throw new ArgumentOutOfRangeException(paramName, stateSize, "State size must be positive.");
+        if (!IsPowerOfTwo(stateSize))
+            throw new ArgumentException(
+                $"Quantum kernels require state size to be a power of two for shared-memory reductions. Got: {stateSize}",
+                paramName);
+    }
+
     private unsafe void ExecuteFusedGemm(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output, int M, int N, int K)
     {
         if (!_kernelCache.TryGetValue(kernelName, out var kernel))
@@ -5514,6 +5534,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("normalize_probabilities", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: normalize_probabilities");
 
+        // Validate state size is power of two for shared-memory reduction
+        ValidateQuantumStateSize(stateSize, nameof(stateSize));
+
         using var _ = PushContext();
         // One block per batch element
         uint grid = (uint)batchSize;
@@ -5562,8 +5585,14 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("quantum_rotation", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: quantum_rotation");
 
+        // Validate numQubits is in a reasonable range (1-30 to avoid overflow)
+        if (numQubits <= 0 || numQubits > 30)
+            throw new ArgumentOutOfRangeException(nameof(numQubits), numQubits,
+                "Number of qubits must be between 1 and 30 to avoid integer overflow.");
+
         using var _ = PushContext();
         int dim = 1 << numQubits;
+        // dim is guaranteed to be power of two since it's 2^numQubits
         uint blockDim = (uint)Math.Min(DefaultBlockSize, dim);
         IntPtr stateRealPtr = stateReal.Handle;
         IntPtr stateImagPtr = stateImag.Handle;
@@ -5586,6 +5615,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
     {
         if (!_kernelCache.TryGetValue("measurement_forward", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: measurement_forward");
+
+        // Validate state size is power of two for shared-memory reduction
+        ValidateQuantumStateSize(stateSize, nameof(stateSize));
 
         using var _ = PushContext();
         // One block per batch element, uses shared memory for reduction

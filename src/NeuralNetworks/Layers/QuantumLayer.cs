@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -271,108 +272,144 @@ public class QuantumLayer<T> : LayerBase<T>
 
         int dimension = 1 << _numQubits; // State dimension = 2^numQubits
 
-        // Upload quantum circuit to GPU (real and imaginary parts separately)
-        var circuitRealFlat = new float[dimension * dimension];
-        var circuitImagFlat = new float[dimension * dimension];
-        for (int i = 0; i < dimension; i++)
+        // Track all allocated buffers for exception safety
+        IGpuBuffer? circuitRealBuffer = null;
+        IGpuBuffer? circuitImagBuffer = null;
+        IGpuBuffer? stateRealBuffer = null;
+        IGpuBuffer? stateImagBuffer = null;
+        IGpuBuffer? squaredBuffer = null;
+        IGpuBuffer? normSqBuffer = null;
+        IGpuBuffer? normSqClampedBuffer = null;
+        IGpuBuffer? normBuffer = null;
+        IGpuBuffer? invNormBuffer = null;
+        IGpuBuffer? resultRealBuffer = null;
+        IGpuBuffer? resultImagBuffer = null;
+        IGpuBuffer? probabilitiesBuffer = null;
+
+        try
         {
-            for (int j = 0; j < dimension; j++)
+            // Upload quantum circuit to GPU (real and imaginary parts separately)
+            var circuitRealFlat = new float[dimension * dimension];
+            var circuitImagFlat = new float[dimension * dimension];
+            for (int i = 0; i < dimension; i++)
             {
-                int idx = i * dimension + j;
-                circuitRealFlat[idx] = NumOps.ToFloat(_quantumCircuit[i, j].Real);
-                circuitImagFlat[idx] = NumOps.ToFloat(_quantumCircuit[i, j].Imaginary);
+                for (int j = 0; j < dimension; j++)
+                {
+                    int idx = i * dimension + j;
+                    circuitRealFlat[idx] = NumOps.ToFloat(_quantumCircuit[i, j].Real);
+                    circuitImagFlat[idx] = NumOps.ToFloat(_quantumCircuit[i, j].Imaginary);
+                }
             }
-        }
-        var circuitRealBuffer = backend.AllocateBuffer(circuitRealFlat);
-        var circuitImagBuffer = backend.AllocateBuffer(circuitImagFlat);
+            var circuitReal = backend.AllocateBuffer(circuitRealFlat);
+            circuitRealBuffer = circuitReal;
+            var circuitImag = backend.AllocateBuffer(circuitImagFlat);
+            circuitImagBuffer = circuitImag;
 
-        // GPU-only state initialization: pad input and L2 normalize per batch
-        // Allocate state buffers on GPU
-        var stateRealBuffer = backend.AllocateBuffer(batchSize * dimension);
-        var stateImagBuffer = backend.AllocateBuffer(batchSize * dimension);
+            // GPU-only state initialization: pad input and L2 normalize per batch
+            // Allocate state buffers on GPU
+            var stateReal = backend.AllocateBuffer(batchSize * dimension);
+            stateRealBuffer = stateReal;
+            var stateImag = backend.AllocateBuffer(batchSize * dimension);
+            stateImagBuffer = stateImag;
 
-        // Zero the buffers (padding with zeros)
-        backend.Fill(stateRealBuffer, 0.0f, batchSize * dimension);
-        backend.Fill(stateImagBuffer, 0.0f, batchSize * dimension);
+            // Zero the buffers (padding with zeros)
+            backend.Fill(stateReal, 0.0f, batchSize * dimension);
+            backend.Fill(stateImag, 0.0f, batchSize * dimension);
 
-        // Copy input data with padding using strided copy
-        int copyWidth = Math.Min(inputDim, dimension);
-        backend.Copy2DStrided(input.Buffer, stateRealBuffer, batchSize, copyWidth, dimension, 0);
+            // Copy input data with padding using strided copy
+            int copyWidth = Math.Min(inputDim, dimension);
+            backend.Copy2DStrided(input.Buffer, stateReal, batchSize, copyWidth, dimension, 0);
 
-        // L2 normalize each batch element on GPU
-        // Step 1: Square the values
-        var squaredBuffer = backend.AllocateBuffer(batchSize * dimension);
-        backend.Multiply(stateRealBuffer, stateRealBuffer, squaredBuffer, batchSize * dimension);
+            // L2 normalize each batch element on GPU
+            // Step 1: Square the values
+            var squared = backend.AllocateBuffer(batchSize * dimension);
+            squaredBuffer = squared;
+            backend.Multiply(stateReal, stateReal, squared, batchSize * dimension);
 
-        // Step 2: Sum per batch to get sum of squares
-        var normSqBuffer = backend.AllocateBuffer(batchSize);
-        backend.SumAxis(squaredBuffer, normSqBuffer, batchSize, dimension);
-        squaredBuffer.Dispose();
+            // Step 2: Sum per batch to get sum of squares
+            var normSq = backend.AllocateBuffer(batchSize);
+            normSqBuffer = normSq;
+            backend.SumAxis(squared, normSq, batchSize, dimension);
 
-        // Step 3: Clamp to avoid division by zero (add epsilon)
-        var normSqClampedBuffer = backend.AllocateBuffer(batchSize);
-        backend.Clamp(normSqBuffer, normSqClampedBuffer, 1e-10f, float.MaxValue, batchSize);
-        normSqBuffer.Dispose();
+            // Step 3: Clamp to avoid division by zero (add epsilon)
+            var normSqClamped = backend.AllocateBuffer(batchSize);
+            normSqClampedBuffer = normSqClamped;
+            backend.Clamp(normSq, normSqClamped, 1e-10f, float.MaxValue, batchSize);
 
-        // Step 4: Sqrt to get L2 norm
-        var normBuffer = backend.AllocateBuffer(batchSize);
-        backend.Sqrt(normSqClampedBuffer, normBuffer, batchSize);
-        normSqClampedBuffer.Dispose();
+            // Step 4: Sqrt to get L2 norm
+            var norm = backend.AllocateBuffer(batchSize);
+            normBuffer = norm;
+            backend.Sqrt(normSqClamped, norm, batchSize);
 
-        // Step 5: Reciprocal to get 1/norm
-        var invNormBuffer = backend.AllocateBuffer(batchSize);
-        backend.Reciprocal(normBuffer, invNormBuffer, batchSize);
-        normBuffer.Dispose();
+            // Step 5: Reciprocal to get 1/norm
+            var invNorm = backend.AllocateBuffer(batchSize);
+            invNormBuffer = invNorm;
+            backend.Reciprocal(norm, invNorm, batchSize);
 
-        // Step 6: Broadcast multiply to normalize each row
-        backend.BroadcastMultiplyFirstAxis(stateRealBuffer, invNormBuffer, stateRealBuffer, batchSize, dimension);
-        invNormBuffer.Dispose();
+            // Step 6: Broadcast multiply to normalize each row
+            backend.BroadcastMultiplyFirstAxis(stateReal, invNorm, stateReal, batchSize, dimension);
 
-        // Allocate output state buffers
-        var resultRealBuffer = backend.AllocateBuffer(batchSize * dimension);
-        var resultImagBuffer = backend.AllocateBuffer(batchSize * dimension);
+            // Allocate output state buffers
+            var resultReal = backend.AllocateBuffer(batchSize * dimension);
+            resultRealBuffer = resultReal;
+            var resultImag = backend.AllocateBuffer(batchSize * dimension);
+            resultImagBuffer = resultImag;
 
-        // Apply quantum circuit: complex matrix multiplication
-        backend.ComplexMatVec(
-            circuitRealBuffer, circuitImagBuffer,
-            stateRealBuffer, stateImagBuffer,
-            resultRealBuffer, resultImagBuffer,
-            batchSize, dimension);
+            // Apply quantum circuit: complex matrix multiplication
+            backend.ComplexMatVec(
+                circuitReal, circuitImag,
+                stateReal, stateImag,
+                resultReal, resultImag,
+                batchSize, dimension);
 
-        // Compute probabilities: |amplitude|^2
-        var probabilitiesBuffer = backend.AllocateBuffer(batchSize * dimension);
-        backend.QuantumMeasurement(resultRealBuffer, resultImagBuffer, probabilitiesBuffer, batchSize, dimension);
+            // Compute probabilities: |amplitude|^2
+            var probabilities = backend.AllocateBuffer(batchSize * dimension);
+            probabilitiesBuffer = probabilities;
+            backend.QuantumMeasurement(resultReal, resultImag, probabilities, batchSize, dimension);
 
-        // Clean up intermediate buffers
-        circuitRealBuffer.Dispose();
-        circuitImagBuffer.Dispose();
-        stateRealBuffer.Dispose();
-        stateImagBuffer.Dispose();
-        resultRealBuffer.Dispose();
-        resultImagBuffer.Dispose();
-
-        // Determine output shape
-        int[] outputShape;
-        if (input.Shape.Length == 1)
-        {
-            outputShape = [dimension];
-        }
-        else if (input.Shape.Length == 2)
-        {
-            outputShape = [batchSize, dimension];
-        }
-        else
-        {
-            // Restore higher-rank shape
-            outputShape = new int[input.Shape.Length];
-            for (int d = 0; d < input.Shape.Length - 1; d++)
+            // Determine output shape
+            int[] outputShape;
+            if (input.Shape.Length == 1)
             {
-                outputShape[d] = input.Shape[d];
+                outputShape = [dimension];
             }
-            outputShape[input.Shape.Length - 1] = dimension;
-        }
+            else if (input.Shape.Length == 2)
+            {
+                outputShape = [batchSize, dimension];
+            }
+            else
+            {
+                // Restore higher-rank shape
+                outputShape = new int[input.Shape.Length];
+                for (int d = 0; d < input.Shape.Length - 1; d++)
+                {
+                    outputShape[d] = input.Shape[d];
+                }
+                outputShape[input.Shape.Length - 1] = dimension;
+            }
 
-        return new GpuTensor<T>(backend, probabilitiesBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            // Create result (ownership of probabilities buffer transfers)
+            var result = new GpuTensor<T>(backend, probabilities, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            probabilitiesBuffer = null; // Prevent disposal in finally block since ownership transferred
+
+            return result;
+        }
+        finally
+        {
+            // Dispose all intermediate buffers (not the output which was transferred)
+            circuitRealBuffer?.Dispose();
+            circuitImagBuffer?.Dispose();
+            stateRealBuffer?.Dispose();
+            stateImagBuffer?.Dispose();
+            squaredBuffer?.Dispose();
+            normSqBuffer?.Dispose();
+            normSqClampedBuffer?.Dispose();
+            normBuffer?.Dispose();
+            invNormBuffer?.Dispose();
+            resultRealBuffer?.Dispose();
+            resultImagBuffer?.Dispose();
+            probabilitiesBuffer?.Dispose(); // Only disposed on exception (null on success)
+        }
     }
 
     /// <summary>

@@ -212,8 +212,10 @@ public partial class DirectGpuTensorEngine
             // Step 3: sum over input capsules to get s_j: [B, C, D]
             var summed = SumAxisGpu(weightedPred, axis: 1);
 
-            // Step 4: squash to get output capsules v_j
-            output = SquashGpu(summed, axis: -1, epsilon);
+            // Step 4: squash to get output capsules v_j - dispose old output before reassignment
+            var newOutput = SquashGpu(summed, axis: -1, epsilon);
+            output?.Dispose();
+            output = newOutput;
 
             // Step 5: update couplings (except on last iteration)
             if (iter < numIterations - 1)
@@ -497,8 +499,10 @@ public partial class DirectGpuTensorEngine
             // Step 4: Add bias: [B, J, D] + [1, J, D]
             var withBias = AddGpu(weightedSum, biasGpu);
 
-            // Step 5: Squash activation
-            output = SquashGpu(withBias, axis: -1, epsilon);
+            // Step 5: Squash activation - dispose old output before reassignment
+            var newOutput = SquashGpu(withBias, axis: -1, epsilon);
+            output?.Dispose();
+            output = newOutput;
 
             // Step 6: Update couplings (except on last iteration)
             if (iter < numIterations - 1)
