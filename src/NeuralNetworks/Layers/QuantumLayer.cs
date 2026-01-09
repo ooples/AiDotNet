@@ -286,37 +286,47 @@ public class QuantumLayer<T> : LayerBase<T>
         var circuitRealBuffer = backend.AllocateBuffer(circuitRealFlat);
         var circuitImagBuffer = backend.AllocateBuffer(circuitImagFlat);
 
-        // Initialize state: Copy and pad/normalize input on CPU, then allocate with data
-        // PERFORMANCE NOTE: This CPU round-trip (Download -> process -> Upload) is a performance
-        // bottleneck. A full GPU implementation would use dedicated kernels for state initialization
-        // (padding, normalization). Consider adding GPU kernels for these operations in performance-critical
-        // scenarios, especially for large batch sizes or when this layer is used frequently.
-        var inputData = backend.DownloadBuffer(input.Buffer);
-        var stateReal = new float[batchSize * dimension];
-        var stateImag = new float[batchSize * dimension]; // Zeros for imaginary part
+        // GPU-only state initialization: pad input and L2 normalize per batch
+        // Allocate state buffers on GPU
+        var stateRealBuffer = backend.AllocateBuffer(batchSize * dimension);
+        var stateImagBuffer = backend.AllocateBuffer(batchSize * dimension);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Copy and pad input to dimension
-            float sumSq = 0;
-            for (int i = 0; i < Math.Min(inputDim, dimension); i++)
-            {
-                int srcIdx = b * inputDim + i;
-                float val = inputData[srcIdx];
-                stateReal[b * dimension + i] = val;
-                sumSq += val * val;
-            }
-            // Normalize
-            float norm = (float)Math.Sqrt(sumSq + 1e-10);
-            for (int i = 0; i < dimension; i++)
-            {
-                stateReal[b * dimension + i] /= norm;
-            }
-        }
+        // Zero the buffers (padding with zeros)
+        backend.Fill(stateRealBuffer, 0.0f, batchSize * dimension);
+        backend.Fill(stateImagBuffer, 0.0f, batchSize * dimension);
 
-        // Allocate GPU buffers with initialized data
-        var stateRealBuffer = backend.AllocateBuffer(stateReal);
-        var stateImagBuffer = backend.AllocateBuffer(stateImag);
+        // Copy input data with padding using strided copy
+        int copyWidth = Math.Min(inputDim, dimension);
+        backend.Copy2DStrided(input.Buffer, stateRealBuffer, batchSize, copyWidth, dimension, 0);
+
+        // L2 normalize each batch element on GPU
+        // Step 1: Square the values
+        var squaredBuffer = backend.AllocateBuffer(batchSize * dimension);
+        backend.Multiply(stateRealBuffer, stateRealBuffer, squaredBuffer, batchSize * dimension);
+
+        // Step 2: Sum per batch to get sum of squares
+        var normSqBuffer = backend.AllocateBuffer(batchSize);
+        backend.SumAxis(squaredBuffer, normSqBuffer, batchSize, dimension);
+        squaredBuffer.Dispose();
+
+        // Step 3: Clamp to avoid division by zero (add epsilon)
+        var normSqClampedBuffer = backend.AllocateBuffer(batchSize);
+        backend.Clamp(normSqBuffer, normSqClampedBuffer, 1e-10f, float.MaxValue, batchSize);
+        normSqBuffer.Dispose();
+
+        // Step 4: Sqrt to get L2 norm
+        var normBuffer = backend.AllocateBuffer(batchSize);
+        backend.Sqrt(normSqClampedBuffer, normBuffer, batchSize);
+        normSqClampedBuffer.Dispose();
+
+        // Step 5: Reciprocal to get 1/norm
+        var invNormBuffer = backend.AllocateBuffer(batchSize);
+        backend.Reciprocal(normBuffer, invNormBuffer, batchSize);
+        normBuffer.Dispose();
+
+        // Step 6: Broadcast multiply to normalize each row
+        backend.BroadcastMultiplyFirstAxis(stateRealBuffer, invNormBuffer, stateRealBuffer, batchSize, dimension);
+        invNormBuffer.Dispose();
 
         // Allocate output state buffers
         var resultRealBuffer = backend.AllocateBuffer(batchSize * dimension);
