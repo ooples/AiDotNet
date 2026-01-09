@@ -362,6 +362,64 @@ public interface IDirectGpuBackend : IDisposable
     void SquashBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int numCapsules, int capsuleDim, float epsilon);
 
     /// <summary>
+    /// Capsule prediction transform for DigitCapsuleLayer.
+    /// Computes: pred[b,i,c,d] = sum_k(input[b,i,k] * weights[i,c,k,d])
+    /// </summary>
+    /// <param name="input">Input [batchSize, inputCapsules, inputDim].</param>
+    /// <param name="weights">Weights [inputCapsules, outputCapsules, inputDim, outputDim].</param>
+    /// <param name="output">Output [batchSize, inputCapsules, outputCapsules, outputDim].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputCapsules">Number of input capsules.</param>
+    /// <param name="inputDim">Dimension of each input capsule.</param>
+    /// <param name="outputCapsules">Number of output capsules.</param>
+    /// <param name="outputDim">Dimension of each output capsule.</param>
+    void CapsulePredictions(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int outputCapsules, int outputDim);
+
+    /// <summary>
+    /// Capsule transform for CapsuleLayer.
+    /// Computes: transformed[b,i,j,d] = sum_k(input[b,i,k] * weights[i,k,j,d])
+    /// </summary>
+    /// <param name="input">Input [batchSize, inputCapsules, inputDim].</param>
+    /// <param name="weights">Weights [inputCapsules, inputDim, numCapsules, capsuleDim].</param>
+    /// <param name="output">Output [batchSize, inputCapsules, numCapsules, capsuleDim].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputCapsules">Number of input capsules.</param>
+    /// <param name="inputDim">Dimension of each input capsule.</param>
+    /// <param name="numCapsules">Number of output capsules.</param>
+    /// <param name="capsuleDim">Dimension of each output capsule.</param>
+    void CapsuleTransform(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int numCapsules, int capsuleDim);
+
+    /// <summary>
+    /// Dynamic routing weighted sum for capsule networks.
+    /// Computes: output[b,c,d] = sum_i(coupling[b,i,c] * predictions[b,i,c,d])
+    /// </summary>
+    /// <param name="coupling">Coupling coefficients [batchSize, inputCapsules, outputCapsules].</param>
+    /// <param name="predictions">Predictions [batchSize, inputCapsules, outputCapsules, capsuleDim].</param>
+    /// <param name="output">Output [batchSize, outputCapsules, capsuleDim].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputCapsules">Number of input capsules.</param>
+    /// <param name="outputCapsules">Number of output capsules.</param>
+    /// <param name="capsuleDim">Dimension of each capsule.</param>
+    void CapsuleWeightedSum(IGpuBuffer coupling, IGpuBuffer predictions, IGpuBuffer output,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim);
+
+    /// <summary>
+    /// Dynamic routing agreement computation for capsule networks.
+    /// Computes: agreement[b,i,c] = sum_d(predictions[b,i,c,d] * output[b,c,d])
+    /// </summary>
+    /// <param name="predictions">Predictions [batchSize, inputCapsules, outputCapsules, capsuleDim].</param>
+    /// <param name="output">Current output [batchSize, outputCapsules, capsuleDim].</param>
+    /// <param name="agreement">Agreement scores [batchSize, inputCapsules, outputCapsules].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputCapsules">Number of input capsules.</param>
+    /// <param name="outputCapsules">Number of output capsules.</param>
+    /// <param name="capsuleDim">Dimension of each capsule.</param>
+    void CapsuleAgreement(IGpuBuffer predictions, IGpuBuffer output, IGpuBuffer agreement,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim);
+
+    /// <summary>
     /// Tile tensor along batch dimension (axis 0).
     /// Input: [1, innerSize], Output: [repeats, innerSize]
     /// </summary>
@@ -1536,6 +1594,165 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="size">Number of neurons.</param>
     void UpdateTraces(IGpuBuffer traces, IGpuBuffer spikes, IGpuBuffer input,
         float decay, float threshold, int size);
+
+    #endregion
+
+    #region Hyperbolic Geometry Operations (Poincare Ball Model)
+
+    /// <summary>
+    /// Projects points to be inside the Poincare ball (ensures ||x|| &lt; 1/sqrt(c)).
+    /// </summary>
+    /// <param name="input">Input buffer [batchSize * dim].</param>
+    /// <param name="output">Output buffer [batchSize * dim].</param>
+    /// <param name="batchSize">Number of points.</param>
+    /// <param name="dim">Dimension of each point.</param>
+    /// <param name="curvature">Curvature parameter c (typically 1.0).</param>
+    /// <param name="epsilon">Small epsilon for boundary (default 1e-5).</param>
+    void PoincareProject(IGpuBuffer input, IGpuBuffer output, int batchSize, int dim, float curvature, float epsilon = 1e-5f);
+
+    /// <summary>
+    /// Mobius addition in Poincare ball: x (+) y.
+    /// </summary>
+    /// <param name="x">First operand [batchSize * dim].</param>
+    /// <param name="y">Second operand [batchSize * dim].</param>
+    /// <param name="output">Output buffer [batchSize * dim].</param>
+    /// <param name="batchSize">Number of operations.</param>
+    /// <param name="dim">Dimension of each point.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void MobiusAdd(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature);
+
+    /// <summary>
+    /// Poincare exponential map: exp_x(v) maps tangent vector v at point x to manifold.
+    /// </summary>
+    /// <param name="basePoint">Base point on manifold [batchSize * dim].</param>
+    /// <param name="tangentVec">Tangent vector [batchSize * dim].</param>
+    /// <param name="output">Output point on manifold [batchSize * dim].</param>
+    /// <param name="batchSize">Number of operations.</param>
+    /// <param name="dim">Dimension of each point.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void PoincareExpMap(IGpuBuffer basePoint, IGpuBuffer tangentVec, IGpuBuffer output, int batchSize, int dim, float curvature);
+
+    /// <summary>
+    /// Computes Poincare distance between points.
+    /// </summary>
+    /// <param name="x">First points [batchSize * dim].</param>
+    /// <param name="y">Second points [batchSize * dim].</param>
+    /// <param name="output">Output distances [batchSize].</param>
+    /// <param name="batchSize">Number of distance computations.</param>
+    /// <param name="dim">Dimension of each point.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void PoincareDistance(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature);
+
+    /// <summary>
+    /// Hyperbolic linear layer forward pass on GPU.
+    /// </summary>
+    /// <param name="input">Input [batchSize * inputFeatures].</param>
+    /// <param name="weights">Weights [outputFeatures * inputFeatures].</param>
+    /// <param name="biases">Biases [outputFeatures * inputFeatures].</param>
+    /// <param name="output">Output [batchSize * outputFeatures].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    /// <param name="epsilon">Epsilon for projection.</param>
+    void HyperbolicLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon);
+
+    #endregion
+
+    #region Octonion Algebra Operations
+
+    /// <summary>
+    /// Octonion multiplication: a * b where a, b are 8-component octonions.
+    /// Uses Cayley-Dickson construction multiplication rules.
+    /// </summary>
+    /// <param name="a">First operand [count * 8].</param>
+    /// <param name="b">Second operand [count * 8].</param>
+    /// <param name="output">Output [count * 8].</param>
+    /// <param name="count">Number of octonion multiplications.</param>
+    void OctonionMultiply(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count);
+
+    /// <summary>
+    /// Octonion addition: a + b.
+    /// </summary>
+    /// <param name="a">First operand [count * 8].</param>
+    /// <param name="b">Second operand [count * 8].</param>
+    /// <param name="output">Output [count * 8].</param>
+    /// <param name="count">Number of octonion additions.</param>
+    void OctonionAdd(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count);
+
+    /// <summary>
+    /// Octonion linear layer forward pass on GPU.
+    /// output[o] = sum_i(weights[o,i] * input[i]) + biases[o] where * is octonion multiplication.
+    /// </summary>
+    /// <param name="input">Input [batchSize * inputFeatures * 8].</param>
+    /// <param name="weights">Weights [outputFeatures * inputFeatures * 8].</param>
+    /// <param name="biases">Biases [outputFeatures * 8].</param>
+    /// <param name="output">Output [batchSize * outputFeatures * 8].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+        int batchSize, int inputFeatures, int outputFeatures);
+
+    #endregion
+
+    #region Quantum Computing Operations
+
+    /// <summary>
+    /// Compute probabilities from complex amplitudes: |amplitude|^2.
+    /// </summary>
+    /// <param name="realPart">Real part of amplitudes [batchSize * stateSize].</param>
+    /// <param name="imagPart">Imaginary part of amplitudes [batchSize * stateSize].</param>
+    /// <param name="probabilities">Output probabilities [batchSize * stateSize].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="stateSize">Number of quantum states.</param>
+    void QuantumMeasurement(IGpuBuffer realPart, IGpuBuffer imagPart, IGpuBuffer probabilities, int batchSize, int stateSize);
+
+    /// <summary>
+    /// Normalize probabilities to sum to 1 per batch.
+    /// </summary>
+    /// <param name="probabilities">Probabilities [batchSize * stateSize] (in/out).</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="stateSize">Number of states per batch.</param>
+    void NormalizeProbabilities(IGpuBuffer probabilities, int batchSize, int stateSize);
+
+    /// <summary>
+    /// Complex matrix-vector multiply for quantum circuit: y = A * x.
+    /// </summary>
+    /// <param name="matReal">Real part of matrix [dim * dim].</param>
+    /// <param name="matImag">Imaginary part of matrix [dim * dim].</param>
+    /// <param name="vecReal">Real part of vector [batchSize * dim].</param>
+    /// <param name="vecImag">Imaginary part of vector [batchSize * dim].</param>
+    /// <param name="outReal">Real part of output [batchSize * dim].</param>
+    /// <param name="outImag">Imaginary part of output [batchSize * dim].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="dim">Dimension of matrix and vectors.</param>
+    void ComplexMatVec(IGpuBuffer matReal, IGpuBuffer matImag, IGpuBuffer vecReal, IGpuBuffer vecImag,
+        IGpuBuffer outReal, IGpuBuffer outImag, int batchSize, int dim);
+
+    /// <summary>
+    /// Applies quantum rotation gates (Ry rotation) to quantum state.
+    /// </summary>
+    /// <param name="stateReal">Real part of state [batchSize * dim].</param>
+    /// <param name="stateImag">Imaginary part of state [batchSize * dim].</param>
+    /// <param name="outReal">Real part of output [batchSize * dim].</param>
+    /// <param name="outImag">Imaginary part of output [batchSize * dim].</param>
+    /// <param name="angles">Rotation angles [numQubits].</param>
+    /// <param name="numQubits">Number of qubits (dim = 2^numQubits).</param>
+    /// <param name="batchSize">Batch size.</param>
+    void QuantumRotation(IGpuBuffer stateReal, IGpuBuffer stateImag, IGpuBuffer outReal, IGpuBuffer outImag,
+        IGpuBuffer angles, int numQubits, int batchSize);
+
+    /// <summary>
+    /// Combined measurement layer forward: |z|^2 and normalize.
+    /// Input is interleaved real/imag format.
+    /// </summary>
+    /// <param name="input">Input [batchSize * stateSize * 2] interleaved real/imag.</param>
+    /// <param name="output">Output probabilities [batchSize * stateSize].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="stateSize">Number of quantum states.</param>
+    void MeasurementForward(IGpuBuffer input, IGpuBuffer output, int batchSize, int stateSize);
 
     #endregion
 }

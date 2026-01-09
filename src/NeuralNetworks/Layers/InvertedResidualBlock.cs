@@ -1,6 +1,8 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -48,7 +50,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
     private readonly ConvolutionalLayer<T> _projectConv;
     private readonly BatchNormalizationLayer<T> _projectBn;
 
-    private readonly IActivationFunction<T> _activation;
     private readonly bool _useResidual;
     private readonly bool _hasExpansion;
     private readonly bool _useSE;
@@ -68,6 +69,11 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer has a GPU implementation.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the number of input channels.
@@ -113,7 +119,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         IActivationFunction<T>? activationFunction = null)
         : base(
             inputShape: [inChannels, inputHeight, inputWidth],
-            outputShape: [outChannels, (inputHeight + stride - 1) / stride, (inputWidth + stride - 1) / stride])
+            outputShape: [outChannels, (inputHeight + stride - 1) / stride, (inputWidth + stride - 1) / stride],
+            scalarActivation: activationFunction ?? new ReLU6Activation<T>())
     {
         InChannels = inChannels;
         OutChannels = outChannels;
@@ -121,7 +128,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         Stride = stride;
 
         int hiddenDim = inChannels * expansionRatio;
-        _activation = activationFunction ?? new ReLU6Activation<T>();
         _hasExpansion = expansionRatio != 1;
         _useSE = useSE;
 
@@ -239,6 +245,79 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         }
 
         return _lastProjectBnOut;
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU, keeping data GPU-resident.
+    /// </summary>
+    /// <param name="inputs">The input tensors (expects single input).</param>
+    /// <returns>The output tensor on GPU.</returns>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        IGpuTensor<T> x = input;
+
+        // Expansion phase (if expansion > 1)
+        if (_hasExpansion && _expandConv is not null && _expandBn is not null)
+        {
+            var expandOut = _expandConv.ForwardGpu(x);
+            var expandBnOut = _expandBn.ForwardGpu(expandOut);
+            expandOut.Dispose(); // Dispose intermediate tensor
+            var expandAct = gpuEngine.ActivationGpu(expandBnOut, GetFusedActivationType());
+            expandBnOut.Dispose(); // Dispose intermediate tensor
+            x = expandAct;
+        }
+
+        // Depthwise convolution phase
+        var dwOut = _dwConv.ForwardGpu(x);
+        // Dispose expansion output if we had expansion phase
+        if (_hasExpansion && x != input)
+            x.Dispose();
+        var dwBnOut = _dwBn.ForwardGpu(dwOut);
+        dwOut.Dispose(); // Dispose intermediate tensor
+        var dwAct = gpuEngine.ActivationGpu(dwBnOut, GetFusedActivationType());
+        dwBnOut.Dispose(); // Dispose intermediate tensor
+        x = dwAct;
+
+        // Squeeze-and-Excitation phase (optional)
+        if (_useSE && _se is not null)
+        {
+            // Permute from NCHW [B, C, H, W] to NHWC [B, H, W, C] for SE layer
+            var xNhwc = gpuEngine.PermuteGpu(x, [0, 2, 3, 1]);
+            x.Dispose(); // Dispose dwAct before SE
+
+            // Apply SE layer (expects NHWC format)
+            var seOut = _se.ForwardGpu(xNhwc);
+            xNhwc.Dispose(); // Dispose intermediate tensor
+
+            // Permute back from NHWC [B, H, W, C] to NCHW [B, C, H, W]
+            var seOutNchw = gpuEngine.PermuteGpu(seOut, [0, 3, 1, 2]);
+            seOut.Dispose(); // Dispose intermediate tensor
+
+            x = seOutNchw;
+        }
+
+        // Projection phase (LINEAR - no activation)
+        var projectOut = _projectConv.ForwardGpu(x);
+        x.Dispose(); // Dispose SE output (or dwAct if no SE)
+        var projectBnOut = _projectBn.ForwardGpu(projectOut);
+        projectOut.Dispose(); // Dispose intermediate tensor
+
+        // Residual connection (only if dimensions match)
+        if (_useResidual)
+        {
+            var result = gpuEngine.AddGpu(projectBnOut, input);
+            projectBnOut.Dispose(); // Dispose intermediate tensor
+            return result;
+        }
+
+        return projectBnOut;
     }
 
     /// <summary>
@@ -445,7 +524,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
                 return false;
 
             // Check activation supports JIT
-            if (!_activation.SupportsJitCompilation)
+            if (ScalarActivation is not null && !ScalarActivation.SupportsJitCompilation)
                 return false;
 
             return true;
@@ -505,7 +584,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
                 epsilon: NumOps.ToDouble(_expandBn.GetEpsilon()));
 
             // Apply activation using proper JIT graph integration
-            current = _activation.ApplyToGraph(current);
+            if (ScalarActivation is not null)
+                current = ScalarActivation.ApplyToGraph(current);
         }
 
         // Depthwise convolution phase
@@ -529,7 +609,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
                 epsilon: NumOps.ToDouble(_dwBn.GetEpsilon()));
 
             // Apply activation using proper JIT graph integration
-            current = _activation.ApplyToGraph(current);
+            if (ScalarActivation is not null)
+                current = ScalarActivation.ApplyToGraph(current);
         }
 
         // Squeeze-and-Excitation phase (if used)
@@ -580,12 +661,16 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
 
     private Tensor<T> ApplyBlockActivation(Tensor<T> input)
     {
-        return _activation.Activate(input);
+        if (ScalarActivation is null)
+            return input;
+        return ScalarActivation.Activate(input);
     }
 
     private Tensor<T> ApplyBlockActivationDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var derivative = _activation.Derivative(input);
+        if (ScalarActivation is null)
+            return gradient;
+        var derivative = ScalarActivation.Derivative(input);
         return MultiplyTensors(gradient, derivative);
     }
 

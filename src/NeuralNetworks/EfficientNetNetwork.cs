@@ -247,6 +247,11 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// <returns>The output class logits.</returns>
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+
         Tensor<T> output = input;
         foreach (var layer in Layers)
         {

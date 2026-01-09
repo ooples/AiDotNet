@@ -1507,6 +1507,10 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
         SetTrainingMode(false);
         var embedding = GetImageEmbedding(input);
         var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);

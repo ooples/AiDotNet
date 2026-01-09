@@ -139,7 +139,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// indexing patterns. Without specialized GPU kernels for these operations, true GPU-resident
     /// execution isn't possible - CPU fallback is used.
     /// </remarks>
-    protected override bool SupportsGpuExecution => false;
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CapsuleLayer{T}"/> class with specified dimensions and routing iterations.
@@ -589,6 +589,62 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastCouplingCoefficients = couplingCoefficients;
 
         return _lastOutput;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass through the capsule layer.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensors.</param>
+    /// <returns>GPU-resident output tensor after capsule transformation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass using dedicated GPU kernels for
+    /// capsule transformation and dynamic routing. All operations stay GPU-resident
+    /// for maximum performance.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+
+        // Validate input shape
+        if (input.Shape.Length != 3)
+            throw new ArgumentException($"CapsuleLayer.ForwardGpu requires 3D input [batch, inputCapsules, inputDim], got {input.Shape.Length}D");
+
+        int batchSize = input.Shape[0];
+        int inputCapsules = input.Shape[1];
+        int inputDim = input.Shape[2];
+
+        // Validate dimensions match
+        if (inputCapsules != _transformationMatrix.Shape[0])
+            throw new ArgumentException($"Input capsules mismatch: input has {inputCapsules}, layer expects {_transformationMatrix.Shape[0]}");
+        if (inputDim != _transformationMatrix.Shape[1])
+            throw new ArgumentException($"Input dimension mismatch: input has {inputDim}, layer expects {_transformationMatrix.Shape[1]}");
+
+        // Step 1: Cache or upload weights to GPU
+        var weightsTensor = gpuEngine.GetOrCacheWeightsGpu<T>(_transformationMatrix);
+
+        // Step 2: GPU-resident capsule transform
+        // Uses dedicated CapsuleTransform kernel that parallelizes across all output elements
+        var transformed = gpuEngine.CapsuleTransformGpu<T>(input, weightsTensor.Buffer, _numCapsules, _capsuleDimension);
+
+        // Step 3: GPU-resident dynamic routing with bias
+        var output = gpuEngine.CapsuleRoutingGpu(transformed, _bias, _numRoutingIterations);
+
+        // Dispose intermediate tensor
+        transformed.Dispose();
+
+        return output;
     }
 
 

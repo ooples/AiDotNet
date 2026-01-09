@@ -370,19 +370,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var parameters = new Vector<T>(totalParameterCount);
 
         int currentIndex = 0;
-        foreach (var layer in Layers)
+        foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
             int layerParameterCount = layer.ParameterCount;
-            if (layerParameterCount > 0)
+            var layerParameters = layer.GetParameters();
+            for (int i = 0; i < layerParameterCount; i++)
             {
-                var layerParameters = layer.GetParameters();
-                for (int i = 0; i < layerParameterCount; i++)
-                {
-                    parameters[currentIndex + i] = layerParameters[i];
-                }
-
-                currentIndex += layerParameterCount;
+                parameters[currentIndex + i] = layerParameters[i];
             }
+
+            currentIndex += layerParameterCount;
         }
 
         return parameters;
@@ -575,6 +572,68 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Checks if all layers in the network support GPU execution.
+    /// Used to determine if the GPU-resident optimization path can be used.
+    /// </summary>
+    /// <returns>True if all layers can execute on GPU; false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method checks if every layer in your network can run on the GPU.
+    /// If even one layer needs the CPU, we can't use the fast GPU-only path.
+    /// </para>
+    /// </remarks>
+    protected virtual bool CanUseGpuResidentPath()
+    {
+        return Layers.All(layer => layer.CanExecuteOnGpu);
+    }
+
+    /// <summary>
+    /// Attempts to perform a GPU-resident forward pass with automatic fallback to CPU.
+    /// Use this in derived class Forward() methods to get GPU optimization with minimal code.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <param name="result">The output tensor if GPU path succeeded.</param>
+    /// <returns>True if GPU path was used successfully; false if CPU path should be used.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Derived Classes:</b> Call this at the start of your Forward() method:
+    /// </para>
+    /// <code>
+    /// public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)
+    /// {
+    ///     if (TryForwardGpuOptimized(input, out var result))
+    ///         return result;
+    ///     
+    ///     // CPU fallback path
+    ///     ...
+    /// }
+    /// </code>
+    /// </remarks>
+    protected bool TryForwardGpuOptimized(Tensor<T> input, out Tensor<T> result)
+    {
+        result = null!;
+        
+        if (Engine is not DirectGpuTensorEngine)
+            return false;
+            
+        if (!CanUseGpuResidentPath())
+            return false;
+            
+        try
+        {
+            using var gpuResult = ForwardGpu(input);
+            result = gpuResult.ToTensor();
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
+        {
+            // Log GPU failure for diagnostics before falling back to CPU path
+            System.Diagnostics.Debug.WriteLine($"[NeuralNetworkBase] GPU forward failed ({ex.GetType().Name}): {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Performs a GPU-resident forward pass, keeping intermediate results on GPU.
     /// Only downloads the final result to CPU when the returned tensor is accessed.
     /// </summary>
@@ -691,7 +750,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             return current;
         }
-        catch
+        catch (Exception)
         {
             // Clean up on error
             if (ownsCurrentTensor && current is not null)
@@ -767,7 +826,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             return current;
         }
-        catch
+        catch (Exception)
         {
             if (ownsCurrentTensor)
             {
@@ -880,7 +939,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                         return result;
                     }
-                    catch
+                    catch (Exception)
                     {
                         if (ownsCurrentTensor && current is not null)
                         {
@@ -890,7 +949,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
                 // Fall back to non-deferred GPU execution if deferred fails
                 System.Diagnostics.Debug.WriteLine($"Deferred execution failed, falling back: {ex.Message}");
@@ -903,9 +962,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             using var result = ForwardGpu(input);
             return result.ToTensor();
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
         {
-            // Final fallback to CPU predict
+            // Log GPU failure for diagnostics before final fallback to CPU
+            System.Diagnostics.Debug.WriteLine($"[NeuralNetworkBase] GPU forward failed in ForwardDeferred ({ex.GetType().Name}): {ex.Message}");
             return Predict(input);
         }
     }
@@ -991,7 +1051,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                         return result;
                     }
-                    catch
+                    catch (Exception)
                     {
                         if (ownsCurrentTensor && current is not null)
                         {
@@ -1005,7 +1065,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
                 // Fall back to non-deferred execution
                 System.Diagnostics.Debug.WriteLine($"Async deferred execution failed, falling back: {ex.Message}");
@@ -1021,8 +1081,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 using var result = ForwardGpu(input);
                 return result.ToTensor();
             }
-            catch
+            catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
+                // Log GPU failure for diagnostics before falling back to CPU
+                System.Diagnostics.Debug.WriteLine($"[NeuralNetworkBase] Async GPU forward failed ({ex.GetType().Name}): {ex.Message}");
                 return Predict(input);
             }
         }, cancellationToken);
@@ -1144,7 +1206,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             return current;
         }
-        catch
+        catch (Exception)
         {
             // On error, tensors are cleaned up when context is disposed
             throw;
@@ -1602,12 +1664,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Collect gradients from all layers
         List<Vector<T>> allGradients = new List<Vector<T>>();
 
-        foreach (var layer in Layers)
+        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                allGradients.Add(layer.GetParameterGradients());
-            }
+            allGradients.Add(layer.GetParameterGradients());
         }
 
         // Concatenate all gradients into a single vector
@@ -2980,22 +3039,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         int currentIndex = 0;
-        foreach (var layer in Layers)
+        foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
             int layerParameterCount = layer.ParameterCount;
-            if (layerParameterCount > 0)
+            // Extract parameters for this layer
+            var layerParameters = new Vector<T>(layerParameterCount);
+            for (int i = 0; i < layerParameterCount; i++)
             {
-                // Extract parameters for this layer
-                var layerParameters = new Vector<T>(layerParameterCount);
-                for (int i = 0; i < layerParameterCount; i++)
-                {
-                    layerParameters[i] = parameters[currentIndex + i];
-                }
-
-                // Set the layer's parameters
-                layer.SetParameters(layerParameters);
-                currentIndex += layerParameterCount;
+                layerParameters[i] = parameters[currentIndex + i];
             }
+
+            // Set the layer's parameters
+            layer.SetParameters(layerParameters);
+            currentIndex += layerParameterCount;
         }
     }
 

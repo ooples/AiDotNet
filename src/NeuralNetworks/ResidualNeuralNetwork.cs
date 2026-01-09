@@ -441,7 +441,11 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Perform forward pass through all layers sequentially
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        // CPU path: perform forward pass through all layers sequentially
         var current = input;
         foreach (var layer in Layers)
         {

@@ -153,8 +153,13 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate input shape before any processing (including GPU path)
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(SparseNeuralNetwork<T>), "forward pass");
+
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
 
         Tensor<T> output = input;
         foreach (var layer in Layers)

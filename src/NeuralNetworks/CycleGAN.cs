@@ -759,7 +759,14 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     protected override void InitializeLayers() { }
 
-    public override Tensor<T> Predict(Tensor<T> input) => GeneratorAtoB.Predict(input);
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        return GeneratorAtoB.Predict(input);
+    }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

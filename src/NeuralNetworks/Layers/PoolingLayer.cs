@@ -1,4 +1,6 @@
 using AiDotNet.Engines;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
 
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -132,6 +134,11 @@ public class PoolingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer has a GPU implementation.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// The input tensor from the most recent forward pass.

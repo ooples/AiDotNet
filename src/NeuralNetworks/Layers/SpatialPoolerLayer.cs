@@ -335,30 +335,30 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend is not available.");
 
-        // Download input from GPU for processing
-        var inputData = backend.DownloadBuffer(input.Buffer);
+        // Flatten to 1D if needed
+        var flatInput = input.Shape.Length == 1 ? input : gpuEngine.ReshapeGpu(input, [input.ElementCount]);
 
-        // Convert to Tensor<T>
-        var inputTensor = new Tensor<T>(input.Shape);
-        for (int i = 0; i < inputData.Length; i++)
-        {
-            inputTensor[i] = NumOps.FromDouble(inputData[i]);
-        }
+        // Reshape to [1, InputSize] for matrix multiply (batch of 1)
+        var inputReshaped = gpuEngine.ReshapeGpu(flatInput, [1, InputSize]);
 
-        // Process using existing Forward logic
-        var output = Forward(inputTensor);
+        // Matrix multiply: [1, InputSize] @ [InputSize, ColumnCount] = [1, ColumnCount]
+        var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
 
-        // Upload output to GPU
-        var outputData = new float[output.Length];
-        for (int i = 0; i < output.Length; i++)
-        {
-            outputData[i] = NumOps.ToFloat(output[i]);
-        }
+        // Apply threshold to get sparse binary output
+        var thresholdFloat = (float)SparsityThreshold;
+        var outputMask = gpuEngine.GreaterThanScalarGpu(activations, thresholdFloat);
 
-        var outputBuffer = backend.AllocateBuffer(outputData);
-        var outputShape = output.Shape;
+        // Reshape to [ColumnCount]
+        var output = gpuEngine.ReshapeGpu(outputMask, [ColumnCount]);
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        // Dispose intermediates (except output)
+        if (input.Shape.Length != 1)
+            flatInput.Dispose();
+        inputReshaped.Dispose();
+        activations.Dispose();
+        outputMask.Dispose();
+
+        return output;
     }
 
     /// <summary>

@@ -198,6 +198,26 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.SquashBackward(gradOutput, input, gradInput, numCapsules, capsuleDim, epsilon);
 
     /// <inheritdoc/>
+    public virtual void CapsulePredictions(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int outputCapsules, int outputDim)
+        => Inner.CapsulePredictions(input, weights, output, batchSize, inputCapsules, inputDim, outputCapsules, outputDim);
+
+    /// <inheritdoc/>
+    public virtual void CapsuleTransform(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int numCapsules, int capsuleDim)
+        => Inner.CapsuleTransform(input, weights, output, batchSize, inputCapsules, inputDim, numCapsules, capsuleDim);
+
+    /// <inheritdoc/>
+    public virtual void CapsuleWeightedSum(IGpuBuffer coupling, IGpuBuffer predictions, IGpuBuffer output,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+        => Inner.CapsuleWeightedSum(coupling, predictions, output, batchSize, inputCapsules, outputCapsules, capsuleDim);
+
+    /// <inheritdoc/>
+    public virtual void CapsuleAgreement(IGpuBuffer predictions, IGpuBuffer output, IGpuBuffer agreement,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+        => Inner.CapsuleAgreement(predictions, output, agreement, batchSize, inputCapsules, outputCapsules, capsuleDim);
+
+    /// <inheritdoc/>
     public virtual void TileBatch(IGpuBuffer input, IGpuBuffer output, int repeats, int innerSize)
         => Inner.TileBatch(input, output, repeats, innerSize);
 
@@ -803,6 +823,74 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual void UpdateTraces(IGpuBuffer traces, IGpuBuffer spikes, IGpuBuffer input, float decay, float threshold, int size)
         => Inner.UpdateTraces(traces, spikes, input, decay, threshold, size);
+
+    #endregion
+
+    #region Hyperbolic Geometry Operations
+
+    /// <inheritdoc/>
+    public virtual void PoincareProject(IGpuBuffer input, IGpuBuffer output, int batchSize, int dim, float curvature, float epsilon = 1e-5f)
+        => Inner.PoincareProject(input, output, batchSize, dim, curvature, epsilon);
+
+    /// <inheritdoc/>
+    public virtual void MobiusAdd(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature)
+        => Inner.MobiusAdd(x, y, output, batchSize, dim, curvature);
+
+    /// <inheritdoc/>
+    public virtual void PoincareExpMap(IGpuBuffer basePoint, IGpuBuffer tangentVec, IGpuBuffer output, int batchSize, int dim, float curvature)
+        => Inner.PoincareExpMap(basePoint, tangentVec, output, batchSize, dim, curvature);
+
+    /// <inheritdoc/>
+    public virtual void PoincareDistance(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature)
+        => Inner.PoincareDistance(x, y, output, batchSize, dim, curvature);
+
+    /// <inheritdoc/>
+    public virtual void HyperbolicLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon)
+        => Inner.HyperbolicLinearForward(input, weights, biases, output, batchSize, inputFeatures, outputFeatures, curvature, epsilon);
+
+    #endregion
+
+    #region Octonion Algebra Operations
+
+    /// <inheritdoc/>
+    public virtual void OctonionMultiply(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count)
+        => Inner.OctonionMultiply(a, b, output, count);
+
+    /// <inheritdoc/>
+    public virtual void OctonionAdd(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count)
+        => Inner.OctonionAdd(a, b, output, count);
+
+    /// <inheritdoc/>
+    public virtual void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+        int batchSize, int inputFeatures, int outputFeatures)
+        => Inner.OctonionLinearForward(input, weights, biases, output, batchSize, inputFeatures, outputFeatures);
+
+    #endregion
+
+    #region Quantum Computing Operations
+
+    /// <inheritdoc/>
+    public virtual void QuantumMeasurement(IGpuBuffer realPart, IGpuBuffer imagPart, IGpuBuffer probabilities, int batchSize, int stateSize)
+        => Inner.QuantumMeasurement(realPart, imagPart, probabilities, batchSize, stateSize);
+
+    /// <inheritdoc/>
+    public virtual void NormalizeProbabilities(IGpuBuffer probabilities, int batchSize, int stateSize)
+        => Inner.NormalizeProbabilities(probabilities, batchSize, stateSize);
+
+    /// <inheritdoc/>
+    public virtual void ComplexMatVec(IGpuBuffer matReal, IGpuBuffer matImag, IGpuBuffer vecReal, IGpuBuffer vecImag,
+        IGpuBuffer outReal, IGpuBuffer outImag, int batchSize, int dim)
+        => Inner.ComplexMatVec(matReal, matImag, vecReal, vecImag, outReal, outImag, batchSize, dim);
+
+    /// <inheritdoc/>
+    public virtual void QuantumRotation(IGpuBuffer stateReal, IGpuBuffer stateImag, IGpuBuffer outReal, IGpuBuffer outImag,
+        IGpuBuffer angles, int numQubits, int batchSize)
+        => Inner.QuantumRotation(stateReal, stateImag, outReal, outImag, angles, numQubits, batchSize);
+
+    /// <inheritdoc/>
+    public virtual void MeasurementForward(IGpuBuffer input, IGpuBuffer output, int batchSize, int stateSize)
+        => Inner.MeasurementForward(input, output, batchSize, stateSize);
 
     #endregion
 

@@ -55,6 +55,7 @@ public sealed class HipBackend : IAsyncGpuBackend
     private IntPtr _sparseModule;
     private IntPtr _locallyConnectedModule;
     private IntPtr _deformableConvModule;
+    private IntPtr _specializedModule;
 
     private const int DefaultBlockSize = 256;
 
@@ -324,6 +325,10 @@ public sealed class HipBackend : IAsyncGpuBackend
             // Compile Deformable Convolution kernels (DCNv2 with learnable offsets and masks)
             CompileKernelModule(HipDeformableConvolutionKernels.GetSource(), "deformable_conv", ref _deformableConvModule,
                 HipDeformableConvolutionKernels.GetKernelNames());
+
+            // Compile Specialized kernels (hyperbolic geometry, octonion algebra, quantum computing)
+            CompileKernelModule(Kernels.HipSpecializedKernels.GetSource(), "specialized", ref _specializedModule,
+                Kernels.HipSpecializedKernels.GetKernelNames());
 
             Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Total: {_kernelCache.Count}");
@@ -1622,6 +1627,30 @@ public sealed class HipBackend : IAsyncGpuBackend
         {
             foreach (var h in handles) if (h.IsAllocated) h.Free();
         }
+    }
+
+    public void CapsulePredictions(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int outputCapsules, int outputDim)
+    {
+        throw new NotImplementedException("CapsulePredictions kernel not yet implemented for HIP backend");
+    }
+
+    public void CapsuleTransform(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer output,
+        int batchSize, int inputCapsules, int inputDim, int numCapsules, int capsuleDim)
+    {
+        throw new NotImplementedException("CapsuleTransform kernel not yet implemented for HIP backend");
+    }
+
+    public void CapsuleWeightedSum(IGpuBuffer coupling, IGpuBuffer predictions, IGpuBuffer output,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+    {
+        throw new NotImplementedException("CapsuleWeightedSum kernel not yet implemented for HIP backend");
+    }
+
+    public void CapsuleAgreement(IGpuBuffer predictions, IGpuBuffer output, IGpuBuffer agreement,
+        int batchSize, int inputCapsules, int outputCapsules, int capsuleDim)
+    {
+        throw new NotImplementedException("CapsuleAgreement kernel not yet implemented for HIP backend");
     }
 
     public void TileBatch(IGpuBuffer input, IGpuBuffer output, int repeats, int innerSize)
@@ -6659,6 +6688,387 @@ public sealed class HipBackend : IAsyncGpuBackend
     {
         throw new NotImplementedException("UpdateTraces not implemented for HIP backend yet.");
     }
+
+    #region Hyperbolic Geometry Operations
+
+    public void PoincareProject(IGpuBuffer input, IGpuBuffer output, int batchSize, int dim, float curvature, float epsilon = 1e-5f)
+    {
+        if (!_kernelCache.TryGetValue("poincare_project", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: poincare_project");
+
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(dim, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(curvature, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void MobiusAdd(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("mobius_add", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: mobius_add");
+
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(x.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(y.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(dim, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(curvature, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void PoincareExpMap(IGpuBuffer basePoint, IGpuBuffer tangentVec, IGpuBuffer output, int batchSize, int dim, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("poincare_exp_map", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: poincare_exp_map");
+
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(basePoint.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(tangentVec.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(dim, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(curvature, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void PoincareDistance(IGpuBuffer x, IGpuBuffer y, IGpuBuffer output, int batchSize, int dim, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("poincare_distance", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: poincare_distance");
+
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(x.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(y.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(dim, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(curvature, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void HyperbolicLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_forward", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: hyperbolic_linear_forward");
+
+        int totalThreads = batchSize * outputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[9];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(weights.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(biases.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inputFeatures, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(outputFeatures, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(curvature, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+
+            var args = new IntPtr[9];
+            for (int i = 0; i < 9; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    #endregion
+
+    #region Octonion Algebra Operations
+
+    public void OctonionMultiply(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count)
+    {
+        if (!_kernelCache.TryGetValue("octonion_multiply", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: octonion_multiply");
+
+        uint grid = (uint)((count + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(a.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(b.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(count, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void OctonionAdd(IGpuBuffer a, IGpuBuffer b, IGpuBuffer output, int count)
+    {
+        if (!_kernelCache.TryGetValue("octonion_add", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: octonion_add");
+
+        int totalElements = count * 8;
+        uint grid = (uint)((totalElements + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(a.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(b.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(count, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
+        int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_forward", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: octonion_linear_forward");
+
+        int totalThreads = batchSize * outputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(weights.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(biases.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inputFeatures, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(outputFeatures, GCHandleType.Pinned);
+
+            var args = new IntPtr[7];
+            for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    #endregion
+
+    #region Quantum Computing Operations
+
+    public void QuantumMeasurement(IGpuBuffer realPart, IGpuBuffer imagPart, IGpuBuffer probabilities, int batchSize, int stateSize)
+    {
+        if (!_kernelCache.TryGetValue("quantum_measurement", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: quantum_measurement");
+
+        int totalElements = batchSize * stateSize;
+        uint grid = (uint)((totalElements + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(realPart.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(imagPart.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(probabilities.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(stateSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void NormalizeProbabilities(IGpuBuffer probabilities, int batchSize, int stateSize)
+    {
+        if (!_kernelCache.TryGetValue("normalize_probabilities", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: normalize_probabilities");
+
+        uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
+        var handles = new GCHandle[3];
+        try
+        {
+            handles[0] = GCHandle.Alloc(probabilities.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(stateSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[3];
+            for (int i = 0; i < 3; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, (uint)batchSize, DefaultBlockSize, args, sharedMemSize);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void ComplexMatVec(IGpuBuffer matReal, IGpuBuffer matImag, IGpuBuffer vecReal, IGpuBuffer vecImag,
+        IGpuBuffer outReal, IGpuBuffer outImag, int batchSize, int dim)
+    {
+        if (!_kernelCache.TryGetValue("complex_matvec", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: complex_matvec");
+
+        int totalElements = batchSize * dim;
+        uint grid = (uint)((totalElements + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[8];
+        try
+        {
+            handles[0] = GCHandle.Alloc(matReal.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(matImag.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(vecReal.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(vecImag.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(outReal.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(outImag.Handle, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(dim, GCHandleType.Pinned);
+
+            var args = new IntPtr[8];
+            for (int i = 0; i < 8; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void QuantumRotation(IGpuBuffer stateReal, IGpuBuffer stateImag, IGpuBuffer outReal, IGpuBuffer outImag,
+        IGpuBuffer angles, int numQubits, int batchSize)
+    {
+        if (!_kernelCache.TryGetValue("quantum_rotation", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: quantum_rotation");
+
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(stateReal.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(stateImag.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(outReal.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(outImag.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(angles.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(numQubits, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[7];
+            for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, (uint)batchSize, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void MeasurementForward(IGpuBuffer input, IGpuBuffer output, int batchSize, int stateSize)
+    {
+        if (!_kernelCache.TryGetValue("measurement_forward", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: measurement_forward");
+
+        uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(stateSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, (uint)batchSize, DefaultBlockSize, args, sharedMemSize);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    #endregion
 
     public void Dispose()
     {
