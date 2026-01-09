@@ -4236,6 +4236,61 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-resident backward pass for scaled dot-product attention.
+    /// Computes gradients for query, key, and value tensors.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">Gradient of loss w.r.t. attention output [batch, heads, seqLen, headDim].</param>
+    /// <param name="query">Query tensor from forward pass [batch, heads, seqLen, headDim].</param>
+    /// <param name="key">Key tensor from forward pass [batch, heads, seqLen, headDim].</param>
+    /// <param name="value">Value tensor from forward pass [batch, heads, seqLen, headDim].</param>
+    /// <param name="attentionWeights">Attention weights from forward pass [batch, heads, seqLen, seqLen].</param>
+    /// <param name="scale">Scale factor (typically 1/sqrt(headDim)).</param>
+    /// <param name="isCausal">Whether to use causal masking.</param>
+    /// <returns>Tuple of (gradQuery, gradKey, gradValue) GPU-resident tensors.</returns>
+    public (IGpuTensor<T> GradQuery, IGpuTensor<T> GradKey, IGpuTensor<T> GradValue) ScaledDotProductAttentionBackwardGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuTensor<T> query,
+        IGpuTensor<T> key,
+        IGpuTensor<T> value,
+        IGpuTensor<T> attentionWeights,
+        double scale,
+        bool isCausal = false)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for ScaledDotProductAttentionBackwardGpu");
+
+        // Extract dimensions from query tensor (all tensors share same shape except attn weights)
+        int[] qShape = query.Shape;
+        if (qShape.Length != 4)
+            throw new ArgumentException("Query tensor must be 4D [batch, heads, seqLen, headDim]");
+
+        int batch = qShape[0];
+        int heads = qShape[1];
+        int seqLen = qShape[2];
+        int headDim = qShape[3];
+
+        // Allocate output gradient buffers
+        int qkvSize = batch * heads * seqLen * headDim;
+        var gradQueryBuffer = backend.AllocateBuffer(qkvSize);
+        var gradKeyBuffer = backend.AllocateBuffer(qkvSize);
+        var gradValueBuffer = backend.AllocateBuffer(qkvSize);
+
+        // Execute ScaledDotProductAttentionBackward on GPU
+        backend.ScaledDotProductAttentionBackward(
+            gradOutput.Buffer, query.Buffer, key.Buffer, value.Buffer,
+            attentionWeights.Buffer, gradQueryBuffer, gradKeyBuffer, gradValueBuffer,
+            batch, heads, seqLen, headDim, (float)scale, isCausal);
+
+        // Return GPU-resident gradient tensors
+        var gradQuery = new GpuTensor<T>(backend, gradQueryBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
+        var gradKey = new GpuTensor<T>(backend, gradKeyBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
+        var gradValue = new GpuTensor<T>(backend, gradValueBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+        return (gradQuery, gradKey, gradValue);
+    }
+
+    /// <summary>
     /// GPU-resident tensor permutation (transpose with arbitrary dimension reordering).
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
@@ -6214,6 +6269,75 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // Return GPU-resident output tensor
         var outputTensor = new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
         return (outputTensor, saveMean, saveInvVar);
+    }
+
+    /// <summary>
+    /// GPU-resident layer normalization backward pass.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">GPU-resident gradient of loss w.r.t. output.</param>
+    /// <param name="input">GPU-resident input from forward pass.</param>
+    /// <param name="gamma">Scale parameters.</param>
+    /// <param name="saveMean">Saved mean from forward pass.</param>
+    /// <param name="saveInvVar">Saved inverse variance from forward pass.</param>
+    /// <param name="epsilon">Epsilon for numerical stability.</param>
+    /// <returns>Tuple of (gradInput, gradGamma, gradBeta) GPU-resident tensors.</returns>
+    public (IGpuTensor<T> GradInput, Tensor<T> GradGamma, Tensor<T> GradBeta) LayerNormBackwardGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuTensor<T> input,
+        Tensor<T> gamma,
+        Tensor<T> saveMean,
+        Tensor<T> saveInvVar,
+        double epsilon)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for LayerNormBackwardGpu");
+
+        int[] shape = gradOutput.Shape;
+        int batchSize = shape[0];
+        int normalizedSize = shape.Length > 1 ? shape[1] : shape[0];
+
+        // For higher-rank tensors, flatten the normalized dimensions
+        for (int i = 2; i < shape.Length; i++)
+        {
+            normalizedSize *= shape[i];
+        }
+
+        // Upload gamma, saveMean, saveInvVar to GPU
+        using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.Data, PersistentTensorRole.Weights);
+        float[] saveMeanFloat = DirectGpuEngine.ToFloatArray(saveMean.Data);
+        float[] saveInvVarFloat = DirectGpuEngine.ToFloatArray(saveInvVar.Data);
+        IGpuBuffer saveMeanBuffer = backend.AllocateBuffer(saveMeanFloat);
+        IGpuBuffer saveInvVarBuffer = backend.AllocateBuffer(saveInvVarFloat);
+
+        // Allocate output buffers
+        int inputSize = gradOutput.ElementCount;
+        var gradInputBuffer = backend.AllocateBuffer(inputSize);
+        IGpuBuffer gradGammaBuffer = backend.AllocateBuffer(normalizedSize);
+        IGpuBuffer gradBetaBuffer = backend.AllocateBuffer(normalizedSize);
+
+        // Execute LayerNormBackward on GPU
+        backend.LayerNormBackward(
+            gradOutput.Buffer, input.Buffer, gammaBuffer.Buffer,
+            saveMeanBuffer, saveInvVarBuffer,
+            gradInputBuffer, gradGammaBuffer, gradBetaBuffer,
+            batchSize, normalizedSize, (float)epsilon);
+
+        // Download gradGamma and gradBeta (these are small, same size as normalizedSize)
+        float[] gradGammaFloat = backend.DownloadBuffer(gradGammaBuffer);
+        float[] gradBetaFloat = backend.DownloadBuffer(gradBetaBuffer);
+
+        // Dispose temporary buffers
+        saveMeanBuffer.Dispose();
+        saveInvVarBuffer.Dispose();
+        gradGammaBuffer.Dispose();
+        gradBetaBuffer.Dispose();
+        var gradGamma = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradGammaFloat), new[] { normalizedSize });
+        var gradBeta = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBetaFloat), new[] { normalizedSize });
+
+        // Return GPU-resident gradInput tensor
+        var gradInputTensor = new GpuTensor<T>(backend, gradInputBuffer, shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        return (gradInputTensor, gradGamma, gradBeta);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -210,6 +211,16 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _keyWeightsVelocity;
     private Tensor<T>? _valueWeightsVelocity;
     private Tensor<T>? _outputBiasVelocity;
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput2D;
+    private IGpuTensor<T>? _gpuQ;
+    private IGpuTensor<T>? _gpuK;
+    private IGpuTensor<T>? _gpuV;
+    private IGpuTensor<T>? _gpuAttentionWeights;
+    private int _gpuBatchSize;
+    private int _gpuSequenceLength;
+    private int _gpuEmbeddingDimension;
 
     /// <summary>
     /// The number of attention heads used in the multi-head attention mechanism.
@@ -694,7 +705,17 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Skip this expensive download during inference (50% overhead reduction)
         if (IsTrainingMode)
         {
-            // Download GPU tensors to CPU for backward pass
+            // Cache GPU tensors for GPU-resident backward pass
+            _gpuInput2D = input2D;
+            _gpuQ = Q;
+            _gpuK = K;
+            _gpuV = V;
+            _gpuAttentionWeights = attentionWeightsGpu;
+            _gpuBatchSize = batchSize;
+            _gpuSequenceLength = sequenceLength;
+            _gpuEmbeddingDimension = embeddingDimension;
+
+            // Also cache CPU tensors for fallback backward pass
             _lastInput = input3D.ToTensor();
             _lastAttentionScores = attentionWeightsGpu?.ToTensor();
             _lastOutput = output.ToTensor();
@@ -842,6 +863,99 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             ? inputGradient.Reshape(_originalInputShape)
             : inputGradient;
 
+    }
+
+    /// <summary>
+    /// Performs the backward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient of the loss w.r.t. output.</param>
+    /// <returns>GPU-resident gradient of the loss w.r.t. input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuInput2D == null || _gpuQ == null || _gpuK == null || _gpuV == null || _gpuAttentionWeights == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        int batchSize = _gpuBatchSize;
+        int sequenceLength = _gpuSequenceLength;
+        int embeddingDimension = _gpuEmbeddingDimension;
+
+        // Reshape output gradient to 3D if needed
+        IGpuTensor<T> outputGrad3D = outputGradient;
+        if (outputGradient.Shape.Length != 3)
+        {
+            outputGrad3D = gpuEngine.ReshapeGpu(outputGradient, [batchSize, sequenceLength, embeddingDimension]);
+        }
+
+        // Apply activation derivative (if not identity)
+        IGpuTensor<T> activationGrad;
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            // For now, use identity derivative since complex activation backward needs output tensor
+            activationGrad = outputGrad3D;
+        }
+        else
+        {
+            activationGrad = outputGrad3D;
+        }
+
+        // Bias gradient: sum over batch and sequence dimensions
+        var biasSumBatch = gpuEngine.SumAxisGpu(activationGrad, 0);
+        var biasSum = gpuEngine.SumAxisGpu(biasSumBatch, 0);
+        _outputBiasGradient = biasSum.ToTensor();
+
+        // Output gradient to 4D: [B, H, S, D]
+        var dOutput4DShaped = gpuEngine.ReshapeGpu(activationGrad, [batchSize, sequenceLength, _headCount, _headDimension]);
+        var dOutput4D = gpuEngine.PermuteGpu(dOutput4DShaped, [0, 2, 1, 3]);
+
+        // Use GPU ScaledDotProductAttentionBackward for efficient gradient computation
+        double scale = 1.0 / Math.Sqrt(_headDimension);
+        var (dQ_4D, dK_4D, dV_4D) = gpuEngine.ScaledDotProductAttentionBackwardGpu(
+            dOutput4D, _gpuQ, _gpuK, _gpuV, _gpuAttentionWeights, scale, isCausal: false);
+
+        // Reshape gradients from 4D to 2D for weight gradient computation
+        var dQ_transposed = gpuEngine.PermuteGpu(dQ_4D, [0, 2, 1, 3]);
+        var dK_transposed = gpuEngine.PermuteGpu(dK_4D, [0, 2, 1, 3]);
+        var dV_transposed = gpuEngine.PermuteGpu(dV_4D, [0, 2, 1, 3]);
+
+        var dQ = gpuEngine.ReshapeGpu(dQ_transposed, [batchSize * sequenceLength, embeddingDimension]);
+        var dK = gpuEngine.ReshapeGpu(dK_transposed, [batchSize * sequenceLength, embeddingDimension]);
+        var dV = gpuEngine.ReshapeGpu(dV_transposed, [batchSize * sequenceLength, embeddingDimension]);
+
+        // Weight gradients: input2D^T @ dQ/dK/dV
+        var input2D_T = gpuEngine.TransposeGpu(_gpuInput2D);
+        var dQueryWeights = gpuEngine.MatMulGpuTensors(input2D_T, dQ);
+        var dKeyWeights = gpuEngine.MatMulGpuTensors(input2D_T, dK);
+        var dValueWeights = gpuEngine.MatMulGpuTensors(input2D_T, dV);
+
+        // Download weight gradients to CPU (needed for UpdateParameters)
+        _queryWeightsGradient = dQueryWeights.ToTensor();
+        _keyWeightsGradient = dKeyWeights.ToTensor();
+        _valueWeightsGradient = dValueWeights.ToTensor();
+
+        // Input gradient: dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
+        var wqT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_queryWeights), GpuTensorRole.Weight);
+        var wkT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_keyWeights), GpuTensorRole.Weight);
+        var wvT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_valueWeights), GpuTensorRole.Weight);
+
+        var dInputFromQ = gpuEngine.MatMulGpuTensors(dQ, wqT);
+        var dInputFromK = gpuEngine.MatMulGpuTensors(dK, wkT);
+        var dInputFromV = gpuEngine.MatMulGpuTensors(dV, wvT);
+
+        var dInput2D = gpuEngine.AddGpu(gpuEngine.AddGpu(dInputFromQ, dInputFromK), dInputFromV);
+
+        // Reshape back to original input shape
+        var inputGradient = gpuEngine.ReshapeGpu(dInput2D, [batchSize, sequenceLength, embeddingDimension]);
+
+        // Handle original input shape restoration
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            inputGradient = gpuEngine.ReshapeGpu(inputGradient, _originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -1272,6 +1386,13 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;
         _outputBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput2D = null;
+        _gpuQ = null;
+        _gpuK = null;
+        _gpuV = null;
+        _gpuAttentionWeights = null;
     }
 
     /// <summary>

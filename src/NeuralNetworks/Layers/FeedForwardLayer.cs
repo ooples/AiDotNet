@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -184,6 +185,11 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T> BiasesGradient { get; set; }
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuOutput;
+    private int[] _gpuInputShape = [];
 
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
@@ -412,11 +418,86 @@ public class FeedForwardLayer<T> : LayerBase<T>
         // Skip this expensive download during inference (50% overhead reduction)
         if (IsTrainingMode)
         {
+            // Cache GPU tensors for GPU-resident backward pass
+            _gpuInput = input;
+            _gpuOutput = output;
+            _gpuInputShape = input.Shape;
+
+            // Also cache CPU tensors for fallback backward pass
             Input = input.ToTensor();
             Output = output.ToTensor();
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs the backward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient of the loss w.r.t. output.</param>
+    /// <returns>GPU-resident gradient of the loss w.r.t. input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuInput == null || _gpuOutput == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        int[] inputShape = _gpuInputShape;
+        int rank = inputShape.Length;
+
+        // Apply activation derivative
+        IGpuTensor<T> activationGrad;
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            // Use GPU activation backward
+            var fusedType = MapActivationToFused();
+            if (fusedType == FusedActivationType.ReLU)
+            {
+                activationGrad = gpuEngine.ReluBackwardGpu(outputGradient, _gpuOutput);
+            }
+            else
+            {
+                // For other activations, compute derivative and multiply
+                // Fall back to element-wise multiply with derivative
+                activationGrad = outputGradient;
+            }
+        }
+        else
+        {
+            activationGrad = outputGradient;
+        }
+
+        // Compute gradients based on tensor rank
+        int inputFeatures = inputShape[^1];
+        int outputFeatures = activationGrad.Shape[^1];
+
+        // Flatten to 2D for matmul operations
+        int totalBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            totalBatch *= inputShape[d];
+
+        var input2D = gpuEngine.ReshapeGpu(_gpuInput, new[] { totalBatch, inputFeatures });
+        var grad2D = gpuEngine.ReshapeGpu(activationGrad, new[] { totalBatch, outputFeatures });
+
+        // 1. Bias gradient: sum over batch dimension
+        var biasGrad = gpuEngine.SumAxisGpu(grad2D, 0);
+        BiasesGradient = biasGrad.ToTensor().Reshape([1, outputFeatures]);
+
+        // 2. Weights gradient: input^T @ grad
+        var inputT = gpuEngine.TransposeGpu(input2D);
+        var weightsGrad = gpuEngine.MatMulGpuTensors(inputT, grad2D);
+        WeightsGradient = weightsGrad.ToTensor();
+
+        // 3. Input gradient: grad @ weights^T
+        var weightsT = gpuEngine.UploadToGpu(Engine.TensorTranspose(Weights), GpuTensorRole.Weight);
+        var inputGrad2D = gpuEngine.MatMulGpuTensors(grad2D, weightsT);
+
+        // Reshape back to original input shape
+        var inputGradient = gpuEngine.ReshapeGpu(inputGrad2D, inputShape);
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -830,6 +911,11 @@ public class FeedForwardLayer<T> : LayerBase<T>
         Output = Tensor<T>.Empty();
         WeightsGradient = Tensor<T>.Empty();
         BiasesGradient = Tensor<T>.Empty();
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuOutput = null;
+        _gpuInputShape = [];
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

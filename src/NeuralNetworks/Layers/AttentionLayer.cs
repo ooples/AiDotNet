@@ -209,6 +209,17 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T>? _dWo;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuQ;
+    private IGpuTensor<T>? _gpuK;
+    private IGpuTensor<T>? _gpuV;
+    private IGpuTensor<T>? _gpuAttnOutput;
+    private IGpuTensor<T>? _gpuAttnWeights;
+    private int[]? _gpuInputShape;
+    private int _gpuBatchSize;
+    private int _gpuSeqLen;
+
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
@@ -599,18 +610,56 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Output projection: [B*S, AttentionSize] @ [AttentionSize, InputSize] -> [B*S, InputSize]
         var outputFlat = gpuEngine.FusedLinearGpu(attnFlat, Engine.TensorTranspose(_Wo), null, FusedActivationType.None);
 
-        // Dispose intermediate tensors to free GPU memory
-        if (!ReferenceEquals(input3D, input)) ((IDisposable)input3D).Dispose();
-        ((IDisposable)inputFlat).Dispose();
-        ((IDisposable)qFlat).Dispose();
-        ((IDisposable)kFlat).Dispose();
-        ((IDisposable)vFlat).Dispose();
-        ((IDisposable)Q4D).Dispose();
-        ((IDisposable)K4D).Dispose();
-        ((IDisposable)V4D).Dispose();
-        ((IDisposable)attnOutput4D).Dispose();
-        ((IDisposable)attnWeights4D).Dispose();
-        ((IDisposable)attnFlat).Dispose();
+        // Cache GPU tensors for backward pass during training
+        if (IsTrainingMode)
+        {
+            // Cache the 3D input (don't dispose)
+            _gpuInput = input3D;
+            _gpuBatchSize = batchSize;
+            _gpuSeqLen = seqLen;
+            _gpuInputShape = input.Shape;
+
+            // Reshape Q, K, V back to 3D [B, S, A] for backward
+            _gpuQ = gpuEngine.ReshapeGpu(qFlat, [batchSize, seqLen, _attentionSize]);
+            _gpuK = gpuEngine.ReshapeGpu(kFlat, [batchSize, seqLen, _attentionSize]);
+            _gpuV = gpuEngine.ReshapeGpu(vFlat, [batchSize, seqLen, _attentionSize]);
+
+            // Reshape attention output and weights to 3D
+            _gpuAttnOutput = gpuEngine.ReshapeGpu(attnOutput4D, [batchSize, seqLen, _attentionSize]);
+            _gpuAttnWeights = gpuEngine.ReshapeGpu(attnWeights4D, [batchSize, seqLen, seqLen]);
+
+            // Also cache CPU versions for CPU backward compatibility
+            _lastInput = input.ToTensor();
+            _lastQueryInput = input3D.ToTensor();
+            _lastKeyInput = input3D.ToTensor();
+            _lastValueInput = input3D.ToTensor();
+            _lastAttentionOutput = _gpuAttnOutput.ToTensor();
+            _lastAttentionWeights = _gpuAttnWeights.ToTensor();
+
+            // Dispose tensors we don't need (but keep ones cached for backward)
+            ((IDisposable)inputFlat).Dispose();
+            ((IDisposable)Q4D).Dispose();
+            ((IDisposable)K4D).Dispose();
+            ((IDisposable)V4D).Dispose();
+            ((IDisposable)attnOutput4D).Dispose();
+            ((IDisposable)attnWeights4D).Dispose();
+            ((IDisposable)attnFlat).Dispose();
+        }
+        else
+        {
+            // Dispose intermediate tensors to free GPU memory (inference mode)
+            if (!ReferenceEquals(input3D, input)) ((IDisposable)input3D).Dispose();
+            ((IDisposable)inputFlat).Dispose();
+            ((IDisposable)qFlat).Dispose();
+            ((IDisposable)kFlat).Dispose();
+            ((IDisposable)vFlat).Dispose();
+            ((IDisposable)Q4D).Dispose();
+            ((IDisposable)K4D).Dispose();
+            ((IDisposable)V4D).Dispose();
+            ((IDisposable)attnOutput4D).Dispose();
+            ((IDisposable)attnWeights4D).Dispose();
+            ((IDisposable)attnFlat).Dispose();
+        }
 
         // Reshape to final output shape
         IGpuTensor<T> output;
@@ -926,6 +975,108 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             return BackwardViaAutodiff(outputGradient);
         else
             return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU for the attention layer.
+    /// </summary>
+    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>The GPU tensor containing the gradient of the loss with respect to the input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuQ == null || _gpuK == null || _gpuV == null ||
+            _gpuAttnOutput == null || _gpuAttnWeights == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        int batchSize = _gpuBatchSize;
+        int seqLen = _gpuSeqLen;
+        int flatBatchSeq = batchSize * seqLen;
+
+        // Step 1: Backprop through output projection (Wo)
+        // Forward: output = attnOutput @ Wo.T
+        // Backward: dWo = dOutput.T @ attnOutput, dAttnOutput = dOutput @ Wo
+
+        // Flatten gradients for matmul
+        var dOutputFlat = gpuEngine.ReshapeGpu(outputGradient, [flatBatchSeq, _inputSize]);
+        var attnOutputFlat = gpuEngine.ReshapeGpu(_gpuAttnOutput, [flatBatchSeq, _attentionSize]);
+
+        // Upload Wo to GPU
+        var gpuWo = gpuEngine.UploadToGpu(_Wo, GpuTensorRole.Weight);
+
+        // Compute dWo: dOutput.T @ attnOutput
+        var dOutputFlatT = gpuEngine.TransposeGpu(dOutputFlat);
+        var gpuDWo = gpuEngine.MatMulGpuTensors(dOutputFlatT, attnOutputFlat);
+        _dWo = gpuDWo.ToTensor();
+
+        // Compute dAttnOutput: dOutput @ Wo
+        var dAttnOutputFlat = gpuEngine.MatMulGpuTensors(dOutputFlat, gpuWo);
+        var dAttnOutput = gpuEngine.ReshapeGpu(dAttnOutputFlat, [batchSize, seqLen, _attentionSize]);
+
+        // Step 2: Backprop through attention
+        // Use ScaledDotProductAttentionBackwardGpu
+        double scale = 1.0 / Math.Sqrt(_attentionSize);
+        var (dQ, dK, dV) = gpuEngine.ScaledDotProductAttentionBackwardGpu(
+            dAttnOutput, _gpuQ, _gpuK, _gpuV, _gpuAttnWeights, scale);
+
+        // Step 3: Backprop through Q, K, V projections
+        // Forward: Q = input @ Wq.T, K = input @ Wk.T, V = input @ Wv.T
+        // Backward: dWq = dQ.T @ input, dWk = dK.T @ input, dWv = dV.T @ input
+        //           dInput = dQ @ Wq + dK @ Wk + dV @ Wv
+
+        // Flatten Q, K, V gradients
+        var dQFlat = gpuEngine.ReshapeGpu(dQ, [flatBatchSeq, _attentionSize]);
+        var dKFlat = gpuEngine.ReshapeGpu(dK, [flatBatchSeq, _attentionSize]);
+        var dVFlat = gpuEngine.ReshapeGpu(dV, [flatBatchSeq, _attentionSize]);
+
+        // Flatten input for weight gradient computation
+        var inputFlat = gpuEngine.ReshapeGpu(_gpuInput, [flatBatchSeq, _inputSize]);
+
+        // Upload weights to GPU
+        var gpuWq = gpuEngine.UploadToGpu(_Wq, GpuTensorRole.Weight);
+        var gpuWk = gpuEngine.UploadToGpu(_Wk, GpuTensorRole.Weight);
+        var gpuWv = gpuEngine.UploadToGpu(_Wv, GpuTensorRole.Weight);
+
+        // Transpose input for weight gradient computation
+        var inputFlatT = gpuEngine.TransposeGpu(inputFlat);
+
+        // Compute weight gradients: dW = dProj.T @ input
+        var dQFlatT = gpuEngine.TransposeGpu(dQFlat);
+        var dKFlatT = gpuEngine.TransposeGpu(dKFlat);
+        var dVFlatT = gpuEngine.TransposeGpu(dVFlat);
+
+        var gpuDWq = gpuEngine.MatMulGpuTensors(dQFlatT, inputFlat);
+        var gpuDWk = gpuEngine.MatMulGpuTensors(dKFlatT, inputFlat);
+        var gpuDWv = gpuEngine.MatMulGpuTensors(dVFlatT, inputFlat);
+
+        _dWq = gpuDWq.ToTensor();
+        _dWk = gpuDWk.ToTensor();
+        _dWv = gpuDWv.ToTensor();
+
+        // Compute input gradients: dInput = dQ @ Wq + dK @ Wk + dV @ Wv
+        var dInputFromQ = gpuEngine.MatMulGpuTensors(dQFlat, gpuWq);
+        var dInputFromK = gpuEngine.MatMulGpuTensors(dKFlat, gpuWk);
+        var dInputFromV = gpuEngine.MatMulGpuTensors(dVFlat, gpuWv);
+
+        // Sum all input gradients
+        int inputSize = flatBatchSeq * _inputSize;
+        var dInputPartial = backend.AllocateBuffer(inputSize);
+        backend.Add(dInputFromQ.Buffer, dInputFromK.Buffer, dInputPartial, inputSize);
+
+        var dInputBuffer = backend.AllocateBuffer(inputSize);
+        backend.Add(dInputPartial, dInputFromV.Buffer, dInputBuffer, inputSize);
+        dInputPartial.Dispose();
+
+        // Reshape to original input shape
+        var dInput = new GpuTensor<T>(backend, dInputBuffer, _gpuInputShape ?? [batchSize, seqLen, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
+
+        return dInput;
     }
 
     /// <summary>
@@ -1415,6 +1566,15 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastAttentionWeights = null;
         _lastWasCrossAttention = false;
         _lastUsedMask = false;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuQ = null;
+        _gpuK = null;
+        _gpuV = null;
+        _gpuAttnOutput = null;
+        _gpuAttnWeights = null;
+        _gpuInputShape = null;
     }
 
     /// <summary>
