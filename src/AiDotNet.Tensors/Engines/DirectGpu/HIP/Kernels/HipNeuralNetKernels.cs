@@ -514,14 +514,16 @@ extern ""C"" __global__ void nag_step(
         grad += weightDecay * param[idx];
     }
 
-    // Nesterov momentum: v = momentum * v - lr * grad
-    // param = param + momentum * v - lr * grad (lookahead)
+    // Nesterov Accelerated Gradient (NAG):
+    // Standard formulation matching PyTorch's Nesterov momentum:
+    // v_t = momentum * v_{t-1} + grad
+    // param = param - lr * (grad + momentum * v_t)
     float v = velocity[idx];
-    float vNew = momentum * v - learningRate * grad;
+    float vNew = momentum * v + grad;
     velocity[idx] = vNew;
 
-    // NAG update: use velocity for lookahead
-    param[idx] += momentum * vNew - learningRate * grad;
+    // NAG update: apply gradient with lookahead via momentum
+    param[idx] -= learningRate * (grad + momentum * vNew);
 }
 
 extern ""C"" __global__ void lars_step(
@@ -1026,10 +1028,13 @@ extern ""C"" __global__ void dfp_step(
 }
 
 // Coordinate Descent (per-coordinate update)
+// This kernel should be launched with <<<1, 1>>> since it updates a single coordinate
 extern ""C"" __global__ void coordinate_descent_step(
-    float* param, const float* gradient, 
+    float* param, const float* gradient,
     int coordinate, float learningRate, int size)
 {
+    // Only allow the first thread to execute to prevent data race
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
     if (coordinate >= size) return;
     param[coordinate] -= learningRate * gradient[coordinate];
 }
@@ -1791,8 +1796,11 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
             "compute_mean_var", "argmax_axis", "argmin_axis",
             "sgd_step", "adam_step", "adamw_step", "rmsprop_step", "adagrad_step", "nag_step", "lars_step", "lamb_step",
             "sgd_update", "adadelta_update", "amsgrad_update", "adamax_update", "lion_update", "nadam_update", "ftrl_update",
-            "proximal_gradient_step", "conjugate_gradient_step", "lbfgs_init_q", "bfgs_step",
-            "levenberg_marquardt_step", "trust_region_step", "admm_step", "newton_method_step", "dfp_step", "coordinate_descent_step",
+            "proximal_gradient_step", "conjugate_gradient_step",
+            // L-BFGS two-loop recursion kernels
+            "lbfgs_copy_vector", "lbfgs_dot_product_reduce", "lbfgs_reduce_partials", "lbfgs_axpy",
+            "lbfgs_scale_vector", "lbfgs_apply_direction", "lbfgs_compute_rho", "lbfgs_update_history",
+            "bfgs_step", "levenberg_marquardt_step", "trust_region_step", "admm_step", "newton_method_step", "dfp_step", "coordinate_descent_step",
             "dropout_forward", "dropout_backward", "embedding_forward", "embedding_backward",
             "transpose_2d", "batched_transpose", "permute_general",
             // LSTM kernels
