@@ -3213,21 +3213,32 @@ public sealed class HipBackend : IAsyncGpuBackend
 
     public unsafe void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
     {
+        // Overload without indices - call main implementation with null indices
+        GlobalMaxPool2D(input, output, null, batch, channels, height, width);
+    }
+
+    public unsafe void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices, int batch, int channels, int height, int width)
+    {
         if (!_kernelCache.TryGetValue("global_maxpool2d", out var krnl))
             throw new InvalidOperationException("HIP kernel not found: global_maxpool2d");
 
-        var handles = new GCHandle[6];
+        int saveIndices = indices is not null ? 1 : 0;
+        IntPtr indicesPtr = indices?.Handle ?? IntPtr.Zero;
+
+        var handles = new GCHandle[8];
         try
         {
             handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
             handles[1] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
-            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
-            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
-            handles[4] = GCHandle.Alloc(height, GCHandleType.Pinned);
-            handles[5] = GCHandle.Alloc(width, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(indicesPtr, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(height, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(width, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(saveIndices, GCHandleType.Pinned);
 
-            var args = new IntPtr[6];
-            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+            var args = new IntPtr[8];
+            for (int i = 0; i < 8; i++) args[i] = handles[i].AddrOfPinnedObject();
 
             uint grid = (uint)((batch * channels + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
@@ -8362,9 +8373,20 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    // Maximum dimension supported by hyperbolic kernels (due to shared memory limits)
+    private const int HyperbolicMaxDim = 128;
+
     public void HyperbolicLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
         int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon)
     {
+        // Validate dimension limits - kernel will silently clamp dimensions > 128
+        if (inputFeatures > HyperbolicMaxDim)
+            throw new ArgumentOutOfRangeException(nameof(inputFeatures),
+                $"HyperbolicLinearForward requires inputFeatures <= {HyperbolicMaxDim}. Got {inputFeatures}.");
+        if (outputFeatures > HyperbolicMaxDim)
+            throw new ArgumentOutOfRangeException(nameof(outputFeatures),
+                $"HyperbolicLinearForward requires outputFeatures <= {HyperbolicMaxDim}. Got {outputFeatures}.");
+
         if (!_kernelCache.TryGetValue("hyperbolic_linear_forward", out var kernel))
             throw new InvalidOperationException("HIP kernel not found: hyperbolic_linear_forward");
 
@@ -8399,6 +8421,14 @@ public sealed class HipBackend : IAsyncGpuBackend
     public void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
         int batchSize, int inputFeatures, int outputFeatures, float curvature)
     {
+        // Validate dimension limits - kernel will silently clamp dimensions > 128
+        if (inputFeatures > HyperbolicMaxDim)
+            throw new ArgumentOutOfRangeException(nameof(inputFeatures),
+                $"HyperbolicLinearBackwardInput requires inputFeatures <= {HyperbolicMaxDim}. Got {inputFeatures}.");
+        if (outputFeatures > HyperbolicMaxDim)
+            throw new ArgumentOutOfRangeException(nameof(outputFeatures),
+                $"HyperbolicLinearBackwardInput requires outputFeatures <= {HyperbolicMaxDim}. Got {outputFeatures}.");
+
         if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_input", out var kernel))
             throw new InvalidOperationException("HIP kernel not found: hyperbolic_linear_backward_input");
 
@@ -8432,6 +8462,14 @@ public sealed class HipBackend : IAsyncGpuBackend
     public void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
         int batchSize, int inputFeatures, int outputFeatures, float curvature)
     {
+        // Validate dimension limits - kernel will silently clamp dimensions > 128
+        if (inputFeatures > HyperbolicMaxDim)
+            throw new ArgumentOutOfRangeException(nameof(inputFeatures),
+                $"HyperbolicLinearBackwardWeights requires inputFeatures <= {HyperbolicMaxDim}. Got {inputFeatures}.");
+        if (outputFeatures > HyperbolicMaxDim)
+            throw new ArgumentOutOfRangeException(nameof(outputFeatures),
+                $"HyperbolicLinearBackwardWeights requires outputFeatures <= {HyperbolicMaxDim}. Got {outputFeatures}.");
+
         if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_weights", out var kernel))
             throw new InvalidOperationException("HIP kernel not found: hyperbolic_linear_backward_weights");
 

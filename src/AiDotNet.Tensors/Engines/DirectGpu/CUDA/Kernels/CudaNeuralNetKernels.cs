@@ -423,8 +423,11 @@ extern ""C"" __global__ void log_cosh_loss(
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    float diff = predicted[idx] - actual[idx];
-    output[idx] = logf(coshf(diff));
+    // Numerically stable: log(cosh(x)) = |x| + log1p(exp(-2|x|)) - log(2)
+    // This avoids overflow that occurs with coshf(x) for |x| > ~20
+    float x = predicted[idx] - actual[idx];
+    float ax = fabsf(x);
+    output[idx] = ax + log1pf(expf(-2.0f * ax)) - 0.69314718056f;
 }
 
 extern ""C"" __global__ void log_cosh_gradient(
@@ -432,7 +435,9 @@ extern ""C"" __global__ void log_cosh_gradient(
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    gradient[idx] = tanhf(predicted[idx] - actual[idx]);
+    // Gradient of log(cosh(x)) is tanh(x), but guard for large inputs
+    float x = predicted[idx] - actual[idx];
+    gradient[idx] = (fabsf(x) > 20.0f) ? copysignf(1.0f, x) : tanhf(x);
 }
 
 // Quantile Loss

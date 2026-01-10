@@ -1218,6 +1218,7 @@ __kernel void embedding_lookup(
 }
 
 // Embedding backward (scatter add gradients)
+// Uses atomic operations for thread safety when indices collide
 __kernel void embedding_backward(
     __global const float* gradOutput,
     __global const float* indices,
@@ -1231,8 +1232,8 @@ __kernel void embedding_backward(
     int index = (int)indices[idx];
 
     for (int d = 0; d < embeddingDim; d++) {
-        // Note: This needs atomic add for thread safety in practice
-        gradEmbedding[index * embeddingDim + d] += gradOutput[idx * embeddingDim + d];
+        // Use atomic add for thread safety when multiple indices point to same embedding
+        atomic_add_float(&gradEmbedding[index * embeddingDim + d], gradOutput[idx * embeddingDim + d]);
     }
 }
 
@@ -1268,6 +1269,7 @@ __kernel void gather_kernel(
 }
 
 // ScatterAdd operation
+// Uses atomic operations for thread safety when indices collide
 __kernel void scatter_add_kernel(
     __global const float* source,
     __global const float* indices,
@@ -1280,8 +1282,8 @@ __kernel void scatter_add_kernel(
 
     int destIdx = (int)indices[idx];
     for (int f = 0; f < featureSize; f++) {
-        // Note: Needs atomic add for thread safety
-        destination[destIdx * featureSize + f] += source[idx * featureSize + f];
+        // Use atomic add for thread safety when multiple sources scatter to same destination
+        atomic_add_float(&destination[destIdx * featureSize + f], source[idx * featureSize + f]);
     }
 }
 

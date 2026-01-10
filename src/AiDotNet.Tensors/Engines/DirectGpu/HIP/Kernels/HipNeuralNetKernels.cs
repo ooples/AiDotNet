@@ -294,8 +294,8 @@ extern ""C"" __global__ void triplet_loss_backward(
     int batchSize, int embeddingDim, float margin)
 {
     int tripletIdx = blockIdx.x;
-    int featureIdx = threadIdx.x;
-    if (tripletIdx >= batchSize || featureIdx >= embeddingDim) return;
+    int tid = threadIdx.x;
+    if (tripletIdx >= batchSize) return;
 
     int offset = tripletIdx * embeddingDim;
 
@@ -304,7 +304,7 @@ extern ""C"" __global__ void triplet_loss_backward(
     __shared__ float negDist2;
     __shared__ int isActive;
 
-    if (featureIdx == 0) {
+    if (tid == 0) {
         posDist2 = 0.0f;
         negDist2 = 0.0f;
         for (int j = 0; j < embeddingDim; j++) {
@@ -317,23 +317,26 @@ extern ""C"" __global__ void triplet_loss_backward(
     }
     __syncthreads();
 
-    int globalIdx = offset + featureIdx;
     float scale = 2.0f / (float)batchSize;
 
-    if (isActive) {
-        float diffPos = anchor[globalIdx] - positive[globalIdx];
-        float diffNeg = anchor[globalIdx] - negative[globalIdx];
+    // Stride loop to handle embeddingDim > blockDim.x (max 1024)
+    for (int featureIdx = tid; featureIdx < embeddingDim; featureIdx += blockDim.x) {
+        int globalIdx = offset + featureIdx;
+        if (isActive) {
+            float diffPos = anchor[globalIdx] - positive[globalIdx];
+            float diffNeg = anchor[globalIdx] - negative[globalIdx];
 
-        // d_loss/d_anchor = 2*(anchor - positive) - 2*(anchor - negative)
-        gradAnchor[globalIdx] = scale * (diffPos - diffNeg);
-        // d_loss/d_positive = -2*(anchor - positive)
-        gradPositive[globalIdx] = -scale * diffPos;
-        // d_loss/d_negative = 2*(anchor - negative)
-        gradNegative[globalIdx] = scale * diffNeg;
-    } else {
-        gradAnchor[globalIdx] = 0.0f;
-        gradPositive[globalIdx] = 0.0f;
-        gradNegative[globalIdx] = 0.0f;
+            // d_loss/d_anchor = 2*(anchor - positive) - 2*(anchor - negative)
+            gradAnchor[globalIdx] = scale * (diffPos - diffNeg);
+            // d_loss/d_positive = -2*(anchor - positive)
+            gradPositive[globalIdx] = -scale * diffPos;
+            // d_loss/d_negative = 2*(anchor - negative)
+            gradNegative[globalIdx] = scale * diffNeg;
+        } else {
+            gradAnchor[globalIdx] = 0.0f;
+            gradPositive[globalIdx] = 0.0f;
+            gradNegative[globalIdx] = 0.0f;
+        }
     }
 }
 
@@ -388,13 +391,19 @@ extern ""C"" __global__ void mae_gradient(const float* predicted, const float* a
 extern ""C"" __global__ void log_cosh_loss(const float* predicted, const float* actual, float* output, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    output[idx] = logf(coshf(predicted[idx] - actual[idx]));
+    // Numerically stable: log(cosh(x)) = |x| + log1p(exp(-2|x|)) - log(2)
+    // This avoids overflow that occurs with coshf(x) for |x| > ~20
+    float x = predicted[idx] - actual[idx];
+    float ax = fabsf(x);
+    output[idx] = ax + log1pf(expf(-2.0f * ax)) - 0.69314718056f;
 }
 
 extern ""C"" __global__ void log_cosh_gradient(const float* predicted, const float* actual, float* gradient, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    gradient[idx] = tanhf(predicted[idx] - actual[idx]);
+    // Gradient of log(cosh(x)) is tanh(x), but guard for large inputs
+    float x = predicted[idx] - actual[idx];
+    gradient[idx] = (fabsf(x) > 20.0f) ? copysignf(1.0f, x) : tanhf(x);
 }
 
 extern ""C"" __global__ void quantile_loss(const float* predicted, const float* actual, float* output, float quantile, int size) {

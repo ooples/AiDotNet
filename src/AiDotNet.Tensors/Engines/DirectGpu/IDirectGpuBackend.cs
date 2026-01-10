@@ -2219,12 +2219,23 @@ public interface IDirectGpuBackend : IDisposable
 public interface IGpuBuffer : IDisposable
 {
     /// <summary>
-    /// Gets the number of float elements in the buffer.
+    /// Gets the number of elements in the buffer.
+    /// For standard buffers allocated via AllocateBuffer(), this represents float elements.
+    /// For mixed-precision FP16 buffers, this still represents the element count (not bytes),
+    /// but each element is 2 bytes instead of 4.
     /// </summary>
+    /// <remarks>
+    /// When using ConvertToFp16/ConvertToFp32, the 'size' parameter is always the element count.
+    /// The caller must ensure buffer allocation accounts for the correct byte size:
+    /// - FP32 (float): size * 4 bytes
+    /// - FP16 (half): size * 2 bytes
+    /// </remarks>
     int Size { get; }
 
     /// <summary>
-    /// Gets the size in bytes.
+    /// Gets the total size in bytes.
+    /// For standard float buffers: Size * 4.
+    /// For FP16 buffers: Size * 2.
     /// </summary>
     long SizeInBytes { get; }
 

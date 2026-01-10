@@ -13,7 +13,11 @@ internal static class OctonionKernels
     public static string GetSource()
     {
         return @"
-#define EPSILON 1e-15f
+// Epsilon for division safety - must be appropriate for float32 precision
+// Float32 machine epsilon is ~1.19e-7, so use 1e-7f for safe divisions
+#define EPSILON_DIV 1e-7f
+// Epsilon for norm^2 comparisons (allows smaller values before protection kicks in)
+#define EPSILON_NORM_SQ 1e-14f
 
 // ===========================================================================
 // OCTONION MULTIPLICATION TABLE
@@ -87,7 +91,7 @@ inline float octonion_norm_sq(float* a) {
 // Octonion inverse: a^(-1) = conj(a) / ||a||^2
 inline void octonion_inverse(float* a, float* r) {
     float normSq = octonion_norm_sq(a);
-    normSq = fmax(normSq, EPSILON);
+    normSq = fmax(normSq, EPSILON_NORM_SQ);
 
     r[0] = a[0] / normSq;
     for (int i = 1; i < 8; i++) {
@@ -494,7 +498,7 @@ __kernel void octonion_norm_backward(
 
     // Compute norm
     float normSq = octonion_norm_sq(inputLocal);
-    float norm = sqrt(fmax(normSq, EPSILON));
+    float norm = sqrt(fmax(normSq, EPSILON_NORM_SQ));
 
     // d(||a||)/da = a / ||a||
     float gradOutScalar = gradOutput[gid]; // Note: norm output is scalar
@@ -561,7 +565,7 @@ __kernel void octonion_modulus_relu_forward(
 
     // Compute norm
     float normSq = octonion_norm_sq(inputLocal);
-    float norm = sqrt(fmax(normSq, EPSILON));
+    float norm = sqrt(fmax(normSq, EPSILON_NORM_SQ));
 
     // Apply ReLU to (norm - threshold)
     float activatedNorm = fmax(0.0f, norm - threshold);
@@ -595,7 +599,7 @@ __kernel void octonion_modulus_relu_backward(
 
     // Compute norm
     float normSq = octonion_norm_sq(inputLocal);
-    float norm = sqrt(fmax(normSq, EPSILON));
+    float norm = sqrt(fmax(normSq, EPSILON_NORM_SQ));
 
     // Check if in dead zone (norm <= threshold)
     if (norm <= threshold) {

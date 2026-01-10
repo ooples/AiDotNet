@@ -26,7 +26,7 @@ internal static class LossKernels
 // Formula: loss = (predicted - actual)²
 // Gradient: d_loss/d_predicted = 2 * (predicted - actual)
 // ---------------------------------------------------------------------------
-__kernel void mse_loss(
+__kernel void loss_mse(
     __global const float* predicted,
     __global const float* actual,
     __global float* output,
@@ -39,7 +39,7 @@ __kernel void mse_loss(
     output[idx] = diff * diff;
 }
 
-__kernel void mse_gradient(
+__kernel void loss_mse_gradient(
     __global const float* predicted,
     __global const float* actual,
     __global float* gradient,
@@ -56,7 +56,7 @@ __kernel void mse_gradient(
 // Formula: loss = -(actual * log(predicted) + (1-actual) * log(1-predicted))
 // Gradient: d_loss/d_predicted = (predicted - actual) / (predicted * (1-predicted))
 // ---------------------------------------------------------------------------
-__kernel void bce_loss(
+__kernel void loss_bce(
     __global const float* predicted,
     __global const float* actual,
     __global float* output,
@@ -71,7 +71,7 @@ __kernel void bce_loss(
     output[idx] = -(target * log(pred) + (1.0f - target) * log(1.0f - pred));
 }
 
-__kernel void bce_gradient(
+__kernel void loss_bce_gradient(
     __global const float* predicted,
     __global const float* actual,
     __global float* gradient,
@@ -91,7 +91,7 @@ __kernel void bce_gradient(
 // Formula: loss = -Σ(actual * log(predicted))
 // Gradient: d_loss/d_predicted = -actual / predicted
 // ---------------------------------------------------------------------------
-__kernel void cross_entropy_loss(
+__kernel void loss_cross_entropy(
     __global const float* predicted,
     __global const float* actual,
     __global float* output,
@@ -105,7 +105,7 @@ __kernel void cross_entropy_loss(
     output[idx] = -actual[idx] * log(pred);
 }
 
-__kernel void cross_entropy_gradient(
+__kernel void loss_cross_entropy_gradient(
     __global const float* predicted,
     __global const float* actual,
     __global float* gradient,
@@ -891,12 +891,12 @@ __kernel void elastic_net_gradient(
     {
         return new string[]
         {
-            // MSE Loss
-            "mse_loss", "mse_gradient",
-            // Binary Cross-Entropy Loss
-            "bce_loss", "bce_gradient",
-            // Cross-Entropy Loss
-            "cross_entropy_loss", "cross_entropy_gradient",
+            // MSE Loss (prefixed to avoid collision with NeuralNetKernels)
+            "loss_mse", "loss_mse_gradient",
+            // Binary Cross-Entropy Loss (prefixed to avoid collision with NeuralNetKernels)
+            "loss_bce", "loss_bce_gradient",
+            // Cross-Entropy Loss (prefixed to avoid collision with NeuralNetKernels)
+            "loss_cross_entropy", "loss_cross_entropy_gradient",
             // Huber Loss
             "huber_loss", "huber_gradient",
             // Focal Loss
