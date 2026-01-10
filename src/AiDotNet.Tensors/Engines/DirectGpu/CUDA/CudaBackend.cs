@@ -5234,9 +5234,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float momentum, float weightDecay, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(velocity, nameof(velocity));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (velocity is null) throw new ArgumentNullException(nameof(velocity));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
 
@@ -5263,10 +5263,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(m, nameof(m));
-        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (step < 1)
@@ -5302,10 +5302,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(m, nameof(m));
-        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (step < 1)
@@ -5342,9 +5342,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float rho, float epsilon, float weightDecay, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(squaredAvg, nameof(squaredAvg));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (squaredAvg is null) throw new ArgumentNullException(nameof(squaredAvg));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (epsilon <= 0)
@@ -5375,9 +5375,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float epsilon, float weightDecay, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(accumulatedGrad, nameof(accumulatedGrad));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (accumulatedGrad is null) throw new ArgumentNullException(nameof(accumulatedGrad));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (epsilon <= 0)
@@ -5407,9 +5407,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float momentum, float weightDecay, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(velocity, nameof(velocity));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (velocity is null) throw new ArgumentNullException(nameof(velocity));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
 
@@ -5437,9 +5437,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float momentum, float weightDecay, float trustCoeff, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(velocity, nameof(velocity));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (velocity is null) throw new ArgumentNullException(nameof(velocity));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (trustCoeff <= 0)
@@ -5470,10 +5470,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(m, nameof(m));
-        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (step < 1)
@@ -5512,8 +5512,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float weightDecay, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
 
@@ -5538,10 +5538,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float rho, float epsilon, float weightDecay, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(accumGrad, nameof(accumGrad));
-        ArgumentNullException.ThrowIfNull(accumUpdate, nameof(accumUpdate));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (accumGrad is null) throw new ArgumentNullException(nameof(accumGrad));
+        if (accumUpdate is null) throw new ArgumentNullException(nameof(accumUpdate));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (epsilon <= 0)
@@ -5573,11 +5573,11 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(m, nameof(m));
-        ArgumentNullException.ThrowIfNull(v, nameof(v));
-        ArgumentNullException.ThrowIfNull(vMax, nameof(vMax));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
+        if (vMax is null) throw new ArgumentNullException(nameof(vMax));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (step < 1)
@@ -5616,10 +5616,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(m, nameof(m));
-        ArgumentNullException.ThrowIfNull(u, nameof(u));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (u is null) throw new ArgumentNullException(nameof(u));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (step < 1)
@@ -5656,9 +5656,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float beta1, float beta2, float weightDecay, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(m, nameof(m));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
 
@@ -5687,10 +5687,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(m, nameof(m));
-        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
         if (step < 1)
@@ -5727,10 +5727,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
         float learningRate, float l1Reg, float l2Reg, float beta, int size)
     {
         // Validate buffer parameters
-        ArgumentNullException.ThrowIfNull(param, nameof(param));
-        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
-        ArgumentNullException.ThrowIfNull(z, nameof(z));
-        ArgumentNullException.ThrowIfNull(n, nameof(n));
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (z is null) throw new ArgumentNullException(nameof(z));
+        if (n is null) throw new ArgumentNullException(nameof(n));
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
 
