@@ -9350,6 +9350,112 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
+    /// <summary>
+    /// GPU-resident ConvTranspose2D backward pass for input gradients.
+    /// Computes gradient with respect to input.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">GPU-resident output gradient [B, outC, outH, outW].</param>
+    /// <param name="kernel">Kernel weights [inC, outC, kH, kW].</param>
+    /// <param name="inputShape">Shape of the input [B, inC, inH, inW].</param>
+    /// <param name="stride">Convolution stride [strideH, strideW].</param>
+    /// <param name="padding">Padding [padH, padW].</param>
+    /// <param name="outputPadding">Output padding [outputPadH, outputPadW].</param>
+    /// <returns>GPU-resident gradient with respect to input.</returns>
+    public IGpuTensor<T> ConvTranspose2DBackwardInputGpu<T>(
+        IGpuTensor<T> gradOutput,
+        Tensor<T> kernel,
+        int[] inputShape,
+        int[] stride,
+        int[] padding,
+        int[] outputPadding)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for ConvTranspose2DBackwardInputGpu");
+
+        int batch = inputShape[0];
+        int inChannels = inputShape[1];
+        int inHeight = inputShape[2];
+        int inWidth = inputShape[3];
+
+        // For transposed conv: kernel shape is [inC, outC, kH, kW]
+        int outChannels = kernel.Shape[1];
+        int kernelH = kernel.Shape[2];
+        int kernelW = kernel.Shape[3];
+
+        int outHeight = gradOutput.Shape[2];
+        int outWidth = gradOutput.Shape[3];
+
+        // Allocate output buffer for input gradient
+        var gradInputBuffer = backend.AllocateBuffer(batch * inChannels * inHeight * inWidth);
+
+        // Upload kernel
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+
+        backend.ConvTranspose2DBackwardInput(
+            gradOutput.Buffer, kernelBuffer.Buffer, gradInputBuffer,
+            batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth,
+            kernelH, kernelW,
+            stride[0], stride[1], padding[0], padding[1],
+            outputPadding[0], outputPadding[1]);
+
+        return new GpuTensor<T>(backend, gradInputBuffer, inputShape,
+            GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-resident ConvTranspose2D backward pass for kernel gradients.
+    /// Computes gradient with respect to kernel weights.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="gradOutput">GPU-resident output gradient [B, outC, outH, outW].</param>
+    /// <param name="input">GPU-resident input from forward pass [B, inC, inH, inW].</param>
+    /// <param name="kernelShape">Shape of the kernel [inC, outC, kH, kW].</param>
+    /// <param name="stride">Convolution stride [strideH, strideW].</param>
+    /// <param name="padding">Padding [padH, padW].</param>
+    /// <param name="outputPadding">Output padding [outputPadH, outputPadW].</param>
+    /// <returns>GPU-resident gradient with respect to kernels.</returns>
+    public IGpuTensor<T> ConvTranspose2DBackwardKernelGpu<T>(
+        IGpuTensor<T> gradOutput,
+        IGpuTensor<T> input,
+        int[] kernelShape,
+        int[] stride,
+        int[] padding,
+        int[] outputPadding)
+    {
+        if (!TryGetBackend(out var backend))
+            throw new InvalidOperationException("No GPU backend available for ConvTranspose2DBackwardKernelGpu");
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        // For transposed conv: kernel shape is [inC, outC, kH, kW]
+        int outChannels = kernelShape[1];
+        int kernelH = kernelShape[2];
+        int kernelW = kernelShape[3];
+
+        int outHeight = gradOutput.Shape[2];
+        int outWidth = gradOutput.Shape[3];
+
+        // Allocate output buffer for kernel gradient
+        int kernelSize = kernelShape[0] * kernelShape[1] * kernelShape[2] * kernelShape[3];
+        var gradKernelBuffer = backend.AllocateBuffer(kernelSize);
+
+        backend.ConvTranspose2DBackwardKernel(
+            input.Buffer, gradOutput.Buffer, gradKernelBuffer,
+            batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth,
+            kernelH, kernelW,
+            stride[0], stride[1], padding[0], padding[1],
+            outputPadding[0], outputPadding[1]);
+
+        return new GpuTensor<T>(backend, gradKernelBuffer, kernelShape,
+            GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
     #endregion
 
     public void Dispose()

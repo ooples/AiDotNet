@@ -2172,6 +2172,183 @@ public sealed class CudaBackend : IAsyncGpuBackend
         LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
     }
 
+    public unsafe void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+    {
+        // The backward pass w.r.t. input for transposed convolution is a standard convolution
+        // dL/dX = conv2d(dL/dY, W) with specific padding
+        if (!_kernelCache.TryGetValue("conv_transpose2d_backward_input", out var cudaKernel))
+        {
+            // Fallback: CPU implementation
+            var gradOutData = DownloadBuffer(gradOutput);
+            var kernelData = DownloadBuffer(kernel);
+            var gradInputData = new float[batch * inChannels * inHeight * inWidth];
+
+            // Backward pass: dL/dX = conv(dL/dY, W) with padding adjustment
+            for (int b = 0; b < batch; b++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int ih = 0; ih < inHeight; ih++)
+                    {
+                        for (int iw = 0; iw < inWidth; iw++)
+                        {
+                            float sum = 0;
+                            for (int oc = 0; oc < outChannels; oc++)
+                            {
+                                for (int kh = 0; kh < kernelH; kh++)
+                                {
+                                    for (int kw = 0; kw < kernelW; kw++)
+                                    {
+                                        // For transposed conv backward, compute output position
+                                        int oh = ih * strideH - padH + kh;
+                                        int ow = iw * strideW - padW + kw;
+                                        if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
+                                        {
+                                            int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                                            // Kernel layout: [inChannels, outChannels, kernelH, kernelW]
+                                            int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                                            sum += gradOutData[goIdx] * kernelData[kIdx];
+                                        }
+                                    }
+                                }
+                            }
+                            gradInputData[((b * inChannels + ic) * inHeight + ih) * inWidth + iw] = sum;
+                        }
+                    }
+                }
+            }
+
+            // Upload to GPU
+            using var ctx = PushContext();
+            fixed (float* gradInputDataPtr = gradInputData)
+            {
+                CuBlasNative.CheckCudaResult(
+                    CuBlasNative.cuMemcpyHtoD(gradInput.Handle, (IntPtr)gradInputDataPtr, (ulong)(gradInputData.Length * sizeof(float))),
+                    "cuMemcpyHtoD (ConvTranspose2DBackwardInput)");
+            }
+            return;
+        }
+
+        using var _ = PushContext();
+        int totalInput = batch * inChannels * inHeight * inWidth;
+        uint gridX = (uint)((totalInput + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr kernelPtr = kernel.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        void** args = stackalloc void*[17];
+        args[0] = &gradOutputPtr;
+        args[1] = &kernelPtr;
+        args[2] = &gradInputPtr;
+        args[3] = &batch;
+        args[4] = &inChannels;
+        args[5] = &inHeight;
+        args[6] = &inWidth;
+        args[7] = &outChannels;
+        args[8] = &outHeight;
+        args[9] = &outWidth;
+        args[10] = &kernelH;
+        args[11] = &kernelW;
+        args[12] = &strideH;
+        args[13] = &strideW;
+        args[14] = &padH;
+        args[15] = &padW;
+        args[16] = &totalInput;
+        LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
+    }
+
+    public unsafe void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+    {
+        // The backward pass w.r.t. kernel for transposed convolution
+        if (!_kernelCache.TryGetValue("conv_transpose2d_backward_kernel", out var cudaKernel))
+        {
+            // Fallback: CPU implementation
+            var inputData = DownloadBuffer(input);
+            var gradOutData = DownloadBuffer(gradOutput);
+            // Kernel layout: [inChannels, outChannels, kernelH, kernelW]
+            var gradKernelData = new float[inChannels * outChannels * kernelH * kernelW];
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int oc = 0; oc < outChannels; oc++)
+                    {
+                        for (int kh = 0; kh < kernelH; kh++)
+                        {
+                            for (int kw = 0; kw < kernelW; kw++)
+                            {
+                                float sum = 0;
+                                for (int ih = 0; ih < inHeight; ih++)
+                                {
+                                    for (int iw = 0; iw < inWidth; iw++)
+                                    {
+                                        // Output position that this input element contributed to
+                                        int oh = ih * strideH - padH + kh;
+                                        int ow = iw * strideW - padW + kw;
+                                        if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
+                                        {
+                                            int inIdx = ((b * inChannels + ic) * inHeight + ih) * inWidth + iw;
+                                            int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                                            sum += inputData[inIdx] * gradOutData[goIdx];
+                                        }
+                                    }
+                                }
+                                int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                                gradKernelData[kIdx] += sum;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Upload to GPU
+            using var ctx = PushContext();
+            fixed (float* gradKernelDataPtr = gradKernelData)
+            {
+                CuBlasNative.CheckCudaResult(
+                    CuBlasNative.cuMemcpyHtoD(gradKernel.Handle, (IntPtr)gradKernelDataPtr, (ulong)(gradKernelData.Length * sizeof(float))),
+                    "cuMemcpyHtoD (ConvTranspose2DBackwardKernel)");
+            }
+            return;
+        }
+
+        using var _ = PushContext();
+        int totalKernel = inChannels * outChannels * kernelH * kernelW;
+        uint gridX = (uint)((totalKernel + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr gradKernelPtr = gradKernel.Handle;
+        void** args = stackalloc void*[17];
+        args[0] = &inputPtr;
+        args[1] = &gradOutputPtr;
+        args[2] = &gradKernelPtr;
+        args[3] = &batch;
+        args[4] = &inChannels;
+        args[5] = &inHeight;
+        args[6] = &inWidth;
+        args[7] = &outChannels;
+        args[8] = &outHeight;
+        args[9] = &outWidth;
+        args[10] = &kernelH;
+        args[11] = &kernelW;
+        args[12] = &strideH;
+        args[13] = &strideW;
+        args[14] = &padH;
+        args[15] = &padW;
+        args[16] = &totalKernel;
+        LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
+    }
+
     #region Locally Connected Convolution Operations
 
     public unsafe void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
@@ -3257,6 +3434,118 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[7] = &channels;
         args[8] = &spatialSize;
         args[9] = &epsilon;
+        LaunchKernel(kernel, gridX, DefaultBlockSize, args);
+    }
+
+    public unsafe void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon)
+    {
+        // Use instancenorm_backward kernel if available, otherwise fall back to layernorm pattern
+        if (!_kernelCache.TryGetValue("instancenorm_backward", out var kernel))
+        {
+            // Fallback: implement using basic CUDA operations
+            // This computes: dx = invStd * (1/N) * (N * delta - sum(delta) - xNorm * sum(delta * xNorm))
+            // where delta = gradOutput * gamma
+
+            // For now, use CPU fallback via buffer download/upload
+            var gradOutData = DownloadBuffer(gradOutput);
+            var inputData = DownloadBuffer(input);
+            var gammaData = DownloadBuffer(gamma);
+            var meanData = DownloadBuffer(saveMean);
+            var invVarData = DownloadBuffer(saveInvVar);
+            var gradInputData = new float[gradOutData.Length];
+            var gradGammaData = new float[channels];
+            var gradBetaData = new float[channels];
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int offset = (b * channels + c) * spatialSize;
+                    float meanVal = meanData[b * channels + c];
+                    float invStd = invVarData[b * channels + c];
+                    float g = gammaData[c];
+
+                    // First pass: compute sums for gradient correction
+                    float sumDelta = 0.0f;
+                    float sumDeltaXNorm = 0.0f;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        float go = gradOutData[offset + s];
+                        float x = inputData[offset + s];
+                        float xNorm = (x - meanVal) * invStd;
+                        float delta = go * g;
+
+                        gradGammaData[c] += go * xNorm;
+                        gradBetaData[c] += go;
+
+                        sumDelta += delta;
+                        sumDeltaXNorm += delta * xNorm;
+                    }
+
+                    // Second pass: compute gradInput with proper correction terms
+                    float invN = 1.0f / spatialSize;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        float go = gradOutData[offset + s];
+                        float x = inputData[offset + s];
+                        float xNorm = (x - meanVal) * invStd;
+                        float delta = go * g;
+
+                        // dx = invStd * invN * (N * delta - sum(delta) - xNorm * sum(delta * xNorm))
+                        gradInputData[offset + s] = invStd * invN * (spatialSize * delta - sumDelta - xNorm * sumDeltaXNorm);
+                    }
+                }
+            }
+
+            // Upload results to GPU buffers
+            using var ctx = PushContext();
+            fixed (float* gradInputDataPtr = gradInputData)
+            {
+                CuBlasNative.CheckCudaResult(
+                    CuBlasNative.cuMemcpyHtoD(gradInput.Handle, (IntPtr)gradInputDataPtr, (ulong)(gradInputData.Length * sizeof(float))),
+                    "cuMemcpyHtoD (InstanceNormBackward gradInput)");
+            }
+            fixed (float* gradGammaDataPtr = gradGammaData)
+            {
+                CuBlasNative.CheckCudaResult(
+                    CuBlasNative.cuMemcpyHtoD(gradGamma.Handle, (IntPtr)gradGammaDataPtr, (ulong)(gradGammaData.Length * sizeof(float))),
+                    "cuMemcpyHtoD (InstanceNormBackward gradGamma)");
+            }
+            fixed (float* gradBetaDataPtr = gradBetaData)
+            {
+                CuBlasNative.CheckCudaResult(
+                    CuBlasNative.cuMemcpyHtoD(gradBeta.Handle, (IntPtr)gradBetaDataPtr, (ulong)(gradBetaData.Length * sizeof(float))),
+                    "cuMemcpyHtoD (InstanceNormBackward gradBeta)");
+            }
+            return;
+        }
+
+        using var _ = PushContext();
+        uint gridX = (uint)(batch * channels);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gammaPtr = gamma.Handle;
+        IntPtr saveMeanPtr = saveMean.Handle;
+        IntPtr saveInvVarPtr = saveInvVar.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        IntPtr gradGammaPtr = gradGamma.Handle;
+        IntPtr gradBetaPtr = gradBeta.Handle;
+        void** args = stackalloc void*[12];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gammaPtr;
+        args[3] = &saveMeanPtr;
+        args[4] = &saveInvVarPtr;
+        args[5] = &gradInputPtr;
+        args[6] = &gradGammaPtr;
+        args[7] = &gradBetaPtr;
+        args[8] = &batch;
+        args[9] = &channels;
+        args[10] = &spatialSize;
+        args[11] = &epsilon;
         LaunchKernel(kernel, gridX, DefaultBlockSize, args);
     }
 

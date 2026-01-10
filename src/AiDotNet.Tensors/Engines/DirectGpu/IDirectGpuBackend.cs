@@ -797,6 +797,26 @@ public interface IDirectGpuBackend : IDisposable
         int outputPadH, int outputPadW);
 
     /// <summary>
+    /// Computes the gradient of ConvTranspose2D w.r.t. input.
+    /// </summary>
+    void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose2D w.r.t. kernel.
+    /// </summary>
+    void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW);
+
+    /// <summary>
     /// Performs locally connected 2D convolution where each spatial position has unique weights.
     /// </summary>
     /// <param name="input">Input tensor [batch, inChannels, inHeight, inWidth].</param>
@@ -1098,6 +1118,26 @@ public interface IDirectGpuBackend : IDisposable
 
     void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
         IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon);
+
+    /// <summary>
+    /// Computes the backward pass for Instance Normalization.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from the next layer [batch, channels, spatialSize].</param>
+    /// <param name="input">Original input from forward pass [batch, channels, spatialSize].</param>
+    /// <param name="gamma">Scale parameters [channels].</param>
+    /// <param name="saveMean">Saved mean from forward pass [batch, channels].</param>
+    /// <param name="saveInvVar">Saved inverse variance from forward pass [batch, channels].</param>
+    /// <param name="gradInput">Output gradient with respect to input [batch, channels, spatialSize].</param>
+    /// <param name="gradGamma">Output gradient with respect to gamma [channels].</param>
+    /// <param name="gradBeta">Output gradient with respect to beta [channels].</param>
+    /// <param name="batch">Number of samples in the batch.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="spatialSize">Spatial size (H * W for 4D input).</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon);
 
     void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
         int batchSize, int normalizedSize, float epsilon);
