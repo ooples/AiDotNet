@@ -798,30 +798,39 @@ extern ""C"" __global__ void nag_step(
     param[idx] -= learningRate * (grad + momentum * vNew);
 }
 
+// LARS (Layer-wise Adaptive Rate Scaling) optimizer
+// Reference: Large Batch Training of Convolutional Networks (You et al., 2017)
+// Requires precomputed layer-wise norms: weightNorm = ||w||_2, gradNorm = ||g||_2
+// Local learning rate: lr_local = trustCoeff * weightNorm / (gradNorm + weightDecay * weightNorm + eps)
 extern ""C"" __global__ void lars_step(
     float* param, const float* gradient, float* velocity,
-    float learningRate, float momentum, float weightDecay, float trustCoeff, int size)
+    float learningRate, float momentum, float weightDecay, float trustCoeff,
+    float weightNorm, float gradNorm, float epsilon, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
 
-    // Note: LARS computes local learning rate based on layer-wise norms
-    // This simplified version applies uniform scaling; full LARS requires
-    // computing norms per layer before calling this kernel
     float grad = gradient[idx];
     float p = param[idx];
 
-    // Apply weight decay
+    // Compute LARS local learning rate from precomputed layer norms
+    float localLr = learningRate;
+    if (weightNorm > 0.0f && gradNorm > 0.0f) {
+        float denom = gradNorm + weightDecay * weightNorm + epsilon;
+        localLr = learningRate * trustCoeff * weightNorm / denom;
+    }
+
+    // Apply weight decay to gradient
     if (weightDecay > 0.0f) {
         grad += weightDecay * p;
     }
 
-    // Update velocity with momentum
-    float v = momentum * velocity[idx] + grad;
+    // Update velocity with momentum (SGD with momentum)
+    float v = momentum * velocity[idx] + localLr * grad;
     velocity[idx] = v;
 
     // Update parameters
-    param[idx] = p - learningRate * v;
+    param[idx] = p - v;
 }
 
 extern ""C"" __global__ void lamb_step(
@@ -1218,15 +1227,18 @@ extern ""C"" __global__ void lbfgs_update_history(
     y_newest[idx] = g_new[idx] - g_old[idx];
 }
 
-// BFGS update (simplified - full version requires matrix operations)
+// BFGS update using diagonal Hessian approximation
+// Note: Full BFGS requires O(n²) memory for dense Hessian inverse. This diagonal
+// approximation enables efficient GPU parallelization while preserving per-parameter
+// curvature scaling. For full matrix BFGS, use L-BFGS with two-loop recursion.
 extern ""C"" __global__ void bfgs_step(
     float* param, const float* gradient, const float* invHessianDiag,
     float learningRate, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    
-    // Diagonal approximation: x = x - lr * H^-1 * g
+
+    // Diagonal quasi-Newton: x = x - lr * diag(H^-1) * g
     param[idx] -= learningRate * invHessianDiag[idx] * gradient[idx];
 }
 
@@ -1243,25 +1255,28 @@ extern ""C"" __global__ void levenberg_marquardt_step(
     param[idx] -= learningRate * gradient[idx] / (dampedHess + 1e-8f);
 }
 
-// Trust Region update
+// Trust Region update using diagonal Hessian approximation
+// Uses per-parameter trust region constraint for GPU-parallel execution.
+// Each parameter's step is independently bounded by trustRadius.
 extern ""C"" __global__ void trust_region_step(
     float* param, const float* gradient, const float* hessianDiag,
     float trustRadius, float learningRate, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    
-    // Simplified trust region with diagonal Hessian
+
     float grad = gradient[idx];
     float hess = hessianDiag[idx];
+
+    // Newton step with diagonal Hessian: step = -H^-1 * g
     float step = -grad / (hess + 1e-8f);
-    
-    // Limit step by trust radius
-    float stepNorm = fabsf(step);
-    if (stepNorm > trustRadius) {
-        step = (step / stepNorm) * trustRadius;
+
+    // Apply per-parameter trust region constraint
+    float stepMag = fabsf(step);
+    if (stepMag > trustRadius) {
+        step = (step / stepMag) * trustRadius;
     }
-    
+
     param[idx] += learningRate * step;
 }
 
@@ -1281,15 +1296,17 @@ extern ""C"" __global__ void admm_step(
     dual[idx] += param[idx] - consensus[idx];
 }
 
-// Newton's Method (simplified with diagonal Hessian)
+// Newton's Method using diagonal Hessian approximation
+// Uses per-parameter curvature (diagonal elements) for GPU-parallel second-order optimization.
+// Damping parameter prevents instability when Hessian diagonal is near zero or negative.
 extern ""C"" __global__ void newton_method_step(
     float* param, const float* gradient, const float* hessianDiag,
     float learningRate, float damping, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    
-    // Newton step: x = x - lr * H^-1 * g
+
+    // Damped Newton step: x = x - lr * g / (H_ii + damping)
     float hess = hessianDiag[idx];
     param[idx] -= learningRate * gradient[idx] / (hess + damping);
 }
