@@ -5518,16 +5518,7 @@ KERNEL VARIANTS (A/B testing):
 
         public void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer indices, int batch, int channels, int height, int width)
         {
-            // Use kernel with indices output for backward pass support
-            if (!_kernelCache.TryGetValue("global_maxpool2d_with_indices", out var k))
-            {
-                // Fall back to kernel without indices if specialized kernel not available
-                GlobalMaxPool2D(input, output, batch, channels, height, width);
-                // Fill indices with zeros - caller should handle this case
-                Fill(indices, 0.0f, batch * channels);
-                return;
-            }
-
+            var k = _kernelCache["global_maxpool2d_with_indices"];
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);

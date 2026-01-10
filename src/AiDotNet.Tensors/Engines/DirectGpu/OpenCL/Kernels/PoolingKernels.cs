@@ -261,6 +261,39 @@ __kernel void global_maxpool2d(
     output[b * channels + c] = maxVal;
 }
 
+// Global Max Pooling 2D with indices output for backward pass
+__kernel void global_maxpool2d_with_indices(
+    __global const float* input,
+    __global float* output,
+    __global int* indices,
+    const int batch,
+    const int channels,
+    const int height,
+    const int width)
+{
+    const int idx = get_global_id(0);
+    const int c = idx % channels;
+    const int b = idx / channels;
+
+    if (b >= batch) return;
+
+    float maxVal = -INFINITY;
+    int maxIdx = 0;
+
+    for (int h = 0; h < height; h++) {
+        for (int w = 0; w < width; w++) {
+            float val = input[((b * channels + c) * height + h) * width + w];
+            if (val > maxVal) {
+                maxVal = val;
+                maxIdx = h * width + w;  // Flattened spatial index
+            }
+        }
+    }
+
+    output[b * channels + c] = maxVal;
+    indices[b * channels + c] = maxIdx;
+}
+
 // Global Average Pooling 2D Backward
 // Each work-item handles one element of the gradient input
 __kernel void global_avgpool2d_backward(
@@ -649,6 +682,7 @@ __kernel void nearest_neighbor_upsample_backward(
                 "avgpool2d_backward",
                 "global_avgpool2d",
                 "global_maxpool2d",
+                "global_maxpool2d_with_indices",
                 "global_avgpool2d_backward",
                 "global_maxpool2d_backward",
                 "adaptive_avgpool2d",
