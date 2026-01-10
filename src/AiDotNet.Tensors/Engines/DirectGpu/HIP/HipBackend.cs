@@ -56,6 +56,7 @@ public sealed class HipBackend : IAsyncGpuBackend
     private IntPtr _locallyConnectedModule;
     private IntPtr _deformableConvModule;
     private IntPtr _specializedModule;
+    private IntPtr _spatialTransformerModule;
 
     private const int DefaultBlockSize = 256;
 
@@ -329,6 +330,10 @@ public sealed class HipBackend : IAsyncGpuBackend
             // Compile Specialized kernels (hyperbolic geometry, octonion algebra, quantum computing)
             CompileKernelModule(Kernels.HipSpecializedKernels.GetSource(), "specialized", ref _specializedModule,
                 Kernels.HipSpecializedKernels.GetKernelNames());
+
+            // Compile Spatial Transformer kernels (TopK, AffineGrid, GridSample)
+            CompileKernelModule(Kernels.HipSpatialTransformerKernels.GetSource(), "spatial_transformer", ref _spatialTransformerModule,
+                Kernels.HipSpatialTransformerKernels.GetKernelNames());
 
             Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Total: {_kernelCache.Count}");
@@ -761,47 +766,42 @@ public sealed class HipBackend : IAsyncGpuBackend
         return C;
     }
 
-    public void BatchedGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, int batchCount, float alpha = 1.0f, float beta = 0.0f)
+    public unsafe void BatchedGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, int batchCount, float alpha = 1.0f, float beta = 0.0f)
     {
         if (batchCount <= 0)
             throw new ArgumentException("Batch count must be positive", nameof(batchCount));
 
-        System.Diagnostics.Debug.WriteLine("HipBackend BatchedGemm is executing on CPU fallback; TODO: implement GPU batched GEMM.");
+        if (!_kernelCache.TryGetValue("batched_gemm", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: batched_gemm");
 
-        // Download all data
-        var aData = DownloadBuffer(A);
-        var bData = DownloadBuffer(B);
-        var cData = DownloadBuffer(C);
-
-        int aStride = M * K;
-        int bStride = K * N;
-        int cStride = M * N;
-
-        // Process each batch
-        for (int batch = 0; batch < batchCount; batch++)
+        var handles = new GCHandle[9];
+        try
         {
-            int aOffset = batch * aStride;
-            int bOffset = batch * bStride;
-            int cOffset = batch * cStride;
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(C.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(M, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(N, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(K, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(batchCount, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(alpha, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(beta, GCHandleType.Pinned);
 
-            // Perform matrix multiplication for this batch
-            for (int row = 0; row < M; row++)
-            {
-                for (int col = 0; col < N; col++)
-                {
-                    float sum = 0.0f;
-                    for (int k = 0; k < K; k++)
-                    {
-                        sum += aData[aOffset + row * K + k] * bData[bOffset + k * N + col];
-                    }
-                    int cIdx = cOffset + row * N + col;
-                    cData[cIdx] = alpha * sum + beta * cData[cIdx];
-                }
-            }
+            var args = new IntPtr[9];
+            for (int i = 0; i < 9; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            // 3D grid: (N tiles, M tiles, batches)
+            const int tileSize = 16;
+            uint gridX = (uint)((N + tileSize - 1) / tileSize);
+            uint gridY = (uint)((M + tileSize - 1) / tileSize);
+            uint gridZ = (uint)batchCount;
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, (uint)tileSize, (uint)tileSize, 1, args);
+            Synchronize();
         }
-
-        // Upload result
-        UploadToBuffer(C, cData);
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     #endregion
@@ -5375,33 +5375,165 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
-    public void TopK(IGpuBuffer A, IGpuBuffer values, IGpuBuffer indices, int outerSize, int reduceSize, int k, bool sorted = true)
+    public unsafe void TopK(IGpuBuffer A, IGpuBuffer values, IGpuBuffer indices, int outerSize, int reduceSize, int k, bool sorted = true)
     {
-        // TODO: Implement HIP TopK kernel
-        throw new NotImplementedException("TopK kernel not yet implemented for HIP backend.");
+        if (!_kernelCache.TryGetValue("topk", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: topk");
+
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(values.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(indices.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(outerSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(reduceSize, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(k, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(sorted ? 1 : 0, GCHandleType.Pinned);
+
+            var args = new IntPtr[7];
+            for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            // One block per row, 256 threads per block
+            uint grid = (uint)outerSize;
+            uint sharedMem = (uint)(k * (sizeof(float) + sizeof(int)));
+            LaunchKernel(krnl, grid, DefaultBlockSize, args, sharedMem);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
-    public void AffineGrid(IGpuBuffer theta, IGpuBuffer grid, int batch, int outputHeight, int outputWidth)
+    public unsafe void AffineGrid(IGpuBuffer theta, IGpuBuffer grid, int batch, int outputHeight, int outputWidth)
     {
-        // TODO: Implement HIP AffineGrid kernel
-        throw new NotImplementedException("AffineGrid kernel not yet implemented for HIP backend.");
+        if (!_kernelCache.TryGetValue("affine_grid", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: affine_grid");
+
+        var handles = new GCHandle[5];
+        try
+        {
+            handles[0] = GCHandle.Alloc(theta.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(grid.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(outputHeight, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(outputWidth, GCHandleType.Pinned);
+
+            var args = new IntPtr[5];
+            for (int i = 0; i < 5; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            // 3D grid: (width, height, batch)
+            uint gridX = (uint)((outputWidth + 15) / 16);
+            uint gridY = (uint)((outputHeight + 15) / 16);
+            uint gridZ = (uint)batch;
+            LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
-    public void GridSample(IGpuBuffer input, IGpuBuffer grid, IGpuBuffer output,
+    public unsafe void GridSample(IGpuBuffer input, IGpuBuffer grid, IGpuBuffer output,
         int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
         int paddingMode = 0, bool alignCorners = false)
     {
-        // TODO: Implement HIP GridSample kernel
-        throw new NotImplementedException("GridSample kernel not yet implemented for HIP backend.");
+        if (!_kernelCache.TryGetValue("grid_sample", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: grid_sample");
+
+        var handles = new GCHandle[10];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(grid.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(paddingMode, GCHandleType.Pinned);
+            // Note: alignCorners is handled in the kernel as the last param
+
+            var args = new IntPtr[11];
+            for (int i = 0; i < 10; i++) args[i] = handles[i].AddrOfPinnedObject();
+            // Add alignCorners as the 11th parameter
+            int alignCornersInt = alignCorners ? 1 : 0;
+            var alignHandle = GCHandle.Alloc(alignCornersInt, GCHandleType.Pinned);
+            args[10] = alignHandle.AddrOfPinnedObject();
+
+            try
+            {
+                // 3D grid: (width, height, batch*channels)
+                uint gridX = (uint)((outWidth + 15) / 16);
+                uint gridY = (uint)((outHeight + 15) / 16);
+                uint gridZ = (uint)(batch * channels);
+                LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+                Synchronize();
+            }
+            finally
+            {
+                if (alignHandle.IsAllocated) alignHandle.Free();
+            }
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
-    public void GridSampleBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer grid,
+    public unsafe void GridSampleBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer grid,
         IGpuBuffer gradInput, IGpuBuffer gradGrid,
         int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth,
         int paddingMode = 0, bool alignCorners = false)
     {
-        // TODO: Implement HIP GridSampleBackward kernel
-        throw new NotImplementedException("GridSampleBackward kernel not yet implemented for HIP backend.");
+        if (!_kernelCache.TryGetValue("grid_sample_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: grid_sample_backward");
+
+        var handles = new GCHandle[12];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(grid.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(gradGrid.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(inHeight, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(inWidth, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(outHeight, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(outWidth, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(paddingMode, GCHandleType.Pinned);
+
+            var args = new IntPtr[13];
+            for (int i = 0; i < 12; i++) args[i] = handles[i].AddrOfPinnedObject();
+            // Add alignCorners as the 13th parameter
+            int alignCornersInt = alignCorners ? 1 : 0;
+            var alignHandle = GCHandle.Alloc(alignCornersInt, GCHandleType.Pinned);
+            args[12] = alignHandle.AddrOfPinnedObject();
+
+            try
+            {
+                // 3D grid: (width, height, batch)
+                uint gridX = (uint)((outWidth + 15) / 16);
+                uint gridY = (uint)((outHeight + 15) / 16);
+                uint gridZ = (uint)batch;
+                LaunchKernel3D(krnl, gridX, gridY, gridZ, 16, 16, 1, args);
+                Synchronize();
+            }
+            finally
+            {
+                if (alignHandle.IsAllocated) alignHandle.Free();
+            }
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     public unsafe void BroadcastMultiplyLastAxis(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int outerSize, int innerSize)
