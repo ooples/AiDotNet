@@ -1116,13 +1116,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected bool TryForwardGpuOptimized(Tensor<T> input, out Tensor<T> result)
     {
         result = null!;
-        
+
         if (Engine is not DirectGpuTensorEngine)
             return false;
-            
+
         if (!CanUseGpuResidentPath())
             return false;
-            
+
         try
         {
             using var gpuResult = ForwardGpu(input);

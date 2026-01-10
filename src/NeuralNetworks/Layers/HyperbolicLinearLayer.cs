@@ -355,53 +355,53 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         {
             weightsBuffer = backend.AllocateBuffer(weightsFlat);
 
-        // Cache biases to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
-        var biasesFlat = new float[OutputFeatures * InputFeatures];
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
+            // Cache biases to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
+            var biasesFlat = new float[OutputFeatures * InputFeatures];
+            for (int o = 0; o < OutputFeatures; o++)
             {
-                biasesFlat[o * InputFeatures + i] = _numOps.ToFloat(_biases[o, i]);
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    biasesFlat[o * InputFeatures + i] = _numOps.ToFloat(_biases[o, i]);
+                }
             }
-        }
-        biasesBuffer = backend.AllocateBuffer(biasesFlat);
+            biasesBuffer = backend.AllocateBuffer(biasesFlat);
 
-        // Allocate output buffer
-        var outputBuffer = backend.AllocateBuffer(batchSize * OutputFeatures);
+            // Allocate output buffer
+            var outputBuffer = backend.AllocateBuffer(batchSize * OutputFeatures);
 
-        // Get curvature and epsilon as floats
-        float curvature = _numOps.ToFloat(_curvature);
-        float epsilon = 1e-5f;
+            // Get curvature and epsilon as floats
+            float curvature = _numOps.ToFloat(_curvature);
+            float epsilon = 1e-5f;
 
-        // Validate buffers are allocated (they should be at this point)
-        if (weightsBuffer is null || biasesBuffer is null)
-            throw new InvalidOperationException("GPU buffer allocation failed");
+            // Validate buffers are allocated (they should be at this point)
+            if (weightsBuffer is null || biasesBuffer is null)
+                throw new InvalidOperationException("GPU buffer allocation failed");
 
-        // Call the GPU kernel for hyperbolic linear forward
-        backend.HyperbolicLinearForward(
-            input.Buffer, weightsBuffer, biasesBuffer, outputBuffer,
-            batchSize, InputFeatures, OutputFeatures, curvature, epsilon);
+            // Call the GPU kernel for hyperbolic linear forward
+            backend.HyperbolicLinearForward(
+                input.Buffer, weightsBuffer, biasesBuffer, outputBuffer,
+                batchSize, InputFeatures, OutputFeatures, curvature, epsilon);
 
 
-        // Determine output shape
-        int[] outputShape;
-        if (input.Shape.Length == 1)
-        {
-            outputShape = [OutputFeatures];
-        }
-        else if (input.Shape.Length == 2)
-        {
-            outputShape = [batchSize, OutputFeatures];
-        }
-        else
-        {
-            var newShape = new int[input.Shape.Length];
-            Array.Copy(input.Shape, newShape, input.Shape.Length - 1);
-            newShape[^1] = OutputFeatures;
-            outputShape = newShape;
-        }
+            // Determine output shape
+            int[] outputShape;
+            if (input.Shape.Length == 1)
+            {
+                outputShape = [OutputFeatures];
+            }
+            else if (input.Shape.Length == 2)
+            {
+                outputShape = [batchSize, OutputFeatures];
+            }
+            else
+            {
+                var newShape = new int[input.Shape.Length];
+                Array.Copy(input.Shape, newShape, input.Shape.Length - 1);
+                newShape[^1] = OutputFeatures;
+                outputShape = newShape;
+            }
 
-        // Note: GPU path does not apply activation function - consider CPU fallback for non-identity activations
+            // Note: GPU path does not apply activation function - consider CPU fallback for non-identity activations
             return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
         finally
