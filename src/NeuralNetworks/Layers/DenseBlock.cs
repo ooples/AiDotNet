@@ -228,7 +228,7 @@ public class DenseBlock<T> : LayerBase<T>
     /// </remarks>
     /// <param name="outputGradient">GPU tensor containing gradient of loss with respect to output.</param>
     /// <returns>GPU tensor containing gradient with respect to input.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuFeatureMaps == null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");

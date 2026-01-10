@@ -464,7 +464,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="outputGradient">GPU tensor containing gradient of loss with respect to layer output.</param>
     /// <returns>GPU tensor containing gradient with respect to input.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuInput == null || _gpuPreActivation == null || _gpuOutput == null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");

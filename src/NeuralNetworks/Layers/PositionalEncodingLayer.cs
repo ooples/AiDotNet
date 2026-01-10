@@ -759,7 +759,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// Since positional encodings are constants, the gradient flows through unchanged.
     /// The derivative of (x + constant) with respect to x is 1.
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         return outputGradient;
     }

@@ -225,7 +225,7 @@ public class ResidualLayer<T> : LayerBase<T>
     /// For residual connection: output = activation(input + innerLayer(input))
     /// Gradient flows to both the input directly and through the inner layer.
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");

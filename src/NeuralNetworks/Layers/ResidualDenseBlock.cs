@@ -588,7 +588,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     /// <param name="outputGradient">GPU tensor representing the gradient from the next layer.</param>
     /// <returns>GPU tensor representing the gradient with respect to the input.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuInput == null || _gpuConv1Out == null || _gpuX1Activated == null ||
             _gpuConcat1 == null || _gpuConv2Out == null || _gpuX2Activated == null ||

@@ -552,7 +552,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
     /// <returns>The GPU tensor containing the gradient of the loss with respect to the query input.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuQuery == null || _gpuContext == null || _gpuQ == null || _gpuK == null || _gpuV == null ||
             _gpuAttnOutput == null || _gpuAttnWeights == null)

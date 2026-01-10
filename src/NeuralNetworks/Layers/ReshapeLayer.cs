@@ -447,7 +447,7 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// This is also a zero-copy view operation.
     /// </para>
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuCachedInputShape == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");

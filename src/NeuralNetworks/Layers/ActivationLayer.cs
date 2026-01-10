@@ -714,7 +714,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
     /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
     /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");

@@ -1495,7 +1495,7 @@ public class LSTMLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
 
         if (_gpuLastInput == null || _gpuCachedForgetGates == null || _gpuCachedInputGates == null ||
             _gpuCachedCellCandidates == null || _gpuCachedOutputGates == null ||
@@ -1792,7 +1792,7 @@ public class LSTMLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
 
         if (_gpuWeightsFiGradient == null || _gpuWeightsIiGradient == null ||
             _gpuWeightsCiGradient == null || _gpuWeightsOiGradient == null ||

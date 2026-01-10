@@ -758,7 +758,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The gradient from subsequent layer [B, N, embedDim].</param>
     /// <returns>The gradient with respect to input [B, C, H, W].</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuPatchesFlat == null || _gpuInput == null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");

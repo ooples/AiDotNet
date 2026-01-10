@@ -283,7 +283,7 @@ public class BottleneckBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
     /// <returns>GPU-resident gradient of the loss with respect to the input.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");

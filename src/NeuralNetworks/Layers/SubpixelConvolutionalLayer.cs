@@ -718,7 +718,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuInput == null || _gpuConvOutput == null || _gpuShuffled == null)
             throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");

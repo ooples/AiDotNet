@@ -210,7 +210,7 @@ public class PaddingLayer<T> : LayerBase<T>
     /// Uses SliceGpu to extract center region for each padded dimension.
     /// </para>
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuCachedInputShape == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -245,26 +245,6 @@ public class PaddingLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-        }
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-        {
-            throw new InvalidOperationException("GPU backend unavailable.");
-        }
-
-        // CPU fallback: download gradient, compute via CPU Backward, upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Return the input gradient as GPU tensor
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PaddingLayer{T}"/> class with the specified input shape,

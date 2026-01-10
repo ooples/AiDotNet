@@ -385,7 +385,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// d(loss)/d(input) = outputGradient * (2 * (input - mean) / (axis_size * (variance + epsilon)))
     /// </para>
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");

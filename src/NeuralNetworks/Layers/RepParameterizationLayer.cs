@@ -599,7 +599,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="outputGradient">GPU tensor containing gradient of loss with respect to layer output.</param>
     /// <returns>GPU tensor containing gradient with respect to input [mean, logvar].</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuMean == null || _gpuEpsilon == null || _gpuStdDev == null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");

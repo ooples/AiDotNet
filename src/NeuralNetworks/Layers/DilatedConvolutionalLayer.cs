@@ -953,7 +953,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">GPU-resident gradient from subsequent layer.</param>
     /// <returns>GPU-resident gradient with respect to input.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuInput == null || _gpuOutput == null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");

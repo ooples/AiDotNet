@@ -633,13 +633,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         GpuExecutionOptions? options = null)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-        if (engine?.Backend == null)
+        if (engine?.GetBackend() == null)
         {
             // Fallback to non-deferred if no GPU backend
             return BackpropagateGpu(outputGradients);
         }
 
-        var backend = engine.Backend as IAsyncGpuBackend;
+        var backend = engine.GetBackend() as IAsyncGpuBackend;
         if (backend == null)
         {
             return BackpropagateGpu(outputGradients);
@@ -729,14 +729,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         GpuExecutionOptions? options = null)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-        if (engine?.Backend == null)
+        if (engine?.GetBackend() == null)
         {
             // Fallback to non-deferred if no GPU backend
             UpdateParametersGpu(config);
             return;
         }
 
-        var backend = engine.Backend as IAsyncGpuBackend;
+        var backend = engine.GetBackend() as IAsyncGpuBackend;
         if (backend == null)
         {
             UpdateParametersGpu(config);
@@ -798,7 +798,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         T lossValue = NumOps.Zero;
         
-        var backend = gpuEngine.Backend as IAsyncGpuBackend;
+        var backend = gpuEngine.GetBackend() as IAsyncGpuBackend;
         if (backend == null)
         {
             throw new InvalidOperationException("GPU training requires an async GPU backend.");
@@ -862,7 +862,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         T lossValue = NumOps.Zero;
         
-        var backend = gpuEngine.Backend as IAsyncGpuBackend;
+        var backend = gpuEngine.GetBackend() as IAsyncGpuBackend;
         if (backend == null)
         {
             throw new InvalidOperationException("GPU training requires an async GPU backend.");

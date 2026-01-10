@@ -247,7 +247,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// <exception cref="InvalidOperationException">
     /// Thrown when GPU backend is unavailable or forward pass was not called.
     /// </exception>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> gradOutput)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> gradOutput)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");

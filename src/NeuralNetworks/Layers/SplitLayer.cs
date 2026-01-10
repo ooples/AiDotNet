@@ -330,26 +330,6 @@ public class SplitLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-        }
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-        {
-            throw new InvalidOperationException("GPU backend unavailable.");
-        }
-
-        // CPU fallback: download gradient, compute via CPU Backward, upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Return the input gradient as GPU tensor
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-    }
 
     /// <summary>
     /// Computes the gradient of the loss with respect to the input on the GPU.
@@ -359,7 +339,7 @@ public class SplitLayer<T> : LayerBase<T>
     /// <remarks>
     /// Since split is a reshape operation, backward is also just a reshape to restore the original shape.
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");

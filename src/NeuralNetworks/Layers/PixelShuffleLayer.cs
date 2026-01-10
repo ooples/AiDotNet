@@ -380,7 +380,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// Reshape [N, C, H*r, W*r] -> [N, C, H, r, W, r] -> Permute (inverse) -> [N, C, r, r, H, W] -> Reshape [N, C*r², H, W]
     /// </para>
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");

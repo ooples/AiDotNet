@@ -2136,7 +2136,7 @@ public class GRULayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
 
         if (_gpuLastInput == null || _gpuCachedZGates == null || _gpuCachedRGates == null ||
             _gpuCachedHCandidates == null || _gpuCachedHiddenStates == null)
@@ -2394,7 +2394,7 @@ public class GRULayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
 
         if (_gpuWzGradient == null || _gpuWrGradient == null || _gpuWhGradient == null ||
             _gpuUzGradient == null || _gpuUrGradient == null || _gpuUhGradient == null ||

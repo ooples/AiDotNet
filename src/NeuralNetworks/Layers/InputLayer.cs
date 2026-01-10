@@ -69,7 +69,7 @@ public class InputLayer<T> : LayerBase<T>
     /// <remarks>
     /// InputLayer is an identity operation, so the gradient passes through unchanged.
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         return outputGradient;
     }

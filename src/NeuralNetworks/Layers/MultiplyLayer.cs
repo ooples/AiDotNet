@@ -324,26 +324,6 @@ public class MultiplyLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-        }
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-        {
-            throw new InvalidOperationException("GPU backend unavailable.");
-        }
-
-        // CPU fallback: download gradient, compute via CPU Backward, upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Return the input gradient as GPU tensor
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-    }
 
     /// <summary>
     /// Computes the gradients of the loss with respect to the inputs on the GPU.
@@ -354,7 +334,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// For element-wise multiplication z = x * y, the gradient with respect to each input
     /// is the product of the output gradient and all other inputs.
     /// </remarks>
-    public IGpuTensor<T>[] BackwardGpu(IGpuTensor<T> outputGradient)
+    public new IGpuTensor<T>[] BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");

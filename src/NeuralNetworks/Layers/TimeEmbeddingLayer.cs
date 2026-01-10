@@ -179,7 +179,7 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the timestep input (typically zeros since sinusoidal embedding is fixed).</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_gpuSinusoidalEmbed == null || _gpuHidden == null || _gpuPreActivation == null || _gpuInputShape == null)
             throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");

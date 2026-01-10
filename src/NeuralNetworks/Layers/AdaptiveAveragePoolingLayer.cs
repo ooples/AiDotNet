@@ -288,7 +288,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
     /// <returns>The gradient of the loss with respect to the input.</returns>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (_lastInputShape == null)
             throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");

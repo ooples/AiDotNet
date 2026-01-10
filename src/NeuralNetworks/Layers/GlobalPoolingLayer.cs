@@ -645,26 +645,6 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-        }
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-        {
-            throw new InvalidOperationException("GPU backend unavailable.");
-        }
-
-        // CPU fallback: download gradient, compute via CPU Backward, upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Return the input gradient as GPU tensor
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-    }
 
     /// <summary>
     /// Performs GPU-resident backward pass for global pooling.
@@ -673,7 +653,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
     /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
     /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");

@@ -390,7 +390,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// through both forward and backward inner layers while keeping all data on the GPU.
     /// </para>
     /// </remarks>
-    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
@@ -973,60 +973,6 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">GPU tensor containing the gradient of the loss with respect to the output.</param>
     /// <returns>GPU tensor containing the gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Check if inner layers support GPU training
-        if (!_forwardLayer.SupportsGpuTraining || !_backwardLayer.SupportsGpuTraining)
-        {
-            // CPU fallback: download gradient, run Backward(), upload result
-            var outputGradCpu = outputGradient.ToTensor();
-            var inputGradCpu = Backward(outputGradCpu);
-            return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-        }
-
-        // Delegate to inner layers for GPU backward
-        IGpuTensor<T> forwardGradient, backwardGradient;
-
-        if (_mergeMode)
-        {
-            forwardGradient = outputGradient;
-            backwardGradient = outputGradient;
-        }
-        else
-        {
-            // Split output gradient for each direction
-            int halfSize = outputGradient.Buffer.Size / 2;
-            forwardGradient = outputGradient.CreateView(0, [halfSize]);
-            backwardGradient = outputGradient.CreateView(halfSize, [halfSize]);
-        }
-
-        var forwardInputGradient = _forwardLayer.BackwardGpu(forwardGradient);
-        var backwardInputGradient = _backwardLayer.BackwardGpu(backwardGradient);
-
-        // Reverse the backward gradient
-        int batchSize = backwardInputGradient.Shape.Length >= 3 ? backwardInputGradient.Shape[0] : 1;
-        int timeSteps = backwardInputGradient.Shape.Length >= 3 ? backwardInputGradient.Shape[1] : backwardInputGradient.Shape[0];
-        int features = backwardInputGradient.Shape[backwardInputGradient.Shape.Length - 1];
-
-        var reversedBackwardGradient = ReverseSequenceGpu(backend, backwardInputGradient, batchSize, timeSteps, features);
-        backwardInputGradient.Dispose();
-
-        // Sum the gradients
-        var inputGradBuffer = backend.AllocateBuffer(forwardInputGradient.Buffer.Size);
-        backend.Add(forwardInputGradient.Buffer, reversedBackwardGradient.Buffer, inputGradBuffer, forwardInputGradient.Buffer.Size);
-
-        forwardInputGradient.Dispose();
-        reversedBackwardGradient.Dispose();
-
-        return new GpuTensor<T>(backend, inputGradBuffer, forwardInputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
-    }
 
     /// <summary>
     /// Updates parameters on GPU using the configured optimizer.
