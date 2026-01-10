@@ -593,6 +593,10 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.GlobalMaxPool2D(input, output, batch, channels, height, width);
 
     /// <inheritdoc/>
+    public virtual void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer indices, int batch, int channels, int height, int width)
+        => Inner.GlobalMaxPool2D(input, output, indices, batch, channels, height, width);
+
+    /// <inheritdoc/>
     public virtual void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
         => Inner.GlobalAvgPool2DBackward(gradOutput, gradInput, batch, channels, height, width);
 

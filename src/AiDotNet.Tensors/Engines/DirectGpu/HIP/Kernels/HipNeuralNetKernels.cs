@@ -923,6 +923,9 @@ extern ""C"" __global__ void amsgrad_update(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
 
+    // Guard against step==0 to prevent division-by-zero in bias correction
+    int safe_step = (step < 1) ? 1 : step;
+
     float grad = gradient[idx];
     if (weightDecay > 0.0f) {
         grad += weightDecay * param[idx];
@@ -937,7 +940,7 @@ extern ""C"" __global__ void amsgrad_update(
     float vMaxVal = fmaxf(vMax[idx], vVal);
     vMax[idx] = vMaxVal;
 
-    float mHat = mVal / (1.0f - powf(beta1, (float)step));
+    float mHat = mVal / (1.0f - powf(beta1, (float)safe_step));
 
     param[idx] -= learningRate * mHat / (sqrtf(vMaxVal) + epsilon);
 }
@@ -951,6 +954,9 @@ extern ""C"" __global__ void adamax_update(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
 
+    // Guard against step==0 to prevent division-by-zero in bias correction
+    int safe_step = (step < 1) ? 1 : step;
+
     float grad = gradient[idx];
     if (weightDecay > 0.0f) {
         grad += weightDecay * param[idx];
@@ -962,7 +968,7 @@ extern ""C"" __global__ void adamax_update(
     float uVal = fmaxf(beta2 * u[idx], fabsf(grad));
     u[idx] = uVal;
 
-    float biasCorrection = 1.0f - powf(beta1, (float)step);
+    float biasCorrection = 1.0f - powf(beta1, (float)safe_step);
 
     param[idx] -= (learningRate / biasCorrection) * mVal / (uVal + epsilon);
 }
@@ -999,6 +1005,9 @@ extern ""C"" __global__ void nadam_update(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
 
+    // Guard against step==0 to prevent division-by-zero in bias correction
+    int safe_step = (step < 1) ? 1 : step;
+
     float grad = gradient[idx];
     if (weightDecay > 0.0f) {
         grad += weightDecay * param[idx];
@@ -1010,8 +1019,8 @@ extern ""C"" __global__ void nadam_update(
     float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
     v[idx] = vVal;
 
-    float beta1Pow = powf(beta1, (float)step);
-    float beta2Pow = powf(beta2, (float)step);
+    float beta1Pow = powf(beta1, (float)safe_step);
+    float beta2Pow = powf(beta2, (float)safe_step);
     float mHat = mVal / (1.0f - beta1Pow);
     float vHat = vVal / (1.0f - beta2Pow);
 

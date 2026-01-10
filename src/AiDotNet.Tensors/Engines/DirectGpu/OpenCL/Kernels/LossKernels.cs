@@ -160,7 +160,7 @@ __kernel void huber_gradient(
     if (abs_diff <= delta) {
         gradient[idx] = diff;
     } else {
-        gradient[idx] = delta * sign(diff);
+        gradient[idx] = delta * (diff > 0.0f ? 1.0f : (diff < 0.0f ? -1.0f : 0.0f));
     }
 }
 
@@ -319,8 +319,50 @@ __kernel void contrastive_loss(
     
     // Similar pairs (label=0): minimize distance
     // Dissimilar pairs (label=1): push apart up to margin
-    output[idx] = (1.0f - l) * 0.5f * dist_sq + 
+    output[idx] = (1.0f - l) * 0.5f * dist_sq +
                   l * 0.5f * pow(fmax(0.0f, margin - sqrt(dist_sq)), 2.0f);
+}
+
+// ---------------------------------------------------------------------------
+// Contrastive Loss Gradient
+// d_loss/d_pred1 = (1-l)*diff + l*(margin-dist > 0 ? -diff/dist * (margin-dist) : 0)
+// d_loss/d_pred2 = -d_loss/d_pred1
+// ---------------------------------------------------------------------------
+__kernel void contrastive_loss_gradient(
+    __global const float* pred1,
+    __global const float* pred2,
+    __global const float* label,
+    __global float* grad1,
+    __global float* grad2,
+    const float margin,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float diff = pred1[idx] - pred2[idx];
+    float dist = sqrt(diff * diff);
+    float l = label[idx];
+
+    // For similar pairs (label=0): gradient = diff (minimize distance)
+    // For dissimilar pairs (label=1): gradient = -(margin-dist)*diff/dist (push apart if dist < margin)
+    float gradient;
+    if (l < 0.5f) {
+        // Similar pair: d_loss/d_pred1 = diff
+        gradient = diff;
+    } else {
+        // Dissimilar pair
+        float margin_diff = margin - dist;
+        if (margin_diff > 0.0f && dist > 1e-7f) {
+            // d_loss/d_pred1 = -(margin - dist) * diff / dist
+            gradient = -margin_diff * diff / dist;
+        } else {
+            gradient = 0.0f;
+        }
+    }
+
+    grad1[idx] = gradient;
+    grad2[idx] = -gradient;
 }
 
 // ---------------------------------------------------------------------------
@@ -438,7 +480,9 @@ __kernel void log_cosh_loss(
     if (idx >= size) return;
     
     float diff = predicted[idx] - actual[idx];
-    output[idx] = log(cosh(diff));
+    // Numerically stable formula: log(cosh(x)) = |x| + log(1 + exp(-2|x|)) - log(2)
+    float abs_diff = fabs(diff);
+    output[idx] = abs_diff + log1p(exp(-2.0f * abs_diff)) - 0.693147180559945f;
 }
 
 __kernel void log_cosh_gradient(

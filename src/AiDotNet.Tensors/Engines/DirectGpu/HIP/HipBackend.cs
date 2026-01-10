@@ -3214,8 +3214,12 @@ public sealed class HipBackend : IAsyncGpuBackend
     public unsafe void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
     {
         // Overload without indices - call main implementation with null indices
-        GlobalMaxPool2D(input, output, null, batch, channels, height, width);
+        GlobalMaxPool2D(input, output, (IGpuBuffer?)null, batch, channels, height, width);
     }
+
+    // Interface implementation for non-nullable indices (required for backward pass)
+    void IDirectGpuBackend.GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer indices, int batch, int channels, int height, int width)
+        => GlobalMaxPool2D(input, output, (IGpuBuffer?)indices, batch, channels, height, width);
 
     public unsafe void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices, int batch, int channels, int height, int width)
     {

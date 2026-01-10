@@ -971,8 +971,29 @@ public interface IDirectGpuBackend : IDisposable
         int strideH, int strideW, int padH, int padW,
         bool countIncludePad);
 
+    /// <summary>
+    /// Global average pooling - reduces each spatial plane to a single value by averaging.
+    /// </summary>
     void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Global max pooling - reduces each spatial plane to a single value by taking the maximum.
+    /// Note: For backward pass with GlobalMaxPool2DBackward, use the overload that outputs indices.
+    /// </summary>
     void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Global max pooling with index output for backward pass.
+    /// Indices are stored as flattened position (h * width + w) for each (batch, channel).
+    /// </summary>
+    /// <param name="input">Input buffer [batch * channels * height * width].</param>
+    /// <param name="output">Output buffer [batch * channels].</param>
+    /// <param name="indices">Index buffer [batch * channels] - stores position of max value for backward pass.</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="height">Input height.</param>
+    /// <param name="width">Input width.</param>
+    void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer indices, int batch, int channels, int height, int width);
 
     /// <summary>
     /// Backward pass for global average pooling.
@@ -984,6 +1005,7 @@ public interface IDirectGpuBackend : IDisposable
     /// <summary>
     /// Backward pass for global max pooling.
     /// Scatters gradient to the positions that had maximum values.
+    /// Requires indices from GlobalMaxPool2D(input, output, indices, ...) forward pass.
     /// gradInput[b,c,h,w] = gradOutput[b,c] if (h,w) was max position, else 0
     /// </summary>
     void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width);
@@ -1361,13 +1383,51 @@ public interface IDirectGpuBackend : IDisposable
 
     #region Loss Functions
 
+    // ============================================================================
+    // LOSS FUNCTION REDUCTION CONVENTION:
+    // All loss functions in this API use MEAN reduction by default.
+    // Forward pass: Returns mean loss = sum(element_losses) / batch_size
+    // Backward pass: Gradients are scaled by 1/batch_size to match mean reduction.
+    // ============================================================================
+
+    /// <summary>
+    /// Cross-entropy loss for multi-class classification. Reduction: MEAN.
+    /// </summary>
     float CrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int batchSize, int numClasses);
+
+    /// <summary>
+    /// Backward pass for cross-entropy loss. Gradients scaled by 1/batchSize (mean reduction).
+    /// </summary>
     void CrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int batchSize, int numClasses);
+
+    /// <summary>
+    /// Binary cross-entropy loss. Reduction: MEAN.
+    /// </summary>
     float BinaryCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+
+    /// <summary>
+    /// Backward pass for binary cross-entropy loss. Gradients scaled by 1/size (mean reduction).
+    /// </summary>
     void BinaryCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    /// <summary>
+    /// Mean squared error loss. Reduction: MEAN.
+    /// </summary>
     float MseLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+
+    /// <summary>
+    /// Backward pass for MSE loss. Gradients scaled by 2/size (derivative of mean reduction).
+    /// </summary>
     void MseBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    /// <summary>
+    /// Smooth L1 (Huber) loss. Reduction: MEAN.
+    /// </summary>
     float SmoothL1Loss(IGpuBuffer predictions, IGpuBuffer targets, int size, float beta);
+
+    /// <summary>
+    /// Backward pass for Smooth L1 loss. Gradients scaled by 1/size (mean reduction).
+    /// </summary>
     void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta);
 
     /// <summary>
@@ -1497,17 +1557,33 @@ public interface IDirectGpuBackend : IDisposable
     /// <summary>
     /// Convert FP32 buffer to FP16 for mixed precision training.
     /// </summary>
-    /// <param name="input">Input buffer containing FP32 (float) elements.</param>
-    /// <param name="output">Output buffer for FP16 elements. Must be allocated as a byte buffer with size * 2 bytes (use AllocateByteBuffer(size * 2)).</param>
-    /// <param name="size">Number of elements to convert (not bytes).</param>
+    /// <remarks>
+    /// <para><b>Buffer allocation:</b></para>
+    /// <list type="bullet">
+    /// <item>Input: Allocate(elementCount) - FP32 buffer with 4 bytes per element</item>
+    /// <item>Output: AllocateByteBuffer(elementCount * 2) - FP16 buffer with 2 bytes per element</item>
+    /// </list>
+    /// <para>The 'size' parameter is always the element count, not byte count.</para>
+    /// </remarks>
+    /// <param name="input">Input buffer containing FP32 (float) elements [elementCount floats].</param>
+    /// <param name="output">Output buffer for FP16 elements. Allocate with AllocateByteBuffer(elementCount * 2).</param>
+    /// <param name="size">Number of elements to convert (element count, not bytes).</param>
     void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size);
 
     /// <summary>
     /// Convert FP16 buffer to FP32 for mixed precision training.
     /// </summary>
-    /// <param name="input">Input buffer containing FP16 elements (byte buffer with size * 2 bytes).</param>
-    /// <param name="output">Output buffer for FP32 (float) elements.</param>
-    /// <param name="size">Number of elements to convert (not bytes).</param>
+    /// <remarks>
+    /// <para><b>Buffer allocation:</b></para>
+    /// <list type="bullet">
+    /// <item>Input: AllocateByteBuffer(elementCount * 2) - FP16 buffer with 2 bytes per element</item>
+    /// <item>Output: Allocate(elementCount) - FP32 buffer with 4 bytes per element</item>
+    /// </list>
+    /// <para>The 'size' parameter is always the element count, not byte count.</para>
+    /// </remarks>
+    /// <param name="input">Input buffer containing FP16 elements. Allocated with AllocateByteBuffer(elementCount * 2).</param>
+    /// <param name="output">Output buffer for FP32 (float) elements [elementCount floats].</param>
+    /// <param name="size">Number of elements to convert (element count, not bytes).</param>
     void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size);
 
     #endregion

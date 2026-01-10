@@ -295,7 +295,9 @@ extern ""C"" __global__ void triplet_loss_backward(
 {
     int tripletIdx = blockIdx.x;
     int featureIdx = threadIdx.x;
-    if (tripletIdx >= batchSize || featureIdx >= embeddingDim) return;
+
+    // Block-level early exit is safe - entire block exits together
+    if (tripletIdx >= batchSize) return;
 
     int offset = tripletIdx * embeddingDim;
 
@@ -315,7 +317,11 @@ extern ""C"" __global__ void triplet_loss_backward(
         }
         isActive = (posDist2 - negDist2 + margin) > 0.0f ? 1 : 0;
     }
+    // All threads in block must reach this barrier (no early return before this)
     __syncthreads();
+
+    // Thread-level bounds check AFTER syncthreads to prevent deadlock
+    if (featureIdx >= embeddingDim) return;
 
     int globalIdx = offset + featureIdx;
     float scale = 2.0f / (float)batchSize;
@@ -1019,6 +1025,9 @@ extern ""C"" __global__ void amsgrad_update(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
 
+    // Guard against step==0 to prevent division-by-zero in bias correction
+    int safe_step = (step < 1) ? 1 : step;
+
     float grad = gradient[idx];
     if (weightDecay > 0.0f) {
         grad += weightDecay * param[idx];
@@ -1033,7 +1042,7 @@ extern ""C"" __global__ void amsgrad_update(
     float vMaxVal = fmaxf(vMax[idx], vVal);
     vMax[idx] = vMaxVal;
 
-    float mHat = mVal / (1.0f - powf(beta1, (float)step));
+    float mHat = mVal / (1.0f - powf(beta1, (float)safe_step));
 
     param[idx] -= learningRate * mHat / (sqrtf(vMaxVal) + epsilon);
 }
@@ -1047,6 +1056,9 @@ extern ""C"" __global__ void adamax_update(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
 
+    // Guard against step==0 to prevent division-by-zero in bias correction
+    int safe_step = (step < 1) ? 1 : step;
+
     float grad = gradient[idx];
     if (weightDecay > 0.0f) {
         grad += weightDecay * param[idx];
@@ -1058,7 +1070,7 @@ extern ""C"" __global__ void adamax_update(
     float uVal = fmaxf(beta2 * u[idx], fabsf(grad));
     u[idx] = uVal;
 
-    float biasCorrection = 1.0f - powf(beta1, (float)step);
+    float biasCorrection = 1.0f - powf(beta1, (float)safe_step);
 
     param[idx] -= (learningRate / biasCorrection) * mVal / (uVal + epsilon);
 }
@@ -1095,6 +1107,9 @@ extern ""C"" __global__ void nadam_update(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
 
+    // Guard against step==0 to prevent division-by-zero in bias correction
+    int safe_step = (step < 1) ? 1 : step;
+
     float grad = gradient[idx];
     if (weightDecay > 0.0f) {
         grad += weightDecay * param[idx];
@@ -1106,8 +1121,8 @@ extern ""C"" __global__ void nadam_update(
     float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
     v[idx] = vVal;
 
-    float beta1Pow = powf(beta1, (float)step);
-    float beta2Pow = powf(beta2, (float)step);
+    float beta1Pow = powf(beta1, (float)safe_step);
+    float beta2Pow = powf(beta2, (float)safe_step);
     float mHat = mVal / (1.0f - beta1Pow);
     float vHat = vVal / (1.0f - beta2Pow);
 
@@ -1676,6 +1691,9 @@ extern ""C"" __global__ void lstm_cell_backward(
 }
 
 // Fused LSTM gate computation: computes Wi*x + Ui*h + b for all 4 gates
+// Uses shared memory tiling for optimized matrix multiplication
+#define LSTM_TILE_K 32
+
 extern ""C"" __global__ void lstm_gates_precompute(
     const float* input,         // Input: [batch, input_size]
     const float* hiddenPrev,    // Previous hidden: [batch, hidden]
@@ -1685,27 +1703,58 @@ extern ""C"" __global__ void lstm_gates_precompute(
     float* gates,               // Output gates: [batch, 4*hidden]
     int batchSize, int inputSize, int hiddenSize)
 {
-    // PERFORMANCE TODO: Replace naive dot-product loops with cuBLAS cublasSgemm
-    // for the weightsIH × input and weightsHH × hiddenPrev operations.
-    // Current implementation is ~10-100x slower than cuBLAS for large matrices.
-    // For production, use cublasSgemmBatched or separate cublasSgemm calls.
+    // Each thread computes one output element gates[b, g]
+    // Use shared memory to cache tiles of input/hidden and weights
+    __shared__ float tileInput[LSTM_TILE_K];
+    __shared__ float tileHidden[LSTM_TILE_K];
+    __shared__ float tileWeightIH[LSTM_TILE_K];
+    __shared__ float tileWeightHH[LSTM_TILE_K];
+
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int totalSize = batchSize * 4 * hiddenSize;
     if (idx >= totalSize) return;
 
     int b = idx / (4 * hiddenSize);
     int g = idx % (4 * hiddenSize);
+    int tid = threadIdx.x;
+    int blockSize = blockDim.x;
 
     float sum = bias[g];
 
-    // Input-to-hidden: weightsIH[g, :] dot input[b, :]
-    for (int i = 0; i < inputSize; i++) {
-        sum += weightsIH[g * inputSize + i] * input[b * inputSize + i];
+    // Tiled input-to-hidden: weightsIH[g, :] dot input[b, :]
+    for (int tileStart = 0; tileStart < inputSize; tileStart += LSTM_TILE_K) {
+        // Cooperatively load tiles into shared memory
+        int loadIdx = tileStart + (tid % LSTM_TILE_K);
+        if (tid < LSTM_TILE_K && loadIdx < inputSize) {
+            tileInput[tid] = input[b * inputSize + loadIdx];
+            tileWeightIH[tid] = weightsIH[g * inputSize + loadIdx];
+        }
+        __syncthreads();
+
+        // Compute partial dot product for this tile
+        int tileEnd = min(LSTM_TILE_K, inputSize - tileStart);
+        for (int k = 0; k < tileEnd; k++) {
+            sum += tileWeightIH[k] * tileInput[k];
+        }
+        __syncthreads();
     }
 
-    // Hidden-to-hidden: weightsHH[g, :] dot hiddenPrev[b, :]
-    for (int h = 0; h < hiddenSize; h++) {
-        sum += weightsHH[g * hiddenSize + h] * hiddenPrev[b * hiddenSize + h];
+    // Tiled hidden-to-hidden: weightsHH[g, :] dot hiddenPrev[b, :]
+    for (int tileStart = 0; tileStart < hiddenSize; tileStart += LSTM_TILE_K) {
+        // Cooperatively load tiles into shared memory
+        int loadIdx = tileStart + (tid % LSTM_TILE_K);
+        if (tid < LSTM_TILE_K && loadIdx < hiddenSize) {
+            tileHidden[tid] = hiddenPrev[b * hiddenSize + loadIdx];
+            tileWeightHH[tid] = weightsHH[g * hiddenSize + loadIdx];
+        }
+        __syncthreads();
+
+        // Compute partial dot product for this tile
+        int tileEnd = min(LSTM_TILE_K, hiddenSize - tileStart);
+        for (int k = 0; k < tileEnd; k++) {
+            sum += tileWeightHH[k] * tileHidden[k];
+        }
+        __syncthreads();
     }
 
     gates[idx] = sum;

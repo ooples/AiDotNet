@@ -5516,6 +5516,30 @@ KERNEL VARIANTS (A/B testing):
             k.Execute1D(batch * channels, Math.Min(64, batch * channels));
         }
 
+        public void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer indices, int batch, int channels, int height, int width)
+        {
+            // Use kernel with indices output for backward pass support
+            if (!_kernelCache.TryGetValue("global_maxpool2d_with_indices", out var k))
+            {
+                // Fall back to kernel without indices if specialized kernel not available
+                GlobalMaxPool2D(input, output, batch, channels, height, width);
+                // Fill indices with zeros - caller should handle this case
+                Fill(indices, 0.0f, batch * channels);
+                return;
+            }
+
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, height);
+            k.SetArg(arg++, width);
+
+            k.Execute1D(batch * channels, Math.Min(64, batch * channels));
+        }
+
         public void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
         {
             if (!_kernelCache.TryGetValue("global_avgpool2d_backward", out var k))
