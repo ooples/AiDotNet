@@ -57,6 +57,16 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private Vector<T>? _previousParameters;
 
     /// <summary>
+    /// GPU buffer for z state (accumulated sum state).
+    /// </summary>
+    private IGpuBuffer? _gpuZ;
+
+    /// <summary>
+    /// GPU buffer for n state (accumulated squared gradient state).
+    /// </summary>
+    private IGpuBuffer? _gpuN;
+
+    /// <summary>
     /// Initializes a new instance of the FTRLOptimizer class.
     /// </summary>
     /// <remarks>
@@ -406,13 +416,60 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     /// <summary>
+    /// Initializes FTRL optimizer state on the GPU.
+    /// </summary>
+    /// <param name="parameterCount">Number of parameters.</param>
+    /// <param name="backend">GPU backend for memory allocation.</param>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuZ != null && _gpuN != null)
+            return;
+
+        // Allocate GPU buffers for z and n state (initialized to zero)
+        var zeros = new float[parameterCount];
+        _gpuZ = backend.AllocateBuffer(zeros);
+        _gpuN = backend.AllocateBuffer(zeros);
+
+        _t = 0;
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
     /// Updates parameters on GPU using FTRL optimization.
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        // FTRL requires z, n state - should be managed by the layer
-        // For now, fall back to base implementation
-        base.UpdateParametersGpu(parameters, gradients, parameterCount, backend);
+        if (!_gpuStateInitialized || _gpuZ == null || _gpuN == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        _t++;
+
+        // Call the FTRL GPU kernel
+        backend.FtrlUpdate(
+            parameters,
+            gradients,
+            _gpuZ!,
+            _gpuN!,
+            (float)_options.Alpha,
+            (float)_options.Lambda1,
+            (float)_options.Lambda2,
+            (float)_options.Beta,
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuZ?.Dispose();
+        _gpuZ = null;
+        _gpuN?.Dispose();
+        _gpuN = null;
+        _gpuStateInitialized = false;
     }
 
     /// <summary>

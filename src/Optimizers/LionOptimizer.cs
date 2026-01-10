@@ -53,6 +53,11 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private T _currentBeta2;
 
     /// <summary>
+    /// GPU buffer for momentum estimates.
+    /// </summary>
+    private IGpuBuffer? _gpuM;
+
+    /// <summary>
     /// Initializes a new instance of the LionOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -596,13 +601,56 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     /// <summary>
+    /// Initializes Lion optimizer state on the GPU.
+    /// </summary>
+    /// <param name="parameterCount">Number of parameters.</param>
+    /// <param name="backend">GPU backend for memory allocation.</param>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuM != null)
+            return;
+
+        // Allocate GPU buffer for momentum estimates (initialized to zero)
+        var zeros = new float[parameterCount];
+        _gpuM = backend.AllocateBuffer(zeros);
+
+        _t = 0;
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
     /// Updates parameters on GPU using Lion optimization.
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        // Lion requires m state - should be managed by the layer
-        // For now, fall back to base implementation
-        base.UpdateParametersGpu(parameters, gradients, parameterCount, backend);
+        if (!_gpuStateInitialized || _gpuM == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        _t++;
+
+        // Call the Lion GPU kernel
+        backend.LionUpdate(
+            parameters,
+            gradients,
+            _gpuM!,
+            (float)_options.InitialLearningRate,
+            (float)_options.Beta1,
+            (float)_options.Beta2,
+            (float)_options.WeightDecay,
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuM?.Dispose();
+        _gpuM = null;
+        _gpuStateInitialized = false;
     }
 
     /// <summary>
