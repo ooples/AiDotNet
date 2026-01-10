@@ -8298,6 +8298,64 @@ KERNEL VARIANTS (A/B testing):
             kernel.Execute1D(totalThreads, localSize);
         }
 
+        /// <inheritdoc/>
+        public void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+            int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        {
+            if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_input", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: hyperbolic_linear_backward_input");
+
+            int totalThreads = batchSize * inputFeatures;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)weights).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            kernel.SetArg(4u, batchSize);
+            kernel.SetArg(5u, inputFeatures);
+            kernel.SetArg(6u, outputFeatures);
+            kernel.SetArg(7u, curvature);
+            kernel.Execute1D(totalThreads, localSize);
+        }
+
+        /// <inheritdoc/>
+        public void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+            int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        {
+            if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_weights", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: hyperbolic_linear_backward_weights");
+
+            int totalThreads = outputFeatures * inputFeatures;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)gradWeights).Buffer.Handle);
+            kernel.SetArg(3u, batchSize);
+            kernel.SetArg(4u, inputFeatures);
+            kernel.SetArg(5u, outputFeatures);
+            kernel.SetArg(6u, curvature);
+            kernel.Execute1D(totalThreads, localSize);
+        }
+
+        /// <inheritdoc/>
+        public void HyperbolicLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradBiases,
+            int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        {
+            if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_biases", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: hyperbolic_linear_backward_biases");
+
+            int totalThreads = outputFeatures * inputFeatures;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)gradBiases).Buffer.Handle);
+            kernel.SetArg(3u, batchSize);
+            kernel.SetArg(4u, inputFeatures);
+            kernel.SetArg(5u, outputFeatures);
+            kernel.SetArg(6u, curvature);
+            kernel.Execute1D(totalThreads, localSize);
+        }
+
         #endregion
 
         #region Octonion Algebra Operations
@@ -8345,6 +8403,55 @@ KERNEL VARIANTS (A/B testing):
             kernel.SetArg(5u, inputFeatures);
             kernel.SetArg(6u, outputFeatures);
             kernel.Execute1D(totalThreads, localSize);
+        }
+
+        public void OctonionLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+            int batchSize, int inputFeatures, int outputFeatures)
+        {
+            if (!_kernelCache.TryGetValue("octonion_linear_backward_input", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: octonion_linear_backward_input");
+
+            int totalThreads = batchSize * inputFeatures;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)weights).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            kernel.SetArg(4u, batchSize);
+            kernel.SetArg(5u, inputFeatures);
+            kernel.SetArg(6u, outputFeatures);
+            kernel.Execute1D(totalThreads, localSize);
+        }
+
+        public void OctonionLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+            int batchSize, int inputFeatures, int outputFeatures)
+        {
+            if (!_kernelCache.TryGetValue("octonion_linear_backward_weights", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: octonion_linear_backward_weights");
+
+            int totalThreads = outputFeatures * inputFeatures;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)gradWeights).Buffer.Handle);
+            kernel.SetArg(3u, batchSize);
+            kernel.SetArg(4u, inputFeatures);
+            kernel.SetArg(5u, outputFeatures);
+            kernel.Execute1D(totalThreads, localSize);
+        }
+
+        public void OctonionLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer gradBiases,
+            int batchSize, int outputFeatures)
+        {
+            if (!_kernelCache.TryGetValue("octonion_linear_backward_biases", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: octonion_linear_backward_biases");
+
+            int localSize = CalculateOptimalWorkGroupSize1D(outputFeatures);
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)gradBiases).Buffer.Handle);
+            kernel.SetArg(2u, batchSize);
+            kernel.SetArg(3u, outputFeatures);
+            kernel.Execute1D(outputFeatures, localSize);
         }
 
         #endregion

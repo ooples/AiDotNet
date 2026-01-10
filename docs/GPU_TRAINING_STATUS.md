@@ -293,8 +293,8 @@ Additional loss functions that could be added in the future:
 | DenseLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | FullyConnectedLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | LocallyConnectedLayer | ✅ | ❌ | ❌ | ❌ | Per-position weights |
-| HyperbolicLinearLayer | ✅ | ❌ | ❌ | ❌ | Hyperbolic geometry |
-| OctonionLinearLayer | ✅ | ❌ | ❌ | ❌ | Octonion algebra |
+| HyperbolicLinearLayer | ✅ | ✅ | ❌ | ❌ | Hyperbolic geometry, Poincaré ball gradients |
+| OctonionLinearLayer | ✅ | ✅ | ❌ | ❌ | Octonion algebra, Jacobian-based gradients |
 
 ### Convolutional Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |

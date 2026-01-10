@@ -6334,6 +6334,83 @@ public sealed class CudaBackend : IAsyncGpuBackend
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
+    /// <inheritdoc/>
+    public unsafe void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_input", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hyperbolic_linear_backward_input");
+
+        using var _ = PushContext();
+        int totalThreads = batchSize * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+
+        void** args = stackalloc void*[8];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &weightsPtr;
+        args[3] = &gradInputPtr;
+        args[4] = &batchSize;
+        args[5] = &inputFeatures;
+        args[6] = &outputFeatures;
+        args[7] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_weights", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hyperbolic_linear_backward_weights");
+
+        using var _ = PushContext();
+        int totalThreads = outputFeatures * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradWeightsPtr = gradWeights.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradWeightsPtr;
+        args[3] = &batchSize;
+        args[4] = &inputFeatures;
+        args[5] = &outputFeatures;
+        args[6] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void HyperbolicLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradBiases,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_biases", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hyperbolic_linear_backward_biases");
+
+        using var _ = PushContext();
+        int totalThreads = outputFeatures * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradBiasesPtr = gradBiases.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradBiasesPtr;
+        args[3] = &batchSize;
+        args[4] = &inputFeatures;
+        args[5] = &outputFeatures;
+        args[6] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
     #endregion
 
     #region Octonion Algebra Operations
@@ -6399,6 +6476,73 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[4] = &batchSize;
         args[5] = &inputFeatures;
         args[6] = &outputFeatures;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void OctonionLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_input", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_linear_backward_input");
+
+        using var _ = PushContext();
+        int totalThreads = batchSize * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &weightsPtr;
+        args[3] = &gradInputPtr;
+        args[4] = &batchSize;
+        args[5] = &inputFeatures;
+        args[6] = &outputFeatures;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void OctonionLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_weights", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_linear_backward_weights");
+
+        using var _ = PushContext();
+        int totalThreads = outputFeatures * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradWeightsPtr = gradWeights.Handle;
+
+        void** args = stackalloc void*[6];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradWeightsPtr;
+        args[3] = &batchSize;
+        args[4] = &inputFeatures;
+        args[5] = &outputFeatures;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void OctonionLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer gradBiases,
+        int batchSize, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_biases", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_linear_backward_biases");
+
+        using var _ = PushContext();
+        uint grid = (uint)((outputFeatures + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr gradBiasesPtr = gradBiases.Handle;
+
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutputPtr;
+        args[1] = &gradBiasesPtr;
+        args[2] = &batchSize;
+        args[3] = &outputFeatures;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 

@@ -7280,6 +7280,103 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    /// <inheritdoc/>
+    public void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_input", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: hyperbolic_linear_backward_input");
+
+        int totalThreads = batchSize * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[8];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(weights.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inputFeatures, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(outputFeatures, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(curvature, GCHandleType.Pinned);
+
+            var args = new IntPtr[8];
+            for (int i = 0; i < 8; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_weights", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: hyperbolic_linear_backward_weights");
+
+        int totalThreads = outputFeatures * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradWeights.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inputFeatures, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(outputFeatures, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(curvature, GCHandleType.Pinned);
+
+            var args = new IntPtr[7];
+            for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    /// <inheritdoc/>
+    public void HyperbolicLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradBiases,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_biases", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: hyperbolic_linear_backward_biases");
+
+        int totalThreads = outputFeatures * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradBiases.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inputFeatures, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(outputFeatures, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(curvature, GCHandleType.Pinned);
+
+            var args = new IntPtr[7];
+            for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
     #endregion
 
     #region Octonion Algebra Operations
@@ -7358,6 +7455,94 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             var args = new IntPtr[7];
             for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void OctonionLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_input", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: octonion_linear_backward_input");
+
+        int totalThreads = batchSize * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(weights.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(inputFeatures, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(outputFeatures, GCHandleType.Pinned);
+
+            var args = new IntPtr[7];
+            for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void OctonionLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_weights", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: octonion_linear_backward_weights");
+
+        int totalThreads = outputFeatures * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradWeights.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(inputFeatures, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(outputFeatures, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void OctonionLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer gradBiases,
+        int batchSize, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_biases", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: octonion_linear_backward_biases");
+
+        uint grid = (uint)((outputFeatures + DefaultBlockSize - 1) / DefaultBlockSize);
+        var handles = new GCHandle[4];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradBiases.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(outputFeatures, GCHandleType.Pinned);
+
+            var args = new IntPtr[4];
+            for (int i = 0; i < 4; i++) args[i] = handles[i].AddrOfPinnedObject();
 
             LaunchKernel(kernel, grid, DefaultBlockSize, args);
             Synchronize();

@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -68,6 +69,10 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// Gradient for biases, stored during backward pass.
     /// </summary>
     private Octonion<T>[]? _biasesGradient;
+
+    // GPU caching fields for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private int[]? _gpuInputShape;
 
     /// <summary>
     /// Gets the number of input features (octonion-valued).
@@ -303,6 +308,13 @@ public class OctonionLinearLayer<T> : LayerBase<T>
             }
         }
 
+        // Cache input for backward pass if in training mode
+        if (IsTrainingMode)
+        {
+            _gpuInput = input;
+            _gpuInputShape = input.Shape.ToArray();
+        }
+
         // Flatten weights to GPU buffer: [outputFeatures * inputFeatures * 8]
         var weightsFlat = new float[OutputFeatures * InputFeatures * 8];
         int wIdx = 0;
@@ -374,6 +386,160 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         }
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU for the octonion linear layer.
+    /// Computes gradients using proper octonion algebra with Jacobian of octonion multiplication.
+    /// </summary>
+    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>The GPU tensor containing the gradient of the loss with respect to the input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuInputShape == null)
+        {
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+        {
+            throw new InvalidOperationException("GPU backend unavailable.");
+        }
+
+        // Determine batch size from cached input shape
+        int batchSize;
+        if (_gpuInputShape.Length == 1)
+        {
+            batchSize = 1;
+        }
+        else if (_gpuInputShape.Length == 2)
+        {
+            batchSize = _gpuInputShape[0];
+        }
+        else
+        {
+            batchSize = 1;
+            for (int d = 0; d < _gpuInputShape.Length - 1; d++)
+            {
+                batchSize *= _gpuInputShape[d];
+            }
+        }
+
+        // Upload weights to GPU (needed for input gradient computation)
+        var weightsFlat = new float[OutputFeatures * InputFeatures * 8];
+        int wIdx = 0;
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                var oct = _weights[o, i];
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.Scalar);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E1);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E2);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E3);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E4);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E5);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E6);
+                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E7);
+            }
+        }
+
+        IGpuBuffer? weightsBuffer = null;
+        IGpuBuffer? gradInputBuffer = null;
+        IGpuBuffer? gradWeightsBuffer = null;
+        IGpuBuffer? gradBiasesBuffer = null;
+
+        try
+        {
+            weightsBuffer = backend.AllocateBuffer(weightsFlat);
+
+            // Allocate gradient buffers
+            gradInputBuffer = backend.AllocateBuffer(batchSize * InputFeatures * 8);
+            gradWeightsBuffer = backend.AllocateBuffer(OutputFeatures * InputFeatures * 8);
+            gradBiasesBuffer = backend.AllocateBuffer(OutputFeatures * 8);
+
+            // Compute input gradient
+            backend.OctonionLinearBackwardInput(
+                outputGradient.Buffer, _gpuInput.Buffer, weightsBuffer, gradInputBuffer,
+                batchSize, InputFeatures, OutputFeatures);
+
+            // Compute weight gradient
+            backend.OctonionLinearBackwardWeights(
+                outputGradient.Buffer, _gpuInput.Buffer, gradWeightsBuffer,
+                batchSize, InputFeatures, OutputFeatures);
+
+            // Compute bias gradient
+            backend.OctonionLinearBackwardBiases(
+                outputGradient.Buffer, gradBiasesBuffer,
+                batchSize, OutputFeatures);
+
+            // Download weight gradients from GPU and store for UpdateParameters
+            var weightsGradFlat = new float[OutputFeatures * InputFeatures * 8];
+            backend.DownloadBuffer(gradWeightsBuffer, weightsGradFlat);
+
+            _weightsGradient = new Octonion<T>[OutputFeatures, InputFeatures];
+            int wgIdx = 0;
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    _weightsGradient[o, i] = new Octonion<T>(
+                        _numOps.FromFloat(weightsGradFlat[wgIdx]),
+                        _numOps.FromFloat(weightsGradFlat[wgIdx + 1]),
+                        _numOps.FromFloat(weightsGradFlat[wgIdx + 2]),
+                        _numOps.FromFloat(weightsGradFlat[wgIdx + 3]),
+                        _numOps.FromFloat(weightsGradFlat[wgIdx + 4]),
+                        _numOps.FromFloat(weightsGradFlat[wgIdx + 5]),
+                        _numOps.FromFloat(weightsGradFlat[wgIdx + 6]),
+                        _numOps.FromFloat(weightsGradFlat[wgIdx + 7]));
+                    wgIdx += 8;
+                }
+            }
+
+            // Download bias gradients from GPU and store for UpdateParameters
+            var biasesGradFlat = new float[OutputFeatures * 8];
+            backend.DownloadBuffer(gradBiasesBuffer, biasesGradFlat);
+
+            _biasesGradient = new Octonion<T>[OutputFeatures];
+            int bgIdx = 0;
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                _biasesGradient[o] = new Octonion<T>(
+                    _numOps.FromFloat(biasesGradFlat[bgIdx]),
+                    _numOps.FromFloat(biasesGradFlat[bgIdx + 1]),
+                    _numOps.FromFloat(biasesGradFlat[bgIdx + 2]),
+                    _numOps.FromFloat(biasesGradFlat[bgIdx + 3]),
+                    _numOps.FromFloat(biasesGradFlat[bgIdx + 4]),
+                    _numOps.FromFloat(biasesGradFlat[bgIdx + 5]),
+                    _numOps.FromFloat(biasesGradFlat[bgIdx + 6]),
+                    _numOps.FromFloat(biasesGradFlat[bgIdx + 7]));
+                bgIdx += 8;
+            }
+
+            // Create output gradient tensor with proper shape
+            var inputGradient = new GpuTensor<T>(backend, gradInputBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+            // Clear GPU cache after backward pass
+            _gpuInput = null;
+
+            // Prevent disposal of gradInputBuffer since it's owned by the returned tensor
+            gradInputBuffer = null;
+
+            return inputGradient;
+        }
+        finally
+        {
+            weightsBuffer?.Dispose();
+            gradWeightsBuffer?.Dispose();
+            gradBiasesBuffer?.Dispose();
+            gradInputBuffer?.Dispose();
+        }
     }
 
     /// <summary>

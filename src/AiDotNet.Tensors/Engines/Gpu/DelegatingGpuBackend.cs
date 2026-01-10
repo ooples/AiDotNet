@@ -888,6 +888,21 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon)
         => Inner.HyperbolicLinearForward(input, weights, biases, output, batchSize, inputFeatures, outputFeatures, curvature, epsilon);
 
+    /// <inheritdoc/>
+    public virtual void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        => Inner.HyperbolicLinearBackwardInput(gradOutput, input, weights, gradInput, batchSize, inputFeatures, outputFeatures, curvature);
+
+    /// <inheritdoc/>
+    public virtual void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        => Inner.HyperbolicLinearBackwardWeights(gradOutput, input, gradWeights, batchSize, inputFeatures, outputFeatures, curvature);
+
+    /// <inheritdoc/>
+    public virtual void HyperbolicLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradBiases,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        => Inner.HyperbolicLinearBackwardBiases(gradOutput, input, gradBiases, batchSize, inputFeatures, outputFeatures, curvature);
+
     #endregion
 
     #region Octonion Algebra Operations
@@ -904,6 +919,20 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
         int batchSize, int inputFeatures, int outputFeatures)
         => Inner.OctonionLinearForward(input, weights, biases, output, batchSize, inputFeatures, outputFeatures);
+
+    /// <inheritdoc/>
+    public virtual void OctonionLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures)
+        => Inner.OctonionLinearBackwardInput(gradOutput, input, weights, gradInput, batchSize, inputFeatures, outputFeatures);
+
+    /// <inheritdoc/>
+    public virtual void OctonionLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures)
+        => Inner.OctonionLinearBackwardWeights(gradOutput, input, gradWeights, batchSize, inputFeatures, outputFeatures);
+
+    /// <inheritdoc/>
+    public virtual void OctonionLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer gradBiases, int batchSize, int outputFeatures)
+        => Inner.OctonionLinearBackwardBiases(gradOutput, gradBiases, batchSize, outputFeatures);
 
     #endregion
 

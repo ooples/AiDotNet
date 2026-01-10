@@ -1922,6 +1922,46 @@ public interface IDirectGpuBackend : IDisposable
     void HyperbolicLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
         int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon);
 
+    /// <summary>
+    /// Backward pass for hyperbolic linear layer - computes input gradients.
+    /// </summary>
+    /// <param name="gradOutput">Output gradient [batchSize, outputFeatures].</param>
+    /// <param name="input">Input from forward pass [batchSize, inputFeatures].</param>
+    /// <param name="weights">Weights [outputFeatures, inputFeatures].</param>
+    /// <param name="gradInput">Output: input gradient [batchSize, inputFeatures].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature);
+
+    /// <summary>
+    /// Backward pass for hyperbolic linear layer - computes weight gradients.
+    /// </summary>
+    /// <param name="gradOutput">Output gradient [batchSize, outputFeatures].</param>
+    /// <param name="input">Input from forward pass [batchSize, inputFeatures].</param>
+    /// <param name="gradWeights">Output: weight gradient [outputFeatures, inputFeatures].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature);
+
+    /// <summary>
+    /// Backward pass for hyperbolic linear layer - computes bias gradients.
+    /// </summary>
+    /// <param name="gradOutput">Output gradient [batchSize, outputFeatures].</param>
+    /// <param name="input">Input from forward pass [batchSize, inputFeatures].</param>
+    /// <param name="gradBiases">Output: bias gradient [outputFeatures, inputFeatures].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void HyperbolicLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradBiases,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature);
+
     #endregion
 
     #region Octonion Algebra Operations
@@ -1958,6 +1998,43 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="outputFeatures">Output features.</param>
     void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
         int batchSize, int inputFeatures, int outputFeatures);
+
+    /// <summary>
+    /// Backward pass for octonion linear layer - compute input gradient.
+    /// Uses Jacobian of octonion multiplication for proper gradient flow.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from next layer [batchSize * outputFeatures * 8].</param>
+    /// <param name="input">Cached input from forward pass [batchSize * inputFeatures * 8].</param>
+    /// <param name="weights">Weight octonions [outputFeatures * inputFeatures * 8].</param>
+    /// <param name="gradInput">Output gradient for previous layer [batchSize * inputFeatures * 8].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    void OctonionLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures);
+
+    /// <summary>
+    /// Backward pass for octonion linear layer - compute weight gradient.
+    /// Accumulates gradients over the batch dimension.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from next layer [batchSize * outputFeatures * 8].</param>
+    /// <param name="input">Cached input from forward pass [batchSize * inputFeatures * 8].</param>
+    /// <param name="gradWeights">Output weight gradient [outputFeatures * inputFeatures * 8].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    void OctonionLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures);
+
+    /// <summary>
+    /// Backward pass for octonion linear layer - compute bias gradient.
+    /// Sums output gradients over the batch dimension.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from next layer [batchSize * outputFeatures * 8].</param>
+    /// <param name="gradBiases">Output bias gradient [outputFeatures * 8].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    void OctonionLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer gradBiases, int batchSize, int outputFeatures);
 
     #endregion
 

@@ -77,6 +77,10 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     private Matrix<T>? _biasesGradient;
 
+    // GPU caching fields for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private int[]? _gpuInputShape;
+
     /// <summary>
     /// Gets the number of input features.
     /// </summary>
@@ -340,6 +344,13 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             throw new ArgumentException($"Input size {inputLen} does not match expected {InputFeatures}.");
         }
 
+        // Cache input for backward pass if in training mode
+        if (IsTrainingMode)
+        {
+            _gpuInput = input;
+            _gpuInputShape = input.Shape.ToArray();
+        }
+
         // Cache weights to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
         var weightsFlat = new float[OutputFeatures * InputFeatures];
         for (int o = 0; o < OutputFeatures; o++)
@@ -408,6 +419,136 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         {
             weightsBuffer?.Dispose();
             biasesBuffer?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU for the hyperbolic linear layer.
+    /// Computes gradients using Riemannian geometry in the Poincaré ball model.
+    /// </summary>
+    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>The GPU tensor containing the gradient of the loss with respect to the input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuInputShape == null)
+        {
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+        {
+            throw new InvalidOperationException("GPU backend unavailable.");
+        }
+
+        // Determine batch size from cached input shape
+        int batchSize;
+        if (_gpuInputShape.Length == 1)
+        {
+            batchSize = 1;
+        }
+        else if (_gpuInputShape.Length == 2)
+        {
+            batchSize = _gpuInputShape[0];
+        }
+        else
+        {
+            batchSize = 1;
+            for (int d = 0; d < _gpuInputShape.Length - 1; d++)
+            {
+                batchSize *= _gpuInputShape[d];
+            }
+        }
+
+        float curvature = _numOps.ToFloat(_curvature);
+
+        // Upload weights to GPU (needed for input gradient computation)
+        var weightsFlat = new float[OutputFeatures * InputFeatures];
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                weightsFlat[o * InputFeatures + i] = _numOps.ToFloat(_weights[o, i]);
+            }
+        }
+
+        IGpuBuffer? weightsBuffer = null;
+        IGpuBuffer? gradInputBuffer = null;
+        IGpuBuffer? gradWeightsBuffer = null;
+        IGpuBuffer? gradBiasesBuffer = null;
+
+        try
+        {
+            weightsBuffer = backend.AllocateBuffer(weightsFlat);
+
+            // Allocate gradient buffers
+            gradInputBuffer = backend.AllocateBuffer(batchSize * InputFeatures);
+            gradWeightsBuffer = backend.AllocateBuffer(OutputFeatures * InputFeatures);
+            gradBiasesBuffer = backend.AllocateBuffer(OutputFeatures * InputFeatures);
+
+            // Compute input gradient
+            backend.HyperbolicLinearBackwardInput(
+                outputGradient.Buffer, _gpuInput.Buffer, weightsBuffer, gradInputBuffer,
+                batchSize, InputFeatures, OutputFeatures, curvature);
+
+            // Compute weight gradient
+            backend.HyperbolicLinearBackwardWeights(
+                outputGradient.Buffer, _gpuInput.Buffer, gradWeightsBuffer,
+                batchSize, InputFeatures, OutputFeatures, curvature);
+
+            // Compute bias gradient
+            backend.HyperbolicLinearBackwardBiases(
+                outputGradient.Buffer, _gpuInput.Buffer, gradBiasesBuffer,
+                batchSize, InputFeatures, OutputFeatures, curvature);
+
+            // Download weight gradients from GPU and store for UpdateParameters
+            var weightsGradFlat = new float[OutputFeatures * InputFeatures];
+            backend.DownloadBuffer(gradWeightsBuffer, weightsGradFlat);
+
+            _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    _weightsGradient[o, i] = _numOps.FromFloat(weightsGradFlat[o * InputFeatures + i]);
+                }
+            }
+
+            // Download bias gradients from GPU and store for UpdateParameters
+            var biasesGradFlat = new float[OutputFeatures * InputFeatures];
+            backend.DownloadBuffer(gradBiasesBuffer, biasesGradFlat);
+
+            _biasesGradient = new Matrix<T>(OutputFeatures, InputFeatures);
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    _biasesGradient[o, i] = _numOps.FromFloat(biasesGradFlat[o * InputFeatures + i]);
+                }
+            }
+
+            // Create output gradient tensor with proper shape
+            var inputGradient = new GpuTensor<T>(backend, gradInputBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+            // Clear GPU cache after backward pass
+            _gpuInput = null;
+
+            // Prevent disposal of gradInputBuffer since it's owned by the returned tensor
+            gradInputBuffer = null;
+
+            return inputGradient;
+        }
+        finally
+        {
+            weightsBuffer?.Dispose();
+            gradWeightsBuffer?.Dispose();
+            gradBiasesBuffer?.Dispose();
+            gradInputBuffer?.Dispose();
         }
     }
 
